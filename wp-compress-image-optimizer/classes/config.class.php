@@ -1,18 +1,10 @@
 <?php
+
+
 /**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/config.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
+ * Class - Config
+ * Handles Configuration Files
  */
-
-
-
-
-
-
-
 class wps_ic_config
 {
 

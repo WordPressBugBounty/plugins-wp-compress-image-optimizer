@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-client.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 if (!defined('ABSPATH')) {
@@ -21,16 +13,18 @@ class WPS_LocalV2
     const STATUS_POLL_TIMEOUT_S  = 5;
     const PENDING_TRANSIENT_TTL  = 600;
 
-    
-    const INLINE_BYTES_RAW_MAX   = 716800;   
+    // The most source bytes ever sent inline, whatever the service declares. Rule: the decoded
+    // source must stay within the service's max_inline_bytes and its base64 within the 32 MB
+    // body the /optimize-v2 route parses (20 MB raw is ~26.7 MB encoded). See inline_cap().
+    const INLINE_BYTES_CEILING   = 20971520;
 
 
     const SOURCE_URL_FETCH_MAX   = 9961472;
 
-    
+    /** @var string */
     private $apikey;
 
-    
+    /** @var string */
     private $orchestrator_url;
 
     public function __construct($apikey, $orchestrator_url)
@@ -47,10 +41,10 @@ class WPS_LocalV2
             return $env;
         }
 
-        
-        
-        
-        
+        // v7.21.350 — DIAGNOSTIC (removable): the wire receipt — transport mode + body
+        // size of THIS dispatch, in the fetchable log. The .317 flip discriminator: a
+        // retry that should be ~1KB source.url but logs inline/six-figure bytes names
+        // the flip as the bug; url+small with silence service-side names the edge.
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('media-wire-out', (string) $imageID, '', [
                 'transport' => (string) ($env['headers']['X-WPC-Source-Transport'] ?? '?'),
@@ -86,7 +80,7 @@ class WPS_LocalV2
 
         $http_code = (int) wp_remote_retrieve_response_code($response);
         $body_raw  = wp_remote_retrieve_body($response);
-        return $this->process_response($imageID, $http_code, $body_raw);
+        return $this->process_response($imageID, $http_code, $body_raw, (string) wp_remote_retrieve_header($response, 'retry-after'));
     }
 
 
@@ -94,15 +88,15 @@ class WPS_LocalV2
     {
         $body = $this->build_request_body($imageID, $variants, $options);
         if (empty($body)) {
-            
-            
+            // v7.21.351 — DIAGNOSTIC (removable): name the empty-body exit precisely.
+            // eleven-ecu 17357: dispatch receipts with no wire-out = the bail is HERE.
             if (function_exists('wpc_cache_first_log')) {
-                $wpc_af351 = function_exists('get_attached_file') ? (string) get_attached_file($imageID) : '';
-                $wpc_op351 = function_exists('wp_get_original_image_path') ? (string) wp_get_original_image_path($imageID) : '';
+                $attached_path = function_exists('get_attached_file') ? (string) get_attached_file($imageID) : '';
+                $original_path = function_exists('wp_get_original_image_path') ? (string) wp_get_original_image_path($imageID) : '';
                 wpc_cache_first_log('media-env-fail', (string) $imageID, '', [
                     'why'      => $body === null ? 'animated_webp' : 'file_missing',
-                    'attached' => basename($wpc_af351) . ':' . (($wpc_af351 && @file_exists($wpc_af351)) ? 1 : 0),
-                    'original' => basename($wpc_op351) . ':' . (($wpc_op351 && @file_exists($wpc_op351)) ? 1 : 0),
+                    'attached' => basename($attached_path) . ':' . (($attached_path && @file_exists($attached_path)) ? 1 : 0),
+                    'original' => basename($original_path) . ':' . (($original_path && @file_exists($original_path)) ? 1 : 0),
                 ]);
             }
             return ['ok' => false, 'error' => 'request_build_failed'];
@@ -136,9 +130,9 @@ class WPS_LocalV2
         $has_url  = !empty($src_obj['url']);
         $transport = $has_b64 ? ($has_url ? 'both' : 'inline') : 'url';
 
-        
-        
-        
+        // v7.21.319 — envelope telemetry so the debug endpoint can show whether a dispatch
+        // went out inline (large body → blackhole risk) or url (tiny). Answers "is source.url
+        // actually being used?" without reading debug.log.
         if (function_exists('set_transient')) {
             set_transient('wpc_v2_last_envelope_' . (int) $imageID, [
                 'transport' => $transport,
@@ -162,24 +156,40 @@ class WPS_LocalV2
         ];
     }
 
-    
-
-
-
-
-    public function process_response($imageID, $http_code, $body_raw)
+    /**
+     * Public response processor. The bulk curl_multi dispatcher calls this
+     * after curl_multi_getcontent() to walk the same response routing that
+     * optimize() does (429 / 401 / 413 / 200 + apply_phase_a_response).
+     */
+    public function process_response($imageID, $http_code, $body_raw, $retry_after_header = '')
     {
         $http_code = (int) $http_code;
         $parsed    = json_decode((string) $body_raw, true);
 
+        // A 429 names its wait in the Retry-After header and in the body's `retry_after`
+        // (server.js, the Phase A overload answer); the bulk lane's curl_multi reads no headers,
+        // so the body is read too. The dispatch door turns it into the site-wide hold.
         if ($http_code === 429) {
-            return ['ok' => false, 'error' => 'pool_full', 'http_code' => 429, 'parsed' => $parsed];
+            $retry_after = (int) $retry_after_header;
+            if ($retry_after <= 0 && is_array($parsed)) {
+                $retry_after = (int) ($parsed['retry_after'] ?? ($parsed['retryAfter'] ?? 0));
+            }
+            return ['ok' => false, 'error' => 'pool_full', 'http_code' => 429, 'retry_after' => max(0, $retry_after), 'parsed' => $parsed, 'body' => $body_raw];
         }
         if ($http_code === 401) {
-            return ['ok' => false, 'error' => 'invalid_apikey', 'http_code' => 401];
+            return ['ok' => false, 'error' => 'invalid_apikey', 'http_code' => 401, 'body' => $body_raw];
         }
+        // `use_scaled` asks for WordPress's -scaled copy as the source (the door resends once).
         if ($http_code === 413) {
-            return ['ok' => false, 'error' => 'source_too_large', 'http_code' => 413, 'parsed' => $parsed];
+            return [
+                'ok'            => false,
+                'error'         => 'source_too_large',
+                'service_error' => is_array($parsed) ? (string) ($parsed['error'] ?? '') : '',
+                'use_scaled'    => is_array($parsed) && !empty($parsed['use_scaled']),
+                'http_code'     => 413,
+                'parsed'        => $parsed,
+                'body'          => $body_raw,
+            ];
         }
         if ($http_code !== 200 || !is_array($parsed)) {
             error_log(sprintf(
@@ -192,44 +202,79 @@ class WPS_LocalV2
         }
 
         if (empty($parsed['ok'])) {
-            return ['ok' => false, 'error' => $parsed['error'] ?? 'phase_a_failed', 'parsed' => $parsed];
+            return ['ok' => false, 'error' => $parsed['error'] ?? 'phase_a_failed', 'http_code' => $http_code, 'parsed' => $parsed, 'body' => $body_raw];
         }
 
         $jobId = isset($parsed['jobId']) ? (string) $parsed['jobId'] : '';
 
-        $write = $this->apply_phase_a_response($imageID, $parsed, $jobId);
-        if (empty($write['ok'])) {
-            return ['ok' => false, 'error' => 'write_failed', 'detail' => $write['detail'] ?? '', 'parsed' => $parsed];
+        // Rule: the service's duplicate answer is a sent image, not a failed write. With
+        // V2_MEDIA_DEDUP on, a request whose every (sizeLabel, format) pair the service encoded
+        // in the last 24 h is answered {ok, dedupe:'media_recent_encode', imageID, jobId,
+        // phase:'A', pairs[, partial]} with no Phase A body: the service republishes those
+        // variants to this site's manifest and wakes the pull, and keeps no job state for that
+        // jobId (the status route answers 410). Observed failure: the rig's bulk run read that
+        // answer as `write_failed`, left two re-sent images uncompressed and showed them as
+        // "Refused: write_failed 2" (diff-1bdd6454-vs-96b29648, bug 1).
+        if (isset($parsed['dedupe']) && is_string($parsed['dedupe']) && $parsed['dedupe'] !== '') {
+            if (function_exists('wpc_v2_reset_attempts')) {
+                wpc_v2_reset_attempts((int) $imageID);
+            }
+            return [
+                'ok'      => true,
+                'outcome' => 'deduplicated',
+                'dedupe'  => (string) $parsed['dedupe'],
+                'pairs'   => isset($parsed['pairs']) ? (int) $parsed['pairs'] : 0,
+                'jobId'   => $jobId,
+                'parsed'  => $parsed,
+            ];
         }
 
-        
-        
-        
-        
-        
-        if (function_exists('wpc_v2_parked_list197') && function_exists('wpc_v2_attempts_reset197')
+        $write = $this->apply_phase_a_response($imageID, $parsed, $jobId);
+        if (empty($write['ok'])) {
+            return ['ok' => false, 'error' => 'write_failed', 'detail' => $write['detail'] ?? '', 'http_code' => $http_code, 'parsed' => $parsed];
+        }
+
+        // v7.21.352 — RECOVERY ON PROOF (eleven-ecu: 37 images burned their 4 attempts
+        // against a host firewall that blackholed the orchestrator; once the pipe is
+        // fixed, parked images would stay dead up to 7 days). A dispatch that just
+        // SUCCEEDED is the proof the underlying issue is resolved — unpark the fleet so
+        // bulk re-admits everything. Bounded (park list caps at 200), 10-min throttled.
+        if (function_exists('wpc_v2_parked_list') && function_exists('wpc_v2_reset_attempts')
             && !get_transient('wpc_v2_unpark_sweep352')) {
-            $wpc_pk352 = wpc_v2_parked_list197();
-            if (!empty($wpc_pk352)) {
+            $parked_ids = wpc_v2_parked_list();
+            if (!empty($parked_ids)) {
                 set_transient('wpc_v2_unpark_sweep352', 1, 600);
-                foreach ($wpc_pk352 as $wpc_pid352) {
-                    wpc_v2_attempts_reset197((int) $wpc_pid352);
+                foreach ($parked_ids as $parked_id) {
+                    wpc_v2_reset_attempts((int) $parked_id);
                 }
                 if (function_exists('wpc_cache_first_log')) {
-                    wpc_cache_first_log('media-unpark-sweep', '', '', ['n' => count($wpc_pk352)]);
+                    wpc_cache_first_log('media-unpark-sweep', '', '', ['n' => count($parked_ids)]);
                 }
             }
         }
-        if (function_exists('wpc_v2_attempts_reset197')) {
-            wpc_v2_attempts_reset197((int) $imageID);
+        if (function_exists('wpc_v2_reset_attempts')) {
+            wpc_v2_reset_attempts((int) $imageID);
         }
         return ['ok' => true, 'parsed' => $parsed, 'write' => $write, 'jobId' => $jobId];
     }
 
 
+    /**
+     * The inline source cap: the service's declared max_inline_bytes (cached capabilities),
+     * never above INLINE_BYTES_CEILING; the ceiling when nothing is cached. A larger source goes
+     * by URL. Observed failure: a 26 MB hardcode let a source through whose base64 exceeded the
+     * route's body limit, while a 700 KB constant elsewhere still named the old cap.
+     */
+    private static function inline_cap()
+    {
+        $caps = (function_exists('get_site_transient') && defined('WPC_V2_CAPS_CACHE_KEY')) ? get_site_transient(WPC_V2_CAPS_CACHE_KEY) : false;
+        $declared = is_array($caps) && !empty($caps['max_inline_bytes']) ? (int) $caps['max_inline_bytes'] : self::INLINE_BYTES_CEILING;
+        return min($declared, self::INLINE_BYTES_CEILING);
+    }
+
     private function build_request_body($imageID, array $variants, array $options)
     {
-        
+        // Animated webp: permanent decline — recompression mangles animation frames
         if (function_exists('wpc_is_animated_webp') && function_exists('get_post_mime_type')
             && (string) get_post_mime_type($imageID) === 'image/webp') {
             $wpc_awb_f = function_exists('get_attached_file') ? (string) get_attached_file($imageID) : '';
@@ -250,7 +295,9 @@ class WPS_LocalV2
         $source_path = function_exists('wp_get_original_image_path')
             ? wp_get_original_image_path($imageID)
             : $abs_path;
-        if (!$source_path || !file_exists($source_path)) {
+        // The service's 413 with `use_scaled` asks for the copy WordPress scaled
+        // (wps_ic_image_optimize::resend_scaled()).
+        if (!$source_path || !file_exists($source_path) || !empty($options['use_scaled_source'])) {
             $source_path = $abs_path;
         }
 
@@ -259,7 +306,11 @@ class WPS_LocalV2
 
         $mp_probe       = @getimagesize($source_path);
         $src_megapixels = (isset($mp_probe[0], $mp_probe[1])) ? ((int) $mp_probe[0] * (int) $mp_probe[1]) : 0;
-        $mp_ceiling     = (int) apply_filters('wpc_v2_source_max_megapixels', 19900000);
+        // Just under the service's declared max_source_mp (99.5 %: 20 MP gives the 19.9 MP this
+        // ceiling always had), so a source the service would refuse with a 413 is scaled first.
+        $caps_mp        = (function_exists('get_site_transient') && defined('WPC_V2_CAPS_CACHE_KEY')) ? get_site_transient(WPC_V2_CAPS_CACHE_KEY) : false;
+        $declared_mp    = is_array($caps_mp) && !empty($caps_mp['max_source_mp']) ? (float) $caps_mp['max_source_mp'] : 0.0;
+        $mp_ceiling     = (int) apply_filters('wpc_v2_source_max_megapixels', $declared_mp > 0 ? (int) floor($declared_mp * 995000) : 19900000);
         $over_mp        = ($src_megapixels > 0 && $src_megapixels > $mp_ceiling);
 
 
@@ -285,7 +336,7 @@ class WPS_LocalV2
             if (!is_dir($tmp_dir)) {
                 wp_mkdir_p($tmp_dir);
             } else {
-                
+                // Opportunistic cleanup of stale temp sources (>1 hour old).
 
 
                 $stale_cutoff = time() - 3600;
@@ -300,9 +351,9 @@ class WPS_LocalV2
             $editor = wp_get_image_editor($source_path);
             if (!is_wp_error($editor)) {
                 $editor->resize($resize_max, $resize_max, false);
-                
+                // This intermediate is only built for the rare original that STILL exceeds the (9.5 MB)
 
-                
+                // For those giants the encoder derives every variant from THIS 2560 source, and since no
 
 
                 $wpc_src_q = (int) apply_filters('wpc_v2_source_quality', 100, $imageID);
@@ -333,7 +384,7 @@ class WPS_LocalV2
 
         if (!$used_resized
             && $bytes_on_disk > 0
-            && (($bytes_on_disk > self::INLINE_BYTES_RAW_MAX && $bytes_on_disk > $url_fetch_max) || $over_mp)
+            && ($bytes_on_disk > $url_fetch_max || $over_mp)
             && $abs_path
             && $abs_path !== $source_path
             && file_exists($abs_path)) {
@@ -354,8 +405,8 @@ class WPS_LocalV2
         $h    = isset($size[1]) ? (int) $size[1] : 0;
 
         if ($w <= 0 || $h <= 0) {
-            
-            
+            // Tier 2: WP attachment metadata. Cached at upload time; reliable
+            // across formats since WP normalises during _wp_attachment_metadata.
             $meta = wp_get_attachment_metadata($imageID);
             if (is_array($meta)) {
                 if ($w <= 0 && !empty($meta['width']))  $w = (int) $meta['width'];
@@ -364,8 +415,8 @@ class WPS_LocalV2
         }
 
         if (($w <= 0 || $h <= 0) && extension_loaded('imagick')) {
-            
-            
+            // Tier 3: Imagick identifyImage — slow (~50-100 ms) but bulletproof
+            // for any format ImageMagick can read.
             try {
                 $im_probe = new Imagick();
                 $im_probe->pingImage($source_path);
@@ -382,7 +433,7 @@ class WPS_LocalV2
         }
 
         if ($w <= 0 || $h <= 0) {
-            
+            // All three tiers failed. Bail with a clear error — better than
 
             error_log(sprintf(
                 '[WPC V2Client] source_dims_unknown imageID=%s path=%s — refusing to POST',
@@ -391,19 +442,15 @@ class WPS_LocalV2
             return ['ok' => false, 'error' => 'source_dims_unknown', 'imageID' => $imageID];
         }
 
-        
-
-
-        
-
-
+        // Source transport: up to 5 MB inline only; up to the inline cap (inline_cap()) inline
+        // plus the URL; above the cap the URL only.
         $tier1_max = (int) apply_filters('wpc_v2_source_inline_max_bytes',  5 * 1024 * 1024);
-        $tier2_max = (int) apply_filters('wpc_v2_source_both_max_bytes',   26 * 1024 * 1024);
+        $tier2_max = (int) apply_filters('wpc_v2_source_both_max_bytes', self::inline_cap());
 
         $source = ['width' => $w, 'height' => $h, 'bytesB64Available' => true];
 
         if ($bytes_on_disk > 0 && empty($options['force_url_source']) && $bytes_on_disk <= $tier2_max) {
-            
+            // Tier 1 or Tier 2 — attempt inline read.
             $raw = @file_get_contents($source_path);
             if ($raw !== false) {
                 $source['bytesB64'] = base64_encode($raw);
@@ -416,10 +463,10 @@ class WPS_LocalV2
                     $rel        = ltrim(str_replace($upload_dir['basedir'], '', $source_path), '/');
                     $source['url'] = $upload_dir['baseurl'] . '/' . $rel;
                 }
-                
+                // Tier 1: bytesB64 only — URL omitted to save POST body bytes.
             }
-            
-            
+            // If file_get_contents failed (rare — disk read error mid-flight),
+            // fall through to URL-only path below as last resort.
         }
 
 
@@ -438,8 +485,8 @@ class WPS_LocalV2
                                     ? $options['formats']
                                     : ['jpeg', 'webp', 'avif'];
 
-        
-        
+        // webp-as-source contract: recompress to webp/avif only — NEVER jpeg from a
+        // webp original (alpha loss + format downgrade)
         $wpc_src_mime_wb = function_exists('get_post_mime_type') ? (string) get_post_mime_type($imageID) : '';
         if ($wpc_src_mime_wb === 'image/webp') {
             $global_formats = array_values(array_diff($global_formats, ['jpeg', 'jpg']));
@@ -469,15 +516,10 @@ class WPS_LocalV2
         $body = [
             'apikey'         => $this->apikey,
             'imageID'        => (string) $imageID,
-            'imageSite'      => parse_url(home_url(), PHP_URL_HOST),
             'source'         => $source,
             'variants'       => array_values($variants),
             'formats'        => $global_formats,
-            'level'          => isset($options['level']) ? (string) $options['level'] : 'intelligent',
-
-
-            
-            'skipBackup'     => (function_exists('wpc_parent_has_backup') && wpc_parent_has_backup($imageID)) ? '1' : '0',
+            'level'          => isset($options['level']) ? (string) $options['level'] : (function_exists('wpc_v2_level') ? wpc_v2_level() : 'intelligent'),
             'callback'       => [
 
 
@@ -490,17 +532,12 @@ class WPS_LocalV2
 
 
                 'batchSupported' => apply_filters('wpc_v2_batch_supported', false),
+                // Per-callback-type concurrency caps (AIMD). Plugin self-measures
+                // its FPM capacity via AIMD (TCP-style congestion control), advertises
 
 
-                'directEntry'    => function_exists('wpc_v2_callback_url')
-                                    ? (bool) get_option('wpc_v2_direct_entry_healthy', false)
-                                    : false,
-                
-                
-
-
-                
-                
+                // Includes WP-CLI/cron 2× multiplier (single unmultiplied) for jobs
+                // that don't compete with FE traffic for FPM workers.
 
 
                 'maxConcurrent'  => (function_exists('wpc_v2_get_max_concurrent')
@@ -510,9 +547,9 @@ class WPS_LocalV2
                                     : null,
 
 
-                
+                // See addons/v2/v2-pull.php.
 
-                
+                // POLL to drain the manifest — when that scheduler isn't firing on a host, fresh AND ancient
 
 
                 'deliveryMode'   => (function_exists('wpc_v2_pull_delivery_enabled')
@@ -523,13 +560,12 @@ class WPS_LocalV2
                                     : null,
             ],
 
-            
+            // §11 F4: header would be unsigned + spoofable; body is in the HMAC
 
 
             'origin'         => function_exists('wpc_v2_get_request_origin')
                                 ? wpc_v2_get_request_origin()
                                 : 'web',
-            'triggerContext' => isset($options['triggerContext']) ? (string) $options['triggerContext'] : 'unknown',
             'resubmit_reason' => isset($options['resubmit_reason']) && $options['resubmit_reason'] !== ''
                                 ? (string) $options['resubmit_reason'] : 'new',
             'attempt'         => isset($options['attempt']) ? max(1, (int) $options['attempt']) : 1,
@@ -549,10 +585,10 @@ class WPS_LocalV2
         return $body;
     }
 
-    
-
-
-
+    /**
+     * Parse Phase A response, write parent variant bytes to disk, update meta,
+     * record asyncPending in transient for the polling fallback.
+     */
     private function apply_phase_a_response($imageID, array $parsed, $jobId = '')
     {
         $imageID = (int) $imageID;
@@ -620,7 +656,7 @@ class WPS_LocalV2
             $entry = isset($parent[$fmt]) && is_array($parent[$fmt]) ? $parent[$fmt] : null;
             if (!$entry) continue;
 
-            
+            // Per-format ok/reason from contract C4 — bg_no_improvement maps here too.
             if (isset($entry['ok']) && $entry['ok'] === false) {
                 $reason = isset($entry['reason']) ? (string) $entry['reason'] : 'no_improvement';
                 $this->record_no_improvement_variant($imageID, $parent_size_label, $fmt, $reason, $entry);
@@ -651,53 +687,33 @@ class WPS_LocalV2
             if ($raw === false) continue;
 
 
-            if (in_array($fmt, ['jpeg', 'webp'], true) && $src_bytes_on_disk > 0 && strlen($raw) >= $src_bytes_on_disk) {
-                error_log(sprintf(
-                    '[WPC V2Client] phase_a_parent_skip reason=parent_larger_than_disk size_label=%s fmt=%s parent_bytes=%d disk_bytes=%d',
-                    $parent_size_label, $fmt, strlen($raw), $src_bytes_on_disk
-                ));
-                $this->record_no_improvement_variant($imageID, $parent_size_label, $fmt, 'parent_larger_than_source', $entry);
-                $intentional_skip_count++;
-                continue;
-            }
-
             if (function_exists('wpc_is_valid_image_bytes')
                 && !wpc_is_valid_image_bytes($raw, $fmt === 'jpeg' ? 'jpeg' : $fmt, $imageID, 'phase_a_v2', ['size_label' => $parent_size_label])) {
                 continue;
             }
 
+            // The store refuses a parent no smaller than the file WordPress serves at its size
+            // (the attached file for `scaled`, the original for `original`) and records it as no
+            // improvement; that is an intentional skip, not a failure.
             $dest = $dest_dir . '/' . $filename;
-            $tmp  = $dest . '.wpc_tmp_' . wp_generate_password(8, false);
-
-
-            if (wpc_fs_put($tmp, $raw) === false) {
-                $err = error_get_last();
+            $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $parent_size_label, 'fmt' => $fmt, 'src' => 'phase_a']]);
+            if (($put['error'] ?? '') === 'larger_than_disk') {
+                if (empty($put['recorded'])) {
+                    $this->record_no_improvement_variant($imageID, $parent_size_label, $fmt, 'larger_than_disk', $entry);
+                }
+                $intentional_skip_count++;
+                continue;
+            }
+            if (empty($put['ok'])) {
                 error_log(sprintf(
-                    '[WPC V2Client] phase_a_write_failed imageID=%d size_label=%s fmt=%s bytes=%d dest_tail=%s msg=%s',
-                    (int) $imageID, (string) $parent_size_label, (string) $fmt, strlen($raw),
-                    substr($dest, -60), $err['message'] ?? '-'
+                    '[WPC V2Client] phase_a_%s imageID=%d size_label=%s fmt=%s bytes=%d dest_tail=%s msg=%s',
+                    (string) $put['error'], (int) $imageID, (string) $parent_size_label, (string) $fmt, strlen($raw),
+                    substr($dest, -60), (string) $put['msg']
                 ));
                 continue;
             }
-            if (!@rename($tmp, $dest)) {
-                $err = error_get_last();
-                error_log(sprintf(
-                    '[WPC V2Client] phase_a_rename_failed imageID=%d size_label=%s fmt=%s dest_tail=%s msg=%s',
-                    (int) $imageID, (string) $parent_size_label, (string) $fmt,
-                    substr($dest, -60), $err['message'] ?? '-'
-                ));
-                @unlink($tmp);
-                continue;
-            }
-            if (!@chmod($dest, 0644)) {
-                $err = error_get_last();
-                error_log(sprintf(
-                    '[WPC V2Client] phase_a_chmod_failed imageID=%d dest_tail=%s msg=%s',
-                    (int) $imageID, substr($dest, -60), $err['message'] ?? '-'
-                ));
-            }
 
-            
+            // Savings baseline = un-scaled original (consistent across variants
 
 
             $entry_orig = isset($entry['originalSize']) ? (int) $entry['originalSize'] : 0;
@@ -743,6 +759,9 @@ class WPS_LocalV2
                     $intentional_skip_count, count($async_pending)
                 ));
                 $this->record_pending_variants($imageID, $async_pending, $jobId);
+                // No parent bytes to record (the service's parent was no smaller than the file on
+                // disk), so the owner's rule cannot see it: the promotion is made here.
+                wps_ic_image_variants::mark_compressed($imageID, 'phase-a');
                 $this->promote_to_compressed($imageID);
                 return ['ok' => true, 'variants_written' => [], 'jobId' => $jobId, 'parents_skipped' => $intentional_skip_count];
             }
@@ -768,7 +787,7 @@ class WPS_LocalV2
             return ['ok' => false, 'detail' => 'no parent bytes written', 'diag' => $diag];
         }
 
-        $this->merge_variants($imageID, $written);
+        wps_ic_image_variants::record($imageID, $written, 'phase-a', ['first' => true]);
         $this->record_pending_variants($imageID, $async_pending, $jobId);
         $this->promote_to_compressed($imageID);
 
@@ -816,6 +835,11 @@ class WPS_LocalV2
         if ($code === 410) {
             return ['ok' => false, 'error' => 'gc_expired', 'http_code' => 410];
         }
+        // The job was dispatched under another key (the site's key changed since): this key can
+        // never read it (server.js, status route, v3.24.143 (E)).
+        if ($code === 403) {
+            return ['ok' => false, 'error' => 'apikey_mismatch', 'http_code' => 403];
+        }
         $parsed = json_decode(wp_remote_retrieve_body($response), true);
         if ($code !== 200 || !is_array($parsed)) {
             return ['ok' => false, 'error' => 'orchestrator_error', 'http_code' => $code];
@@ -823,11 +847,11 @@ class WPS_LocalV2
         return ['ok' => true, 'parsed' => $parsed];
     }
 
-    
-
-
-
-
+    /**
+     * Read the stored jobId for an image from the pending transient. Returns
+     * empty string if no pending state exists. Used by get_status() callers
+     * (the cron's status poll) so they do not track the jobId separately.
+     */
     public static function get_stored_job_id($imageID)
     {
         $imageID = (int) $imageID;
@@ -838,39 +862,17 @@ class WPS_LocalV2
     }
 
 
-    public function redeliver($imageID)
-    {
-        if (function_exists('wpc_probe_orchestrator_capabilities')) {
-            $caps = wpc_probe_orchestrator_capabilities();
-            if (empty($caps['redeliver_supported'])) {
-                return ['ok' => false, 'error' => 'redeliver_unsupported_v04_deferred'];
-            }
-        }
-        $imageID = (int) $imageID;
-        $jobId = self::get_stored_job_id($imageID);
-        $url = $this->orchestrator_url . '/optimize-v2/status/' . $imageID . '?redeliver=true';
-        if ($jobId !== '') $url .= '&jobId=' . rawurlencode($jobId);
-        $response = wp_remote_get($url, [
-            'timeout' => self::STATUS_POLL_TIMEOUT_S,
-            'headers' => ['Authorization' => 'Bearer ' . $this->apikey],
-        ]);
-        if (is_wp_error($response)) return ['ok' => false, 'error' => 'transport'];
-        $code = (int) wp_remote_retrieve_response_code($response);
-        return ['ok' => $code === 200, 'http_code' => $code];
-    }
-
-
     private function derive_variant_filename($abs_path, $size_label, $format, $imageID = 0)
     {
-        $base = basename($abs_path);                          
+        $base = basename($abs_path);                          // e.g. photo-scaled.jpg
         $dot  = strrpos($base, '.');
         if ($dot === false) return '';
         $name = substr($base, 0, $dot);
 
         $ext = ($format === 'jpeg' || $format === 'jpg') ? 'jpg' : strtolower($format);
 
-        
-        
+        // "scaled" parent — the WP-attached file IS the scaled file. Variant
+        // filename is just basename with new extension (e.g. photo-scaled.webp).
         if ($size_label === 'scaled' || $size_label === '') {
             return $name . '.' . $ext;
         }
@@ -892,11 +894,11 @@ class WPS_LocalV2
         return $name_clean . '-' . $size_label . '.' . $ext;
     }
 
-    
-
-
-
-
+    /**
+     * Variant key matching v1 convention: jpeg uses bare size label,
+     * webp/avif use {label}-{format}. Compatible with existing
+     * wpc_compute_best_savings, canonical_original_size, and modal renderers.
+     */
     private function variant_key($size_label, $format)
     {
         $size_label = (string) $size_label;
@@ -906,54 +908,9 @@ class WPS_LocalV2
         return $size_label . '-' . $format;
     }
 
-    
-
-
-
-
-    private function merge_variants($imageID, array $new_entries)
-    {
-        global $wpdb;
-        $lock_name = 'wpc_bg_meta_' . $imageID;
-
-
-        $got_lock = wpc_worker_lock($lock_name);
-        if (!$got_lock) {
-            error_log(sprintf('[WPC V2] merge_variants lock_unavailable imageID=%d entries=%d — proceeding unlocked with defensive merge', (int) $imageID, count($new_entries)));
-        }
-
-        try {
-
-
-            wp_cache_delete($imageID, 'post_meta');
-            $existing = get_post_meta($imageID, 'ic_local_variants', true);
-            if (!is_array($existing)) $existing = [];
-            foreach ($new_entries as $key => $entry) {
-                if (!empty($existing[$key]['bg_upgraded'])) continue;
-                $existing[$key] = $entry;
-            }
-            update_post_meta($imageID, 'ic_local_variants', $existing);
-
-            if (function_exists('wpc_compute_best_savings')) {
-                $best = wpc_compute_best_savings($existing, $imageID);
-                if (!empty($best['orig']) && !empty($best['pct'])) {
-                    update_post_meta($imageID, 'ic_savings',          round((float) $best['pct'], 1));
-                    update_post_meta($imageID, 'ic_savings_format',   (string) $best['format']);
-                    update_post_meta($imageID, 'ic_savings_bytes',    (int) $best['orig'] - (int) $best['opt']);
-                    update_post_meta($imageID, 'ic_savings_baseline', (int) $best['orig']);
-                }
-            }
-        } finally {
-            if ($got_lock) {
-                wpc_worker_unlock($lock_name);
-            }
-        }
-    }
-
-
     private function record_pending_variants($imageID, array $async_pending, $jobId = '')
     {
-        
+        // Read ic_local_variants FIRST so we can skip entries that
 
 
         wp_cache_delete($imageID, 'post_meta');
@@ -985,8 +942,8 @@ class WPS_LocalV2
             delete_transient('wpc_v2_pending_' . $imageID);
             return;
         }
-        
-        
+        // If everything already landed (pending empty but jobId present),
+        // still discard the transient — there's nothing left to wait for.
         if (empty($pending)) {
             delete_transient('wpc_v2_pending_' . $imageID);
             return;
@@ -997,47 +954,32 @@ class WPS_LocalV2
             'recorded_at' => time(),
         ];
         set_transient('wpc_v2_pending_' . $imageID, $payload, self::PENDING_TRANSIENT_TTL);
+        // The cron's status poll asks the service about it if the callbacks do not land it.
+        if (function_exists('wpc_v2_status_watch_add')) {
+            wpc_v2_status_watch_add($imageID);
+        }
     }
 
-    
-
-
-
+    /**
+     * Record per-format no-improvement signal so UI can render "no AVIF for this
+     * variant" definitively. Reuses the v1 bg_no_improvement flag.
+     */
     private function record_no_improvement_variant($imageID, $size_label, $format, $reason, array $entry)
     {
         $key = $this->variant_key($size_label, $format);
-        global $wpdb;
-        $lock_name = 'wpc_bg_meta_' . $imageID;
-        
-        $got_lock = wpc_worker_lock($lock_name);
-        if (!$got_lock) {
-            error_log(sprintf('[WPC V2] record_no_improvement_variant lock_unavailable imageID=%d variant=%s — proceeding unlocked', (int) $imageID, $key));
-        }
-        try {
-            $existing = get_post_meta($imageID, 'ic_local_variants', true);
-            if (!is_array($existing)) $existing = [];
-            $existing[$key] = array_merge($existing[$key] ?? [], [
-                'bg_no_improvement' => true,
-                'no_improvement_reason' => (string) $reason,
-                'baseline_kb' => isset($entry['baselineKb']) ? (float) $entry['baselineKb'] : 0.0,
-                'widen_alt_kbs' => isset($entry['widenAltKbs']) && is_array($entry['widenAltKbs']) ? $entry['widenAltKbs'] : [],
-            ]);
-            update_post_meta($imageID, 'ic_local_variants', $existing);
-        } finally {
-            if ($got_lock) {
-                wpc_worker_unlock($lock_name);
-            }
-        }
+        wps_ic_image_variants::record($imageID, [$key => [
+            'bg_no_improvement' => true,
+            'no_improvement_reason' => (string) $reason,
+            'baseline_kb' => isset($entry['baselineKb']) ? (float) $entry['baselineKb'] : 0.0,
+            'widen_alt_kbs' => isset($entry['widenAltKbs']) && is_array($entry['widenAltKbs']) ? $entry['widenAltKbs'] : [],
+        ]], 'phase-a-no-improvement');
     }
 
 
+    /** The rest of a compressed Phase A: ic_status itself is the variant-set owner's promotion. */
     private function promote_to_compressed($imageID)
     {
-        update_post_meta($imageID, 'ic_status', 'compressed');
-        
-        
-        if (function_exists('wpc_invalidate_local_cache')) wpc_invalidate_local_cache();
-        
+        // Merge instead of overwrite so expected_variants survives.
         if (function_exists('wpc_v2_ic_compressing_set_status')) {
             wpc_v2_ic_compressing_set_status($imageID, 'compressed');
         } else {

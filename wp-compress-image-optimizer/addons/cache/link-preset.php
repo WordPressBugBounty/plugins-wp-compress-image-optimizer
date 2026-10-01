@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/cache/link-preset.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -39,7 +31,7 @@ if (!function_exists('wpc_detect_foreign_page_cache')) {
         if (class_exists('SiteGround_Optimizer\\Supercacher\\Supercacher')) {
             return 'sg-optimizer';
         }
-        
+        // A non-WPC advanced-cache.php drop-in = another full-page cache owns the drop-in.
         if (defined('WP_CACHE') && WP_CACHE && defined('WP_CONTENT_DIR') && @is_readable(WP_CONTENT_DIR . '/advanced-cache.php')) {
             $head = @file_get_contents(WP_CONTENT_DIR . '/advanced-cache.php', false, null, 0, 4096);
             if (is_string($head) && $head !== ''
@@ -54,11 +46,11 @@ if (!function_exists('wpc_detect_foreign_page_cache')) {
     }
 }
 
-if (!function_exists('wpc_preset_cache_gate67')) {
-    
-    
-    
-    function wpc_preset_cache_gate67($settings)
+if (!function_exists('wpc_drop_preset_advanced_cache_if_foreign')) {
+    // Never two page caches: every preset-shaped settings array passes through here before
+    // being written. A foreign page cache owning the site drops cache.advanced to 0; the
+    // user's explicit Advanced Cache toggle is untouched (it does not route through presets).
+    function wpc_drop_preset_advanced_cache_if_foreign($settings)
     {
         if (!apply_filters('wpc_preset_cache_gate', true)) {
             return $settings;
@@ -66,13 +58,13 @@ if (!function_exists('wpc_preset_cache_gate67')) {
         if (!is_array($settings) || empty($settings['cache']['advanced'])) {
             return $settings;
         }
-        $wpc_f67 = wpc_detect_foreign_page_cache();
-        if ($wpc_f67 === false) {
+        $foreign_cache = wpc_detect_foreign_page_cache();
+        if ($foreign_cache === false) {
             return $settings;
         }
         $settings['cache']['advanced'] = 0;
         if (function_exists('wpc_link_preset_journal')) {
-            wpc_link_preset_journal('cache-gate', ['foreign' => $wpc_f67]);
+            wpc_link_preset_journal('cache-gate', ['foreign' => $foreign_cache]);
         }
         return $settings;
     }
@@ -83,53 +75,53 @@ if (!function_exists('wpc_font_localizer_present')) {
 
     function wpc_font_localizer_present()
     {
-        static $wpc_flp789 = null;
-        if ($wpc_flp789 !== null) {
-            return apply_filters('wpc_font_localizer_present', $wpc_flp789);
+        static $localizer = null;
+        if ($localizer !== null) {
+            return apply_filters('wpc_font_localizer_present', $localizer);
         }
-        $wpc_flp789 = false;
+        $localizer = false;
         try {
-            $wpc_sl789 = apply_filters('wpc_font_localizer_slugs', [
+            $localizer_slugs = apply_filters('wpc_font_localizer_slugs', [
                 'omgf'               => 'host-webfonts-local',
                 'local-google-fonts' => 'local-google-fonts',
                 'embed-google-fonts' => 'embed-google-fonts',
                 'omgf-pro'           => 'omgf-pro',
                 'dp-divi-dsgvo'      => 'dp-divi-dsgvo',
             ]);
-            $wpc_ap789 = (array) get_option('active_plugins', []);
+            $active_plugins = (array) get_option('active_plugins', []);
             if (function_exists('get_site_option')) {
-                $wpc_ap789 = array_merge($wpc_ap789, array_keys((array) get_site_option('active_sitewide_plugins', [])));
+                $active_plugins = array_merge($active_plugins, array_keys((array) get_site_option('active_sitewide_plugins', [])));
             }
-            foreach ($wpc_sl789 as $wpc_n789 => $wpc_d789) {
-                foreach ($wpc_ap789 as $wpc_p789) {
-                    if (strpos((string) $wpc_p789, (string) $wpc_d789 . '/') === 0) {
-                        $wpc_flp789 = (string) $wpc_n789;
+            foreach ($localizer_slugs as $localizer_name => $plugin_dir) {
+                foreach ($active_plugins as $active_plugin) {
+                    if (strpos((string) $active_plugin, (string) $plugin_dir . '/') === 0) {
+                        $localizer = (string) $localizer_name;
                         break 2;
                     }
                 }
             }
         } catch (\Throwable $e) {
-            $wpc_flp789 = false;
+            $localizer = false;
         }
-        return apply_filters('wpc_font_localizer_present', $wpc_flp789);
+        return apply_filters('wpc_font_localizer_present', $localizer);
     }
 }
 
 if (!function_exists('wpc_font_localizer_sheet')) {
 
 
-    function wpc_font_localizer_sheet($wpc_tag789)
+    function wpc_font_localizer_sheet($tag)
     {
-        if (!is_string($wpc_tag789) || $wpc_tag789 === '') {
+        if (!is_string($tag) || $tag === '') {
             return false;
         }
         if (!function_exists('wpc_font_localizer_present') || wpc_font_localizer_present() === false) {
             return false;
         }
-        $wpc_tk789 = apply_filters('wpc_font_localizer_sheet_tokens',
+        $sheet_tokens = apply_filters('wpc_font_localizer_sheet_tokens',
             ['omgf', 'local-google-fonts', 'embed-google-fonts', 'gfonts_local', 'dp-divi-dsgvo']);
-        foreach ((array) $wpc_tk789 as $wpc_t789) {
-            if ($wpc_t789 !== '' && stripos($wpc_tag789, (string) $wpc_t789) !== false) {
+        foreach ((array) $sheet_tokens as $token) {
+            if ($token !== '' && stripos($tag, (string) $token) !== false) {
                 return true;
             }
         }
@@ -139,74 +131,74 @@ if (!function_exists('wpc_font_localizer_sheet')) {
 
 if (!function_exists('wpc_font_localizer_faces')) {
 
-    
-    
-    
+    // Option B of the font-map contract (service-accepted 2026-08-06): send the localizer's
+    // @font-face inventory beside html/css in the dispatch. Match key on their side is
+    // family + weight + style (+ unicode-range when present); same-origin remap only.
     function wpc_font_localizer_faces()
     {
-        static $wpc_faces794 = null;
-        if ($wpc_faces794 !== null) {
-            return $wpc_faces794;
+        static $faces = null;
+        if ($faces !== null) {
+            return $faces;
         }
-        $wpc_faces794 = [];
+        $faces = [];
         try {
             if (!function_exists('wpc_font_localizer_present') || wpc_font_localizer_present() === false
                 || !function_exists('wp_upload_dir') || !function_exists('home_url')) {
-                return $wpc_faces794;
+                return $faces;
             }
-            $wpc_ud794 = wp_upload_dir();
-            if (empty($wpc_ud794['basedir']) || empty($wpc_ud794['baseurl'])) {
-                return $wpc_faces794;
+            $upload_dir = wp_upload_dir();
+            if (empty($upload_dir['basedir']) || empty($upload_dir['baseurl'])) {
+                return $faces;
             }
-            $wpc_home794 = strtolower((string) parse_url(home_url('/'), PHP_URL_HOST));
-            $wpc_dirs794 = apply_filters('wpc_font_localizer_dirs', ['omgf', 'local-google-fonts', 'embed-google-fonts']);
-            $wpc_sheets794 = [];
-            foreach ((array) $wpc_dirs794 as $wpc_d794) {
-                $wpc_g794 = glob(rtrim((string) $wpc_ud794['basedir'], '/') . '/' . $wpc_d794 . '/{*,*/*}.css', GLOB_BRACE);
-                if (is_array($wpc_g794)) {
-                    $wpc_sheets794 = array_merge($wpc_sheets794, array_slice($wpc_g794, 0, 20));
+            $home_host = strtolower((string) parse_url(home_url('/'), PHP_URL_HOST));
+            $localizer_dirs = apply_filters('wpc_font_localizer_dirs', ['omgf', 'local-google-fonts', 'embed-google-fonts']);
+            $sheets = [];
+            foreach ((array) $localizer_dirs as $localizer_dir) {
+                $globbed = glob(rtrim((string) $upload_dir['basedir'], '/') . '/' . $localizer_dir . '/{*,*/*}.css', GLOB_BRACE);
+                if (is_array($globbed)) {
+                    $sheets = array_merge($sheets, array_slice($globbed, 0, 20));
                 }
             }
-            foreach (array_slice($wpc_sheets794, 0, 20) as $wpc_s794) {
-                $wpc_css794 = (string) @file_get_contents($wpc_s794);
-                if ($wpc_css794 === '' || !preg_match_all('/@font-face\s*\{[^}]*\}/i', $wpc_css794, $wpc_fb794)) {
+            foreach (array_slice($sheets, 0, 20) as $sheet) {
+                $css = (string) @file_get_contents($sheet);
+                if ($css === '' || !preg_match_all('/@font-face\s*\{[^}]*\}/i', $css, $face_blocks)) {
                     continue;
                 }
-                foreach ($wpc_fb794[0] as $wpc_b794) {
-                    if (count($wpc_faces794) >= (int) apply_filters('wpc_font_localizer_faces_max', 50)) {
+                foreach ($face_blocks[0] as $face_block) {
+                    if (count($faces) >= (int) apply_filters('wpc_font_localizer_faces_max', 50)) {
                         break 2;
                     }
-                    if (!preg_match('/font-family\s*:\s*["\']?([^;"\'}]+)/i', $wpc_b794, $wpc_fam794)
-                        || !preg_match('/src\s*:[^;}]*url\(\s*["\']?([^"\')\s]+)/i', $wpc_b794, $wpc_src794)) {
+                    if (!preg_match('/font-family\s*:\s*["\']?([^;"\'}]+)/i', $face_block, $family_match)
+                        || !preg_match('/src\s*:[^;}]*url\(\s*["\']?([^"\')\s]+)/i', $face_block, $src_match)) {
                         continue;
                     }
-                    $wpc_u794 = (string) $wpc_src794[1];
-                    if (strpos($wpc_u794, '//') === false) {
-                        
-                        $wpc_rel794 = ltrim((string) substr(dirname($wpc_s794), strlen(rtrim((string) $wpc_ud794['basedir'], '/'))), '/');
-                        $wpc_u794 = rtrim((string) $wpc_ud794['baseurl'], '/') . '/' . ($wpc_rel794 !== '' ? $wpc_rel794 . '/' : '') . ltrim($wpc_u794, './');
+                    $font_url = (string) $src_match[1];
+                    if (strpos($font_url, '//') === false) {
+                        // Sheet-relative path -> absolute uploads URL beside the sheet.
+                        $relative_dir = ltrim((string) substr(dirname($sheet), strlen(rtrim((string) $upload_dir['basedir'], '/'))), '/');
+                        $font_url = rtrim((string) $upload_dir['baseurl'], '/') . '/' . ($relative_dir !== '' ? $relative_dir . '/' : '') . ltrim($font_url, './');
                     }
-                    $wpc_uh794 = strtolower((string) parse_url($wpc_u794, PHP_URL_HOST));
-                    if ($wpc_uh794 !== '' && $wpc_uh794 !== $wpc_home794) {
-                        continue; 
+                    $font_host = strtolower((string) parse_url($font_url, PHP_URL_HOST));
+                    if ($font_host !== '' && $font_host !== $home_host) {
+                        continue; // same-origin only, per the contract
                     }
-                    $wpc_e794 = ['family' => trim($wpc_fam794[1]), 'src' => $wpc_u794];
-                    if (preg_match('/font-weight\s*:\s*([^;}]+)/i', $wpc_b794, $wpc_w794)) {
-                        $wpc_e794['weight'] = trim($wpc_w794[1]);
+                    $face = ['family' => trim($family_match[1]), 'src' => $font_url];
+                    if (preg_match('/font-weight\s*:\s*([^;}]+)/i', $face_block, $weight_match)) {
+                        $face['weight'] = trim($weight_match[1]);
                     }
-                    if (preg_match('/font-style\s*:\s*([a-z]+)/i', $wpc_b794, $wpc_st794)) {
-                        $wpc_e794['style'] = trim($wpc_st794[1]);
+                    if (preg_match('/font-style\s*:\s*([a-z]+)/i', $face_block, $style_match)) {
+                        $face['style'] = trim($style_match[1]);
                     }
-                    if (preg_match('/unicode-range\s*:\s*([^;}]+)/i', $wpc_b794, $wpc_ur794)) {
-                        $wpc_e794['unicode_range'] = trim($wpc_ur794[1]);
+                    if (preg_match('/unicode-range\s*:\s*([^;}]+)/i', $face_block, $range_match)) {
+                        $face['unicode_range'] = trim($range_match[1]);
                     }
-                    $wpc_faces794[] = $wpc_e794;
+                    $faces[] = $face;
                 }
             }
         } catch (\Throwable $e) {
-            $wpc_faces794 = [];
+            $faces = [];
         }
-        return $wpc_faces794;
+        return $faces;
     }
 }
 
@@ -246,8 +238,8 @@ if (!function_exists('wpc_link_preset_levers')) {
 }
 
 if (!function_exists('wpc_apply_link_preset')) {
-    
-    
+    // Non-destructive: sets each lever ONLY when it is currently unset/blank. Existing user values
+    // always win. Returns ['applied'=>[], 'skipped'=>[]] or false if settings unavailable.
     function wpc_apply_link_preset($ctx = 'link')
     {
         if (!defined('WPS_IC_SETTINGS') || !function_exists('get_option')) {
@@ -268,12 +260,12 @@ if (!function_exists('wpc_apply_link_preset')) {
         $applied = [];
         $skipped = [];
 
-        
+        // Flat levers — set-if-unset.
         foreach ((array) $levers['flat'] as $k => $v) {
             if ($k === 'replace-fonts' && function_exists('wpc_font_localizer_present')) {
-                $wpc_fl789 = wpc_font_localizer_present();
-                if ($wpc_fl789 !== false) {
-                    $skipped[$k] = 'localizer:' . $wpc_fl789;
+                $localizer = wpc_font_localizer_present();
+                if ($localizer !== false) {
+                    $skipped[$k] = 'localizer:' . $localizer;
                     continue;
                 }
             }
@@ -285,7 +277,7 @@ if (!function_exists('wpc_apply_link_preset')) {
             }
         }
 
-        
+        // Critical CSS (nested critical.css) — set the sub-key without touching siblings.
         if (!isset($s['critical']) || !is_array($s['critical'])) {
             $s['critical'] = [];
         }
@@ -296,7 +288,7 @@ if (!function_exists('wpc_apply_link_preset')) {
             $skipped['critical.css'] = $s['critical']['css'];
         }
 
-        
+        // Advanced Cache (nested cache.advanced) — gated on NO foreign page cache. Never two caches.
         if (!isset($s['cache']) || !is_array($s['cache'])) {
             $s['cache'] = [];
         }
@@ -313,7 +305,7 @@ if (!function_exists('wpc_apply_link_preset')) {
         }
 
         update_option(WPS_IC_SETTINGS, $s);
-        update_option('wpc_settings_initialized', '1', false); 
+        update_option('wpc_settings_initialized', '1', false); // P4 latch
         update_option('wpc_link_preset_applied', time(), false);
 
 
@@ -354,7 +346,7 @@ if (!function_exists('wpc_apply_link_preset')) {
         }
 
         if (function_exists('wpc_cohort_beacon')) {
-            wpc_cohort_beacon('linked', ['ctx' => (string) $ctx]); 
+            wpc_cohort_beacon('linked', ['ctx' => (string) $ctx]); // T0 for the tracker Δt columns
         }
 
         wpc_link_preset_journal('preset-apply', ['ctx' => (string) $ctx, 'applied' => $applied, 'skipped' => $skipped]);
@@ -362,7 +354,7 @@ if (!function_exists('wpc_apply_link_preset')) {
             wpc_cohort_beacon('preset_applied', ['applied' => array_keys($applied), 'skipped' => array_keys($skipped)]);
         }
 
-        
+        // Immediate gen dispatch — inline, no cron. One warm fire = one render = one crit dispatch.
         if (function_exists('wpc_warm_url_fire') && function_exists('home_url')) {
             try {
                 wpc_warm_url_fire(home_url('/'));
@@ -378,8 +370,8 @@ if (!function_exists('wpc_apply_link_preset')) {
 }
 
 if (!function_exists('wpc_link_preset_safe_mode')) {
-    
-    
+    // Safe-mode: revert ONLY the preset-managed keys to conservative (off/unset) values, purge once,
+    // journal {from-preset}. NOT a full-blob replace (never wps_ic_set_default_settings).
     function wpc_link_preset_safe_mode()
     {
         if (!defined('WPS_IC_SETTINGS')) {

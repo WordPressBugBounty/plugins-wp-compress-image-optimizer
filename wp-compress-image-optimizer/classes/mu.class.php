@@ -1,17 +1,9 @@
 <?php
+
+
 /**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/mu.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
+ * Class - Multisite
  */
-
-
-
-
-
-
 class wps_ic_mu extends wps_ic
 {
 
@@ -38,7 +30,7 @@ class wps_ic_mu extends wps_ic
         $this->add_ajax('mu_save_default_settings');
         $this->add_ajax('mu_connect_bulk_prepare');
 
-        
+        // Popup Saves
         $this->add_ajax('wps_ic_exclude_list');
         $this->add_ajax('wps_ic_geolocation');
         $this->add_ajax('wps_ic_geolocation_force');
@@ -72,7 +64,7 @@ class wps_ic_mu extends wps_ic
             wp_send_json_error();
         }
 
-        
+        // Wait for SSL?
         wpc_diag_sleep(2, 'cname-retry');
 
         wp_send_json_success(['image' => 'https://' . $cname . '/' . WPS_IC_IMAGES . '/fireworks.svg', 'configured' => 'Connected Domain: <strong>' . $cname . '</strong>']);
@@ -133,27 +125,27 @@ class wps_ic_mu extends wps_ic
             wp_send_json_error('site-list-empty');
         }
 
-        
+        // API Token
         switch_to_blog(1);
         $multisiteDefaultSettings = get_option('multisite_default_settings');
         $settings = get_option(WPS_IC_MU_SETTINGS);
         if (empty($settings['token'])) {
-            
+            // Error, token does not exist
         }
 
         $results = [];
 
         foreach ($sites as $index => $siteID) {
-            
+            // Change Active Blog
             switch_to_blog($siteID);
 
             $siteurl = urlencode(site_url());
             $token = sanitize_text_field($settings['token']);
 
-            
+            // Setup URI
             $uri = WPS_IC_KEYSURL . '?action=connect_mu_single&token=' . $token . '&domain=' . $siteurl . '&hash=' . md5(time()) . '&time_hash=' . time();
 
-            
+            // Verify API Key is our database and user has is confirmed getresponse
             $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
             if (wp_remote_retrieve_response_code($get) == 200) {
@@ -161,7 +153,7 @@ class wps_ic_mu extends wps_ic
                 $body = json_decode($body);
 
                 if (!empty($body->data->code) && $body->data->code == 'site-user-different') {
-                    
+                    // Popup Site Already Connected
                     $reconnect_msg = 'invalid-api-key';
                 }
 
@@ -185,9 +177,9 @@ class wps_ic_mu extends wps_ic
 
                     update_option(WPS_IC_SETTINGS, $settings);
 
-                    
-
-
+                    /**
+                     * GeoLocation Fix
+                     */
                     if (!is_multisite()) {
                         $siteurl = site_url();
                     } else {
@@ -219,7 +211,7 @@ class wps_ic_mu extends wps_ic
                 $results['failed'][] = $siteID;
             }
 
-            
+            // No hash returned - token is not valid
             $results['api_failed'][] = $siteID;
         }
 
@@ -250,17 +242,17 @@ class wps_ic_mu extends wps_ic
         $settings['fonts'] = '';
         update_option(WPS_IC_SETTINGS, $settings);
 
-        
+        // Clear cache.
         if (function_exists('rocket_clean_domain')) {
             rocket_clean_domain();
         }
 
-        
+        // Lite Speed
         if (defined('LSCWP_V')) {
             do_action('litespeed_purge_all');
         }
 
-        
+        // HummingBird
         if (defined('WPHB_VERSION')) {
             do_action('wphb_clear_page_cache');
         }
@@ -300,7 +292,7 @@ class wps_ic_mu extends wps_ic
             $options = get_option(WPS_IC_OPTIONS);
             $apikey = $options['api_key'];
 
-            
+            // TODO is cname valid?
             $cname = sanitize_text_field($_POST['cname']);
             $cname = str_replace(['http://', 'https://'], '', $cname);
             $cname = rtrim($cname, '/');
@@ -317,7 +309,7 @@ class wps_ic_mu extends wps_ic
 
             if (empty($error)) {
                 if (!preg_match('/^([a-zA-z0-9\_\-]+)\.([a-zA-z0-9\_\-]+)\.([a-zA-z0-9\_\-]+)$/', $cname, $matches) && !preg_match('/^([a-zA-z0-9\_\-]+)\.([a-zA-z0-9\_\-]+)\.([a-zA-z0-9\_\-]+)\.([a-zA-z0-9\_\-]+)$/', $cname, $matches)) {
-                    
+                    // Subdomain is not valid
                     $error = 'This domain is invalid, please link a new domain...';
                     delete_option('ic_custom_cname');
                     $settings = get_option(WPS_IC_SETTINGS);
@@ -325,7 +317,7 @@ class wps_ic_mu extends wps_ic
                     update_option(WPS_IC_SETTINGS, $settings);
                     wp_send_json_error('invalid-domain');
                 } else {
-                    
+                    // Verify CNAME DNS
                     $verify_cname_dns = 'https://frankfurt.zapwp.net/?dnsCheck=true&host=' . $cname . '&zoneName=' . $zone_name . '&random=' . microtime(true);
 
                     $call = wp_remote_get($verify_cname_dns, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
@@ -339,22 +331,36 @@ class wps_ic_mu extends wps_ic
 
                         if ($recordsType == 'CNAME') {
                             if ($recordsTarget == $zone_name) {
-                                update_option('ic_custom_cname', sanitize_text_field($cname));
-
                                 $url = WPS_IC_KEYSURL . '?action=cdn_setcname&apikey=' . $apikey . '&cname=' . $cname . '&zone_name=' . $zone_name . '&time=' . time() . '&no_cache=' . md5(mt_rand(999, 9999));
 
                                 $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+                                $legacyAnswer = $call;
 
-                                
+                                // Rule: a host keys refused is not stored and its v6 twin is not sent.
+                                // keys d9b24cde (hub asks 011/044) writes agencySites.cname only when the
+                                // host is verified on the pull zone and otherwise answers success:false
+                                // with data.step; this lane stored the host before asking and ignored the
+                                // answer, so the network site emitted a host the CDN row did not name.
+                                $refusedStep = class_exists('wps_ic_cname') ? wps_ic_cname::setcname_refused_step($legacyAnswer) : '';
+                                if ($refusedStep !== '') {
+                                    wps_ic_cname::log_twin_registration($cname, $legacyAnswer, null, 'multisite');
+                                    wp_send_json_error(['code' => 'keys-refused', 'step' => $refusedStep, 'msg' => wps_ic_cname::setcname_refusal_msg($refusedStep, $cname, $zone_name)]);
+                                }
+                                update_option('ic_custom_cname', sanitize_text_field($cname));
+
+                                //v6 call:
                                 $url = WPS_IC_KEYSURL . '?action=cdn_setcname_v6&apikey=' . $apikey . '&cname=' . $cname . '&zone_name=' . $zone_name . '&time=' . time() . '&no_cache=' . md5(mt_rand(999, 9999));
 
                                 $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+                                if (class_exists('wps_ic_cname') && method_exists('wps_ic_cname', 'log_twin_registration')) {
+                                    wps_ic_cname::log_twin_registration($cname, $legacyAnswer, $call, 'multisite');
+                                }
                                 wpc_diag_sleep(2, 'cname-add');
 
                                 $call = wp_remote_get(WPS_IC_KEYSURL . '?action=cdn_purge&domain=' . site_url() . '&apikey=' . $options['api_key'], ['timeout' => '10', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
 
-                                
+                                // Wait for SSL?
                                 wpc_diag_sleep(2, 'cname-add');
 
                                 wp_send_json_success(['image' => 'https://' . $cname . '/' . WPS_IC_IMAGES . '/fireworks.svg', 'configured' => 'Connected Domain: <strong>' . $cname . '</strong>']);
@@ -508,7 +514,7 @@ class wps_ic_mu extends wps_ic
         $form_settings = $form_settings['options'];
 
         foreach ($sites as $i => $siteID) {
-            
+            // Change Active Blog
             switch_to_blog($siteID);
             $saved_settings = get_option(WPS_IC_SETTINGS);
 
@@ -558,7 +564,7 @@ class wps_ic_mu extends wps_ic
         parse_str($_POST['form'], $form_settings);
         $form_settings = $form_settings['wp-ic-setting'];
 
-        
+        // Change Active Blog
         switch_to_blog($siteID);
         $saved_settings = get_option(WPS_IC_SETTINGS);
 
@@ -609,7 +615,7 @@ class wps_ic_mu extends wps_ic
 
         if ($this->mu_is_connected($siteID)) {
             include WPS_IC_DIR . 'templates/mu/connected.php';
-            
+            #include WPS_IC_DIR . 'templates/mu/site-settings.php';
         } else {
             include WPS_IC_DIR . 'templates/mu/not-connected.php';
         }
@@ -633,41 +639,41 @@ class wps_ic_mu extends wps_ic
 
     public function new_mu_site(WP_Site $new_site)
     {
-        
+        // Setup Database
         $this->mu_autoconnect_site($new_site->blog_id, true);
         restore_current_blog();
     }
 
     public function mu_autoconnect_site($siteID, $viaHook = false)
     {
-        
-        
+        // wp_initialize_site fires for ANY site creation (NS Cloner, WP-CLI, Sites > Add New),
+        // where no plugin nonce exists — wp_send_json_error() here would kill the caller's request.
         if (!$viaHook && (!current_user_can('manage_wpc_settings') || !wp_verify_nonce(isset($_POST['wps_ic_nonce']) ? $_POST['wps_ic_nonce'] : '', 'wps_ic_nonce_action'))) {
             wp_send_json_error('Forbidden.');
         }
 
-        
+        // API Token
         switch_to_blog(1);
         $multisiteDefaultSettings = get_option('multisite_default_settings');
         $mu_settings = get_option(WPS_IC_MU_SETTINGS);
 
         if (!empty($mu_settings['autoconnect']) && $mu_settings['autoconnect'] == '1') {
             if (empty($mu_settings['token'])) {
-                
+                // Error, token does not exist
             }
 
             $single = true;
 
-            
+            // Change Active Blog
             switch_to_blog($siteID);
 
             $siteurl = urlencode(site_url());
             $token = sanitize_text_field($mu_settings['token']);
 
-            
+            // Setup URI
             $uri = WPS_IC_KEYSURL . '?action=connect_mu_single&token=' . $token . '&domain=' . $siteurl . '&hash=' . md5(time()) . '&time_hash=' . time();
 
-            
+            // Verify API Key is our database and user has is confirmed getresponse
             $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
             if (wp_remote_retrieve_response_code($get) == 200) {
@@ -675,7 +681,7 @@ class wps_ic_mu extends wps_ic
                 $body = json_decode($body);
 
                 if (!empty($body->data->code) && $body->data->code == 'site-user-different') {
-                    
+                    // Popup Site Already Connected
                     $reconnect_msg = 'invalid-api-key';
                 }
 
@@ -706,9 +712,9 @@ class wps_ic_mu extends wps_ic
 
                     $wpc_siteID = $siteID;
 
-                    
-
-
+                    /**
+                     * Autoconnect
+                     */
                     if (!is_multisite()) {
                         $siteurl = site_url();
                     } else {
@@ -736,21 +742,21 @@ class wps_ic_mu extends wps_ic
                 $reconnect_msg = 'api-error';
             }
         } else {
-            
+            // Do nothing
         }
     }
 
     public function get_agency_stats()
     {
-        
+        // API Token
         $settings = get_option(WPS_IC_MU_SETTINGS);
         if (empty($settings['token'])) {
-            
+            // Error, token does not exist
         }
 
         $siteID = sanitize_text_field($_POST['siteID']);
 
-        
+        // Change Active Blog
         switch_to_blog($siteID);
 
         $siteurl = urlencode(site_url());
@@ -765,43 +771,43 @@ class wps_ic_mu extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-        
+        // API Token
         $settings = get_option(WPS_IC_MU_SETTINGS);
         if (empty($settings['token'])) {
-            
+            // Error, token does not exist
         }
 
         $siteID = sanitize_text_field($_POST['siteID']);
 
-        
+        // Change Active Blog
         switch_to_blog($siteID);
 
         $options = get_option(WPS_IC_OPTIONS);
         $siteurl = urlencode(site_url());
 
-        
+        // Setup URI
         $uri = WPS_IC_KEYSURL . '?action=disconnect&apikey=' . $options['api_key'] . '&domain=' . $siteurl . '&hash=' . md5(time()) . '&time_hash=' . time();
 
-        
+        // Remove Settings
         $options = get_option(WPS_IC_OPTIONS);
 
         $options['api_key'] = '';
         $options['response_key'] = '';
         update_option(WPS_IC_OPTIONS, $options);
 
-        
+        // Verify API Key is our database and user has is confirmed getresponse
         $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
         wp_send_json_success(['html_status' => '<a href="#" class="wps-ic-mu-connect wpc-mu-individual-connect-bulk hvr-grow" data-site-id="' . $siteID . '"><i class="icon icon-link"></i> Connect</a>']);
 
-        
+        // TODO: Remove?
         if (wp_remote_retrieve_response_code($get) == 200) {
             wp_send_json_success();
         } else {
             wp_send_json_success();
         }
 
-        
+        // No hash returned - token is not valid
         wp_send_json_success();
     }
 
@@ -811,18 +817,18 @@ class wps_ic_mu extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-        
+        // API Token
         switch_to_blog(1);
         $multisiteDefaultSettings = get_option('multisite_default_settings');
         $settings = get_option(WPS_IC_MU_SETTINGS);
         $siteList = get_option('wps_ic_mu_site_list');
 
         if (empty($settings['token'])) {
-            
+            // Error, token does not exist
             wp_send_json_error('token-invalid');
         }
 
-        
+        #$initialSettings = $this->setupSettings();
         $initialSettings = $multisiteDefaultSettings;
 
         $bulk = false;
@@ -841,17 +847,17 @@ class wps_ic_mu extends wps_ic
 
         $siteID = sanitize_text_field($_POST['siteID']);
 
-        
+        // Change Active Blog
         switch_to_blog($siteID);
 
         $siteurl = urlencode(site_url());
         $token = sanitize_text_field($settings['token']);
 
-        
+        // Setup URI
         $uri = WPS_IC_KEYSURL . '?action=connect_mu_single&token=' . $token . '&domain=' . $siteurl . '&hash=' . md5(time()) . '&time_hash=' . time();
 
 
-        
+        // Verify API Key is our database and user has is confirmed getresponse
         $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
 
@@ -862,7 +868,7 @@ class wps_ic_mu extends wps_ic
             $body = json_decode($body_msg);
 
             if (!empty($body->data->code) && $body->data->code == 'site-user-different') {
-                
+                // Popup Site Already Connected
                 $reconnect_msg = 'invalid-api-key';
             }
 
@@ -948,7 +954,7 @@ class wps_ic_mu extends wps_ic
             wp_send_json_error(['msg' => $reconnect_msg, 'body' => $body_msg]);
         }
 
-        
+        // No hash returned - token is not valid
         wp_send_json_error('unkown');
     }
 
@@ -1010,7 +1016,7 @@ class wps_ic_mu extends wps_ic
                         wp_send_json_error('different-account');
                         break;
                     default:
-                        
+                        // Hash is returned, token is valid!
                         $settings = get_option(WPS_IC_MU_SETTINGS);
                         $settings['token'] = $token;
                         update_option(WPS_IC_MU_SETTINGS, $settings);
@@ -1021,7 +1027,7 @@ class wps_ic_mu extends wps_ic
             }
         }
 
-        
+        // No hash returned - token is not valid
         wp_send_json_error();
     }
 

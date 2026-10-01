@@ -1,12 +1,4 @@
 <?php
-
-
-
-
-
-
-
-
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -19,8 +11,8 @@ $wpc_vp_daily = get_option('wpc_vitals_daily', []);
 if (!is_array($wpc_vp_daily)) {
     $wpc_vp_daily = [];
 }
-
-
+// v7.10.863 — SAME-DAY DATA: today's day-file joins the chart before the nightly rollup runs,
+// so the panel shows real measurements minutes after install instead of tomorrow.
 if (function_exists('wpc_vitals_today_partial')) {
     $wpc_vp_tp = wpc_vitals_today_partial();
     if (is_array($wpc_vp_tp)) {
@@ -28,7 +20,7 @@ if (function_exists('wpc_vitals_today_partial')) {
     }
 }
 
-
+// Day keys only (Ymd, ascending) — weekly 'w:' compaction keys are history, not chart rows.
 $wpc_vp_days = [];
 foreach ($wpc_vp_daily as $wpc_vp_k => $wpc_vp_v) {
     if (preg_match('/^\d{8}$/', (string) $wpc_vp_k) && is_array($wpc_vp_v)) {
@@ -40,8 +32,8 @@ $wpc_vp_n     = count($wpc_vp_days);
 $wpc_vp_cur   = array_slice($wpc_vp_days, max(0, $wpc_vp_n - 28), 28, true);
 $wpc_vp_prior = $wpc_vp_n > 28 ? array_slice($wpc_vp_days, max(0, $wpc_vp_n - 56), min(28, $wpc_vp_n - 28), true) : [];
 
-
-
+// Safari INP rides its own bucket lane (inp_s) so engines stay comparable in exports; for the
+// single chip the two lanes merge — a visitor is a visitor.
 $wpc_vp_merge_inp = function ($days) {
     foreach ($days as $k => $d) {
         foreach (['m', 'd'] as $dev) {
@@ -77,15 +69,15 @@ $wpc_vp_fmt = function ($val, $metric) {
     }
     return $val < 1000 ? [(string) $val, 'ms'] : [rtrim(rtrim(number_format($val / 1000, 1), '0'), '.'), 's'];
 };
-
+// CWV thresholds (good / needs-improvement) — CLS values ×1000 to match the bucket edges.
 $wpc_vp_TH = ['lcp' => [2500, 4000], 'inp' => [200, 500], 'cls' => [100, 250], 'ttfb' => [800, 1800]];
 
 $wpc_vp_baseline = get_option('wpc_vitals_baseline');
 $wpc_vp_base_lcp = (is_array($wpc_vp_baseline) && !empty($wpc_vp_baseline['lcp_m_p75'])) ? (int) $wpc_vp_baseline['lcp_m_p75'] : 0;
-
-
-
-
+// v7.10.833 — LIVE BASELINE: p75 of the ?disableWPC=true cohort (bm/bd lanes). When enough
+// bypass samples exist it beats the first-week capture — on Link-and-Go sites the first week
+// is ALREADY optimized traffic, so the stored number undersells the product. Field-to-field,
+// same days, same visitor mix, zero effect on real visitors.
 $wpc_vp_bsamp = ['m' => 0, 'd' => 0];
 $wpc_vp_blive = ['m' => 0, 'd' => 0];
 foreach (['m' => 'bm', 'd' => 'bd'] as $wpc_vp_bl_dev => $wpc_vp_bl_lane) {
@@ -94,40 +86,40 @@ foreach (['m' => 'bm', 'd' => 'bd'] as $wpc_vp_bl_dev => $wpc_vp_bl_lane) {
             $wpc_vp_bsamp[$wpc_vp_bl_dev] += array_sum($wpc_vp_bl_d[$wpc_vp_bl_lane]['lcp']);
         }
     }
-    
-    
-    
+    // v7.21.97 — a ?disableWPC visit is a DELIBERATE probe of the disabled state, not field
+    // traffic that accumulates on its own; one honest measurement is a valid baseline. No
+    // sample-count gate — the minter still builds toward 8 so the p75 refines.
     if ($wpc_vp_bsamp[$wpc_vp_bl_dev] >= 1) {
         $wpc_vp_blive[$wpc_vp_bl_dev] = (int) wpc_vitals_p75($wpc_vp_cur, $wpc_vp_bl_lane, 'lcp');
     }
 }
 $wpc_vp_base_src = 'firstweek';
-
-
-
-
-
-$wpc_vp_blts96 = time();
-$wpc_vp_bldirty96 = false;
-$wpc_vp_bsamp_raw96 = $wpc_vp_bsamp;
+// v7.21.96 — LIVE-BASELINE RATCHET: a measured without-plugin p75 is too expensive to lose
+// to the rolling window. Once a device leg reaches 8 samples, its p75 persists into the
+// baseline option (lcp_{m,d}_p75_live + ts); when the window later thins below 8, the
+// persisted live value carries the ghost for up to 120 days instead of the line vanishing.
+// A live measurement always outranks first-week capture; per-device, never cross-filled.
+$ratchet_now = time();
+$baseline_dirty = false;
+$baseline_samples_raw = $wpc_vp_bsamp;
 if (!is_array($wpc_vp_baseline)) { $wpc_vp_baseline = []; }
-foreach (['m', 'd'] as $wpc_vp_bl_dv96) {
-    $wpc_vp_blk96 = 'lcp_' . $wpc_vp_bl_dv96 . '_p75_live';
-    if ($wpc_vp_blive[$wpc_vp_bl_dv96] > 0) {
-        if ((int) ($wpc_vp_baseline[$wpc_vp_blk96] ?? 0) !== $wpc_vp_blive[$wpc_vp_bl_dv96]
-            || (int) ($wpc_vp_baseline[$wpc_vp_blk96 . '_n'] ?? 0) < (int) $wpc_vp_bsamp[$wpc_vp_bl_dv96]) {
-            $wpc_vp_baseline[$wpc_vp_blk96] = $wpc_vp_blive[$wpc_vp_bl_dv96];
-            $wpc_vp_baseline[$wpc_vp_blk96 . '_ts'] = $wpc_vp_blts96;
-            $wpc_vp_baseline[$wpc_vp_blk96 . '_n'] = max((int) ($wpc_vp_baseline[$wpc_vp_blk96 . '_n'] ?? 0), (int) $wpc_vp_bsamp[$wpc_vp_bl_dv96]);
-            $wpc_vp_bldirty96 = true;
+foreach (['m', 'd'] as $baseline_device) {
+    $live_baseline_key = 'lcp_' . $baseline_device . '_p75_live';
+    if ($wpc_vp_blive[$baseline_device] > 0) {
+        if ((int) ($wpc_vp_baseline[$live_baseline_key] ?? 0) !== $wpc_vp_blive[$baseline_device]
+            || (int) ($wpc_vp_baseline[$live_baseline_key . '_n'] ?? 0) < (int) $wpc_vp_bsamp[$baseline_device]) {
+            $wpc_vp_baseline[$live_baseline_key] = $wpc_vp_blive[$baseline_device];
+            $wpc_vp_baseline[$live_baseline_key . '_ts'] = $ratchet_now;
+            $wpc_vp_baseline[$live_baseline_key . '_n'] = max((int) ($wpc_vp_baseline[$live_baseline_key . '_n'] ?? 0), (int) $wpc_vp_bsamp[$baseline_device]);
+            $baseline_dirty = true;
         }
-    } elseif (!empty($wpc_vp_baseline[$wpc_vp_blk96])
-        && ($wpc_vp_blts96 - (int) ($wpc_vp_baseline[$wpc_vp_blk96 . '_ts'] ?? 0)) <= 120 * 86400) {
-        $wpc_vp_blive[$wpc_vp_bl_dv96] = (int) $wpc_vp_baseline[$wpc_vp_blk96];
-        $wpc_vp_bsamp[$wpc_vp_bl_dv96] = max((int) $wpc_vp_bsamp[$wpc_vp_bl_dv96], (int) ($wpc_vp_baseline[$wpc_vp_blk96 . '_n'] ?? 8));
+    } elseif (!empty($wpc_vp_baseline[$live_baseline_key])
+        && ($ratchet_now - (int) ($wpc_vp_baseline[$live_baseline_key . '_ts'] ?? 0)) <= 120 * 86400) {
+        $wpc_vp_blive[$baseline_device] = (int) $wpc_vp_baseline[$live_baseline_key];
+        $wpc_vp_bsamp[$baseline_device] = max((int) $wpc_vp_bsamp[$baseline_device], (int) ($wpc_vp_baseline[$live_baseline_key . '_n'] ?? 8));
     }
 }
-if ($wpc_vp_bldirty96 && function_exists('update_option')) {
+if ($baseline_dirty && function_exists('update_option')) {
     update_option('wpc_vitals_baseline', $wpc_vp_baseline, false);
 }
 if ($wpc_vp_blive['m'] > 0) {
@@ -137,11 +129,11 @@ if ($wpc_vp_blive['m'] > 0) {
 if ($wpc_vp_blive['d'] > 0 && $wpc_vp_base_src === 'firstweek') {
     $wpc_vp_base_src = 'live';
 }
-
-
-
-
-
+// v7.10.835 — BASELINE SANITY GATE: a stored first-week "before" that is not higher than the
+// current p75 is contaminated capture (Link-and-Go sites' first week is already optimized
+// traffic), never a real regression — showing it would tell the user the plugin slowed them
+// down based on bad data. Suppress it per device; the live ?disableWPC cohort is a true
+// concurrent A/B and is NEVER gated — if it reads worse, that is honest and stays.
 $wpc_vp_curp = [
     'm' => (int) wpc_vitals_p75($wpc_vp_curM, 'm', 'lcp'),
     'd' => (int) wpc_vitals_p75($wpc_vp_curM, 'd', 'lcp'),
@@ -164,16 +156,16 @@ foreach (['m', 'd'] as $wpc_vp_dev) {
         if ($cur > 0) {
             $dot = $cur <= $wpc_vp_TH[$wpc_vp_metric][0] ? 'good' : ($cur <= $wpc_vp_TH[$wpc_vp_metric][1] ? 'ni' : 'poor');
         } elseif ($wpc_vp_metric === 'cls') {
-            
-            
-            
-            $wpc_cls906 = 0;
-            foreach ($wpc_vp_curM as $wpc_vp_cd906) {
-                if (!empty($wpc_vp_cd906[$wpc_vp_dev]['cls']) && is_array($wpc_vp_cd906[$wpc_vp_dev]['cls'])) {
-                    $wpc_cls906 += (int) array_sum($wpc_vp_cd906[$wpc_vp_dev]['cls']);
+            // p75 of 0 with real samples = every visit shifted NOTHING — the best possible
+            // score, not missing data. Bucket 0's edge is 0, so the >0 test alone reads a
+            // perfect site as "na" and have4 (all four chips) could never unlock.
+            $cls_samples = 0;
+            foreach ($wpc_vp_curM as $cls_day) {
+                if (!empty($cls_day[$wpc_vp_dev]['cls']) && is_array($cls_day[$wpc_vp_dev]['cls'])) {
+                    $cls_samples += (int) array_sum($cls_day[$wpc_vp_dev]['cls']);
                 }
             }
-            if ($wpc_cls906 >= 5) {
+            if ($cls_samples >= 5) {
                 $dot = 'good';
                 $num = '0.00';
                 $unit = '';
@@ -226,14 +218,14 @@ foreach (['m', 'd'] as $wpc_vp_dev) {
     }
 }
 
-
+// Per-day chart series (sample-scaled counts; per-day p75 LCP per device, 0 → null gap).
 $wpc_vp_labels = $wpc_vp_cached = $wpc_vp_rendered = [];
 $wpc_vp_lcp = ['m' => [], 'd' => []];
-
-
-
-
-
+// v7.21.27 — WebKit (every iOS browser + macOS Safari) has no largest-contentful-paint
+// entry type, so an iOS-majority site's mobile lane collects views/ttfb/fcp forever but
+// zero LCP — and the timeline stayed permanently on its "numbers appear as they report
+// in" empty state. FCP IS available on WebKit: build its per-day series so the chart can
+// fall back to an honestly-labeled first-paint line when a device leg has no LCP at all.
 $wpc_vp_fcp = ['m' => [], 'd' => []];
 $wpc_vp_lcpq = ['m' => ['p25' => [], 'p50' => []], 'd' => ['p25' => [], 'p50' => []]];
 $wpc_vp_views28 = $wpc_vp_hits28 = $wpc_vp_raw28 = 0;
@@ -250,8 +242,8 @@ foreach ($wpc_vp_curM as $wpc_vp_k => $wpc_vp_d) {
     foreach (['m', 'd'] as $wpc_vp_dev) {
         $p = (int) wpc_vitals_p75([$wpc_vp_d], $wpc_vp_dev, 'lcp');
         $wpc_vp_lcp[$wpc_vp_dev][] = $p > 0 ? $p : null;
-        $wpc_vp_pf27 = (int) wpc_vitals_p75([$wpc_vp_d], $wpc_vp_dev, 'fcp');
-        $wpc_vp_fcp[$wpc_vp_dev][] = $wpc_vp_pf27 > 0 ? $wpc_vp_pf27 : null;
+        $day_fcp_percentile = (int) wpc_vitals_p75([$wpc_vp_d], $wpc_vp_dev, 'fcp');
+        $wpc_vp_fcp[$wpc_vp_dev][] = $day_fcp_percentile > 0 ? $day_fcp_percentile : null;
         foreach (['p25' => 0.25, 'p50' => 0.5] as $wpc_vp_qk => $wpc_vp_qv) {
             $q = (int) wpc_vitals_pct([$wpc_vp_d], $wpc_vp_dev, 'lcp', $wpc_vp_qv);
             $wpc_vp_lcpq[$wpc_vp_dev][$wpc_vp_qk][] = $q > 0 ? $q : null;
@@ -260,23 +252,23 @@ foreach ($wpc_vp_curM as $wpc_vp_k => $wpc_vp_d) {
 }
 $wpc_vp_share = $wpc_vp_raw28 > 0 ? (int) round($wpc_vp_hits28 / $wpc_vp_raw28 * 100) : 0;
 
-
-
-
-
+// v7.21.28 — the empty state must name its cause, not promise blindly: per-device window
+// totals of paint samples (fcp) and of ANY metrics-record signal (lcp+fcp+ttfb). met=0 with
+// views landing means the metrics beacon itself never arrives (blocked endpoint class);
+// fn>0 below the floor means samples are accumulating and the line is coming.
 $wpc_vp_fmeta = ['m' => ['fn' => 0, 'met' => 0], 'd' => ['fn' => 0, 'met' => 0]];
-foreach ($wpc_vp_curM as $wpc_vp_fd28) {
-    foreach (['m', 'd'] as $wpc_vp_fv28) {
-        foreach (['lcp', 'fcp', 'ttfb'] as $wpc_vp_fm28) {
-            $wpc_vp_fc28 = (!empty($wpc_vp_fd28[$wpc_vp_fv28][$wpc_vp_fm28]) && is_array($wpc_vp_fd28[$wpc_vp_fv28][$wpc_vp_fm28]))
-                ? (int) array_sum($wpc_vp_fd28[$wpc_vp_fv28][$wpc_vp_fm28]) : 0;
-            $wpc_vp_fmeta[$wpc_vp_fv28]['met'] += $wpc_vp_fc28;
-            if ($wpc_vp_fm28 === 'fcp') { $wpc_vp_fmeta[$wpc_vp_fv28]['fn'] += $wpc_vp_fc28; }
+foreach ($wpc_vp_curM as $meta_day) {
+    foreach (['m', 'd'] as $meta_device) {
+        foreach (['lcp', 'fcp', 'ttfb'] as $meta_metric) {
+            $meta_count = (!empty($meta_day[$meta_device][$meta_metric]) && is_array($meta_day[$meta_device][$meta_metric]))
+                ? (int) array_sum($meta_day[$meta_device][$meta_metric]) : 0;
+            $wpc_vp_fmeta[$meta_device]['met'] += $meta_count;
+            if ($meta_metric === 'fcp') { $wpc_vp_fmeta[$meta_device]['fn'] += $meta_count; }
         }
     }
 }
 
-
+// Banner: field-to-field improvement once the baseline exists; calm measuring line otherwise.
 $wpc_vp_cur_lcp_m  = (int) wpc_vitals_p75($wpc_vp_curM, 'm', 'lcp');
 $wpc_vp_banner     = '';
 $wpc_vp_banner_sub = '';
@@ -294,7 +286,7 @@ if ($wpc_vp_base_lcp > 0 && $wpc_vp_cur_lcp_m > 0 && $wpc_vp_cur_lcp_m < $wpc_vp
         . ' · ' . sprintf(__('%d%% served from cache', WPS_IC_TEXTDOMAIN), $wpc_vp_share);
 }
 
-
+// v7.10.831 — per-day p75 matrix for every vital (same per-day slice call the LCP series uses).
 $wpc_vp_matrix = ['m' => [], 'd' => []];
 foreach (['lcp', 'inp', 'cls', 'ttfb'] as $wpc_vp_mm) {
     foreach (['m', 'd'] as $wpc_vp_dv) {
@@ -310,20 +302,20 @@ foreach ($wpc_vp_curM as $wpc_vp_k => $wpc_vp_d) {
     }
 }
 
-
-
+// v7.10.863 — the Timeline draws only the days that recorded anything (compact, well-spaced);
+// the Details matrix keeps the full 28-day calendar with blanks. tlx = data-bearing indices.
 $wpc_vp_tlidx = [];
-$wpc_vp_ti863 = 0;
-foreach ($wpc_vp_curM as $wpc_vp_d863) {
-    if ((int) ($wpc_vp_d863['v'] ?? 0) > 0 || !empty($wpc_vp_d863['m']['lcp']) || !empty($wpc_vp_d863['d']['lcp'])) {
-        $wpc_vp_tlidx[] = $wpc_vp_ti863;
+$day_index = 0;
+foreach ($wpc_vp_curM as $timeline_day) {
+    if ((int) ($timeline_day['v'] ?? 0) > 0 || !empty($timeline_day['m']['lcp']) || !empty($timeline_day['d']['lcp'])) {
+        $wpc_vp_tlidx[] = $day_index;
     }
-    $wpc_vp_ti863++;
+    $day_index++;
 }
 
-
-
-
+// v7.10.831 — CAUSALITY MARKERS: the actions the plugin took, pinned to the days they happened.
+// Source: the cflog journal (rotating jsonl) + the link-preset journal; whitelisted, friendly-
+// labeled, one marker per event type per day, capped at 6 (highest-priority first).
 $wpc_vp_events = [];
 if (function_exists('wpc_vitals_panel_events')) {
     $wpc_vp_events = wpc_vitals_panel_events($wpc_vp_curM);
@@ -339,9 +331,8 @@ if (function_exists('wpc_vitals_panel_events')) {
     ];
     $wpc_vp_daykeys = array_keys($wpc_vp_curM);
     $wpc_vp_seen = [];
-    $wpc_vp_lf = defined('WPS_IC_CACHE') ? rtrim(WPS_IC_CACHE, '/') . '/wpc-cflog.jsonl' : '';
-    if ($wpc_vp_lf !== '' && @is_readable($wpc_vp_lf)) {
-        foreach (array_reverse(explode("\n", trim((string) @file_get_contents($wpc_vp_lf)))) as $wpc_vp_ln) {
+    if (function_exists('wpc_cflog_tail')) {
+        foreach (array_reverse(explode("\n", trim(wpc_cflog_tail(8388608)))) as $wpc_vp_ln) {
             $wpc_vp_e = json_decode($wpc_vp_ln, true);
             if (!is_array($wpc_vp_e) || empty($wpc_vp_e['event']) || empty($wpc_vp_e['t'])) { continue; }
             $wpc_vp_ek = (string) $wpc_vp_e['event'];
@@ -371,9 +362,9 @@ if (function_exists('wpc_vitals_panel_events')) {
     usort($wpc_vp_events, function ($a, $b) { return $a['i'] <=> $b['i']; });
 }
 
-
-
-
+// v7.10.845 — EXPERIENCE SPECTRUM + REGIONS + CLAIM PICKER.
+// One bar answers everything at rest: fully-optimized (cached-cohort median), typical (p50),
+// slowest-quarter start (p75), Google's 2.5s tick, and — honesty-gated — the "without" ghost.
 $wpc_vp_lanecount = function ($days, $lane, $metric) {
     $n = 0;
     foreach ($days as $d) {
@@ -381,8 +372,8 @@ $wpc_vp_lanecount = function ($days, $lane, $metric) {
     }
     return $n;
 };
-
-
+// Whitelabel: every customer-facing "WP Compress" in this panel resolves through the same
+// brand source the admin menu uses; WL builds override it, stock installs read 'WP Compress'.
 $wpc_vp_brand = function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : __('WP Compress', WPS_IC_TEXTDOMAIN);
 $wpc_vp_spec = [];
 foreach (['m', 'd'] as $wpc_vp_sd) {
@@ -394,9 +385,9 @@ foreach (['m', 'd'] as $wpc_vp_sd) {
         : ($wpc_vp_blive['d'] > 0 ? $wpc_vp_blive['d']
             : ((is_array($wpc_vp_baseline) && !empty($wpc_vp_baseline['lcp_d_p75'])) ? (int) $wpc_vp_baseline['lcp_d_p75'] : 0));
     $wpc_vp_sp75 = (int) wpc_vitals_p75($wpc_vp_curM, $wpc_vp_sd, 'lcp');
-    
-    
-    
+    // Ghost gate: live cohort, gap >=25% or >=600ms — a knockout or nothing. v7.21.97 —
+    // no sample-count gate: the bypass lane is a deliberate probe, one measurement is a
+    // valid disabled baseline. The gap gate stays — a small delta never headlines.
     $wpc_vp_ghost = 0;
     if ($wpc_vp_base_src === 'live' && $wpc_vp_bsamp[$wpc_vp_sd] >= 1 && $wpc_vp_sbase > 0 && $wpc_vp_sp75 > 0
         && ($wpc_vp_sbase >= $wpc_vp_sp75 * 1.25 || $wpc_vp_sbase - $wpc_vp_sp75 >= 600)) {
@@ -412,7 +403,7 @@ foreach (['m', 'd'] as $wpc_vp_sd) {
         'ghost' => $wpc_vp_ghost,
     ];
 }
-
+// Regions: shown only when >=2 regions carry >=20 views across the window.
 $wpc_vp_regnames = [1 => 'NA', 2 => 'EU', 3 => 'APAC', 4 => 'LATAM', 5 => 'MEA'];
 $wpc_vp_regv = [];
 foreach ($wpc_vp_curM as $wpc_vp_rd) {
@@ -438,8 +429,8 @@ foreach ($wpc_vp_regv as $wpc_vp_rg => $wpc_vp_rc) {
         'p75' => $wpc_vp_rp75, 'ser' => $wpc_vp_rser];
 }
 if (count($wpc_vp_reg) < 2) { $wpc_vp_reg = []; }
-
-
+// Claim picker: strongest TRUE claim wins the banner. 1) gated counterfactual · 2) instant
+// share · 3) the existing improvement line (already computed above) · 4) measuring line.
 $wpc_vp_specm = $wpc_vp_spec['m'];
 $wpc_vp_bpair = null;
 if ($wpc_vp_specm['ghost'] > 0 && $wpc_vp_bsamp['m'] >= 30 && $wpc_vp_cur_lcp_m > 0) {
@@ -448,14 +439,14 @@ if ($wpc_vp_specm['ghost'] > 0 && $wpc_vp_bsamp['m'] >= 30 && $wpc_vp_cur_lcp_m 
     if ($wpc_vp_g50 > 0 && $wpc_vp_c50 > 0
         && ($wpc_vp_g50 >= $wpc_vp_c50 * 1.25 || $wpc_vp_g50 - $wpc_vp_c50 >= 600)) {
         list($wpc_vp_gn, $wpc_vp_gu) = $wpc_vp_fmt($wpc_vp_g50, 'lcp');
-        list($wpc_vp_cn2, $wpc_vp_cu2) = $wpc_vp_fmt($wpc_vp_c50, 'lcp');
+        list($wpc_vp_banner_num, $wpc_vp_banner_unit) = $wpc_vp_fmt($wpc_vp_c50, 'lcp');
         $wpc_vp_bpair = ['off' => (int) $wpc_vp_g50, 'on' => (int) $wpc_vp_c50, 'avg' => 1];
-        $wpc_vp_banner = sprintf(__('Your average visitor loads in %1$s — without %2$s they would wait %3$s.', WPS_IC_TEXTDOMAIN), $wpc_vp_cn2 . $wpc_vp_cu2, $wpc_vp_brand, $wpc_vp_gn . $wpc_vp_gu);
+        $wpc_vp_banner = sprintf(__('Your average visitor loads in %1$s — without %2$s they would wait %3$s.', WPS_IC_TEXTDOMAIN), $wpc_vp_banner_num . $wpc_vp_banner_unit, $wpc_vp_brand, $wpc_vp_gn . $wpc_vp_gu);
     } else {
         list($wpc_vp_gn, $wpc_vp_gu) = $wpc_vp_fmt($wpc_vp_specm['ghost'], 'lcp');
-        list($wpc_vp_cn2, $wpc_vp_cu2) = $wpc_vp_fmt($wpc_vp_cur_lcp_m, 'lcp');
+        list($wpc_vp_banner_num, $wpc_vp_banner_unit) = $wpc_vp_fmt($wpc_vp_cur_lcp_m, 'lcp');
         $wpc_vp_bpair = ['off' => (int) $wpc_vp_specm['ghost'], 'on' => (int) $wpc_vp_cur_lcp_m, 'avg' => 0];
-        $wpc_vp_banner = sprintf(__('Your visitors load in %1$s — without %2$s they would wait %3$s.', WPS_IC_TEXTDOMAIN), $wpc_vp_cn2 . $wpc_vp_cu2, $wpc_vp_brand, $wpc_vp_gn . $wpc_vp_gu);
+        $wpc_vp_banner = sprintf(__('Your visitors load in %1$s — without %2$s they would wait %3$s.', WPS_IC_TEXTDOMAIN), $wpc_vp_banner_num . $wpc_vp_banner_unit, $wpc_vp_brand, $wpc_vp_gn . $wpc_vp_gu);
     }
     $wpc_vp_mins = (int) floor(max(0, $wpc_vp_specm['ghost'] - $wpc_vp_cur_lcp_m) * $wpc_vp_views28 / 60000);
     list($wpc_vp_on, $wpc_vp_ou) = $wpc_vp_fmt((int) $wpc_vp_specm['opt'], 'lcp');
@@ -471,10 +462,10 @@ if ($wpc_vp_specm['ghost'] > 0 && $wpc_vp_bsamp['m'] >= 30 && $wpc_vp_cur_lcp_m 
         . ' · ' . sprintf(__('%d%% served from cache', WPS_IC_TEXTDOMAIN), $wpc_vp_share);
 }
 
-
-
-
-
+// v7.10.855 — SAMPLE PREVIEW for a brand-new install: zero recorded views AND no p75 means
+// every state below would be an empty box. Instead the panel renders a full, clearly-badged
+// example dataset so a fresh user sees what the system delivers; the collecting card and the
+// banner say plainly that it is sample data, and the first real measurements replace it.
 $wpc_vp_demo = ($wpc_vp_views28 < 1 && $wpc_vp_cur_lcp_m < 1 && apply_filters('wpc_vitals_sample_preview', true));
 if ($wpc_vp_demo) {
     $wpc_vp_labels = $wpc_vp_cached = $wpc_vp_rendered = [];
@@ -530,27 +521,27 @@ if ($wpc_vp_demo) {
     $wpc_vp_banner = __('This is a sample preview — measuring your real visitors has started.', WPS_IC_TEXTDOMAIN);
     $wpc_vp_banner_sub = __('Every number shown is example data so you can explore the views. Your own measurements replace it automatically — starting with today\'s very first visits.', WPS_IC_TEXTDOMAIN);
 }
-
-
-
-
-
-
-
-
+// v7.10.905 — MATURITY GATE: a device leg's real-visitor aggregates display only once the
+// lane holds enough samples to mean anything (default 50 LCP samples, or 5 distinct days).
+// Below that, first-day capture is dominated by the owner's own uncached test visits —
+// install churn, purges, background tabs — and a p75 of a dozen such hits is not "your
+// visitors". Immature legs are nulled at this single choke point, so every consumer
+// (timeline line, spectrum, chips, matrix, banner pair) degrades through the same empty
+// paths the demo handover already exercises, and the Initial Speed Check seeds the
+// timeline instead. Mature legs are untouched.
 $wpc_vp_mat = ['m' => ['n' => 0, 'days' => 0, 'ok' => 1], 'd' => ['n' => 0, 'days' => 0, 'ok' => 1]];
 if (!$wpc_vp_demo && (!function_exists('apply_filters') || apply_filters('wpc_vitals_maturity_gate', true))) {
     $wpc_vp_matmin = function_exists('apply_filters') ? (int) apply_filters('wpc_vitals_mature_n', 50) : 50;
     foreach (['m', 'd'] as $wpc_vp_gdv) {
-        $wpc_vp_gn905 = 0;
-        $wpc_vp_gd905 = 0;
+        $lcp_samples = 0;
+        $lcp_days = 0;
         foreach ($wpc_vp_curM as $wpc_vp_gday) {
-            $wpc_vp_gc905 = (!empty($wpc_vp_gday[$wpc_vp_gdv]['lcp']) && is_array($wpc_vp_gday[$wpc_vp_gdv]['lcp']))
+            $day_lcp_samples = (!empty($wpc_vp_gday[$wpc_vp_gdv]['lcp']) && is_array($wpc_vp_gday[$wpc_vp_gdv]['lcp']))
                 ? (int) array_sum($wpc_vp_gday[$wpc_vp_gdv]['lcp']) : 0;
-            if ($wpc_vp_gc905 > 0) { $wpc_vp_gn905 += $wpc_vp_gc905; $wpc_vp_gd905++; }
+            if ($day_lcp_samples > 0) { $lcp_samples += $day_lcp_samples; $lcp_days++; }
         }
-        $wpc_vp_gok = ($wpc_vp_gn905 >= $wpc_vp_matmin || $wpc_vp_gd905 >= 5) ? 1 : 0;
-        $wpc_vp_mat[$wpc_vp_gdv] = ['n' => $wpc_vp_gn905, 'days' => $wpc_vp_gd905, 'ok' => $wpc_vp_gok, 'min' => $wpc_vp_matmin];
+        $wpc_vp_gok = ($lcp_samples >= $wpc_vp_matmin || $lcp_days >= 5) ? 1 : 0;
+        $wpc_vp_mat[$wpc_vp_gdv] = ['n' => $lcp_samples, 'days' => $lcp_days, 'ok' => $wpc_vp_gok, 'min' => $wpc_vp_matmin];
         if (!$wpc_vp_gok) {
             $wpc_vp_gcnt = count($wpc_vp_lcp[$wpc_vp_gdv]);
             $wpc_vp_lcp[$wpc_vp_gdv] = $wpc_vp_gcnt > 0 ? array_fill(0, $wpc_vp_gcnt, null) : [];
@@ -561,31 +552,31 @@ if (!$wpc_vp_demo && (!function_exists('apply_filters') || apply_filters('wpc_vi
             foreach (['lcp', 'inp', 'cls', 'ttfb'] as $wpc_vp_gmm) {
                 $wpc_vp_gmc = count($wpc_vp_matrix[$wpc_vp_gdv][$wpc_vp_gmm]);
                 $wpc_vp_matrix[$wpc_vp_gdv][$wpc_vp_gmm] = $wpc_vp_gmc > 0 ? array_fill(0, $wpc_vp_gmc, null) : [];
-                list($wpc_vp_gz1, $wpc_vp_gz2) = $wpc_vp_fmt(0, $wpc_vp_gmm);
-                $wpc_vp_chips[$wpc_vp_gdv][$wpc_vp_gmm] = ['num' => $wpc_vp_gz1, 'unit' => $wpc_vp_gz2,
+                list($wpc_vp_zero_num, $wpc_vp_zero_unit) = $wpc_vp_fmt(0, $wpc_vp_gmm);
+                $wpc_vp_chips[$wpc_vp_gdv][$wpc_vp_gmm] = ['num' => $wpc_vp_zero_num, 'unit' => $wpc_vp_zero_unit,
                     'dot' => 'na', 'delta' => '', 'dcls' => '', 'q25' => null, 'q50' => null];
             }
             $wpc_vp_spec[$wpc_vp_gdv] = ['opt' => 0, 'p50' => 0, 'p75' => 0, 'n' => 0, 'hn' => 0, 'sh1' => -1, 'ghost' => 0];
         }
-        
-        
-        
-        
-        
-        
-        $wpc_vp_gfn27 = 0;
-        $wpc_vp_gfd27 = 0;
-        foreach ($wpc_vp_curM as $wpc_vp_gday27) {
-            $wpc_vp_gfc27 = (!empty($wpc_vp_gday27[$wpc_vp_gdv]['fcp']) && is_array($wpc_vp_gday27[$wpc_vp_gdv]['fcp']))
-                ? (int) array_sum($wpc_vp_gday27[$wpc_vp_gdv]['fcp']) : 0;
-            if ($wpc_vp_gfc27 > 0) { $wpc_vp_gfn27 += $wpc_vp_gfc27; $wpc_vp_gfd27++; }
+        // The FCP fallback lane matures on its OWN sample counts — an iOS-heavy leg
+        // can hold hundreds of fcp samples while its lcp count stays 0 forever.
+        // v7.21.28 — STRUCTURAL EMPTINESS RELAXES THE FLOOR: when the leg's LCP count
+        // is zero across the whole window (WebKit can't produce it — waiting is
+        // pointless), the alternative to a 12-sample First-paint line is an empty box
+        // forever. The standard floor still governs whenever LCP samples exist.
+        $fcp_samples = 0;
+        $fcp_days = 0;
+        foreach ($wpc_vp_curM as $fcp_day) {
+            $day_fcp_samples = (!empty($fcp_day[$wpc_vp_gdv]['fcp']) && is_array($fcp_day[$wpc_vp_gdv]['fcp']))
+                ? (int) array_sum($fcp_day[$wpc_vp_gdv]['fcp']) : 0;
+            if ($day_fcp_samples > 0) { $fcp_samples += $day_fcp_samples; $fcp_days++; }
         }
-        $wpc_vp_gfok28 = ($wpc_vp_gfn27 >= $wpc_vp_matmin || $wpc_vp_gfd27 >= 5)
+        $fcp_mature = ($fcp_samples >= $wpc_vp_matmin || $fcp_days >= 5)
             || ($wpc_vp_mat[$wpc_vp_gdv]['n'] < 1
-                && ($wpc_vp_gfn27 >= (int) apply_filters('wpc_vitals_fcp_floor', 12) || $wpc_vp_gfd27 >= 3));
-        if (!$wpc_vp_gfok28) {
-            $wpc_vp_gfcnt27 = count($wpc_vp_fcp[$wpc_vp_gdv]);
-            $wpc_vp_fcp[$wpc_vp_gdv] = $wpc_vp_gfcnt27 > 0 ? array_fill(0, $wpc_vp_gfcnt27, null) : [];
+                && ($fcp_samples >= (int) apply_filters('wpc_vitals_fcp_floor', 12) || $fcp_days >= 3));
+        if (!$fcp_mature) {
+            $fcp_series_len = count($wpc_vp_fcp[$wpc_vp_gdv]);
+            $wpc_vp_fcp[$wpc_vp_gdv] = $fcp_series_len > 0 ? array_fill(0, $fcp_series_len, null) : [];
         }
     }
     if (!$wpc_vp_mat['m']['ok']) {
@@ -599,9 +590,9 @@ if (!$wpc_vp_demo && (!function_exists('apply_filters') || apply_filters('wpc_vi
     if (!$wpc_vp_mat['m']['ok'] && !$wpc_vp_mat['d']['ok']) { $wpc_vp_reg = []; }
 }
 $wpc_vp_have4 = ['m' => true, 'd' => true];
-foreach (['m', 'd'] as $wpc_vp_dv860) {
-    foreach (['lcp', 'inp', 'cls', 'ttfb'] as $wpc_vp_m850) {
-        if (($wpc_vp_chips[$wpc_vp_dv860][$wpc_vp_m850]['dot'] ?? 'na') === 'na') { $wpc_vp_have4[$wpc_vp_dv860] = false; }
+foreach (['m', 'd'] as $chip_device) {
+    foreach (['lcp', 'inp', 'cls', 'ttfb'] as $chip_metric) {
+        if (($wpc_vp_chips[$chip_device][$chip_metric]['dot'] ?? 'na') === 'na') { $wpc_vp_have4[$chip_device] = false; }
     }
 }
 $wpc_vp_defdev = (!$wpc_vp_have4['m'] && $wpc_vp_have4['d']) ? 'd' : 'm';
@@ -609,8 +600,8 @@ $wpc_vp_payload = [
     'have4'  => ['m' => $wpc_vp_have4['m'] ? 1 : 0, 'd' => $wpc_vp_have4['d'] ? 1 : 0],
     'defdev' => $wpc_vp_defdev,
     'bl'     => (!$wpc_vp_demo && function_exists('apply_filters') && apply_filters('wpc_vitals_auto_baseline', true)) ? [
-        'm' => max(0, 8 - (int) (isset($wpc_vp_bsamp_raw96) ? $wpc_vp_bsamp_raw96['m'] : $wpc_vp_bsamp['m'])),
-        'd' => max(0, 8 - (int) (isset($wpc_vp_bsamp_raw96) ? $wpc_vp_bsamp_raw96['d'] : $wpc_vp_bsamp['d'])),
+        'm' => max(0, 8 - (int) (isset($baseline_samples_raw) ? $baseline_samples_raw['m'] : $wpc_vp_bsamp['m'])),
+        'd' => max(0, 8 - (int) (isset($baseline_samples_raw) ? $baseline_samples_raw['d'] : $wpc_vp_bsamp['d'])),
         'u' => (function_exists('home_url') ? home_url('/') : '/') . '?disableWPC=true',
     ] : null,
     'sc'     => (function_exists('apply_filters') && apply_filters('wpc_vitals_speed_check', true)) ? [
@@ -946,67 +937,67 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
         }
         var ACCG = accGrey();
         var NS = 'http://www.w3.org/2000/svg';
-
-
-
-
-
-
-        var wpcMkNS35 = null;
-        function wpcParser36(ns36, n36) {
-            var d36 = document.createElement('div');
-            if (n36 === 'svg') {
-                d36.innerHTML = '<svg></svg>';
-                return d36.firstChild;
+        // v7.21.35 — some admin pages carry a third-party script that wraps
+        // document.createElementNS and hands back namespace-less Elements: setAttribute works
+        // but .style is undefined, so the first cosmetic style write threw and blanked every
+        // chart (buyganodermacoffeeonline receipt: 'Cannot set properties of undefined
+        // (setting animationDelay)'). Detect the breakage once, recover a clean factory from
+        // a hidden same-origin frame, and name the condition in the console.
+        var svgFactory = null;
+        function wpcCreateSvgViaParser(namespaceUri, tagName) {
+            var holder = document.createElement('div');
+            if (tagName === 'svg') {
+                holder.innerHTML = '<svg></svg>';
+                return holder.firstChild;
             }
-            d36.innerHTML = '<svg><' + n36 + '></' + n36 + '></svg>';
-            var r36 = d36.firstChild && d36.firstChild.firstChild;
-            return r36 || document.createElementNS(ns36, n36);
+            holder.innerHTML = '<svg><' + tagName + '></' + tagName + '></svg>';
+            var parsed = holder.firstChild && holder.firstChild.firstChild;
+            return parsed || document.createElementNS(namespaceUri, tagName);
         }
-        var wpcArmSrc37 = '';
-        function wpcArm36() {
-            if (wpcMkNS35) { return; }
-            wpcMkNS35 = wpcParser36;
+        var brokenFactorySource = '';
+        function wpcArmSvgParserFallback() {
+            if (svgFactory) { return; }
+            svgFactory = wpcCreateSvgViaParser;
             try {
-                wpcArmSrc37 = String(document.createElementNS).replace(/\s+/g, ' ').slice(0, 240);
-                console.warn('WP Compress vitals: createElementNS is returning wrong-namespace elements on this page right now — switched to parser-based SVG creation. Active implementation at that moment: ' + wpcArmSrc37);
-            } catch (z36) {}
+                brokenFactorySource = String(document.createElementNS).replace(/\s+/g, ' ').slice(0, 240);
+                console.warn('WP Compress vitals: createElementNS is returning wrong-namespace elements on this page right now — switched to parser-based SVG creation. Active implementation at that moment: ' + brokenFactorySource);
+            } catch (sourceErr) {}
         }
         setTimeout(function () {
             try {
                 if (!VP.scn || typeof ajaxurl === 'undefined' || !window.fetch) { return; }
-                var wpcCn37 = 0;
-                var wpcAll37 = document.querySelectorAll('#wpc-vitals-panel svg');
-                for (var i37 = 0; i37 < wpcAll37.length; i37++) {
-                    if (wpcAll37[i37].namespaceURI !== NS) { wpcCn37++; }
-                    var wpcKid37 = wpcAll37[i37].querySelectorAll('*');
-                    for (var k37 = 0; k37 < wpcKid37.length; k37++) {
-                        if (wpcKid37[k37].namespaceURI !== NS) { wpcCn37++; }
+                var foreignCount = 0;
+                var panelSvgs = document.querySelectorAll('#wpc-vitals-panel svg');
+                for (var svgIndex = 0; svgIndex < panelSvgs.length; svgIndex++) {
+                    if (panelSvgs[svgIndex].namespaceURI !== NS) { foreignCount++; }
+                    var svgChildren = panelSvgs[svgIndex].querySelectorAll('*');
+                    for (var childIndex = 0; childIndex < svgChildren.length; childIndex++) {
+                        if (svgChildren[childIndex].namespaceURI !== NS) { foreignCount++; }
                     }
                 }
-                if (!wpcMkNS35 && wpcCn37 === 0) { return; }
-                var wpcFd37 = new FormData();
-                wpcFd37.append('action', 'wpc_vitals_diag37');
-                wpcFd37.append('n', VP.scn);
-                wpcFd37.append('r', JSON.stringify({ armed: wpcMkNS35 ? 1 : 0, foreign: wpcCn37,
-                    svgs: wpcAll37.length, src: wpcArmSrc37 }));
-                fetch(ajaxurl, { method: 'POST', body: wpcFd37, credentials: 'same-origin' });
-            } catch (z37) {}
+                if (!svgFactory && foreignCount === 0) { return; }
+                var diagnosticsForm = new FormData();
+                diagnosticsForm.append('action', 'wpc_vitals_diagnostics');
+                diagnosticsForm.append('n', VP.scn);
+                diagnosticsForm.append('r', JSON.stringify({ armed: svgFactory ? 1 : 0, foreign: foreignCount,
+                    svgs: panelSvgs.length, src: brokenFactorySource }));
+                fetch(ajaxurl, { method: 'POST', body: diagnosticsForm, credentials: 'same-origin' });
+            } catch (postErr) {}
         }, 2500);
         try {
-            var wpcPr36 = document.createElementNS(NS, 'svg');
-            if (!wpcPr36 || wpcPr36.namespaceURI !== NS || !wpcPr36.style) { wpcArm36(); }
-        } catch (e35) { wpcArm36(); }
+            var probeSvg = document.createElementNS(NS, 'svg');
+            if (!probeSvg || probeSvg.namespaceURI !== NS || !probeSvg.style) { wpcArmSvgParserFallback(); }
+        } catch (probeErr) { wpcArmSvgParserFallback(); }
         var VPBRAND = '<?php echo esc_js(sprintf(__('Without %s', WPS_IC_TEXTDOMAIN), $wpc_vp_brand)); ?>';
         var VPBRANDU = VPBRAND.toUpperCase();
 
         function fmtMs(v) { return v == null ? '—' : (v < 1000 ? Math.round(v) + 'ms' : (Math.round(v / 100) / 10) + 's'); }
         function esc(t) { var d = document.createElement('span'); d.textContent = t; return d.innerHTML; }
         function el(n, a) {
-            var e = wpcMkNS35 ? wpcMkNS35(NS, n) : document.createElementNS(NS, n);
+            var e = svgFactory ? svgFactory(NS, n) : document.createElementNS(NS, n);
             if (!e || e.namespaceURI !== NS) {
-                wpcArm36();
-                e = wpcMkNS35(NS, n);
+                wpcArmSvgParserFallback();
+                e = svgFactory(NS, n);
             }
             if (e && !e.style) { try { e.style = {}; } catch (z) {} }
             for (var k in a) { e.setAttribute(k, a[k]); }
@@ -1035,9 +1026,9 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
 
         var region = 0;
         var animOn = true;
-
-
-
+        // ── Experience spectrum: one log-scaled bar, every marker a measured cohort.
+        // Region-filtered views keep the bar (region p75 replaces the site markers; the ghost
+        // never shows regionally — there is no per-region bypass cohort to back it). ──
         function drawSpectrum() {
             var wrap = document.getElementById('wpc-vp-spectrum');
             if (!wrap) { return; }
@@ -1143,7 +1134,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             wrap.appendChild(svg);
         }
 
-
+        // ── Region chips: resting frame shows all; one tap filters the timeline ──
         function drawRegions() {
             var row = document.getElementById('wpc-vp-regions');
             if (!row) { return; }
@@ -1259,8 +1250,8 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             b.addEventListener('click', function () { applyChipPhase(b.getAttribute('data-wpc-cpct')); });
         });
 
-
-        function wpcTlPick2127(l, f) {
+        // ── Causality timeline: p75 line over the pre-optimization band, journal markers pinned ──
+        function wpcTimelinePickSeries(l, f) {
             var i, hl = false, hf = false;
             for (i = 0; i < l.length; i++) { if (l[i] != null) { hl = true; break; } }
             if (!hl) { for (i = 0; i < f.length; i++) { if (f[i] != null) { hf = true; break; } } }
@@ -1279,7 +1270,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             if (region) {
                 (VP.reg || []).forEach(function (rr) { if (rr.c === region && rr.ser) { s75 = pick(rr.ser); s50 = []; s25 = []; } });
             } else {
-                var wpcTlp = wpcTlPick2127(s75, (VP.fcp && VP.fcp[dev]) ? pick(VP.fcp[dev]) : []);
+                var wpcTlp = wpcTimelinePickSeries(s75, (VP.fcp && VP.fcp[dev]) ? pick(VP.fcp[dev]) : []);
                 if (wpcTlp.fcp) { s75 = wpcTlp.ser; s50 = []; s25 = []; tlFcp = true; }
             }
             var tlLabels = pick(VP.labels), tlCached = pick(VP.cached), tlRendered = pick(VP.rendered);
@@ -1364,11 +1355,11 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                         ? '<?php echo esc_js(__('Measuring desktop now — first numbers land in about a minute.', WPS_IC_TEXTDOMAIN)); ?>'
                         : '<?php echo esc_js(__('Running your first speed check — numbers land in about a minute.', WPS_IC_TEXTDOMAIN)); ?>';
                 } else if (maxV > 0) {
-                    var wpcFm28 = (VP.fmeta && VP.fmeta[dev]) || null;
-                    if (wpcFm28 && wpcFm28.met < 1 && !(wpcFm28.fn > 0)) {
+                    var funnelMeta = (VP.fmeta && VP.fmeta[dev]) || null;
+                    if (funnelMeta && funnelMeta.met < 1 && !(funnelMeta.fn > 0)) {
                         em.textContent = '<?php echo esc_js(__('Visitors are landing, but their speed beacons never arrive — a firewall or security rule may be blocking them.', WPS_IC_TEXTDOMAIN)); ?>';
-                    } else if (wpcFm28 && wpcFm28.fn > 0) {
-                        em.textContent = '<?php echo esc_js(__('Collecting speed samples —', WPS_IC_TEXTDOMAIN)); ?> ' + wpcFm28.fn + ' <?php echo esc_js(__('so far. The trend line appears shortly.', WPS_IC_TEXTDOMAIN)); ?>';
+                    } else if (funnelMeta && funnelMeta.fn > 0) {
+                        em.textContent = '<?php echo esc_js(__('Collecting speed samples —', WPS_IC_TEXTDOMAIN)); ?> ' + funnelMeta.fn + ' <?php echo esc_js(__('so far. The trend line appears shortly.', WPS_IC_TEXTDOMAIN)); ?>';
                     } else {
                         em.textContent = '<?php echo esc_js(__('Visitors are landing — speed numbers appear here as they report in.', WPS_IC_TEXTDOMAIN)); ?>';
                     }
@@ -1386,10 +1377,10 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             var baseKey = document.getElementById('wpc-vp-tlkey-base');
             if (baseKey) {
                 baseKey.style.display = (base > 0) ? '' : 'none';
-
-
-
-
+                // v7.21.99 — the legend names the hatched REGION (the counterfactual delta),
+                // not the dashed line: the line already labels itself in-chart with its
+                // source (Without WP Compress / Speed Check / Before optimization), so the
+                // legend carries the outcome. Renders only when a real baseline exists.
                 var baseKeyLab = document.getElementById('wpc-vp-tlkey-baselabel');
                 if (baseKeyLab) { baseKeyLab.textContent = '<?php echo esc_js(__('Time your visitors never waited', WPS_IC_TEXTDOMAIN)); ?>'; }
             }
@@ -1532,7 +1523,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             });
         }
 
-
+        // ── Details: 4×N vitals matrix, Google-threshold colors ──
         function drawMatrix() {
             var mx = document.getElementById('wpc-vp-matrix');
             if (!mx) { return; }
@@ -1630,8 +1621,8 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             if (btn) { btn.style.display = vis ? '' : 'none'; }
             if (!vis && view === 'experience') { setView('timeline'); }
         }
-        function wpcSafe35(f) { try { f(); } catch (e) { try { console.warn('WP Compress vitals chart error:', e); } catch (z) {} } }
-        function render() { wpcSafe35(drawSpectrum); wpcSafe35(drawRegions); wpcSafe35(stageVis); wpcSafe35(renderChips); if (view === 'timeline') { wpcSafe35(drawTimeline); } else if (view === 'details') { wpcSafe35(drawMatrix); } animOn = false; var vpPanel = document.getElementById('wpc-vitals-panel'); if (vpPanel) { vpPanel.className += vpPanel.className.indexOf('wpc-vp-entered') === -1 ? ' wpc-vp-entered' : ''; } }
+        function wpcSafeChartCall(f) { try { f(); } catch (e) { try { console.warn('WP Compress vitals chart error:', e); } catch (z) {} } }
+        function render() { wpcSafeChartCall(drawSpectrum); wpcSafeChartCall(drawRegions); wpcSafeChartCall(stageVis); wpcSafeChartCall(renderChips); if (view === 'timeline') { wpcSafeChartCall(drawTimeline); } else if (view === 'details') { wpcSafeChartCall(drawMatrix); } animOn = false; var vpPanel = document.getElementById('wpc-vitals-panel'); if (vpPanel) { vpPanel.className += vpPanel.className.indexOf('wpc-vp-entered') === -1 ? ' wpc-vp-entered' : ''; } }
 
         document.querySelectorAll('#wpc-vitals-panel .wpc-vitals-toggle button').forEach(function (b) {
             b.addEventListener('click', function () {
@@ -1653,13 +1644,13 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             });
         });
 
-
-
-
-
-
-
-
+        // ── v7.10.863 FIRST SPEED CHECK: load the homepage as a genuine first-time visitor
+        // (cookieless credentialless iframes — the logged-in admin's cookies never touch the
+        // render, so the page cache and every optimization engage exactly as for a stranger).
+        // Sequence: without the plugin first, then a prime pass, then the fully optimized
+        // serve; the parent reads each frame's real LCP and the result card states its source
+        // plainly. The frames' beacons seed the without/with lanes, so the charts fill the
+        // same day via the today-partial. Kill filter: wpc_vitals_speed_check.
         function scFrame(url, w, h, dwell, measure) {
             return new Promise(function (resolve) {
                 var f = document.createElement('iframe');
@@ -1897,9 +1888,9 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                 scText('<b><?php echo esc_js(__('Initial Speed Check', WPS_IC_TEXTDOMAIN)); ?></b> · <?php echo esc_js(__('your homepage painted in', WPS_IC_TEXTDOMAIN)); ?> <b class="wpc-vp-scfast">' + fmtMs(rm.on) + '</b> <?php echo esc_js(__('for a first-time visitor', WPS_IC_TEXTDOMAIN)); ?> · ' + when, true);
             }
         }
-
-
-
+        // The measured result lands on the Timeline immediately: the without-number becomes the
+        // striped baseline band and the optimized paint becomes today's point — per device leg,
+        // only where the server has nothing yet (real lanes overwrite on the next load).
         function scInject(r) {
             if (VP.demo || !r || r.e !== 1) { return; }
             var chg = false;
@@ -1942,11 +1933,11 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             }
         })();
         var scCred = 'credentialless' in HTMLIFrameElement.prototype;
-
-
-
-
-
+        // v7.21.27 — the check's result was localStorage-only: a second admin (other
+        // browser, other machine, or Safari/Firefox where credentialless iframes don't
+        // exist so the check can never run) saw an empty panel on the same site. Every
+        // completed result is now POSTed to the server, and viewers with no local copy
+        // seed from the server one.
         function scSave(r) {
             try {
                 if (!VP.scn || typeof ajaxurl === 'undefined' || !window.fetch) { return; }
@@ -1959,11 +1950,11 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
         }
         try {
             var scStored = JSON.parse(localStorage.getItem('wpcVpSC') || 'null');
-
-
-
-
-
+            // v7.21.28 — MIGRATION: scSave only fired on NEW runs, so an admin whose
+            // browser already held a fresh record displayed it locally and never
+            // uploaded — the server record stayed empty and every other viewer stayed
+            // blank until the local copy expired. Upload the existing record whenever
+            // the server has none (or an older one).
             if (scStored && scStored.e === 1 && (!VP.scr || (VP.scr.t || 0) < (scStored.t || 0))) { scSave(scStored); }
             if (!(scStored && scStored.e === 1) && VP.scr && VP.scr.e === 1) { scStored = VP.scr; }
             if (VP.sc && scStored && scStored.e === 1 && scLeg(scStored, 'm')) { scCard(scStored, false); scInject(scStored); }
@@ -2046,12 +2037,12 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             }
         } catch (e) {}
         if (!scRes && typeof scCard === 'function') { scCard(null, false); }
-
-
-
-
-
-
+        // ── silent baseline minter: the ?disableWPC cohort minted from THIS admin browser
+        // (homepage only, invisible iframes, never a real visitor) until each device leg
+        // holds 8 samples. v7.21.96 — runs for ANY deficient leg, no longer gated behind
+        // the speed-check being unavailable: sc's own iframes are best-effort (desktop leg
+        // nested behind the mobile leg's success), and a device whose leg never fills has
+        // no "Without" line at all. Both minters can overlap; bypass pings are cohort-only.
         try {
             if (VP.bl && (VP.bl.m > 0 || VP.bl.d > 0) && VP.bl.u && document.visibilityState === 'visible') {
                 var blLast = parseInt(localStorage.getItem('wpcVpBlRun') || '0', 10);
@@ -2094,7 +2085,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
     })();
 </script>
 <script type="application/json" id="wpc-vp-saved-cfg"><?php echo wp_json_encode([
-    'saved'     => (!$wpc_vp_demo && function_exists('wpc_vitals_saved_export312')) ? wpc_vitals_saved_export312() : null,
+    'saved'     => (!$wpc_vp_demo && function_exists('wpc_vitals_export_saved_totals')) ? wpc_vitals_export_saved_totals() : null,
     'n'         => function_exists('wp_create_nonce') ? wp_create_nonce('wpc_vp_sc') : '',
     'i18nMonth' => __('this month', WPS_IC_TEXTDOMAIN),
     'i18nYear'  => __('this year', WPS_IC_TEXTDOMAIN),
@@ -2151,7 +2142,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
         };
         setTimeout(tick, 200);
         paint();
-
+        // live tail: real beacons landing in today's day-file while the tab is open
         if (!cfg.n || typeof ajaxurl === 'undefined' || !window.fetch) { return; }
         var off = -1, polling = false;
         function landed(pts, sample) {

@@ -1,14 +1,6 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: debug.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 if (get_option('wps_ic_debug') == 'true') {

@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/minify/html.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 class wps_minifyHtml
@@ -17,16 +9,16 @@ class wps_minifyHtml
 
 
   public function minifyCSS($css) {
-    
+    // Remove spaces after colons
     $css = str_replace(': ', ':', $css);
 
-    
+    // Remove whitespace
     $css = str_replace(["\r\n", "\r", "\n", "\t", '  ', '    ', '    '], '', $css);
 
-    $css = preg_replace('/\/\*(.*?)\*\//s', '', $css); 
-    $css = preg_replace('/\s+/', ' ', $css); 
-    $css = preg_replace('/\s?([,:;{}])\s?/', '$1', $css); 
-    $css = preg_replace('/;}/', '}', $css); 
+    $css = preg_replace('/\/\*(.*?)\*\//s', '', $css); // Remove comments
+    $css = preg_replace('/\s+/', ' ', $css); // Remove multiple whitespaces
+    $css = preg_replace('/\s?([,:;{}])\s?/', '$1', $css); // Remove spaces around selectors and declarations
+    $css = preg_replace('/;}/', '}', $css); // Remove trailing semicolons before closing brace
 
     return $css;
   }
@@ -50,7 +42,7 @@ class wps_minifyHtml
 
     $buffer = preg_replace($search, $replace, $buffer);
 
-    
+    #$buffer = $this->minifyCSS($buffer);
 
     return $buffer;
   }

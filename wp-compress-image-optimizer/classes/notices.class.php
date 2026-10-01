@@ -1,16 +1,8 @@
 <?php
+
 /**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/notices.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
+ * Class - Notices
  */
-
-
-
-
-
 class wps_ic_notices extends wps_ic {
 
   public static $slug;
@@ -79,10 +71,10 @@ class wps_ic_notices extends wps_ic {
     }
   }
 
-  
-
-
-
+  /**
+   * @return void
+   * Render all notices, can use wherever we want
+   */
   public function render_plugin_notices() {
     foreach (self::$custom_notices as $notice) {
       if ($notice['dismiss_tag'] != '') {
@@ -129,8 +121,8 @@ class wps_ic_admin_notice {
       }
     }
 
-    
-    
+    //Uncomment this to show default wp notices, if you do that, check render_notice() to not show double notices on our page
+    //add_action('admin_notices', [$this, 'render_notice']);
   }
 
   public function render_notice() {
@@ -175,5 +167,32 @@ class wps_ic_admin_notice {
           </div>
       </div>
     <?php
+  }
+
+  /** The warning sign of every inline warning row (one copy; the bulk splash's restore card draws it too). */
+  public static function warning_icon() {
+    return '<svg class="is-warning" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+  }
+
+  /**
+   * One notice line inside a page (the bulk splash, the completion card), where
+   * render_notice_html()'s admin-notice box does not fit: the icon, the text and an optional
+   * link, on one row. $type is 'warning'; $text is plain text, escaped here. $class adds the
+   * host's row classes; $text_attrs are attributes of the text element (a script that fills
+   * the same markup reads them). Answers the markup.
+   */
+  public static function render_inline($type, $text, $link_url = '', $link_text = '', $class = '', array $text_attrs = []) {
+    $type = $type === 'warning' ? 'warning' : 'info';
+    $attrs = '';
+    foreach ($text_attrs as $k => $v) {
+      $attrs .= ' ' . esc_attr($k) . '="' . esc_attr($v) . '"';
+    }
+    $html = '<div class="wpc-inline-notice is-' . $type . ($class !== '' ? ' ' . esc_attr($class) : '') . '" role="status">';
+    $html .= $type === 'warning' ? self::warning_icon() : '';
+    $html .= '<span><span class="wpc-inline-notice-text"' . $attrs . '>' . esc_html($text) . '</span>';
+    if ($link_url !== '' && $link_text !== '') {
+      $html .= ' &mdash; <a class="wpc-inline-notice-link" href="' . esc_url($link_url) . '">' . esc_html($link_text) . '</a>';
+    }
+    return $html . '</span></div>';
   }
 }

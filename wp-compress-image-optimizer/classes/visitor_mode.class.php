@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/visitor_mode.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 class wps_ic_visitor_mode {
 

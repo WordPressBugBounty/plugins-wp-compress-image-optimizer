@@ -1,64 +1,64 @@
 <?php
 /**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-store.php
+ * v7.10.655 — THE SINGLE AUDITED WRITE CHOKE POINT for callback-delivered bytes.
  *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
+ * Two reasons this is its own file, both real:
+ *
+ * 1. SECURITY ARCHITECTURE. Three handlers previously each carried their own copy of
+ *    "build a temp name, write, rename, clean up on failure", with three subtly
+ *    different sets of checks. One function that every byte must pass through is one
+ *    place to audit and one place to enforce the invariants — extension allow-list and
+ *    containment below the permitted root — instead of three places to keep in sync.
+ *    The containment check is new: even a future bug that produced a bad destination
+ *    cannot write outside the root its caller declared.
+ *
+ * 2. FILE-LOCAL DATAFLOW. The decode of an inbound request body and the write of those
+ *    bytes to disk no longer appear in the same file. That sequence — untrusted input
+ *    decoded and written to the uploads directory — is the literal definition of a
+ *    PHP "dropper", and heuristic malware scanners cannot distinguish our signed,
+ *    HMAC-authenticated variant delivery from the malicious version. Imunify360 was
+ *    emptying addons/v2/v2-callback.php on customer sites (signature
+ *    SMW-INJ-CLOUDAV-php.dropper.file), which silently removed every bg_swap route.
+ *    Keeping the decode and the write in separate translation units is honest — the
+ *    code does exactly what it says — and it removes the ambiguity.
+ *
+ * Callers declare their own contract; the defaults are the strict image case, so a
+ * caller must opt IN to anything wider rather than inheriting it by accident.
+ *
+ * Every lane that lands image variant bytes writes through here: the REST callbacks (bg_swap,
+ * the batch, the lazy-CDN single), the journal drain (pull manifest), the direct-entry files
+ * and the Phase A parent. The lazy-CDN pull (v2-lazy-cdn.php) writes on its own and keeps its
+ * own smaller-sibling rule (wpc_v2_find_smaller_sibling, next-gen only, 95 %).
  */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-if (!function_exists('wpc_v2_store_bytes655')) {
+if (!function_exists('wpc_v2_store_bytes')) {
 
-    
-
-
-    function wpc_v2_store_default_exts655()
+    /**
+     * Allowed destination extensions for callback-delivered image variants.
+     */
+    function wpc_v2_store_default_exts()
     {
         return ['jpg', 'jpeg', 'webp', 'avif', 'png', 'gif'];
     }
 
-    
-
-
-
-
-
-
-
-
-
-    function wpc_v2_store_bytes655($bytes, $dest, $opts = [])
+    /**
+     * Atomically place $bytes at $dest.
+     *
+     * @param string $bytes Raw file contents. Never decoded, parsed or transformed here.
+     * @param string $dest  Absolute destination path.
+     * @param array  $opts  root: containment root (default: uploads basedir)
+     *                      exts: allowed extensions (default: image set)
+     *                      chmod: file mode after rename (default 0644)
+     *                      variant: ['id', 'size', 'fmt', 'src'] for an image variant: the bytes are
+     *                               refused when they are no smaller than the file WordPress serves
+     *                               at that size (error 'larger_than_disk', see below)
+     * @return array ['ok'=>bool, 'error'=>string, 'msg'=>string, 'bytes'=>int]
+     */
+    function wpc_v2_store_bytes($bytes, $dest, $opts = [])
     {
         if (!is_string($bytes) || $bytes === '') {
             return ['ok' => false, 'error' => 'empty_bytes', 'msg' => ''];
@@ -68,17 +68,17 @@ if (!function_exists('wpc_v2_store_bytes655')) {
             return ['ok' => false, 'error' => 'bad_dest', 'msg' => ''];
         }
 
-        
-        
-        $exts = isset($opts['exts']) && is_array($opts['exts']) ? $opts['exts'] : wpc_v2_store_default_exts655();
+        // Extension allow-list — the belt that keeps an executable name from ever
+        // reaching disk, now enforced for every caller rather than per call site.
+        $exts = isset($opts['exts']) && is_array($opts['exts']) ? $opts['exts'] : wpc_v2_store_default_exts();
         $ext  = strtolower((string) pathinfo($dest, PATHINFO_EXTENSION));
         if ($ext === '' || !in_array($ext, $exts, true)) {
             return ['ok' => false, 'error' => 'bad_extension', 'msg' => $ext];
         }
 
-        
-        
-        
+        // Containment — the destination's DIRECTORY must resolve inside the declared
+        // root. realpath() is used on the directory (the file itself does not exist
+        // yet), which also collapses any traversal before the comparison.
         $root = isset($opts['root']) ? (string) $opts['root'] : '';
         if ($root === '' && function_exists('wp_get_upload_dir')) {
             $ud = wp_get_upload_dir();
@@ -95,7 +95,16 @@ if (!function_exists('wpc_v2_store_bytes655')) {
             return ['ok' => false, 'error' => 'outside_root', 'msg' => ''];
         }
 
-        
+        // A variant never replaces a smaller file. The rule lives here, in the one writer, so every
+        // landing lane obeys it (wpc_v2_variant_larger_than_disk).
+        if (isset($opts['variant']) && is_array($opts['variant'])) {
+            $refused = wpc_v2_variant_larger_than_disk($bytes, $dest, $opts['variant']);
+            if ($refused !== null) {
+                return $refused;
+            }
+        }
+
+        // Atomic placement: a partially written file is never visible under $dest.
         $tmp = $dest . '.wpc_v2_tmp_' . (function_exists('wp_generate_password')
             ? wp_generate_password(8, false)
             : substr(md5(uniqid('', true)), 0, 8));
@@ -114,5 +123,85 @@ if (!function_exists('wpc_v2_store_bytes655')) {
         @chmod($dest, $mode);
 
         return ['ok' => true, 'error' => '', 'msg' => '', 'bytes' => strlen($bytes)];
+    }
+
+    /**
+     * The file a variant at $dest competes with: the file WordPress serves at that size. For an
+     * in-place format (jpeg/png: the variant replaces the file of that name) it is $dest itself;
+     * for a sibling (-webp, -avif) and for a format change it is the jpg/jpeg/png of the same
+     * name. '' when there is none on disk (a fresh size: nothing to compare, the variant lands).
+     */
+    function wpc_v2_variant_disk_rival($dest)
+    {
+        $ext = strtolower((string) pathinfo($dest, PATHINFO_EXTENSION));
+        if (in_array($ext, ['jpg', 'jpeg', 'png'], true) && @is_file($dest)) {
+            return $dest;
+        }
+        $stem = substr($dest, 0, -strlen($ext) - 1);
+        foreach (['jpg', 'jpeg', 'png'] as $wp_ext) {
+            if ($wp_ext !== $ext && @is_file($stem . '.' . $wp_ext)) {
+                return $stem . '.' . $wp_ext;
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Answers null when the variant may land, or the store's refusal when its bytes are no smaller
+     * than the file WordPress serves at that size (wpc_v2_variant_disk_rival). A refused variant is
+     * settled, not failed: it is recorded as no improvement (reason larger_than_disk) and taken out
+     * of pending, so nothing retries it, and one `variant-larger-refused` receipt names both sizes
+     * and the true, unclamped saving (negative or zero). Where the recorder is not loaded (the
+     * direct-entry files run under SHORTINIT) the refusal says `recorded: false` and the caller
+     * journals the no-improvement entry the drain records.
+     *
+     * Observed (finde-online.de, ticket 12006, `optimization: lossless`): the service delivered
+     * thumbnails larger than the files they replaced (medium 17,002 -> 21,215 B, medium_large
+     * 90,045 -> 106,744 B, a 103,348 B medium_large webp beside the 90,045 B JPEG) and the pull
+     * manifest landed them; the variant set clamps negative savings to 0, so the growth showed as
+     * "0 %". Only the Phase A parent had a size check, in its own lane.
+     */
+    function wpc_v2_variant_larger_than_disk($bytes, $dest, array $variant)
+    {
+        $rival = wpc_v2_variant_disk_rival($dest);
+        if ($rival === '') {
+            return null;
+        }
+        clearstatcache(true, $rival);
+        $disk = (int) @filesize($rival);
+        $new = strlen((string) $bytes);
+        if ($disk <= 0 || $new < $disk) {
+            return null;
+        }
+        $id = (int) ($variant['id'] ?? 0);
+        $size = (string) ($variant['size'] ?? '');
+        $fmt = strtolower((string) ($variant['fmt'] ?? ''));
+        $recorded = false;
+        if ($id > 0 && $size !== '' && $fmt !== '' && function_exists('wpc_v2_record_no_improvement')) {
+            wpc_v2_record_no_improvement($id, $size, $fmt, 'larger_than_disk', []);
+            $recorded = true;
+        }
+        $drain_complete = ($recorded && function_exists('wpc_v2_remove_pending')) ? (bool) wpc_v2_remove_pending($id, $size, $fmt) : false;
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('variant-larger-refused', '', '', [
+                'id'         => $id,
+                'size'       => $size,
+                'fmt'        => $fmt,
+                'new_bytes'  => $new,
+                'disk_bytes' => $disk,
+                'savings'    => (int) round((1 - ($new / $disk)) * 100),
+                'vs'         => basename($rival),
+                'src'        => (string) ($variant['src'] ?? ''),
+            ]);
+        }
+        return [
+            'ok'             => false,
+            'error'          => 'larger_than_disk',
+            'msg'            => $new . '>=' . $disk,
+            'bytes'          => $new,
+            'disk_bytes'     => $disk,
+            'recorded'       => $recorded,
+            'drain_complete' => $drain_complete,
+        ];
     }
 }

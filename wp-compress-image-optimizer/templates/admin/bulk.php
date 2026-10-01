@@ -1,13 +1,5 @@
 <?php
 
-
-
-
-
-
-
-
-
 global $wps_ic;
 
 if (!empty($_GET['reset'])) {
@@ -18,7 +10,7 @@ $live_cdn = false;
 if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == '1') {
     $live_cdn = true;
 }
-
+// Also check CF CDN setting
 if (!$live_cdn) {
     $cfSettings = get_option(WPS_IC_CF);
     if (!empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1') {
@@ -74,15 +66,34 @@ if (!$live_cdn) {
 
             <div class="wp-compress-bulk-area">
                 <?php
-                
-
-
+                /**
+                 * Find uncompressed images
+                 */
 
 
                 $bulkProcess = function_exists('wpc_bulk_process_active') ? wpc_bulk_process_active() : get_option('wps_ic_bulk_process');
-                $libraryStatus = wps_ic_local::countLibraryImages();
-                $uncompressedImages = count($libraryStatus['uncompressed']);
-                $compressedImages = count($libraryStatus['compressed']);
+                // The same population the Start button queues (wps_ic_image_library).
+                $libraryStatus = wps_ic_image_library::counts();
+                $uncompressedImages = $libraryStatus['population'];
+                $compressedImages = $libraryStatus['compressed'];
+                // The "no file on disk" warning: one markup (wps_ic_admin_notice::render_inline) for
+                // the splash and the completion card, whose script fills the count from the
+                // heartbeat (data-one / data-many, %s = the number).
+                if (!class_exists('wps_ic_admin_notice')) {
+                    class_exists('wps_ic_notices');   // notices.class.php declares both classes
+                }
+                $wpc_missing_row = function ($n, $class) use ($wps_ic) {
+                    $one = __('%s image has no file on disk', WPS_IC_TEXTDOMAIN);
+                    $many = __('%s images have no file on disk', WPS_IC_TEXTDOMAIN);
+                    return wps_ic_admin_notice::render_inline(
+                        'warning',
+                        sprintf($n === 1 ? $one : $many, number_format_i18n($n)),
+                        admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=missing-files'),
+                        __('see which', WPS_IC_TEXTDOMAIN),
+                        trim('wpc-bulk-splash-meta-row wpc-bulk-missing-row ' . $class),
+                        ['data-one' => $one, 'data-many' => $many]
+                    );
+                };
 
                 $prepare_compress = 'display:none;';
                 $prepare_restore = 'display:none;';
@@ -148,7 +159,7 @@ if (!$live_cdn) {
 
                             <div class="wpc-bulk-splash-count">
                                 <span class="wpc-bulk-splash-count-num" <?php if ($uncompressedImages > 0) echo 'data-count-to="' . (int) $uncompressedImages . '"'; ?>>
-                                    <?php echo $uncompressedImages > 0 ? '0' : '0'; ?>
+                                    <?php echo number_format_i18n((int) $uncompressedImages); ?>
                                 </span>
                                 <span class="wpc-bulk-splash-count-label">
                                     <?php if ($uncompressedImages > 0) {
@@ -167,6 +178,9 @@ if (!$live_cdn) {
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                                     <?php esc_html_e('Originals are kept — restore any time', WPS_IC_TEXTDOMAIN); ?>
                                 </div>
+                                <?php if (!empty($libraryStatus['missing'])) {
+                                    echo $wpc_missing_row((int) $libraryStatus['missing'], 'wpc-bulk-splash-meta-row--missing');
+                                } ?>
                             </div>
                             <?php if ($uncompressedImages > 0) { ?>
                                 <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&action=compress'); ?>"
@@ -196,7 +210,7 @@ if (!$live_cdn) {
 
                             <div class="wpc-bulk-splash-count">
                                 <span class="wpc-bulk-splash-count-num" <?php if ($compressedImages > 0) echo 'data-count-to="' . (int) $compressedImages . '"'; ?>>
-                                    <?php echo '0'; ?>
+                                    <?php echo number_format_i18n((int) $compressedImages); ?>
                                 </span>
                                 <span class="wpc-bulk-splash-count-label">
                                     <?php if ($compressedImages > 0) {
@@ -212,7 +226,7 @@ if (!$live_cdn) {
                                     <?php esc_html_e('Original files returned to your media library', WPS_IC_TEXTDOMAIN); ?>
                                 </div>
                                 <div class="wpc-bulk-splash-meta-row">
-                                    <svg class="is-warning" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                    <?php echo wps_ic_admin_notice::warning_icon(); ?>
                                     <?php esc_html_e('Compressed variants will be discarded', WPS_IC_TEXTDOMAIN); ?>
                                 </div>
                             </div>
@@ -233,28 +247,37 @@ if (!$live_cdn) {
 
                 </div>
 
-                <!-- Splash count-up: tick the gradient numbers from 0 to their target.
-                     ~900ms, eased — gives the splash a "live data" feel on first paint. -->
+                <!-- Splash count-up: the numbers are in the markup; in a visible tab they tick from 0 to
+                     that number (~900 ms, eased) and always end on it. A hidden tab pauses
+                     requestAnimationFrame, so a count-up started there, or hidden mid-way, froze on
+                     a partial number: an automated reader saw "13 ready" of 59 and "9" of 43 on
+                     finde-online.de (ticket 12006). The script never leaves a number other than
+                     the target in the page. -->
                 <script>
                 (function () {
                     var nodes = document.querySelectorAll('.wpc-bulk-splash-count-num[data-count-to]');
-                    if (!nodes.length || !window.requestAnimationFrame) return;
+                    if (!nodes.length || !window.requestAnimationFrame || document.hidden) return;
                     nodes.forEach(function (el) {
                         var target = parseInt(el.getAttribute('data-count-to'), 10) || 0;
-                        if (target < 1) { el.textContent = '0'; return; }
-                        var start = null;
+                        if (target < 1) return;
+                        var finalText = el.textContent.trim();
+                        var start = null, done = false;
                         var duration = Math.min(1200, 500 + target * 8);
                         function ease(t) { return 1 - Math.pow(1 - t, 3); } // ease-out cubic
+                        function finish() { done = true; el.textContent = finalText; }
                         function step(ts) {
+                            if (done) return;
+                            if (document.hidden) { finish(); return; }
                             if (start === null) start = ts;
                             var p = Math.min(1, (ts - start) / duration);
-                            var v = Math.floor(ease(p) * target);
-                            el.textContent = v.toLocaleString();
-                            if (p < 1) requestAnimationFrame(step);
-                            else el.textContent = target.toLocaleString();
+                            if (p < 1) { el.textContent = Math.floor(ease(p) * target).toLocaleString(); requestAnimationFrame(step); }
+                            else finish();
                         }
-
+                        el.textContent = '0';
+                        // Delay slightly so the count-in fade-up isn't fighting with the digit churn.
                         setTimeout(function () { requestAnimationFrame(step); }, 380);
+                        // Timers still fire in a hidden tab: the number lands even if no frame does.
+                        setTimeout(finish, 380 + duration + 300);
                     });
                 })();
                 </script>
@@ -618,7 +641,7 @@ if (!$live_cdn) {
                                     <h2 class="wpc-restore-complete-title"><?php esc_html_e('Restore Complete!', WPS_IC_TEXTDOMAIN); ?></h2>
                                     <p class="wpc-restore-complete-subtitle">
                                         <?php
-                                        
+                                        /* translators: %s = N images restored */
                                         printf(
                                             esc_html__('Successfully restored all %s images to original quality.', WPS_IC_TEXTDOMAIN),
                                             '<strong data-field="final-count">0</strong>'
@@ -867,16 +890,12 @@ if (!$live_cdn) {
                                 </svg>
                               </div>
                               <h2 class="wpc-bulk-complete-title"><?php esc_html_e('Optimization Complete!', WPS_IC_TEXTDOMAIN); ?></h2>
-                              <p class="wpc-bulk-complete-subtitle">
-                                <?php
-                                
-                                printf(
-                                  esc_html__('Successfully optimized %1$s original images, generating %2$s modern variants.', WPS_IC_TEXTDOMAIN),
-                                  '<strong data-field="final-count">0</strong>',
-                                  '<strong data-field="final-variants">0</strong>'
-                                );
-                                ?>
-                              </p>
+                              <!-- Written by compressCompleted() from the run ledger's numbers (the heartbeat's `completion`). -->
+                              <p class="wpc-bulk-complete-subtitle"></p>
+                              <!-- Shown by compressCompleted() when the run's heartbeat counts images with no file on disk. -->
+                              <div class="wpc-bulk-complete-missing" hidden>
+                                <?php echo $wpc_missing_row((int) $libraryStatus['missing'], ''); ?>
+                              </div>
                               <div class="wpc-bulk-complete-stats">
                                 <div class="wpc-bulk-complete-stat">
                                   <div class="wpc-bulk-complete-stat-value" data-field="final-saved">0&nbsp;B</div>
@@ -946,7 +965,7 @@ if (!$live_cdn) {
         </div>
 
         <?php
-        
+        // TODO: Bottom bar with hidden message about bulk optimization
         ?>
 
         <?php include WPS_IC_DIR . 'templates/admin/partials/popups/bulk/popups.php'; ?>

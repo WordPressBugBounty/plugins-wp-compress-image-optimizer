@@ -1,14 +1,6 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: integrations/advanced_custom_fields.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 class wps_ic_advanced_custom_fields extends wps_ic_integrations {
@@ -18,11 +10,11 @@ class wps_ic_advanced_custom_fields extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        
+        // No specific checks needed
     }
 
     public function fix_setting($setting) {
-        
+        // No specific fixes needed
     }
 
     public function add_admin_hooks() {
@@ -36,7 +28,7 @@ class wps_ic_advanced_custom_fields extends wps_ic_integrations {
     }
 
     public function purge_cache_on_options_save($post_id) {
-        
+        // Clear cache when ACF options page is updated
         if ($post_id === 'options') {
             $cache = new wps_ic_cache_integrations();
             $cache::purgeAll();

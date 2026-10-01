@@ -1,25 +1,17 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/cdn/fast404-guard.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
     exit;
 }
 
-
-
-
-
-
-
-
-
-
+/**
+ * v7.20.18 — uploads fast-404. A request for a missing image under uploads costs a full WP
+ * boot before the PHP-level 404 guards answer it; on Apache/LiteSpeed a marker-fenced rule in
+ * uploads/.htaccess answers at the server instead. The -WxH rung shape is carved out so those
+ * requests still reach WP for wpc_v2_rung_intercept (nearest-rung serve + regen queue). The
+ * write is verified by probing a known-missing URL: a 404 WITHOUT the X-WPC-Fast-404 header
+ * proves the server answered before PHP; the header present means the rule is ineffective
+ * (nginx and friends) — journaled, never retried hot.
+ */
 
 if (!function_exists('wpc_fast404_guard_active')) {
     function wpc_fast404_guard_active()
@@ -59,8 +51,8 @@ if (!function_exists('wpc_fast404_guard_write_block')) {
         $file = rtrim($dir, '/\\') . '/.htaccess';
         if (@file_exists($file) ? !@is_writable($file) : !@is_writable($dir)) { return false; }
         if (!function_exists('insert_with_markers')) {
-            $wpc_misc18 = ABSPATH . 'wp-admin/includes/misc.php';
-            if (@is_readable($wpc_misc18)) { require_once $wpc_misc18; }
+            $misc_file = ABSPATH . 'wp-admin/includes/misc.php';
+            if (@is_readable($misc_file)) { require_once $misc_file; }
         }
         if (!function_exists('insert_with_markers')) { return false; }
         return (bool) insert_with_markers($file, 'WPC Fast 404', $remove ? [] : wpc_fast404_guard_rules());
@@ -68,7 +60,7 @@ if (!function_exists('wpc_fast404_guard_write_block')) {
 }
 
 if (!function_exists('wpc_fast404_guard_probe')) {
-    
+    /** 404 without our PHP header = the server answered pre-WP. Returns 'static'|'php'|'other'. */
     function wpc_fast404_guard_probe()
     {
         if (!function_exists('wp_remote_get')) { return 'other'; }
@@ -94,11 +86,11 @@ if (!function_exists('wpc_fast404_guard_tick')) {
 
             $st = get_option('wpc_fast404_state', []);
             $prev = (is_array($st) && isset($st['state'])) ? (string) $st['state'] : '';
-            
-            $wpc_rv273 = md5(implode("\n", wpc_fast404_guard_rules()));
-            $wpc_samerules273 = (is_array($st) && isset($st['rules_v']) && $st['rules_v'] === $wpc_rv273);
+            // .273 — rules are versioned: an armed block from an older ruleset re-writes once.
+            $rules_version = md5(implode("\n", wpc_fast404_guard_rules()));
+            $same_rules = (is_array($st) && isset($st['rules_v']) && $st['rules_v'] === $rules_version);
             if ($prev === 'ineffective' && !$force) { return null; }
-            if ($prev === 'armed' && $wpc_samerules273 && !$force) { return null; }
+            if ($prev === 'armed' && $same_rules && !$force) { return null; }
 
             if (!wpc_fast404_guard_write_block()) {
                 update_option('wpc_fast404_state', ['state' => 'unwritable', 'ts' => time()], false);
@@ -106,13 +98,13 @@ if (!function_exists('wpc_fast404_guard_tick')) {
             }
             $verdict = wpc_fast404_guard_probe();
             if ($verdict === 'static') {
-                update_option('wpc_fast404_state', ['state' => 'armed', 'rules_v' => $wpc_rv273, 'ts' => time()], false);
+                update_option('wpc_fast404_state', ['state' => 'armed', 'rules_v' => $rules_version, 'ts' => time()], false);
                 if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('fast404-armed', '', '', []); }
                 return true;
             }
             if ($verdict === 'php') {
-                
-                
+                // Rule written but PHP still answers (nginx-class front) — leave the block
+                // (harmless), journal ineffective, back off a week like the CORP guard.
                 update_option('wpc_fast404_state', ['state' => 'ineffective', 'ts' => time()], false);
                 set_transient('wpc_fast404_tick', 1, 7 * DAY_IN_SECONDS);
                 return false;

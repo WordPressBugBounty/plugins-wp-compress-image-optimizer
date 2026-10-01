@@ -1,24 +1,16 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/modes.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 class wps_ic_modes extends wps_ic {
 
   public $wpc_filesystem;
 
   public function __construct()
   {
-    
+    #$this->wpc_filesystem = new WP_Filesystem_Direct('');
   }
 
 
   public function getFile($filePath) {
-    
+    // Fetch the image content
     $fileContent = $this->wpc_filesystem->get_contents($filePath);
     return $fileContent;
   }

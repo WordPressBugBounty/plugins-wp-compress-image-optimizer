@@ -1,18 +1,24 @@
 <?php
+
+if (!function_exists('wpc_loopback_connect')) {
+    /**
+     * Open one connection to this site for a loopback: the one place a loopback socket is
+     * opened (the bulk self-chain, the async dispatcher, the image doctor's probe), so a suite
+     * can script the network instead of opening sockets.
+     */
+    function wpc_loopback_connect($remote, &$errno, &$errstr, $timeout, $context)
+    {
+        return @stream_socket_client($remote, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $context);
+    }
+}
+
 /**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/ajax.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
+ * Class - Ajax
  */
-
-
-
-
-
 class wps_ic_ajax extends wps_ic
 {
+    /** The cron event that carries a v2 compress run when no loopback does (wpc_bulk_drain_cron_arm). */
+    const BULK_DRAIN_CRON = 'wpc_bulk_drain_cron';
 
     public static $API_URL = WPS_IC_CRITICAL_API_URL;
     public static $PAGESPEED_URL = WPS_IC_PAGESPEED_API_URL;
@@ -36,7 +42,7 @@ class wps_ic_ajax extends wps_ic
     public static $Requests;
     public static $apikey;
 
-    public static function wpc_requests70()
+    public static function wpc_requests()
     {
         if (!self::$Requests instanceof wps_ic_requests) {
             self::$Requests = new wps_ic_requests();
@@ -80,24 +86,26 @@ class wps_ic_ajax extends wps_ic
             self::$logo_uncompressed = WPS_IC_URI . 'assets/images/legacy/logo-not-compressed.svg';
             self::$logo_excluded = WPS_IC_URI . 'assets/images/legacy/logo-excluded.svg';
 
-            
+            // GUI switch — must be available even without API key (lite CF banner uses it)
             $this->add_ajax('wpsChangeGui');
-            
-            
+            // Read-only admin diagnostics (manage_options + nonce). Registered outside the
+            // api_key gate so the no-key case is still diagnosable.
             $this->add_ajax('wpc_v2_diag');
+            // The image doctor (read-only, manage_options + nonce): classes/image_doctor.class.php.
+            add_action('wp_ajax_wpc_image_doctor', ['wps_ic_image_doctor', 'ajax']);
 
-            
-            
+            // Agency portal: register settings/mode/excludes save handlers regardless of local api_key
+            // (apikey is sent per-request via $_POST['apikey'] in agency mode)
             if ($this->isAgencyPortal()) {
                 $this->add_ajax('wps_ic_ajax_v2_checkbox_batch');
                 $this->add_ajax('wps_ic_save_mode');
                 $this->add_ajax('wps_ic_save_excludes_settings');
                 $this->add_ajax('wps_ic_get_setting');
-                
+                // Font tab
                 $this->add_ajax('wpsScanFonts');
                 $this->add_ajax('wpsRemoveFont');
                 $this->add_ajax('wpsPurgeFontCache');
-                
+                // Cloudflare handlers (api_key comes per-request via $_POST['apikey'])
                 $this->add_ajax('wpc_ic_checkCFToken');
                 $this->add_ajax('wpc_ic_checkCFConnect');
                 $this->add_ajax('wpc_cf_check_permissions');
@@ -110,10 +118,10 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wpc_ic_setupCF');
                 $this->add_ajax('wps_ic_save_cf_cdn');
                 $this->add_ajax('wps_ic_get_cf_cdn');
-                
-                
-                
-                
+                // Custom DNS popup. These lived only in the api_key block, so the portal (which
+                // has no local key) never registered them and the popup's Save/Refresh/Remove
+                // went nowhere the plugin owned — the only thing answering was the agency API
+                // plugin's legacy relay.
                 $this->add_ajax('wps_ic_cname_add');
                 $this->add_ajax('wps_ic_cname_retry');
                 $this->add_ajax('wps_ic_remove_cname');
@@ -121,9 +129,11 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_save_purge_hooks_settings');
                 $this->add_ajax('wps_ic_get_cache_cookies');
                 $this->add_ajax('wps_ic_save_cache_cookies_settings');
+                $this->add_ajax('wps_ic_get_cache_query_params');
+                $this->add_ajax('wps_ic_save_cache_query_params_settings');
                 $this->add_ajax('wps_ic_purge_after_save');
                 $this->add_ajax('wpc_ic_ajax_set_preset');
-                
+                // Export / Import / Reset
                 $this->add_ajax('wps_ic_export_settings');
                 $this->add_ajax('wps_ic_import_settings');
                 $this->add_ajax('wps_ic_set_default_settings');
@@ -134,16 +144,16 @@ class wps_ic_ajax extends wps_ic
             }
 
             if (!empty(parent::$api_key)) {
-                
+                // Pull Stats
                 $this->add_ajax('wps_fetchInitialTest');
                 $this->add_ajax('wps_ic_pull_stats');
 
-                
+                // Scan Fonts
                 $this->add_ajax('wpsRemoveFont');
                 $this->add_ajax('wpsScanFonts');
                 $this->add_ajax('wpsPurgeFontCache');
 
-                
+                // Cloudflare
                 $this->add_ajax('wpc_ic_checkCFToken');
                 $this->add_ajax('wpc_ic_checkCFConnect');
                 $this->add_ajax('wpc_cf_check_permissions');
@@ -155,13 +165,13 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wpc_ic_refreshCFConnection');
                 $this->add_ajax('wpc_ic_setupCF');
 
-                
+                // Critical CSS
                 $this->add_ajax('wps_ic_critical_get_assets');
                 $this->add_ajax('wps_ic_critical_run');
                 $this->add_ajax('wps_ic_get_setting');
                 $this->add_ajax('wps_ic_save_excludes_settings');
 
-                
+                // GeoLocation for Popups
                 $this->add_ajax('wps_ic_remove_key');
                 $this->add_ajax('wpc_ic_set_mode');
                 $this->add_ajax('wpc_ic_ajax_set_preset');
@@ -172,7 +182,7 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_geolocation');
                 $this->add_ajax('wps_ic_geolocation_force');
 
-                
+                // Bulk Actions
                 $this->add_ajax('wps_ic_StopBulk');
                 $this->add_ajax('wps_ic_getBulkStats');
                 $this->add_ajax('wps_ic_bulkCompressHeartbeat');
@@ -183,9 +193,9 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_doBulkCompress');
                 $this->add_ajax('wpc_bulk_v2_drain');
                 $this->add_ajax('wpc_bulk_v2_restore_drain');
-                $this->add_ajax('wpc_bulk_v2_restore_drain_loop');       
+                $this->add_ajax('wpc_bulk_v2_restore_drain_loop');       // HMAC restore self-chain (priv + nopriv)
                 $this->add_ajax_nopriv('wpc_bulk_v2_restore_drain_loop');
-                $this->add_ajax('wpc_bulk_v2_drain_loop');               
+                $this->add_ajax('wpc_bulk_v2_drain_loop');               // HMAC compress self-chain (priv + nopriv)
                 $this->add_ajax_nopriv('wpc_bulk_v2_drain_loop');
                 $this->add_ajax('wpc_bulk_ledger_dump');
                 $this->add_ajax('wpc_v2_compress_probe');
@@ -214,17 +224,17 @@ class wps_ic_ajax extends wps_ic
 
                 $this->add_ajax('wpc_async_image_bg_retry');
                 $this->add_ajax_nopriv('wpc_async_image_bg_retry');
-                $this->add_ajax('wps_ic_get_card');  
+                $this->add_ajax('wps_ic_get_card');  // JS polling fallback
                 $this->add_ajax('wps_ic_variant_count');
-                $this->add_ajax('wps_ic_check_customer_activity');  
+                $this->add_ajax('wps_ic_check_customer_activity');  // HEAD-poll splash freshness signal
                 $this->add_ajax('wps_ic_pull_manifest');
-                
-                
-                
+                // Anon (e.g. a cached admin page served to a logged-out visitor/crawler) must
+                // get a clean stop signal, never a 400 it retries forever. Return immediately —
+                // no nonce, no DB, no HTTP.
                 add_action('wp_ajax_nopriv_wps_ic_check_customer_activity', function () { wp_send_json_success(['enabled' => false]); });
                 add_action('wp_ajax_nopriv_wps_ic_pull_manifest', function () { wp_send_json_success(['enabled' => false]); });
-                
-                
+                // Autonomous drain loop. NOT user-auth gated — uses HMAC (apikey + timestamp).
+                // priv + nopriv so the loopback from the click-handler can hit it cookieless.
                 add_action('wp_ajax_wpc_v2_pull_drain_loop',        'wpc_v2_pull_drain_loop_handler');
                 add_action('wp_ajax_nopriv_wpc_v2_pull_drain_loop', 'wpc_v2_pull_drain_loop_handler');
                 $this->add_ajax('wpc_bulk_clear_stuck_compressing');
@@ -269,6 +279,8 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_save_purge_hooks_settings');
                 $this->add_ajax('wps_ic_save_cache_cookies_settings');
                 $this->add_ajax('wps_ic_get_cache_cookies');
+                $this->add_ajax('wps_ic_save_cache_query_params_settings');
+                $this->add_ajax('wps_ic_get_cache_query_params');
                 $this->add_ajax('wps_ic_get_purge_rules');
                 $this->add_ajax('wps_ic_export_settings');
                 $this->add_ajax('wps_ic_import_settings');
@@ -276,26 +288,30 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_save_cf_cdn');
                 $this->add_ajax('wps_ic_get_cf_cdn');
 
-                
+                // Live Start
 
-                
+                // First Run Variable
                 $this->add_ajax('wps_ic_count_uncompressed_images');
 
-                
+                // Change Setting
                 $this->add_ajax('wps_ic_settings_change');
 
-                
+                // Next-gen delivery (auto-verified resolver): one-option save + manual re-check
                 $this->add_ajax('wpc_delivery_save');
                 $this->add_ajax('wpc_delivery_recheck');
 
-                
+                // Exclude Image from Compress
                 $this->add_ajax('wps_ic_simple_exclude_image');
                 $this->add_ajax('wps_lite_connect');
                 $this->add_ajax('wps_ic_live_connect');
+                $this->add_ajax('wpc_claim');
+                $this->add_ajax('wpc_claim_status');
             } else {
-                
+                // Connect
                 $this->add_ajax('wps_lite_connect');
                 $this->add_ajax('wps_ic_live_connect');
+                $this->add_ajax('wpc_claim');
+                $this->add_ajax('wpc_claim_status');
             }
 
             $this->add_ajax('wps_ic_check_optimization_status');
@@ -319,7 +335,7 @@ class wps_ic_ajax extends wps_ic
         $this->add_ajax('wpc_gf_refresh_nonce');
         $this->add_ajax_nopriv('wpc_gf_refresh_nonce');
 
-        
+        // Clear error debug log action
         add_action('admin_post_wpc_clear_error_log', function () {
             check_admin_referer('wpc_clear_error_log');
             if (!current_user_can('manage_options')) {
@@ -349,8 +365,8 @@ class wps_ic_ajax extends wps_ic
         }
         $out = ['landed' => false, 'nudged' => false];
         try {
-            
-            
+            // The admin's request IS the worker: run OUR due one-shot events inline —
+            // no scheduler, no loopback (dm-class sites collect too). Bounded to 3.
             if (function_exists('_get_cron_array') && function_exists('wp_unschedule_event')
                 && !(function_exists('wpc_gen_backoff_active') && wpc_gen_backoff_active())
                 && !(function_exists('wpc_under_pressure') && wpc_under_pressure())) {
@@ -365,8 +381,8 @@ class wps_ic_ajax extends wps_ic
                             if (strpos($wpc_h, 'wpc_') !== 0 && strpos($wpc_h, 'wps_ic_') !== 0) {
                                 continue;
                             }
-                            
-                            
+                            // HTTP-heavy hooks (repull fans out to 5 handlers, ~70-90s worst
+                            // case in an outage) never run inline in an admin worker.
                             if (in_array($wpc_h, ['wpc_lcp_repull', 'wpc_url_warm'], true)) {
                                 continue;
                             }
@@ -375,7 +391,7 @@ class wps_ic_ajax extends wps_ic
                                     break 3;
                                 }
                                 if (!empty($wpc_ev['schedule'])) {
-                                    continue; 
+                                    continue; // one-shot only — never eat a recurrence
                                 }
                                 $wpc_args = isset($wpc_ev['args']) ? (array) $wpc_ev['args'] : [];
                                 wp_unschedule_event($wpc_ts, $wpc_h, $wpc_args);
@@ -398,16 +414,16 @@ class wps_ic_ajax extends wps_ic
                 if ($wpc_ok && ($wpc_since === 0 || $wpc_mt >= $wpc_since)) {
                     $out['landed'] = true;
                     $out['age'] = max(0, time() - $wpc_mt);
-                    
+                    // Drop the critless edge copy the moment the artifact exists.
                     if (!get_transient('wpc_landck_purged') && class_exists('wps_ic_cache_integrations')
                         && method_exists('wps_ic_cache_integrations', 'purgeUrlHtml')) {
                         set_transient('wpc_landck_purged', 1, 120);
                         wps_ic_cache_integrations::purgeUrlHtml($wpc_uk, '', ['context' => 'land-check']);
                     }
                 } else {
-                    
-                    
-                    
+                    // DB-free landing first: if the gen finished its grind, the artifact is on
+                    // Bunny CDN regardless of any service-DB outage — pull it straight from the
+                    // uuid, bypassing /status entirely. Then re-nudge dispatch as the fallback.
                     if (class_exists('wps_criticalCss')) {
                         try {
                             $wpc_cc = new wps_criticalCss();
@@ -419,7 +435,7 @@ class wps_ic_ajax extends wps_ic
                         }
                     }
                     if (empty($out['landed']) && function_exists('wpc_warm_url_queue')) {
-                        
+                        // Not landed — re-nudge dispatch (debounced internally, FPM-safe).
                         $out['nudged'] = (bool) wpc_warm_url_queue($wpc_home, 'land-check');
                     }
                 }
@@ -440,7 +456,7 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success(['field' => (string) $field, 'nonce' => wp_create_nonce($action)]);
     }
 
-    
+    /** Shared guard for the delivery endpoints. */
     private static function wpc_delivery_guard()
     {
         $nonce = isset($_POST['wps_ic_nonce']) ? $_POST['wps_ic_nonce'] : '';
@@ -452,11 +468,11 @@ class wps_ic_ajax extends wps_ic
         }
     }
 
-    
-
-
-
-
+    /**
+     * Save the ONE next-gen control (mode = auto|webp|off) + optional advanced override, derive
+     * the legacy keys for back-compat, force a fresh verify, and return the resolved state so the
+     * status card re-renders immediately.
+     */
     public function wpc_delivery_save()
     {
         self::wpc_delivery_guard();
@@ -469,7 +485,7 @@ class wps_ic_ajax extends wps_ic
                 wp_send_json_error('bad-mode');
             }
             $settings[WPC_Delivery_Resolver::NEXTGEN_OPTION] = $mode;
-            
+            // Derive the legacy keys so the ~65 existing readers stay correct.
             $ceiling = ($mode === 'auto') ? 'avif' : $mode;
             foreach (WPC_Delivery_Resolver::settings_for_ceiling($ceiling) as $k => $v) {
                 $settings[$k] = $v;
@@ -494,7 +510,7 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success(WPC_Delivery_Resolver::resolve_verbose(true));
     }
 
-    
+    /** Manual "Re-check" button → force a fresh loopback verify, return resolved state. */
     public function wpc_delivery_recheck()
     {
         self::wpc_delivery_guard();
@@ -523,12 +539,12 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success(WPC_Delivery_Resolver::resolve_verbose(true));
     }
 
-    
-    
-    
-    
-    
-    public static function wpc_split_patterns19($raw)
+    // v7.20.19 — the exclusion textareas advertise a comma-separated example
+    // ("e.g. analytics.js, /my-plugin/tracking.js, google-tag") while the parser split on
+    // newlines alone, so pasting the format the UI suggests stored ONE pattern that matched
+    // nothing — a silent no-op with no warning. Accept both separators; no legitimate URL or
+    // filename fragment contains a comma.
+    public static function wpc_split_exclude_patterns($raw)
     {
         if (is_array($raw)) {
             $raw = implode("\n", $raw);
@@ -572,8 +588,8 @@ class wps_ic_ajax extends wps_ic
         $token     = $cfSettings['token'] ?? '';
         $zoneName  = str_replace(['http://', 'https://', '/'], '', $siteUrl);
 
-        
-        
+        // Local teardown runs FIRST and unconditionally — the disconnect must take effect on the front
+        // end immediately, so none of it can be skipped by a slow keys-server notification below.
         if ($isAgency) {
             if (!empty($apikey) && !empty($api) && !empty($api::$comms)) {
                 $api::$comms->deleteRemoteCFOption($apikey);
@@ -621,8 +637,8 @@ class wps_ic_ajax extends wps_ic
             wps_ic_cache::removeHtmlCacheFiles('all');
         }
 
-        
-        
+        // Notify the keys server last, with a capped timeout — its response is unused, so it must never
+        // be able to hold up (or, on a slow host, time out) the teardown above.
         if (!empty($token) && !empty($zoneInput)) {
             $cfsdk = new WPC_CloudflareAPI($token);
             $cfsdk->removeCdnBypassRule($zoneInput);
@@ -710,13 +726,13 @@ class wps_ic_ajax extends wps_ic
         $cfapi = new WPC_CloudflareAPI($token);
         $check = $cfapi->checkPrivileges($zoneInput);
         if (is_wp_error($check)) {
-            
+            // e.g. no zone provided — can't run the per-zone permission probes
             wp_send_json_error(['msg' => $check->get_error_message(), 'kind' => 'misconfig']);
         }
 
 
         if (is_array($check) && !empty($check['critical_missing'])) {
-            update_option('wpc_cf_privileges', ['t' => time(), 'privs' => $check], false);
+            wpc_cf_store_privileges($check);
             wp_send_json_error([
                 'privileges'       => $check,
                 'msg'              => 'Your Cloudflare API token is missing required permission(s): '
@@ -769,7 +785,7 @@ class wps_ic_ajax extends wps_ic
 
 
             if (is_array($check)) {
-                update_option('wpc_cf_privileges', ['t' => time(), 'privs' => $check], false);
+                wpc_cf_store_privileges($check);
             }
             wp_send_json_success(array_merge($save, ['optional_missing' => $wpc_optional_missing, 'privileges' => $check]));
         }
@@ -854,7 +870,7 @@ class wps_ic_ajax extends wps_ic
 
     public static function isFeatureEnabled($featureName)
     {
-        
+        // v7.10.505 — delegate to the single durable reader.
         if (function_exists('wpc_caps_enabled')) {
             return wpc_caps_enabled($featureName);
         }
@@ -870,8 +886,10 @@ class wps_ic_ajax extends wps_ic
         }
 
         $requests = new wps_ic_requests();
+        $t0 = microtime(true);
+        $portal = $this->isAgencyPortal();
 
-        if ($this->isAgencyPortal()) {
+        if ($portal) {
             global $api;
             $apikey   = sanitize_text_field($_POST['apikey'] ?? '');
             $cf       = (!empty($apikey) && !empty($api) && !empty($api::$comms)) ? $api::$comms->getRemoteCFOption($apikey) : [];
@@ -887,154 +905,272 @@ class wps_ic_ajax extends wps_ic
         $zoneInput = sanitize_text_field($cf['zone'] ?? '');
         $zoneName  = str_replace(['http://', 'https://', '/'], '', $siteUrl);
 
-        $body = $requests->GET(WPS_IC_KEYSURL, ['action' => 'refreshCF', 'token' => $token, 'zone' => $zoneInput, 'siteUrl' => $siteUrl, 'zoneName' => $zoneName, 'staticAssets' => $cf['settings']['assets'] ?? '1', 'htmlCache' => $cf['settings']['edge-cache'] ?? 'all', 'cdn' => $cf['settings']['cdn'] ?? '1', 'apikey' => $apikey, 'time' => microtime(true)], ['timeout' => 30]); 
+        // Rule: the plugin's own Cloudflare steps never wait for keys. perkzilla 2026-09-24: keys
+        // took >30 s to write 89 allow-list IPs, the old handler timed out on it and skipped every
+        // step below, twice, and reported "provisioning server answering slowly" both times.
+        $report = [];
+        $privileges = null;
+        if ($token !== '' && $zoneInput !== '') {
+            $cfsdk = new WPC_CloudflareAPI($token);
+            list($report['rules'], $report['bypass_rule']) = $this->cfRulesReportRows($cfsdk, $zoneInput, 'refresh', $portal);
+            $report['vary_images'] = $this->cfVaryImagesReportRow($cfsdk, $zoneInput, $portal);
+            $report['whitelist'] = WPC_CloudflareAPI::classifyResult($cfsdk->whitelistIPs($zoneInput));
+            try {
+                $privileges = $cfsdk->checkPrivileges($zoneInput);
+                if (is_array($privileges)) {
+                    wpc_cf_store_privileges($privileges);
+                }
+            } catch (\Throwable $e) {
+            }
+        } else {
+            $report['rules'] = ['ok' => false, 'mode' => 'failed', 'detail' => 'No Cloudflare token or zone stored'];
+            $report['vary_images'] = ['ok' => false, 'mode' => 'skipped', 'detail' => 'Not attempted (no token)'];
+        }
 
-        if (!empty($body) && isset($body->data)) {
-            $data    = (array) $body->data;
-            $cfCname = $data['cfName'] ?? '';
-            $prevCfCname = (string) get_option(WPS_IC_CF_CNAME);
-
-            if ($this->isAgencyPortal()) {
+        // Keys registration last, with a budget: its answer only carries the CDN hostname, and a
+        // slow keys must not hold the admin's request (the old 30 s GET did, and then answered
+        // nothing). A timeout is "pending" and the background lane finishes it.
+        $keys = $requests->keys('refreshCF', ['token' => $token, 'zone' => $zoneInput, 'siteUrl' => $siteUrl, 'zoneName' => $zoneName,
+            'staticAssets' => $cf['settings']['assets'] ?? '1', 'htmlCache' => $cf['settings']['edge-cache'] ?? 'all',
+            'cdn' => $cf['settings']['cdn'] ?? '1', 'apikey' => $apikey, 'time' => microtime(true)], 8);
+        $reload = false;
+        if ($keys['ok']) {
+            $data        = (array) $keys['data'];
+            $cfCname     = (string) ($data['cfName'] ?? '');
+            $cnameLive   = false;
+            if ($portal) {
                 if (!empty($apikey) && !empty($api) && !empty($api::$comms)) {
                     $api::$comms->saveRemoteCFOption($apikey, null, $cfCname, $cf['settings'] ?? []);
                 }
             } else {
-                update_option(WPS_IC_CF_CNAME, $cfCname);
+                // An empty cfName leaves the stored cname alone: writing '' would blank the CDN
+                // host of a working site on a keys answer that simply omitted it.
+                if ($cfCname !== '' && wpc_cf_cname_persist($cfCname, 'ajax-cf-refresh')) {
+                    $reload = true;
+                }
                 self::$options = get_option(WPS_IC_SETTINGS);
-                self::$options['cf'] = $cf['settings'];
+                self::$options['cf'] = $cf['settings'] ?? [];
                 update_option(WPS_IC_SETTINGS, self::$options);
-
-
-                if (!empty($cfCname) && (string) $cfCname !== $prevCfCname) {
-                    update_option('wpc_cf_cname_verified', '0', false);
-                }
-            }
-
-            $cfsdk = new WPC_CloudflareAPI($token);
-            
-            
-            $cf_bypass = $cfsdk->addCdnBypassRule($zoneInput);
-            $cf_white  = $cfsdk->whitelistIPs($zoneInput);
-            $cf_static = $cfsdk->patchStaticAssetsRespectOrigin($zoneInput);
-            if (method_exists($cfsdk, 'patchHtmlRulesRespectOrigin')) { $cfsdk->patchHtmlRulesRespectOrigin($zoneInput, null, true); }
-
-            
-            $cf_cname_live = (!empty($cfCname) && !$this->isAgencyPortal() && method_exists($cfsdk, 'verifyCfCnameLive')
-                && $cfsdk->verifyCfCnameLive($cfCname, 1, 5));
-            if ($cf_cname_live) {
-                update_option('wpc_cf_cname_verified', 1, false);
-            }
-
-
-            if (!$this->isAgencyPortal()) {
-                update_option('wpc_v2_force_provision', 1, false);
-                if (function_exists('wpc_v2_schedule_config_sync')) {
-                    wpc_v2_schedule_config_sync();
-                }
-            }
-
-
-            $cf_report = [
-                'bypass_rule' => WPC_CloudflareAPI::classifyResult($cf_bypass),
-                'static_rule' => WPC_CloudflareAPI::classifyResult($cf_static),
-                'whitelist'   => WPC_CloudflareAPI::classifyResult($cf_white),
-                'cname'       => ['ok' => (bool) $cf_cname_live, 'mode' => $cf_cname_live ? 'ok' : 'pending',
-                                  'detail' => $cf_cname_live ? 'Resolving (edge-live)' : 'Not yet edge-live — promotes automatically via the heartbeat once it propagates'],
-                'v2_sync'     => ['ok' => true, 'mode' => 'scheduled',
-                                  'detail' => 'Scheduled (non-blocking) — re-provisions out-of-band; confirms on the next heartbeat'],
-            ];
-            
-            
-            
-            if (empty($cf_report['static_rule']['ok']) && ($cf_report['static_rule']['mode'] ?? '') === 'unreachable') {
-                $cf_static = $cfsdk->patchStaticAssetsRespectOrigin($zoneInput);
-                $cf_report['static_rule'] = WPC_CloudflareAPI::classifyResult($cf_static);
-            }
-
-            if (empty($cf_report['bypass_rule']['ok']) && ($cf_report['bypass_rule']['mode'] ?? '') === 'permission') {
-                $cf_report['bypass_rule']['mode'] = 'pending';
-                $cf_report['bypass_rule']['detail'] = 'Optional — add "Zone → Zone WAF → Edit" to the token to enable the security-bypass rule (guarantees our optimization fetches are never blocked by Cloudflare security). Everything else works without it.';
-            }
-
-
-            
-            
-            
-            
-            
-            
-            if (!$this->isAgencyPortal()) {
-                try {
-                    $wpc_nat820 = ['ok' => false, 'mode' => 'pending', 'detail' => 'Not verified'];
-                    if (function_exists('wpc_v2_asset_mime_probe_run')) {
-                        
-                        
-                        
-                        
-                        delete_transient('wpc_v2_cf_asset_mime_retry');
-                        delete_transient('wpc_v2_asset_probe_inflight');
-                        $wpc_hadproof820 = ((string) get_option('wpc_v2_cf_asset_mime_ok', '') === '1');
-                        $wpc_np820 = wpc_v2_asset_mime_probe_run();
-                        $wpc_nl820 = get_option('wpc_v2_cf_asset_mime_last', []);
-                        $wpc_nc820 = is_array($wpc_nl820) && isset($wpc_nl820['code']) ? (int) $wpc_nl820['code'] : 0;
-                        $wpc_nt820 = is_array($wpc_nl820) && !empty($wpc_nl820['ct']) ? (string) $wpc_nl820['ct'] : '-';
-                        if ($wpc_np820) {
-                            $wpc_nat820 = ['ok' => true, 'mode' => 'ok',
-                                'detail' => 'Natural asset URLs verified — the zone answered 200 + text/css; CSS/JS serve clean URLs'];
-                            
-                            
-                            if (!$wpc_hadproof820) {
-                                if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
-                                    wps_ic_cache::removeHtmlCacheFiles('all');
-                                }
-                                if (function_exists('wpc_cache_first_log')) {
-                                    wpc_cache_first_log('natural-converged', '', '', ['src' => 'refresh']);
-                                }
-                            }
-                        } else {
-                            $wpc_nat820 = ['ok' => false, 'mode' => 'pending',
-                                'detail' => 'Zone is not serving plain asset paths yet (HTTP ' . $wpc_nc820 . ', ' . $wpc_nt820
-                                    . ') — needs natural-static routing enabled on the zone; re-checked hourly and applied automatically once it answers 200 + text/css'];
-                        }
+                delete_option('wpc_cf_setup_pending');
+                if ($cfCname !== '' && isset($cfsdk) && $cfsdk->verifyCfCnameLive($cfCname, 1, 5)) {
+                    // Reachable is not verified: the orchestrator's witness promotes (emit gate).
+                    if (wpc_cf_cname_gate_legacy()) {
+                        update_option('wpc_cf_cname_verified', 1, false);
                     }
-                    $cf_report['natural_assets'] = $wpc_nat820;
-                } catch (\Throwable $e) {
-                }
-                try {
-                    if (function_exists('wpc_corp_guard_tick')) {
-                        $wpc_corp823 = wpc_corp_guard_tick(true);
-                        if ($wpc_corp823 !== null) { $cf_report['corp_guard'] = $wpc_corp823; }
-                    }
-                } catch (\Throwable $e) {
+                    $cnameLive = true;
                 }
             }
+            // keys' refreshCF switches tiered caching on for the whole zone (perkzilla 2026-09-24:
+            // on after a Refresh), so the verdict is applied again after its answer.
+            if (isset($cfsdk)) {
+                $cfsdk->applyTieredVerdict($zoneInput);
+            }
+            $report['keys']  = $this->cfKeysAnsweredRow($keys, 'refreshCF');
+            $report['cname'] = ['ok' => $cnameLive, 'mode' => $cnameLive ? 'ok' : 'pending',
+                'detail' => $cnameLive ? 'Resolving (edge-live)' : 'Not yet edge-live — promotes automatically via the heartbeat once it propagates'];
+        } else {
+            $report['keys']  = $this->cfKeysFailedRow($keys);
+            $report['cname'] = ['ok' => false, 'mode' => 'pending', 'detail' => 'Unchanged until the provisioning server answers'];
+            // Rule: a keys timeout arms the retry lane whether or not a cname is already stored.
+            // The old handler armed it only for an empty cname, so a stored one hid every failed
+            // re-registration (perkzilla 2026-09-24).
+            if (!$portal && $keys['why'] === 'timeout') {
+                $this->cfArmSetupRetry($zoneInput);
+            }
+        }
+        if (!$portal) {
+            update_option('wpc_v2_force_provision', 1, false);
+            if (function_exists('wpc_v2_schedule_config_sync')) {
+                wpc_v2_schedule_config_sync();
+            }
+            $report['v2_sync'] = ['ok' => true, 'mode' => 'scheduled',
+                'detail' => 'Scheduled (non-blocking) — re-provisions out-of-band; confirms on the next heartbeat'];
+        }
 
-            $wpc_privs88 = null;
+        // Refresh Connection is the button people press when "assets are not on the CDN" —
+        // and it re-registered edge rules while never re-checking the one gate that decides
+        // the URL shape: the natural-asset MIME proof. Re-verify it HERE, synchronously
+        // (admin-ajax context, the probe is one ≤3s capped GET), purge on a flip so the
+        // verdict reaches served pages, and put the named verdict in the report instead of
+        // leaving a green panel over an unzoned site.
+        if (!$portal) {
             try {
-                if (isset($cfsdk) && method_exists($cfsdk, 'checkPrivileges')) {
-                    $wpc_privs88 = $cfsdk->checkPrivileges($zoneInput);
-                    if (is_array($wpc_privs88)) {
-                        update_option('wpc_cf_privileges', ['t' => time(), 'privs' => $wpc_privs88], false);
+                $naturalRow = ['ok' => false, 'mode' => 'pending', 'detail' => 'Not verified'];
+                if (function_exists('wpc_v2_asset_mime_probe_run')) {
+                    // Deliberately NOT invalidate-then-probe: a transient blip during the
+                    // refresh would leave a healthy proven site revoked for the whole retry
+                    // window. The probe itself is the re-verification — it refreshes the
+                    // stamp on success and runs the 2-strike revocation on definitive failure.
+                    delete_transient('wpc_v2_cf_asset_mime_retry');
+                    delete_transient('wpc_v2_asset_probe_inflight');
+                    $hadNaturalProof = ((string) get_option('wpc_v2_cf_asset_mime_ok', '') === '1');
+                    $naturalOk = wpc_v2_asset_mime_probe_run();
+                    $naturalLast = get_option('wpc_v2_cf_asset_mime_last', []);
+                    $naturalCode = is_array($naturalLast) && isset($naturalLast['code']) ? (int) $naturalLast['code'] : 0;
+                    $naturalType = is_array($naturalLast) && !empty($naturalLast['ct']) ? (string) $naturalLast['ct'] : '-';
+                    // The CDN's own reason for a non-asset answer (X-Redirect-Reason, on every response since 2026-09-28).
+                    $naturalType .= is_array($naturalLast) && !empty($naturalLast['rr']) ? ', CDN reason ' . (string) $naturalLast['rr'] : '';
+                    if ($naturalOk) {
+                        $naturalRow = ['ok' => true, 'mode' => 'ok',
+                            'detail' => 'Natural asset URLs verified — the zone answered 200 + text/css; CSS/JS serve clean URLs'];
+                        // Purge only on the 0->1 FLIP — an already-proven site re-verifying
+                        // must not pay a full cache wipe for pressing Refresh.
+                        if (!$hadNaturalProof) {
+                            if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+                                wps_ic_cache::removeHtmlCacheFiles('all');
+                            }
+                            if (function_exists('wpc_cache_first_log')) {
+                                wpc_cache_first_log('natural-converged', '', '', ['src' => 'refresh']);
+                            }
+                        }
+                    } else {
+                        $naturalRow = ['ok' => false, 'mode' => 'pending',
+                            'detail' => 'Zone is not serving plain asset paths yet (HTTP ' . $naturalCode . ', ' . $naturalType
+                                . ') — needs natural-static routing enabled on the zone; re-checked hourly and applied automatically once it answers 200 + text/css'];
                     }
+                }
+                $report['natural_assets'] = $naturalRow;
+            } catch (\Throwable $e) {
+            }
+            try {
+                if (function_exists('wpc_corp_guard_tick')) {
+                    $corpGuard = wpc_corp_guard_tick(true);
+                    if ($corpGuard !== null) { $report['corp_guard'] = $corpGuard; }
                 }
             } catch (\Throwable $e) {
             }
-            wp_send_json_success(['message' => 'cf-refreshed-successfully', 'report' => $cf_report, 'privileges' => $wpc_privs88]);
         }
 
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('cf-refresh', '', '', ['rules' => $report['rules']['mode'] ?? '', 'bypass' => $report['bypass_rule']['mode'] ?? '',
+                'whitelist' => $report['whitelist']['mode'] ?? '', 'keys' => $report['keys']['mode'] ?? '',
+                'ms' => (int) round((microtime(true) - $t0) * 1000)]);
+        }
+        wp_send_json_success(['message' => 'cf-refreshed', 'report' => $report, 'privileges' => $privileges, 'reload' => $reload]);
+    }
 
-        if ((string) get_option(WPS_IC_CF_CNAME) === '' && !$this->isAgencyPortal()) {
-            update_option('wpc_cf_setup_pending', ['t' => time()], false);
-            if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
-                && !wp_next_scheduled('wpc_cf_setup_retry', [1])) {
-                wp_schedule_single_event(time() + 60, 'wpc_cf_setup_retry', [1]);
-            }
+    /**
+     * The report rows for the cache rules and the WAF skip rule, shared by Connect and Refresh: one
+     * converge answers both. From the agency portal the owner would resolve the portal's own hosts
+     * and panel settings, not the client site's, so the portal does not converge the cache rules
+     * (the site does, on its own upgrade pass and Refresh); the skip rule depends on neither, so
+     * the portal still converges that one alone.
+     */
+    private function cfRulesReportRows($cfsdk, $zoneId, $reason, $portal)
+    {
+        if ($portal) {
+            $skip = wps_ic_cf_rules::converge_skip($cfsdk, $zoneId);
+            return [['ok' => true, 'mode' => 'skipped', 'detail' => 'Cache rules are converged by the site itself (its own Refresh Connection or its next update)'],
+                $this->cfBypassReportRow($skip['outcome'], (int) ($skip['twins'] ?? 0))];
+        }
+        $rules = wps_ic_cf_rules::converge($zoneId, $reason);
+        $outcomes = (array) $rules['rules'];
+        $skip = (string) ($outcomes[wps_ic_cf_rules::SKIP_KEY] ?? ('failed:' . $rules['why']));
+        unset($outcomes[wps_ic_cf_rules::SKIP_KEY]);
+        $failed = array_filter($outcomes, function ($outcome) { return strpos((string) $outcome, 'failed') === 0; });
+        if ($rules['why'] === '' && $failed === []) {
+            return [['ok' => true, 'mode' => 'ok', 'detail' => 'Cache rules converged'], $this->cfBypassReportRow($skip, (int) ($rules['skip_twins'] ?? 0))];
+        }
+        $why = $rules['why'] !== '' ? $rules['why']
+            : implode(', ', array_map(function ($ref, $outcome) { return $ref . ' ' . $outcome; }, array_keys($failed), $failed));
+        return [['ok' => false, 'mode' => 'failed', 'detail' => 'Cache rules: ' . $why], $this->cfBypassReportRow($skip, (int) ($rules['skip_twins'] ?? 0))];
+    }
+
+    /**
+     * The Vary for Images row (wps_ic_cf_rules::converge_vary_images). The witness it keeps is the
+     * site's own, so from the agency portal the site sets it on its own Refresh Connection.
+     */
+    private function cfVaryImagesReportRow($cfsdk, $zoneId, $portal)
+    {
+        if ($portal) {
+            return ['ok' => true, 'mode' => 'skipped', 'detail' => 'Set by the site itself on its own Refresh Connection'];
+        }
+        $vary = wps_ic_cf_rules::converge_vary_images($cfsdk, $zoneId);
+        $code = $vary['code'] !== '' ? ' (Cloudflare code ' . $vary['code'] . ')' : '';
+        switch ($vary['result']) {
+            case 'equal':
+            case 'set':
+                return ['ok' => true, 'mode' => 'ok', 'detail' => 'Set: converted images are served shared-cacheable'];
+            case 'refused':
+                return ['ok' => true, 'mode' => 'skipped', 'detail' => 'Not available on this plan (Cloudflare Pro and above); converted images stay private' . $code];
+            case 'permission':
+                return ['ok' => true, 'mode' => 'skipped', 'detail' => 'Not permitted by the token (needs Zone Settings Edit); converted images stay private' . $code];
+            case 'off':
+                return ['ok' => true, 'mode' => 'skipped', 'detail' => 'Not attempted (switched off on this site)'];
+            case 'mismatch':
+                return ['ok' => false, 'mode' => 'failed', 'detail' => 'Cloudflare did not keep the setting; converted images stay private'];
+            default:
+                return ['ok' => false, 'mode' => 'failed', 'detail' => 'Could not reach Cloudflare' . $code . '; converted images stay private'];
+        }
+    }
+
+    /**
+     * The WAF skip rule's row from its converge outcome: a missing Zone WAF permission is optional,
+     * reported, never retried.
+     */
+    private function cfBypassReportRow($outcome, $twins = 0)
+    {
+        if ($outcome === 'permission') {
+            return ['ok' => false, 'mode' => 'pending',
+                'detail' => 'Optional — add "Zone → Zone WAF → Edit" to the token to enable the security-bypass rule (guarantees our optimization fetches are never blocked by Cloudflare security). Everything else works without it.'];
+        }
+        if (strpos($outcome, 'failed') === 0) {
+            return ['ok' => false, 'mode' => 'failed', 'detail' => 'Security bypass rule: ' . substr($outcome, 7)];
+        }
+        $detail = ['equal' => 'Present and first', 'created' => 'Created (first rule)', 'recreated' => 'Moved back to the first position',
+            'patched' => 'Shape updated', 'legacy' => 'Present (legacy firewall rules API)'];
+        $text = $detail[$outcome] ?? ('Present; Cloudflare refused the fuller shape (' . substr($outcome, 5) . ')');
+        if ($twins > 0) {
+            $text .= '; ' . $twins . ' other rule(s) on the zone also test the origin token (not ours to change)';
+        }
+        return ['ok' => true, 'mode' => 'ok', 'detail' => $text];
+    }
+
+    /** The keys row when keys did not answer usably: a timeout is pending, anything else failed with the typed reason. */
+    private function cfKeysFailedRow(array $keys)
+    {
+        if ($keys['why'] === 'timeout') {
+            return ['ok' => false, 'mode' => 'pending',
+                'detail' => 'Provisioning server did not answer within 8 s (timeout) — registration continues in the background automatically'];
+        }
+        if (($keys['code'] ?? '') === 'cf-token-missing') {
+            // keys d9b24cde: an empty token is refused and nothing is written. From the agency
+            // portal this is the normal case since 7.24.22 (the portal holds no site token).
+            return ['ok' => false, 'mode' => 'failed',
+                'detail' => 'Provisioning server refused: no Cloudflare token was sent (cf-token-missing). Nothing was changed there; the CDN hostname stays as it was. Refresh from the WP Compress settings on the site itself, or reconnect Cloudflare there'];
+        }
+        return ['ok' => false, 'mode' => 'failed',
+            'detail' => 'Provisioning server answered with an error (' . $keys['why'] . ') — the Cloudflare steps above still ran'];
+    }
+
+    /**
+     * The keys row of a Connect/Refresh report when keys answered success. Since keys d9b24cde the
+     * answer carries `data.cf = {ip_allow, cache_rules, dns}`; a part Cloudflare refused used to
+     * read as "Registered" (keys kept the success shape for old plugins), so the row now fails
+     * when any part failed and names each one. An answer without the block reads as before.
+     */
+    private function cfKeysAnsweredRow(array $keys, $action)
+    {
+        $parts = wps_ic_requests::keys_cf_parts($keys['data'], $action);
+        $detail = 'Registered with the provisioning server (' . $keys['ms'] . ' ms)';
+        if ($parts['detail'] !== '') {
+            $detail .= '. ' . $parts['detail'];
+        }
+        return $parts['failed']
+            ? ['ok' => false, 'mode' => 'failed', 'detail' => $detail]
+            : ['ok' => true, 'mode' => 'ok', 'detail' => $detail];
+    }
+
+    /** Arms the background lane (wpc_cf_finish_cname, warm.php) that completes the keys registration. */
+    private function cfArmSetupRetry($zoneId)
+    {
+        update_option('wpc_cf_setup_pending', ['t' => time(), 'zone' => $zoneId], false);
+        if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled') && !wp_next_scheduled('wpc_cf_setup_retry', [1])) {
+            wp_schedule_single_event(time() + 60, 'wpc_cf_setup_retry', [1]);
+        }
+        if (function_exists('wpc_spawn_cron')) {
             wpc_spawn_cron();
         }
-        wp_send_json_success(['message' => 'cf-refresh-cname-pending', 'report' => [
-            'cname' => ['ok' => false, 'mode' => 'pending',
-                        'detail' => 'Our provisioning server is answering slowly — re-sync continues in the background automatically (no action needed)'],
-        ]]);
     }
 
 
@@ -1063,7 +1199,7 @@ class wps_ic_ajax extends wps_ic
         if (is_wp_error($privs)) {
             wp_send_json_error(['msg' => $privs->get_error_message(), 'kind' => 'misconfig']);
         }
-        update_option('wpc_cf_privileges', ['t' => time(), 'privs' => $privs], false);
+        wpc_cf_store_privileges($privs);
 
 
         wp_send_json_success(['t' => time(), 'privileges' => $privs, 'purge_verified' => get_option('wpc_cf_purge_verified')]);
@@ -1074,26 +1210,26 @@ class wps_ic_ajax extends wps_ic
         if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'] ?? '', 'wps_ic_nonce_action')) {
             wp_send_json_error(['msg' => 'Forbidden.'], 403);
         }
-        $wpc_key846 = isset($_POST['lever']) ? sanitize_key((string) $_POST['lever']) : '';
-        $wpc_on846  = (isset($_POST['on']) && (string) $_POST['on'] === '1') ? '1' : '0';
-        $wpc_reg846 = function_exists('wpc_legacy_levers') ? wpc_legacy_levers() : [];
-        if ($wpc_key846 === '' || !isset($wpc_reg846[$wpc_key846])) {
+        $lever = isset($_POST['lever']) ? sanitize_key((string) $_POST['lever']) : '';
+        $lever_value  = (isset($_POST['on']) && (string) $_POST['on'] === '1') ? '1' : '0';
+        $levers = function_exists('wpc_legacy_levers') ? wpc_legacy_levers() : [];
+        if ($lever === '' || !isset($levers[$lever])) {
             wp_send_json_error(['msg' => 'Unknown lever.']);
         }
-        if ($wpc_on846 === '1' && !(defined('WPC_LAB_UI') && WPC_LAB_UI)) {
+        if ($lever_value === '1' && !(defined('WPC_LAB_UI') && WPC_LAB_UI)) {
             wp_send_json_error(['msg' => 'Enabling requires WPC_LAB_UI.']);
         }
-        $wpc_s846 = get_option(WPS_IC_SETTINGS);
-        if (!is_array($wpc_s846)) { $wpc_s846 = []; }
-        $wpc_s846[$wpc_key846] = $wpc_on846;
-        update_option(WPS_IC_SETTINGS, $wpc_s846);
+        $settings = get_option(WPS_IC_SETTINGS);
+        if (!is_array($settings)) { $settings = []; }
+        $settings[$lever] = $lever_value;
+        update_option(WPS_IC_SETTINGS, $settings);
         if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
             wps_ic_cache::removeHtmlCacheFiles('all');
         }
         if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log('legacy-flip', '', '', ['k' => $wpc_key846, 'on' => $wpc_on846]);
+            wpc_cache_first_log('legacy-flip', '', '', ['k' => $lever, 'on' => $lever_value]);
         }
-        wp_send_json_success(['lever' => $wpc_key846, 'on' => $wpc_on846]);
+        wp_send_json_success(['lever' => $lever, 'on' => $lever_value]);
     }
 
     public function wpc_natural_diag()
@@ -1141,10 +1277,10 @@ class wps_ic_ajax extends wps_ic
         $id  = isset($_REQUEST['id']) ? (int) $_REQUEST['id'] : 0;
         $url = isset($_REQUEST['url']) ? esc_url_raw((string) $_REQUEST['url']) : '';
         if ($id <= 0 && $url !== '' && function_exists('attachment_url_to_postid')) {
-            $wpc_clean845 = (string) preg_replace('/\?.*$/', '', $url);
-            $id = (int) attachment_url_to_postid($wpc_clean845);
+            $clean_url = (string) preg_replace('/\?.*$/', '', $url);
+            $id = (int) attachment_url_to_postid($clean_url);
             if ($id <= 0) {
-                $id = (int) attachment_url_to_postid((string) preg_replace('/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', $wpc_clean845));
+                $id = (int) attachment_url_to_postid((string) preg_replace('/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', $clean_url));
             }
         }
         if ($id <= 0) {
@@ -1219,8 +1355,9 @@ class wps_ic_ajax extends wps_ic
         $requests  = new wps_ic_requests();
         $token     = sanitize_text_field($_POST['token']);
         $zoneInput = sanitize_text_field($_POST['zone']);
+        $portal    = $this->isAgencyPortal();
 
-        if ($this->isAgencyPortal()) {
+        if ($portal) {
             global $api;
             $apikey  = sanitize_text_field($_POST['apikey'] ?? '');
             $cf      = (!empty($apikey) && !empty($api) && !empty($api::$comms)) ? $api::$comms->getRemoteCFOption($apikey) : [];
@@ -1231,119 +1368,111 @@ class wps_ic_ajax extends wps_ic
             $cf      = get_option(WPS_IC_CF);
             $siteUrl = site_url();
         }
+        if (!is_array($cf)) {
+            $cf = [];
+        }
 
         $zoneName = str_replace(['http://', 'https://', '/'], '', $siteUrl);
 
-        $body = $requests->GET(WPS_IC_KEYSURL, ['action' => 'setupCF', 'token' => $token, 'zone' => $zoneInput, 'siteUrl' => $siteUrl, 'zoneName' => $cf['zoneName'] ?? $zoneName, 'staticAssets' => '1', 'htmlCache' => 'all', 'cdn' => '1', 'apikey' => $apikey, 'time' => microtime(true)], ['timeout' => 30]); 
-
-
-        $wpc_keys_ok = (!empty($body) && isset($body->data));
-        $data        = $wpc_keys_ok ? (array) $body->data : [];
-        $cfCname     = $wpc_keys_ok ? (string) ($data['cfName'] ?? '') : '';
-        $prevCfCname = (string) get_option(WPS_IC_CF_CNAME);
-
+        // Connect provisions with the panel defaults. They are stored before the rules converge,
+        // because the owner resolves the desired set from the stored panel settings.
         $cf['settings'] = ['assets' => '1', 'edge-cache' => 'all', 'cdn' => '1'];
+        if (!$portal) {
+            update_option(WPS_IC_CF, $cf);
+        }
+
+        // Same order as Refresh Connection: the plugin's own Cloudflare steps first, keys last
+        // with a budget, and a report whatever keys does (perkzilla 2026-09-24: a keys that took
+        // >30 s held every step behind it).
+        $cfsdk = new WPC_CloudflareAPI($token);
+        $cf_report = [];
+        list($cf_report['rules'], $cf_report['bypass_rule']) = $this->cfRulesReportRows($cfsdk, $zoneInput, 'connect', $portal);
+        $cf_report['vary_images'] = $this->cfVaryImagesReportRow($cfsdk, $zoneInput, $portal);
+        $cf_report['whitelist']   = WPC_CloudflareAPI::classifyResult($cfsdk->whitelistIPs($zoneInput));
+
+        $keys = $requests->keys('setupCF', ['token' => $token, 'zone' => $zoneInput, 'siteUrl' => $siteUrl, 'zoneName' => $cf['zoneName'] ?? $zoneName,
+            'staticAssets' => '1', 'htmlCache' => 'all', 'cdn' => '1', 'apikey' => $apikey, 'time' => microtime(true)], 8);
+        $keysOk      = $keys['ok'];
+        $data        = $keysOk ? (array) $keys['data'] : [];
+        $cfCname     = $keysOk ? (string) ($data['cfName'] ?? '') : '';
+
         if ($cfCname !== '') {
             $cf['custom_cname'] = $cfCname;
         }
 
-        if ($this->isAgencyPortal()) {
-            if ($wpc_keys_ok && !empty($apikey) && !empty($api) && !empty($api::$comms)) {
+        if ($portal) {
+            if ($keysOk && !empty($apikey) && !empty($api) && !empty($api::$comms)) {
+                // Rule: the Connect relay carries the token the admin just typed (the one the
+                // Cloudflare steps above used and keys setupCF received), so the panel defaults,
+                // the host and a valid token reach the site in one relay. The portal stopped
+                // receiving the site's token in 7.24.22, and a tokenless cf array made keys write
+                // `cdn.` and the site erase its token (review 2026-09-24 §1 item 4); the portal
+                // now drops a tokenless cf array, which without this would lose settings.cdn, and
+                // the site would never emit the Cloudflare host. The token goes to the site only,
+                // never to a log.
+                $cf['token'] = $token;
                 $api::$comms->saveRemoteCFOption($apikey, $cf, $cfCname);
             }
-        } else {
+        } elseif ($cfCname !== '') {
             update_option(WPS_IC_CF, $cf);
-            if ($cfCname !== '') {
-                update_option(WPS_IC_CF_CNAME, $cfCname);
-
-
-                if ((string) $cfCname !== $prevCfCname) {
-                    update_option('wpc_cf_cname_verified', '0', false);
-                }
-            }
+            wpc_cf_cname_persist($cfCname, 'ajax-connect');
         }
 
-        $cfsdk = new WPC_CloudflareAPI($token);
-        
-        $cf_bypass = $cfsdk->addCdnBypassRule($zoneInput);
-        $cf_white  = $cfsdk->whitelistIPs($zoneInput);
-        $cf_static = $cfsdk->patchStaticAssetsRespectOrigin($zoneInput);
-        if (method_exists($cfsdk, 'patchHtmlRulesRespectOrigin')) { $cfsdk->patchHtmlRulesRespectOrigin($zoneInput, null, true); }
+        // keys' setupCF switches tiered caching on for the whole zone, so the verdict is applied
+        // again after its answer (perkzilla 2026-09-24).
+        if ($keysOk) {
+            $cfsdk->applyTieredVerdict($zoneInput);
+        }
 
-        
-        $cf_cname_live = ($cfCname !== '' && !$this->isAgencyPortal() && method_exists($cfsdk, 'verifyCfCnameLive')
-            && $cfsdk->verifyCfCnameLive($cfCname, 1, 5));
-        if ($cf_cname_live) {
+        // Promote now if the new host is already edge-live (1 try / 5s, no long block).
+        $cf_cname_live = ($cfCname !== '' && !$portal && $cfsdk->verifyCfCnameLive($cfCname, 1, 5));
+        if ($cf_cname_live && wpc_cf_cname_gate_legacy()) {
             update_option('wpc_cf_cname_verified', 1, false);
         }
 
-        
-
-
-        if (!$this->isAgencyPortal()) {
+        if (!$portal) {
             update_option('wpc_v2_force_provision', 1, false);
             if (function_exists('wpc_v2_schedule_config_sync')) {
                 wpc_v2_schedule_config_sync();
             }
-            if (!$wpc_keys_ok) {
-
-                update_option('wpc_cf_setup_pending', ['t' => time(), 'zone' => $zoneInput], false);
-                if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
-                    && !wp_next_scheduled('wpc_cf_setup_retry', [1])) {
-                    wp_schedule_single_event(time() + 60, 'wpc_cf_setup_retry', [1]);
-                }
-                if (function_exists('spawn_cron')) {
-                    wpc_spawn_cron();
-                }
+            // Rule: only an answer that may change on its own (timeout, transport, a broken body) arms
+            // the background retry. A refusal (keys d9b24cde: cf-token-missing and friends) is keys'
+            // verdict on what was sent, and the retry sends the same thing six times over 40 min.
+            if (!$keysOk && strpos((string) $keys['why'], 'refused:') !== 0) {
+                $this->cfArmSetupRetry($zoneInput);
             } else {
                 delete_option('wpc_cf_setup_pending');
             }
         }
 
-        
-        
-        $cf_report = [
-            'bypass_rule' => WPC_CloudflareAPI::classifyResult($cf_bypass),
-            'static_rule' => WPC_CloudflareAPI::classifyResult($cf_static),
-            'whitelist'   => WPC_CloudflareAPI::classifyResult($cf_white),
-            'cname'       => $wpc_keys_ok
-                ? ['ok' => (bool) $cf_cname_live, 'mode' => $cf_cname_live ? 'ok' : 'pending',
-                   'detail' => $cf_cname_live ? 'Resolving (edge-live)' : 'Not yet edge-live — promotes automatically via the heartbeat once it propagates']
-                : ['ok' => false, 'mode' => 'pending',
-                   'detail' => 'Our provisioning server is answering slowly — the CDN hostname is being finished in the background automatically (no action needed)'],
-            'v2_sync'     => ['ok' => true, 'mode' => 'scheduled',
-                              'detail' => 'Scheduled (non-blocking) — provisions out-of-band; confirms on the next heartbeat'],
-        ];
-        
-        
-        
-        
-        
-        
-        
-        
-        if (empty($cf_report['static_rule']['ok']) && ($cf_report['static_rule']['mode'] ?? '') === 'unreachable') {
-            $cf_static = $cfsdk->patchStaticAssetsRespectOrigin($zoneInput);
-            $cf_report['static_rule'] = WPC_CloudflareAPI::classifyResult($cf_static);
-        }
+        // The connection is ALREADY established here: wpc_ic_checkCFConnect stored the
+        // credentials and verified the REQUIRED token permissions (Zone Read + Cache Purge)
+        // before setup ran, so nothing below turns a connect into an error; each row names
+        // what is pending or failed and why.
+        $cf_report['keys']  = $keysOk
+            ? $this->cfKeysAnsweredRow($keys, 'setupCF')
+            : $this->cfKeysFailedRow($keys);
+        $cf_report['cname'] = $keysOk
+            ? ['ok' => (bool) $cf_cname_live, 'mode' => $cf_cname_live ? 'ok' : 'pending',
+               'detail' => $cf_cname_live ? 'Resolving (edge-live)' : 'Not yet edge-live — promotes automatically via the heartbeat once it propagates']
+            : ['ok' => false, 'mode' => 'pending',
+               'detail' => 'The CDN hostname is finished in the background once the provisioning server answers (no action needed)'];
+        $cf_report['v2_sync'] = ['ok' => true, 'mode' => 'scheduled',
+            'detail' => 'Scheduled (non-blocking) — provisions out-of-band; confirms on the next heartbeat'];
 
-        if (empty($cf_report['bypass_rule']['ok']) && ($cf_report['bypass_rule']['mode'] ?? '') === 'permission') {
-            $cf_report['bypass_rule']['mode'] = 'pending';
-            $cf_report['bypass_rule']['detail'] = 'Optional — add "Zone → Zone WAF → Edit" to the token to enable the security-bypass rule (guarantees our optimization fetches are never blocked by Cloudflare security). Everything else works without it.';
-        }
-
-        wp_send_json_success(['message' => $wpc_keys_ok ? 'cf-connected-successfully' : 'cf-connected-cname-pending', 'report' => $cf_report]);
+        wp_send_json_success(['message' => $keysOk ? 'cf-connected-successfully' : 'cf-connected-cname-pending', 'report' => $cf_report,
+            'keys_code' => $keys['code'] !== '' ? $keys['code'] : $keys['step']]);
     }
 
 
     public function wpc_send_critical_remote() {
-        
-        
-        $wpc_src330 = !empty($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : (!empty($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '');
-        $wpc_sh330  = strtolower((string) parse_url(home_url(), PHP_URL_HOST));
-        $wpc_oh330  = strtolower((string) parse_url($wpc_src330, PHP_URL_HOST));
-        $wpc_strip330 = function ($h) { return strpos((string) $h, 'www.') === 0 ? substr($h, 4) : (string) $h; };
-        if ($wpc_oh330 === '' || $wpc_strip330($wpc_oh330) !== $wpc_strip330($wpc_sh330)) {
+        // Browser-fired nopriv trigger: same-origin browsers always send Origin/Referer,
+        // so an empty/foreign one is scripted abuse, not a visitor.
+        $request_origin = !empty($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : (!empty($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '');
+        $site_host  = strtolower((string) parse_url(home_url(), PHP_URL_HOST));
+        $origin_host  = strtolower((string) parse_url($request_origin, PHP_URL_HOST));
+        $strip_www = function ($h) { return strpos((string) $h, 'www.') === 0 ? substr($h, 4) : (string) $h; };
+        if ($origin_host === '' || $strip_www($origin_host) !== $strip_www($site_host)) {
             wp_send_json_error('bad-origin');
         }
 
@@ -1353,82 +1482,72 @@ class wps_ic_ajax extends wps_ic
         $realUrl = sanitize_text_field($realUrl);
         $postID = sanitize_text_field($_POST['postID']);
 
-        
-
-
+        /**
+         * Check does http/s exist if not add it
+         */
         if (strpos($realUrl, 'https://') === false && strpos($realUrl, 'http://') === false) {
             $realUrl = 'https://' . $realUrl;
         }
 
-        
-
-
+        /**
+         * Only keep allowed params in url
+         */
         $keys = new wps_ic_url_key();
 
         $allowed_params = $keys->get_allowed_params();
         $parsed_url = parse_url($realUrl);
         parse_str((string) ($parsed_url['query'] ?? ''), $query_params);
 
-        
+        // Keep only the allowed parameters
         $filtered_params = array_intersect_key($query_params, array_flip($allowed_params));
 
-        
+        // Check if there are any disallowed parameters
         $disallowed_params = array_diff_key($query_params, array_flip($allowed_params));
 
         if (!empty($disallowed_params)) {
             wp_send_json_success('skipped');
         }
 
-        
+        // Build the new query string
         $new_query = http_build_query($filtered_params);
 
-        
-        $wpc_rh330 = strtolower((string) ($parsed_url['host'] ?? ''));
-        if ($wpc_rh330 === '' || $wpc_strip330($wpc_rh330) !== $wpc_strip330($wpc_sh330)) {
+        // Client-supplied host must be OUR host — never dispatch generation for foreign URLs.
+        $url_host = strtolower((string) ($parsed_url['host'] ?? ''));
+        if ($url_host === '' || $strip_www($url_host) !== $strip_www($site_host)) {
             wp_send_json_success('skipped');
         }
 
-        
+        // Reconstruct the URL
         $realUrl = $parsed_url['host'] . (isset($parsed_url['path']) ? $parsed_url['path'] : '') . '?' . $new_query;
         $realUrl = rtrim($realUrl, '?');
         $realUrl = rtrim($realUrl, '/');
 
-        
-
-
+        /**
+         * Does Critical Already Exist?
+         */
         $criticalCSSExists = $criticalCSS->criticalExistsAjax($realUrl);
         if (!empty($criticalCSSExists)) {
             wp_send_json_success(['exists', $realUrl, $criticalCSSExists]);
         }
 
-        
-
-
-        $ccss_debug = get_option('ccss_debug');
-        if (empty($ccss_debug) || $ccss_debug == 'false') {
-            
-            $running = get_transient('wpc_critical_ajax_' . md5($realUrl));
-            if (!empty($running) && $running == 'true') {
-                wp_send_json_success(['already-running', $realUrl]);
-            }
+        // The visitor's first interaction asks for the page's crit through the kick lane, the one
+        // automatic lane that reads the service's answer (generateCriticalAjax behind the kick
+        // receiver): a refusal becomes a hold, is not counted against the page's 4 per 2 h, and
+        // is not resent. This handler used to dispatch itself through initCritical's
+        // fire-and-forget POST, which read no answer: on staging (2026-09-27) /features/ and
+        // /wp-rocket-alternative/ lost the per-page single-flight to it on every visit, each
+        // refused POST counted as a live generation, a /status poll then read the never-made
+        // uuid as superseded and dispatched again, until the cap stopped both pages for 2 h with
+        // no crit. The kick admission is the throttle and the per-page dedupe.
+        $pageUrl = (parse_url(home_url(), PHP_URL_SCHEME) ?: 'https') . '://' . $realUrl;
+        $pageKey = ltrim((string) $keys->setup($pageUrl), '/');
+        if ($pageKey === '' || !function_exists('wpc_repull_kick_now')) {
+            wp_send_json_success(['skipped', $realUrl]);
         }
+        wps_ic_url_key::persistKeyUrl($pageKey, $pageUrl);
+        $kicked = wpc_repull_kick_now($pageKey, false, 'interaction');
 
-
-        $home = false;
-        $home_url = rtrim(home_url(), '/');
-        $realUrl_stripped = preg_replace('#^https?://#', '', $realUrl);
-        $home_url_stripped = preg_replace('#^https?://#', '', $home_url);
-
-        if ($home_url_stripped == $realUrl_stripped) {
-            $home = true;
-        }
-
-        
-        set_transient('wpc_critical_ajax_' . md5($realUrl), 'true', 60);
-
-        $criticalCSS->sendCriticalUrl($realUrl, 0);
-
-        wp_send_json_success(array('sent', $realUrl));
+        wp_send_json_success([$kicked ? 'kicked' : 'not-kicked', $realUrl]);
     }
 
 
@@ -1440,45 +1559,45 @@ class wps_ic_ajax extends wps_ic
         $realUrl = sanitize_text_field($realUrl);
         $postID = sanitize_text_field($_POST['postID']);
 
-        
-
-
+        /**
+         * Only keep allowed params in url
+         */
         $keys = new wps_ic_url_key();
 
         $allowed_params = $keys->get_allowed_params();
         $parsed_url = parse_url($realUrl);
         parse_str((string) ($parsed_url['query'] ?? ''), $query_params);
 
-        
+        // Keep only the allowed parameters
         $filtered_params = array_intersect_key($query_params, array_flip($allowed_params));
 
-        
+        // Check if there are any disallowed parameters
         $disallowed_params = array_diff_key($query_params, array_flip($allowed_params));
 
         if (!empty($disallowed_params)) {
             wp_send_json_success('skipped');
         }
 
-        
+        // Build the new query string
         $new_query = http_build_query($filtered_params);
 
-        
+        // Reconstruct the URL
         $realUrl = $parsed_url['host'] . (isset($parsed_url['path']) ? $parsed_url['path'] : '') . '?' . $new_query;
         $realUrl = rtrim($realUrl, '?');
         $realUrl = rtrim($realUrl, '/');
 
-        
-
-
+        /**
+         * Does Critical Already Exist?
+         */
         $criticalCSSExists = $criticalCSS->criticalExistsAjax($realUrl);
         if (!empty($criticalCSSExists)) {
             wp_send_json_success(['exists', $realUrl, $criticalCSSExists]);
         }
 
 
-        
-
-
+        /**
+         * Is Critical Ajax Already Running?
+         */
         $ccss_debug = get_option('ccss_debug');
         if (empty($ccss_debug) || $ccss_debug == 'false') {
             $running = get_transient('wpc_critical_ajax_' . $postID);
@@ -1497,45 +1616,42 @@ class wps_ic_ajax extends wps_ic
             $home = true;
         }
 
-        
+        // Set as Running
         set_transient('wpc_critical_ajax_' . $postID, 'true', 60);
 
         $requests = new wps_ic_requests();
 
         if (!empty($home)) {
-            $args = ['url' => (function_exists('wpc_canon_url609') ? wpc_canon_url609($realUrl) : $realUrl) . '?criticalCombine=true&testCompliant=true', 'source' => 'admin-ajax', 'version' => self::$version, 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+            $args = ['url' => (function_exists('wpc_canonical_url') ? wpc_canonical_url($realUrl) : $realUrl) . '?criticalCombine=true&testCompliant=true', 'source' => 'admin-ajax', 'version' => self::$version, 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
         } else {
-            $args = ['url' => (function_exists('wpc_canon_url609') ? wpc_canon_url609($realUrl) : $realUrl) . '?criticalCombine=true&testCompliant=true', 'source' => 'admin-ajax', 'home' => $home_url, 'version' => self::$version, 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
-        }
-        if (function_exists('wpc_sanity_escalate622')) {
-            $args = wpc_sanity_escalate622($args, $realUrl);
+            $args = ['url' => (function_exists('wpc_canonical_url') ? wpc_canonical_url($realUrl) : $realUrl) . '?criticalCombine=true&testCompliant=true', 'source' => 'admin-ajax', 'home' => $home_url, 'version' => self::$version, 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
         }
 
 
-        $wpc_set108 = get_option(WPS_IC_SETTINGS);
-        if (is_array($wpc_set108) && (!isset($wpc_set108['delay-js-v2']) || $wpc_set108['delay-js-v2'] == '1')
-            && (!isset($wpc_set108['delay-js-v3']) || $wpc_set108['delay-js-v3'] != '0')
+        $settings = get_option(WPS_IC_SETTINGS);
+        if (is_array($settings) && (!isset($settings['delay-js-v2']) || $settings['delay-js-v2'] == '1')
+            && (!isset($settings['delay-js-v3']) || $settings['delay-js-v3'] != '0')
             && apply_filters('wpc_delay_manifest_capability', true)) {
             $args['capabilities'] = ['delay_manifest' => 1, 'consolidated_callback' => 1];
         }
         try {
-            $wpc_keys108   = new wps_ic_url_key();
-            $wpc_urlkey108 = $wpc_keys108->setup($realUrl);
-            if (!empty($wpc_urlkey108)) {
+            $url_key_helper   = new wps_ic_url_key();
+            $url_key = $url_key_helper->setup($realUrl);
+            if (!empty($url_key)) {
                 if (function_exists('wpc_used_css_apply_demand')) {
-                    wpc_used_css_apply_demand($args, $wpc_urlkey108);
+                    wpc_used_css_apply_demand($args, $url_key);
                 }
                 if (empty($args['tpl_key']) && function_exists('wpc_dispatch_tpl_key')
                     && apply_filters('wpc_send_tpl_key_always', true)) {
-                    $wpc_dtk108 = wpc_dispatch_tpl_key($wpc_urlkey108);
-                    if ($wpc_dtk108 !== '') { $args['tpl_key'] = $wpc_dtk108; }
+                    $tpl_key = wpc_dispatch_tpl_key($url_key);
+                    if ($tpl_key !== '') { $args['tpl_key'] = $tpl_key; }
                 }
             }
-        } catch (\Throwable $wpc_e108) {
+        } catch (\Throwable $error) {
 
         }
         if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log('gen-dispatch', isset($wpc_urlkey108) ? (string) $wpc_urlkey108 : '', (string) $realUrl, [
+            wpc_cache_first_log('gen-dispatch', isset($url_key) ? (string) $url_key : '', (string) $realUrl, [
                 'path' => 'runCriticalAjax',
                 'caps' => isset($args['capabilities']) && is_array($args['capabilities']) ? implode(',', array_keys($args['capabilities'])) : '',
             ]);
@@ -1571,10 +1687,10 @@ class wps_ic_ajax extends wps_ic
 
         foreach ($array2 as $key => $value) {
             if (is_array($value) && isset($result[$key]) && is_array($result[$key])) {
-                
+                // Recursively merge nested arrays
                 $result[$key] = $this->custom_merge($result[$key], $value);
             } elseif (!isset($result[$key])) {
-                
+                // Add keys from $array2 only if they don't exist in $array1
                 $result[$key] = $value;
             }
         }
@@ -1582,16 +1698,16 @@ class wps_ic_ajax extends wps_ic
         return $result;
     }
 
-    
-
-
+    /**
+     * Change Settings Value
+     */
     public function wps_ic_settings_change()
     {
         if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
-        
+        // Check user capabilities
         if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
@@ -1640,7 +1756,7 @@ class wps_ic_ajax extends wps_ic
 
         if ($what == 'live_autopilot') {
             if ($value == '1') {
-                
+                // Enabline Live, clear local queue
                 delete_option('wps_ic_bg_stop');
                 delete_option('wps_ic_bg_process_stop');
                 delete_option('wps_ic_bg_stopping');
@@ -1652,7 +1768,7 @@ class wps_ic_ajax extends wps_ic
                 delete_option('wps_ic_bg_last_run_restore');
             }
         } elseif ($what == 'css' || $what == 'js') {
-            
+            // Purge CSS/JS Cache
             $this->purge_cdn_assets();
         }
 
@@ -1667,7 +1783,7 @@ class wps_ic_ajax extends wps_ic
     {
         $options = get_option(WPS_IC_OPTIONS);
 
-        $call = self::wpc_requests70()->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'domain' => site_url(), 'apikey' => $options['api_key']]);
+        $call = self::wpc_requests()->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'domain' => site_url(), 'apikey' => $options['api_key']]);
 
         if (!empty($call)) {
             if ($call->success == 'true') {
@@ -1686,7 +1802,7 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-        
+        // Check user capabilities
         if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
@@ -1700,27 +1816,27 @@ class wps_ic_ajax extends wps_ic
 
         $value = ($setting_checked == 'false') ? '0' : '1';
 
-        
+        // Parse "options[key]" or "options[key1][key2]" format from HTML name attribute
         preg_match_all('/\[([^\]]+)\]/', $setting_name, $matches);
         $keys = !empty($matches[1]) ? $matches[1] : [$setting_name];
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        $wpc_pillar148 = (count($keys) === 2) ? [$keys[0], $keys[1]] : $keys[0];
-        if (function_exists('wpc_lite_pillar_riders148')) {
-            $settings = wpc_lite_pillar_riders148($settings, $wpc_pillar148, $value);
+        // v7.10.825 / v7.21.148 — one toggle per PILLAR, and the pillar is expanded in exactly
+        // one place (wpc_lite_apply_pillar_riders, defines.php). Optimize CSS carries Used CSS
+        // Delivery; Optimize JavaScript carries the legacy + Ordered-Replay engines; Images
+        // carries retina/adaptive/webp/picture_*/next-gen; CDN carries live-cdn/serve/css/js/
+        // fonts. A bare-key write of a pillar is inert (the member keys drive the behaviour)
+        // AND self-reverting, because lite_settings.php re-derives imagesPreset/cdnAll from
+        // those member keys on every page load. The measured machinery (R2 rollback, watchdog
+        // demotes) keeps per-key demote authority underneath and re-tries on the next epoch
+        // (.824 thaw).
+        //
+        // v7.21.149 — this endpoint writes the WHOLE settings row, so N of it in flight at once
+        // is a lost-update machine. The simple panel moved to wps_ic_ajax_v2_checkbox_batch for
+        // exactly that reason; what is left here is the legacy v2 screen, which changes one
+        // checkbox per request.
+        $pillar_key = (count($keys) === 2) ? [$keys[0], $keys[1]] : $keys[0];
+        if (function_exists('wpc_lite_apply_pillar_riders')) {
+            $settings = wpc_lite_apply_pillar_riders($settings, $pillar_key, $value);
         } elseif (count($keys) === 2) {
             $settings[$keys[0]][$keys[1]] = $value;
         } else {
@@ -1732,23 +1848,27 @@ class wps_ic_ajax extends wps_ic
             $settings['css'] = '0';
         }
 
+        // The settings write purges the page cache through its owner, the delivery-config flip
+        // (update_option_wps_ic_settings, defines.php), hard because this is a human save
+        // (wpc_purge_human_save()). This handler deleted the
+        // whole cache/wp-cio tree on top of it, which took the receipt journal, the stale marker
+        // and every processed stylesheet copy that stored pages still link.
         update_option(WPS_IC_SETTINGS, $settings);
 
 
         self::purgeBreeze();
-        self::purge_cache_files();
 
-        
+        // Clear cache.
         if (function_exists('rocket_clean_domain')) {
             rocket_clean_domain();
         }
 
-        
+        // Lite Speed
         if (defined('LSCWP_V')) {
             do_action('litespeed_purge_all');
         }
 
-        
+        // HummingBird
         if (defined('WPHB_VERSION')) {
             do_action('wphb_clear_page_cache');
         }
@@ -1756,9 +1876,9 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success(['new_value' => $value, 'setting_name' => $setting_name, 'value' => $setting_value]);
     }
 
-    
-
-
+    /**
+     * @return void
+     */
     public static function purgeBreeze()
     {
         if (defined('BREEZE_VERSION')) {
@@ -1772,30 +1892,6 @@ class wps_ic_ajax extends wps_ic
 
             if (function_exists('wp_cache_flush')) {
                 if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('breeze'); } else { @wp_cache_flush(); }
-            }
-        }
-    }
-
-    
-
-
-    public static function purge_cache_files()
-    {
-        $cache_dir = WPS_IC_CACHE;
-
-        self::removeDirectory($cache_dir);
-
-        return true;
-    }
-
-
-    public static function removeDirectory($path)
-    {
-        $path = rtrim($path, '/');
-        $files = glob($path . '/*');
-        if (!empty($files)) {
-            foreach ($files as $file) {
-                is_dir($file) ? self::removeDirectory($file) : unlink($file);
             }
         }
     }
@@ -1839,12 +1935,12 @@ class wps_ic_ajax extends wps_ic
 
     }
 
-    
-
-
+    /**
+     * @return void
+     */
     public function wps_ic_get_setting()
     {
-        
+        // Verify nonce for security
         if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
             wp_send_json_error(['message' => 'Invalid nonce'], 403);
             wp_die();
@@ -1862,7 +1958,7 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-        
+        // Agency mode: fetch from the remote site
         if ($this->isAgencyPortal()) {
             global $api;
             $apikey = sanitize_text_field($_POST['apikey'] ?? '');
@@ -1874,6 +1970,11 @@ class wps_ic_ajax extends wps_ic
         }
 
         $option = get_option($option_name);
+        if ($option_name === 'wpc-excludes') {
+            // The Delay JS box shows the one stored list (wpc_delay_excludes_fold in defines.php).
+            $option = wpc_delay_excludes_fold($option);
+            $option_subset = wpc_delay_excludes_key($option_subset);
+        }
         $value = $option[$option_subset];
         $default_excludes = $option[$option_subset . '_default_excludes_disabled'];
         $exclude_themes = $option[$option_subset . '_exclude_themes'];
@@ -1901,7 +2002,7 @@ class wps_ic_ajax extends wps_ic
         $setting_name = sanitize_text_field($_POST['setting_name']);
         $setting_group = sanitize_text_field($_POST['group_name']);
 
-        
+        // Agency mode: relay to remote site. sendSiteExcludes() terminates via wp_send_json_*.
         if ($this->isAgencyPortal()) {
             global $api;
             $apikey = sanitize_text_field($_POST['apikey'] ?? '');
@@ -1923,7 +2024,7 @@ class wps_ic_ajax extends wps_ic
         }
 
         if ($setting_group == 'wpc-url-excludes') {
-            
+            //To be used in excluding url from an optimization option
             $excludes = $_POST['excludes'];
             $excludes = rtrim($excludes, "\n");
             $excludes = explode("\n", $excludes);
@@ -1934,7 +2035,7 @@ class wps_ic_ajax extends wps_ic
 
             $updated = update_option($setting_group, $wpc_excludes);
         } elseif ($setting_group == 'wpc-excludes' || $setting_group == 'wpc-inline') {
-            $excludes = self::wpc_split_patterns19($_POST['excludes']);
+            $excludes = self::wpc_split_exclude_patterns($_POST['excludes']);
 
             $default_enabled = sanitize_text_field($_POST['default_enabled']);
             $exclude_themes = sanitize_text_field($_POST['exclude_themes']);
@@ -1945,6 +2046,14 @@ class wps_ic_ajax extends wps_ic
 
 
             $wpc_excludes = get_option($setting_group);
+            if ($setting_group === 'wpc-excludes') {
+                // ONE DELAY JS EXCLUDE LIST. Whichever box names it (`delay_js_v2` or
+                // `delay_js_v3`), the save lands in `delay_js_v3`, and a stored v2 copy is folded
+                // away first, so a removal made here cannot come back from the other copy
+                // (acrystalglass.com, ticket 12056: `jquery` needed two edits in two places).
+                $wpc_excludes = wpc_delay_excludes_fold($wpc_excludes);
+                $setting_name = wpc_delay_excludes_key($setting_name);
+            }
             $wpc_excludes[$setting_name] = $excludes;
             $wpc_excludes[$setting_name . '_default_excludes_disabled'] = $default_enabled;
             $wpc_excludes[$setting_name . '_exclude_themes'] = $exclude_themes;
@@ -1952,13 +2061,13 @@ class wps_ic_ajax extends wps_ic
             $wpc_excludes[$setting_name . '_exclude_wp'] = $exclude_wp;
             $wpc_excludes[$setting_name . '_exclude_third'] = $exclude_third;
 
-            
+            // JS Delay popup saves both tabs at once: excludes + configure (lastLoadScript + deferScript)
             if (isset($_POST['lastLoadScript'])) {
-                $wpc_excludes['lastLoadScript'] = self::wpc_split_patterns19(sanitize_textarea_field($_POST['lastLoadScript']));
+                $wpc_excludes['lastLoadScript'] = self::wpc_split_exclude_patterns(sanitize_textarea_field($_POST['lastLoadScript']));
             }
 
             if (isset($_POST['deferScript'])) {
-                $wpc_excludes['deferScript'] = self::wpc_split_patterns19(sanitize_textarea_field($_POST['deferScript']));
+                $wpc_excludes['deferScript'] = self::wpc_split_exclude_patterns(sanitize_textarea_field($_POST['deferScript']));
             }
 
             if ($min_mobile_width !== 'false') {
@@ -1977,16 +2086,12 @@ class wps_ic_ajax extends wps_ic
             $cache = new wps_ic_cache_integrations();
             $cache::purgeAll();
 
-            if ($setting_name == 'combine_js' || $setting_name == 'css_combine' || $setting_name == 'delay_js') {
+            if ($setting_name == 'combine_js' || $setting_name == 'delay_js') {
                 $cache::purgeCombinedFiles();
             }
 
             if ($setting_name == 'critical_css') {
-                
-                
-                if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead()) {
-                    $cache::purgeCriticalFiles();
-                }
+                $cache::invalidateCritical('all', 'excludes-save', 'stale');
             }
 
 
@@ -1997,9 +2102,9 @@ class wps_ic_ajax extends wps_ic
 
     }
 
-    
-
-
+    /**
+     * @return void
+     */
     public function wps_ic_critical_run()
     {
         if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
@@ -2007,7 +2112,11 @@ class wps_ic_ajax extends wps_ic
         }
 
         $criticalCSS = new wps_criticalCss();
-        $criticalCSS->sendCriticalUrl('', $_POST['pageID']);
+        $wpc_page_id = $_POST['pageID'];
+        // A person clicked Run: human class, and like Generate it does not force.
+        wpc_gen_as_human('critical-run', function () use ($criticalCSS, $wpc_page_id) {
+            $criticalCSS->sendCriticalUrl('', $wpc_page_id);
+        });
         wp_send_json_success();
     }
 
@@ -2019,22 +2128,22 @@ class wps_ic_ajax extends wps_ic
 
         $options = get_option(WPS_IC_OPTIONS);
 
-        self::wpc_requests70()->GET(WPS_IC_KEYSURL, ['apikey' => $options['api_key'], 'action' => 'pullStats']);
+        self::wpc_requests()->GET(WPS_IC_KEYSURL, ['apikey' => $options['api_key'], 'action' => 'pullStats']);
         wp_send_json_success();
     }
 
-    
-
-
+    /**
+     * @return void
+     */
     public function wps_ic_critical_get_assets()
     {
-        
+        // Verify nonce for security
         if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
             wp_send_json_error(['message' => 'Invalid nonce'], 403);
             wp_die();
         }
 
-        
+        // Check user capabilities
         if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
@@ -2045,18 +2154,18 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success($count);
     }
 
-    
-
-
+    /**
+     * @return void
+     */
     public function wps_ic_ajax_v2_checkbox()
     {
-        
+        // Verify nonce for security
         if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
             wp_send_json_error(['message' => 'Invalid nonce'], 403);
             wp_die();
         }
 
-        
+        // Check user capabilities
         if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
@@ -2070,7 +2179,7 @@ class wps_ic_ajax extends wps_ic
 
         $optionName = explode(',', $optionName);
 
-        
+        // CF settings are stored in WPS_IC_CF['settings'], not WPS_IC_SETTINGS
         if (is_array($optionName) && count($optionName) > 1 && $optionName[0] === 'cf') {
             $cf = get_option(WPS_IC_CF);
             if (!empty($cf)) {
@@ -2105,7 +2214,7 @@ class wps_ic_ajax extends wps_ic
             $optionName = $optionName[0];
             $newValue = $options[$optionName] = $optionValue;
 
-            
+            // Auto-scan homepage when Local font hosting is first enabled
             if ($optionName === 'replace-fonts' && $newValue === 'local') {
                 $fontsMap = get_option(WPS_IC_FONTS_MAP);
                 if (empty($fontsMap)) {
@@ -2119,7 +2228,7 @@ class wps_ic_ajax extends wps_ic
                 }
             }
 
-            
+            // Recalculate live-cdn when css, js, or fonts changes
             if (in_array($optionName, ['css', 'js', 'fonts'])) {
                 $cdnOn = false;
                 $imageServeKeys = ['jpg', 'png', 'gif', 'svg'];
@@ -2146,10 +2255,10 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success(['newValue' => $newValue, 'optionName' => $optionName]);
     }
 
-    
-
-
-
+    /**
+     * Batch save — applies all checkbox changes in a single DB read/write cycle.
+     * Fixes race condition where parallel per-checkbox AJAX calls overwrite each other.
+     */
     public function wps_ic_ajax_v2_checkbox_batch()
     {
         if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
@@ -2182,7 +2291,7 @@ class wps_ic_ajax extends wps_ic
             $optionValue = sanitize_text_field($change['value']);
 
             if (count($optionName) > 1 && $optionName[0] === 'cf') {
-                
+                // CF settings stored in WPS_IC_CF['settings']
                 if ($cf === null) {
                     $cf = get_option(WPS_IC_CF);
                     if (!empty($cf) && !isset($cf['settings'])) {
@@ -2192,38 +2301,38 @@ class wps_ic_ajax extends wps_ic
                 if (!empty($cf)) {
                     $cf['settings'][$optionName[1]] = $optionValue;
                 }
-            } elseif (count($optionName) > 1 && function_exists('wpc_lite_is_pillar148')
-                      && wpc_lite_is_pillar148([$optionName[0], $optionName[1]])) {
-                
-                
-                
-                
-                $options = wpc_lite_pillar_riders148($options, [$optionName[0], $optionName[1]], $optionValue);
+            } elseif (count($optionName) > 1 && function_exists('wpc_lite_is_pillar')
+                      && wpc_lite_is_pillar([$optionName[0], $optionName[1]])) {
+                // v7.21.149 — the simple panel saves through this batch now, so the pillar
+                // expansion has to happen here too (see wpc_lite_apply_pillar_riders). Guarded by
+                // the predicate because this batch also carries non-boolean values, which the
+                // riders would normalise to '1'/'0'.
+                $options = wpc_lite_apply_pillar_riders($options, [$optionName[0], $optionName[1]], $optionValue);
             } elseif (count($optionName) > 1) {
                 $options[$optionName[0]][$optionName[1]] = $optionValue;
                 if ($optionName[0] === 'serve') {
                     $serveChanged = true;
                     if (isset($optionName[1]) && $optionName[1] === 'jpg') $imagesChanged = true;
                 }
-            } elseif (function_exists('wpc_lite_is_pillar148') && wpc_lite_is_pillar148($optionName[0])) {
-                $options = wpc_lite_pillar_riders148($options, $optionName[0], $optionValue);
+            } elseif (function_exists('wpc_lite_is_pillar') && wpc_lite_is_pillar($optionName[0])) {
+                $options = wpc_lite_apply_pillar_riders($options, $optionName[0], $optionValue);
                 if ($optionName[0] === 'cdnAll') {
-                    
-                    
+                    // The pillar writes serve/css/js/fonts itself and sets live-cdn explicitly,
+                    // so the recalculation below must see the same change the advanced keys make.
                     $serveChanged = true;
                     $assetChanged = true;
                 }
                 if ($optionName[0] === 'imagesPreset') {
-                    $nextgenChanged = true; 
+                    $nextgenChanged = true; // the pillar moves wpc_nextgen and the picture_* pair
                 }
             } else {
                 $name = $optionName[0];
                 $options[$name] = $optionValue;
                 if (in_array($name, ['css', 'js', 'fonts'])) $assetChanged = true;
-                if ($name === 'wpc_nextgen') $nextgenChanged = true; 
-                if (class_exists('WPC_Delivery_Resolver') && $name === WPC_Delivery_Resolver::OVERRIDE_OPTION) $overrideChanged = true; 
+                if ($name === 'wpc_nextgen') $nextgenChanged = true; // Next-Gen card saves natively through this batch
+                if (class_exists('WPC_Delivery_Resolver') && $name === WPC_Delivery_Resolver::OVERRIDE_OPTION) $overrideChanged = true; // Advanced override saves natively through this batch
 
-                
+                // Auto-scan homepage when Local font hosting is first enabled
                 if ($name === 'replace-fonts' && $optionValue === 'local') {
                     $fontsMap = get_option(WPS_IC_FONTS_MAP);
                     if (empty($fontsMap)) {
@@ -2273,10 +2382,10 @@ class wps_ic_ajax extends wps_ic
             $options[WPC_Delivery_Resolver::EDGE_ORIGIN_OPTION] = ($ov === 'edge') ? '1' : '0';
         }
 
-        
+        // Recalculate live-cdn ONCE with all changes applied
         if ($serveChanged || $assetChanged) {
             $cdnOn = false;
-            
+            // Only check image serve keys (css/js/fonts in serve array are stale legacy values)
             $imageServeKeys = ['jpg', 'png', 'gif', 'svg'];
             if (!empty($options['serve'])) {
                 foreach ($imageServeKeys as $k) {
@@ -2297,13 +2406,13 @@ class wps_ic_ajax extends wps_ic
             $options['serve']['fonts'] = (!empty($options['fonts']) && $options['fonts'] == '1') ? '1' : '0';
         }
 
-        
+        // Sync qualityLevel -> optimization (CDN URL reads 'optimization', UI saves 'qualityLevel')
         if (isset($options['qualityLevel'])) {
             $qualityMap = ['1' => 'lossless', '2' => 'intelligent', '3' => 'ultra'];
             $options['optimization'] = $qualityMap[$options['qualityLevel']] ?? 'intelligent';
         }
 
-        
+        // Agency mode: relay to remote site instead of saving locally.
         if ($this->isAgencyPortal()) {
             global $api;
             $apikey = sanitize_text_field($_POST['apikey'] ?? '');
@@ -2313,7 +2422,7 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_success(['saved' => count($changes)]);
         }
 
-        
+        // Phase 1 — detect Modern Image Delivery toggle flip to ON → fire async pre-warm
         $prevSettings = get_option(WPS_IC_SETTINGS, []);
         $prevModern = !empty($prevSettings['modern_image_delivery']) && $prevSettings['modern_image_delivery'] == '1';
         $newModern = !empty($options['modern_image_delivery']) && $options['modern_image_delivery'] == '1';
@@ -2322,8 +2431,8 @@ class wps_ic_ajax extends wps_ic
 
         update_option(WPS_IC_SETTINGS, $options);
 
-        
-        
+        // A live-cdn flip re-routes every image URL; the batch save's purge (wps_ic_purge_after_save)
+        // gates on $htmlPurgeKeys, which does NOT include live-cdn, so a flip via serve/css/js could
 
 
         if ($wpc_livecdn_before_b !== (isset($options['live-cdn']) ? (string) $options['live-cdn'] : $wpc_livecdn_before_b)) {
@@ -2364,8 +2473,8 @@ class wps_ic_ajax extends wps_ic
         }
 
         if ($modernFlippedOn) {
-            
-            
+            // Skip loopback pre-warm on Basic-Auth sites (staging/dev) — would 401.
+            // Queue still fills from normal renders; shutdown hook drains.
             $skip_loopback = function_exists('wpc_site_has_basic_auth') && wpc_site_has_basic_auth();
 
             if (!$skip_loopback) {
@@ -2391,9 +2500,9 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success(['saved' => count($changes)]);
     }
 
-    
-
-
+    /**
+     * Purge all caches — called as separate AJAX request after settings are saved.
+     */
     public function wps_ic_purge_after_save()
     {
         if ((!$this->isAgencyPortal() && !current_user_can('manage_wpc_settings')) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
@@ -2410,15 +2519,15 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_success();
         }
 
-        
+        // Settings that affect cached HTML output
         $htmlPurgeKeys = [
-            
+            // Fonts
             'replace-fonts', 'font-display', 'icon-font-display',
             'preload-crit-fonts', 'fontawesome-lazy',
-            
+            // CDN file types
             'css', 'js', 'fonts', 'lazy', 'nativeLazy',
             'serve,jpg', 'serve,png', 'serve,gif', 'serve,svg',
-            
+            // Image optimization (changes CDN URL parameters in HTML)
             'generate_adaptive', 'generate_webp', 'picture_webp', 'picture_avif',
             'retina', 'background-sizing', 'optimize-lcp', 'modern_image_delivery',
             'qualityLevel', 'local_qualityLevel', 'local_optimization',
@@ -2426,28 +2535,23 @@ class wps_ic_ajax extends wps_ic
 
 
             'avif-natural-source', 'fetchpriority-high', 'single-url-image-format',
-            
+            // Performance
             'critical,css', 'delay,js', 'delay-js-v2',
             'minify,html', 'minify,css', 'minify,js',
-            
+            // CF / CDN routing
             'cf,cdn', 'cf,assets', 'eu-routing',
-            
-            
-            
-            
+            // v7.21.149 — the simple panel's pillar keys. It saves through the batch now and
+            // sends the pillar name, not the member keys it expands to, so the gate has to know
+            // them by name or a simple-screen save would purge nothing. wps_ic_options::$purgeList
+            // already declares imagesPreset/cdnAll as cdn+critical+html.
             'imagesPreset', 'cdnAll', 'cache,advanced',
         ];
-        
-        $critPurgeKeys = ['replace-fonts', 'font-display', 'icon-font-display', 'preload-crit-fonts', 'css', 'fonts', 'minify,css', 'critical,css',
-            'imagesPreset', 'cdnAll'];
-
         $changedKeys = !empty($_POST['changed_keys']) ? array_map('sanitize_text_field', (array) $_POST['changed_keys']) : [];
 
         $needsHtmlPurge = !empty($changedKeys) && !empty(array_intersect($changedKeys, $htmlPurgeKeys));
-        $needsCritPurge = !empty($changedKeys) && !empty(array_intersect($changedKeys, $critPurgeKeys));
 
         if ($needsHtmlPurge) {
-            
+            // Purge WPC HTML cache + bump ICV hashes
             delete_transient('wps_ic_css_cache');
             delete_option('wps_ic_modified_css_cache');
             delete_option('wps_ic_css_combined_cache');
@@ -2455,24 +2559,18 @@ class wps_ic_ajax extends wps_ic
             $cache::purgeAll(false, true, false, false, true);
             $cache::purgeCombinedFiles();
 
-            
+            // Purge third-party caches. The page cache itself is purged by the purgeAll() above
+            // (hard: a human save, wpc_purge_human_save()); a wholesale delete of cache/wp-cio here
+            // erased the receipt journal on every save.
             self::purgeBreeze();
-            self::purge_cache_files();
             if (function_exists('rocket_clean_domain')) rocket_clean_domain();
             if (defined('LSCWP_V')) do_action('litespeed_purge_all');
             if (defined('WPHB_VERSION')) do_action('wphb_clear_page_cache');
         }
 
-        if ($needsCritPurge) {
-            
-            global $wpdb;
-            $options_table = $wpdb->options;
-            $wpdb->query($wpdb->prepare("DELETE FROM $options_table WHERE option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like('_transient_wpc_critical_key_') . '%', $wpdb->esc_like('_transient_timeout_wpc_critical_key_') . '%'));
-            if (!isset($cache)) $cache = new wps_ic_cache_integrations();
-            
-            if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead()) {
-                $cache::purgeCriticalFiles();
-            }
+        // The agency relay of the same save (comms purgeAfterSave) makes this same call.
+        if (function_exists('wpc_crit_invalidate_on_settings_save')) {
+            wpc_crit_invalidate_on_settings_save($changedKeys);
         }
 
 
@@ -2483,7 +2581,7 @@ class wps_ic_ajax extends wps_ic
                     $wpc_fonts_rebake->rebakeFontDisplay();
                 }
             } catch (\Throwable $e) {
-                
+                // A font re-bake error must never break the settings save.
             }
         }
 
@@ -2500,15 +2598,15 @@ class wps_ic_ajax extends wps_ic
                 wps_ic_cache::removeHtmlCacheFiles('all');
             }
 
-            
-            
+            // WP Engine — direct, registration-independent flush (idempotent; safe to double-fire vs the
+            // fan-out leg). Each call is method-guarded so a partial WpeCommon surface can't fatal the save.
             if ($wpc_wpe_active) {
                 try {
                     if (method_exists('WpeCommon', 'purge_memcached'))     { WpeCommon::purge_memcached(); }
                     if (method_exists('WpeCommon', 'purge_varnish_cache')) { WpeCommon::purge_varnish_cache(); }
                     if (method_exists('WpeCommon', 'clear_cdn_cache'))     { WpeCommon::clear_cdn_cache(); }
                 } catch (\Throwable $e) {
-                    
+                    // A WPE flush error must never break the settings save.
                 }
             }
 
@@ -2535,7 +2633,7 @@ class wps_ic_ajax extends wps_ic
                         wps_ic_cache::purgeEdgeHtmlUrls([home_url('/'), home_url()]);
                     }
                 } catch (\Throwable $e) {
-                    
+                    // A CF API error must never break the settings save.
                 }
             }
         }
@@ -2543,19 +2641,19 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success();
     }
 
-    
-
-
-
+    /**
+     * @return void
+     * @since 5.20.01
+     */
     public function wps_ic_generate_critical_css()
     {
-        
+        // Verify nonce for security
         if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
             wp_send_json_error(['message' => 'Invalid nonce'], 403);
             wp_die();
         }
 
-        
+        // Check user capabilities
         if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
@@ -2567,121 +2665,193 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('API Key empty!');
         }
 
-        
-        
-        
-        
-        
-        $GLOBALS['wpc_gen_force496'] = 1;
+        // v7.10.509 — this is an explicit human click, so it must bypass the service's 300s
+        // GEN_DEBOUNCE_S. Without the flag the dispatch is answered from the debounce with the
+        // EXISTING crit_uuid — the same stale artifact — and the button silently does nothing.
+        // The flag also marks the dispatch INTERACTIVE (.508), which is correct here: an admin
+        // is watching this one, unlike a background repull kick.
+        $GLOBALS['wpc_critical_generate_forced'] = 1;
         $criticalCSS = new wps_criticalCss($_SERVER['HTTP_REFERER']);
-        $criticalCSS->generateCriticalAjax();
-        unset($GLOBALS['wpc_gen_force496']);
+        $generation = $criticalCSS->generateCriticalAjax();
+        unset($GLOBALS['wpc_critical_generate_forced']);
 
-        
+        // The crit is inlined INTO the HTML, so the edge must turn over or nothing changes on the wire.
         if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
             try { wps_ic_cache::cfPurgeAllHtml(true, true); } catch (\Throwable $e) {}
         }
 
-        wp_send_json_success();
+        // The person sees what the admin bar always showed; the answer carries what the dispatch
+        // really came to, for debugging. Staging 2026-09-24 06:53: Generate on /case-studies/ was
+        // answered 429 domain_capped (retry_after 321) and this handler answered a bare
+        // {"success":true}, so nothing on the wire said why the page stayed crit-less.
+        wp_send_json_success($this->wpc_human_generation_outcome($generation, (string) $criticalCSS->urlKey));
     }
 
-    
+    /**
+     * What one human-started generation came to, for the ajax answer, from the outcome
+     * generateCriticalAjax() returns:
+     *
+     *   status      accepted (the service took it, is already rendering it, queued it, or answered
+     *               that the crit on disk is current) | refused (the service or the transport
+     *               refused it) | not-sent (nothing left this site: crit off, the double-click
+     *               shield, the dispatch door)
+     *   type        the service's error_type, http_<code>, transport, or why nothing was sent
+     *   retry_after the service's own wait, in seconds
+     *   retry_at    when this site's own retry of the page runs; 0 when none is scheduled or a
+     *               site-wide service hold outlasts it (the retry is an automatic dispatch, the
+     *               hold refuses it and nothing reschedules it)
+     *   uuid, served, landed, message
+     *
+     * Rule: the real outcome is in the answer; what the person is shown does not change. The
+     * observed failure: a 429 domain_capped answered to Generate on staging (2026-09-24 06:53)
+     * reached the browser as a bare {"success":true}.
+     */
+    private function wpc_human_generation_outcome($generation, $urlKey = '')
+    {
+        $generation = is_array($generation) ? $generation : [];
+        $answer = isset($generation['answer']) && is_array($generation['answer']) ? $generation['answer'] : [];
+        $outcome = ['status' => 'not-sent', 'type' => '', 'retry_after' => 0, 'retry_at' => 0,
+            'uuid' => '', 'served' => '', 'landed' => false, 'message' => ''];
 
+        if (empty($generation['sent'])) {
+            $outcome['type'] = isset($generation['refused']) && $generation['refused'] !== '' ? (string) $generation['refused'] : 'no-dispatch';
+            if ($outcome['type'] === 'single-flight') {
+                $outcome['message'] = 'Nothing sent: a generation for this page was started a few seconds ago.';
+            } elseif ($outcome['type'] === 'no-page') {
+                $outcome['message'] = 'Nothing sent yet: this page has no saved copy. The next logged-out visit saves one and asks for critical CSS then.';
+            } else {
+                $outcome['message'] = 'Nothing sent to the service (' . $outcome['type'] . ').';
+            }
+            return $outcome;
+        }
 
+        $code = (int) ($answer['code'] ?? 0);
+        $outcome['type'] = (string) ($answer['error_type'] ?? '');
+        $outcome['served'] = (string) ($answer['served'] ?? '');
+        $outcome['uuid'] = (string) ($generation['uuid'] ?? '');
+        // fleet_queued is the service's "queued, it lands on its own" (the site collects it).
+        if (empty($answer['refused']) || $outcome['type'] === 'fleet_queued') {
+            $outcome['status'] = 'accepted';
+            $outcome['landed'] = !empty($generation['landed']) && !empty($answer['accepted']);
+            $outcome['message'] = $outcome['landed'] ? 'Generated and applied.' : 'Accepted by the service; applies when it lands.';
+            return $outcome;
+        }
 
-    
+        $outcome['status'] = 'refused';
+        if ($outcome['type'] === '') {
+            $outcome['type'] = $code === 0 ? 'transport' : 'http_' . $code;
+        }
+        $outcome['retry_after'] = (int) ($answer['retry_after'] ?? 0);
+        $outcome['retry_at'] = (int) ($answer['retry_at'] ?? 0);
+        if ($outcome['retry_at'] > 0 && function_exists('wpc_gen_service_hold_until') && wpc_gen_service_hold_until($urlKey) >= $outcome['retry_at']) {
+            $outcome['retry_at'] = 0;
+        }
+        $outcome['message'] = 'Refused by the service (' . $outcome['type'] . ', retry_after ' . $outcome['retry_after'] . ' s); '
+            . ($outcome['retry_at'] > 0 ? 'this site retries in ' . max(0, $outcome['retry_at'] - time()) . ' s.' : 'no retry is scheduled.');
+        return $outcome;
+    }
 
-
-
-
-
-
-
-
-
-
-
-
-
-    
-    
-    
-    private function wpc_page_target_725($raw)
+    /**
+     * @return void
+     * @since 5.20.01
+     */
+    /**
+     * ONE action for "my optimizations are wrong — fix them" (v7.10.516).
+     *
+     * The old menu exposed one control per internal mechanism, so being correct meant
+     * knowing to press Pull Latest (sync=1, the only thing that busts the SERVICE
+     * template cache) and then Remove Critical CSS (the only thing that drops cached
+     * HTML) in that order. Neither alone worked, and nothing said so.
+     *
+     * Layer discipline is the other half: rebuild cost is wildly uneven. HTML/Varnish/
+     * edge-HTML are one render per URL, so dropping them is nearly free. The image CDN
+     * zone is re-optimization plus origin bandwidth plus provider cost — so this NEVER
+     * touches it. wpc_r2_purge_html_layers() draws exactly that line. Purging a layer
+     * that is not the broken one is not a neutral act.
+     */
+    // v7.10.725 — resolve + validate a POSTed page URL for the per-page lane. Same-host
+    // and a real front-end page (never an endpoint), or the request dies with a readable
+    // error. Returns [clean_url, url_key].
+    private function wpc_resolve_page_target($raw)
     {
         if (!class_exists('wps_ic_url_key') && defined('WPS_IC_DIR')) {
             @include_once WPS_IC_DIR . 'traits/url_key.php';
         }
-        $wpc_clean725 = class_exists('wps_ic_url_key') ? wps_ic_url_key::sanitizeSameHostUrl((string) $raw) : '';
-        if ($wpc_clean725 === '' || !wps_ic_url_key::isPageUrl($wpc_clean725)) {
+        $clean_url = class_exists('wps_ic_url_key') ? wps_ic_url_key::sanitizeSameHostUrl((string) $raw) : '';
+        if ($clean_url === '' || !wps_ic_url_key::isPageUrl($clean_url)) {
             wp_send_json_error(['message' => 'That URL is not a page on this site.'], 400);
         }
-        $wpc_key725 = ltrim((string) (new wps_ic_url_key())->setup($wpc_clean725), '/');
-        if ($wpc_key725 === '') {
+        $url_key = ltrim((string) (new wps_ic_url_key())->setup($clean_url), '/');
+        if ($url_key === '') {
             wp_send_json_error(['message' => 'Could not resolve this page.'], 400);
         }
-        return [$wpc_clean725, $wpc_key725];
+        return [$clean_url, $url_key];
     }
 
-    
-    
-    
-    
-    
-    private function wpc_rebuild_page_725($raw)
+    // v7.10.725 — Rebuild This Page: one generation for ONE url. The click never purges
+    // HTML — the land does (wpc_land_purge_coalesced + autopurge), so the page keeps
+    // serving the current version until the new one actually exists. Refuses waste the
+    // same way the site-wide handler does: in-flight and just-landed clicks are answered
+    // honestly instead of stacking gens.
+    private function wpc_rebuild_page($raw)
     {
-        $wpc_set725 = get_option(WPS_IC_SETTINGS);
-        if (empty($wpc_set725['critical']['css']) || $wpc_set725['critical']['css'] != '1') {
+        $settings = get_option(WPS_IC_SETTINGS);
+        if (empty($settings['critical']['css']) || $settings['critical']['css'] != '1') {
             wp_send_json_error(['message' => 'Critical CSS is not enabled.'], 400);
         }
-        list($wpc_clean725, $wpc_key725) = $this->wpc_page_target_725($raw);
-        $wpc_dir725 = defined('WPS_IC_CRITICAL') ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $wpc_key725 . '/' : '';
-        $wpc_dsp725 = $wpc_dir725 !== '' ? (int) @filemtime($wpc_dir725 . 'dispatch_ts.txt') : 0;
-        $wpc_lnd725 = $wpc_dir725 !== '' ? (int) @filemtime($wpc_dir725 . 'land_ts.txt') : 0;
-        if ($wpc_dsp725 > 0 && $wpc_dsp725 > $wpc_lnd725 && (time() - $wpc_dsp725) < 180 && empty($_POST['anyway'])) {
+        list($clean_url, $url_key) = $this->wpc_resolve_page_target($raw);
+        $crit_dir = defined('WPS_IC_CRITICAL') ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $url_key . '/' : '';
+        $dispatched_at = $crit_dir !== '' ? (int) @filemtime($crit_dir . 'dispatch_ts.txt') : 0;
+        $landed_at = $crit_dir !== '' ? (int) @filemtime($crit_dir . 'land_ts.txt') : 0;
+        if ($dispatched_at > 0 && $dispatched_at > $landed_at && (time() - $dispatched_at) < 180 && empty($_POST['anyway'])) {
             wp_send_json_success(['situation' => 'already-regenerating', 'scope' => 'page',
                 'message' => 'A fresh version of this page is already being generated — it applies automatically when it lands.']);
         }
-        if (empty($_POST['anyway']) && function_exists('wpc_land_cooldown_active') && wpc_land_cooldown_active($wpc_key725)) {
+        if (empty($_POST['anyway']) && function_exists('wpc_land_cooldown_active') && wpc_land_cooldown_active($url_key)) {
             wp_send_json_success(['situation' => 'cooldown', 'scope' => 'page',
                 'message' => 'This page was rebuilt moments ago. Give the new version a minute to settle — if it still looks wrong after that, rebuild again.']);
         }
-        $wpc_did725 = [];
-        if ($wpc_dir725 !== '' && function_exists('wpc_crit_meta_write')
-            && (@is_file($wpc_dir725 . 'critical_desktop.css') || @is_file($wpc_dir725 . 'critical_mobile.css'))) {
-            wpc_crit_meta_write($wpc_dir725 . 'stale.txt', (string) time());
-            $wpc_did725[] = 'stale-marked:page';
-            
-            
-            
-            if (function_exists('wpc_crit_bypass_page_start') && wpc_crit_bypass_page_start($wpc_key725)) {
-                $wpc_did725[] = 'bypass:page';
+        $actions = [];
+        if ($crit_dir !== '' && function_exists('wpc_crit_invalidate')
+            && (@is_file($crit_dir . 'critical_desktop.css') || @is_file($crit_dir . 'critical_mobile.css'))) {
+            wpc_crit_invalidate($url_key, 'rebuild-page', 'stale');
+            $actions[] = 'stale-marked:page';
+            // v7.10.825 — the page someone rebuilds LOOKS WRONG: stop serving its suspect crit
+            // now (per-URL bypass window, same land/orphan/ceiling laws as the global one) and
+            // drop only THIS page's cached HTML so the relief is visible on the next load.
+            if (function_exists('wpc_crit_bypass_page_start') && wpc_crit_bypass_page_start($url_key)) {
+                $actions[] = 'bypass:page';
             }
             if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeAll')) {
                 try {
-                    wps_ic_cache_integrations::purgeAll($wpc_key725, false, false, false);
-                    $wpc_did725[] = 'purged:page-html';
+                    wps_ic_cache_integrations::purgeAll($url_key, false, false, false);
+                    $actions[] = 'purged:page-html';
                 } catch (\Throwable $e) {
                 }
             }
         }
-        $GLOBALS['wpc_gen_force496'] = 1;
+        $GLOBALS['wpc_critical_generate_forced'] = 1;
         if (!class_exists('wps_criticalCss')) {
             @include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
         }
+        // did and the answer's generation say what the dispatch came to; this handler reported
+        // 'regen-dispatched(sync)' whatever the service answered (staging 2026-09-24 06:53).
+        $generationOutcome = null;
         if (class_exists('wps_criticalCss')) {
             try {
-                $wpc_cc725 = new wps_criticalCss($wpc_clean725);
-                $wpc_cc725->generateCriticalAjax(true);
-                $wpc_did725[] = 'regen-dispatched(force+sync)';
+                $critical_css = new wps_criticalCss($clean_url);
+                $generationOutcome = $this->wpc_human_generation_outcome($critical_css->generateCriticalAjax(true), $url_key);
+                $actions[] = $generationOutcome['status'] === 'accepted' ? 'regen-dispatched(sync)' : 'regen-' . $generationOutcome['status'] . '(' . $generationOutcome['type'] . ')';
             } catch (\Throwable $e) {
-                $wpc_did725[] = 'regen-failed';
+                $actions[] = 'regen-failed';
             }
         }
-        unset($GLOBALS['wpc_gen_force496']);
+        unset($GLOBALS['wpc_critical_generate_forced']);
         if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log('rebuild-page', $wpc_key725, $wpc_clean725, ['did' => implode(' ', $wpc_did725)]);
+            wpc_cache_first_log('rebuild-page', $url_key, $clean_url, ['did' => implode(' ', $actions)]);
         }
-        wp_send_json_success(['situation' => 'rebuilding-page', 'scope' => 'page', 'did' => $wpc_did725,
+        wp_send_json_success(['situation' => 'rebuilding-page', 'scope' => 'page', 'did' => $actions,
+            'generation' => $generationOutcome,
             'message' => 'Rebuilding this page. It shows plain theme styling right away and switches to the fresh optimized version automatically (usually under a minute).']);
     }
 
@@ -2695,123 +2865,127 @@ class wps_ic_ajax extends wps_ic
         }
 
         if (!empty($_POST['page_url'])) {
-            return $this->wpc_rebuild_page_725((string) wp_unslash($_POST['page_url']));
+            return $this->wpc_rebuild_page((string) wp_unslash($_POST['page_url']));
         }
 
-        
-        
-        $wpc_arts516 = 0;
-        $wpc_pend516 = 0;
+        // ---- observe before acting: each branch below exists because doing the maximum
+        //      unconditionally either wastes a cold render or stacks work already in flight.
+        $crit_page_count = 0;
+        $pending_count = 0;
         if (defined('WPS_IC_CRITICAL')) {
-            $wpc_root516 = rtrim(WPS_IC_CRITICAL, '/');
-            $wpc_it516 = @scandir($wpc_root516);
-            if (is_array($wpc_it516)) {
-                foreach ($wpc_it516 as $wpc_e516) {
-                    if ($wpc_e516 === '.' || $wpc_e516 === '..' || $wpc_e516 === 'used-css') {
+            $crit_root = rtrim(WPS_IC_CRITICAL, '/');
+            $crit_entries = @scandir($crit_root);
+            if (is_array($crit_entries)) {
+                foreach ($crit_entries as $entry) {
+                    if ($entry === '.' || $entry === '..' || $entry === 'used-css') {
                         continue;
                     }
-                    $wpc_d516 = $wpc_root516 . '/' . $wpc_e516;
-                    if (!@is_dir($wpc_d516)) {
+                    $page_dir = $crit_root . '/' . $entry;
+                    if (!@is_dir($page_dir)) {
                         continue;
                     }
-                    if (@is_file($wpc_d516 . '/critical_desktop.css') || @is_file($wpc_d516 . '/critical_mobile.css')) {
-                        $wpc_arts516++;
+                    if (@is_file($page_dir . '/critical_desktop.css') || @is_file($page_dir . '/critical_mobile.css')) {
+                        $crit_page_count++;
                     }
-                    $wpc_dsp516 = (int) @filemtime($wpc_d516 . '/dispatch_ts.txt');
-                    $wpc_lnd516 = (int) @filemtime($wpc_d516 . '/land_ts.txt');
-                    if ($wpc_dsp516 > 0 && $wpc_dsp516 > $wpc_lnd516 && (time() - $wpc_dsp516) < 180) {
-                        $wpc_pend516++;
+                    $dispatched_at = (int) @filemtime($page_dir . '/dispatch_ts.txt');
+                    $landed_at = (int) @filemtime($page_dir . '/land_ts.txt');
+                    if ($dispatched_at > 0 && $dispatched_at > $landed_at && (time() - $dispatched_at) < 180) {
+                        $pending_count++;
                     }
                 }
             }
         }
-        $wpc_html516 = false;
+        $has_cached_html = false;
         if (defined('WPS_IC_CACHE') && @is_dir(WPS_IC_CACHE)) {
-            $wpc_c516 = @scandir(WPS_IC_CACHE);
-            $wpc_html516 = is_array($wpc_c516) && count($wpc_c516) > 2;
+            $cache_entries = @scandir(WPS_IC_CACHE);
+            $has_cached_html = is_array($cache_entries) && count($cache_entries) > 2;
         }
-        $wpc_shed516 = (function_exists('wpc_under_pressure') && wpc_under_pressure())
+        $under_pressure = (function_exists('wpc_under_pressure') && wpc_under_pressure())
             || (function_exists('wpc_safe_mode') && wpc_safe_mode());
 
-        
-        
-        if ($wpc_pend516 > 0 && empty($_POST['anyway'])) {
+        // A gen is already in flight: dispatching another only stacks work and the
+        // service answers both from one render anyway.
+        if ($pending_count > 0 && empty($_POST['anyway'])) {
             wp_send_json_success([
                 'situation' => 'already-regenerating',
-                'pending'   => $wpc_pend516,
+                'pending'   => $pending_count,
                 'did'       => [],
-                'message'   => 'A fresh generation is already in flight (' . (int) $wpc_pend516
+                'message'   => 'A fresh generation is already in flight (' . (int) $pending_count
                     . ' pending). Pages keep serving while it lands — nothing else to do.',
             ]);
         }
 
-        $wpc_did516 = [];
+        $actions = [];
+        $homeGenerationOutcome = null;
 
-        if ($wpc_arts516 > 0) {
-            if (function_exists('wpc_crit_soft_purge_all')) {
-                $wpc_did516[] = 'stale-marked:' . (int) wpc_crit_soft_purge_all();
+        if ($crit_page_count > 0) {
+            if (function_exists('wpc_crit_invalidate')) {
+                $actions[] = 'stale-marked:' . (int) wpc_crit_invalidate('all', 'rebuild-all', 'stale');
             }
-            
-            
+            // The JS delay manifest is part of "my optimizations", and until .519 no button
+            // could clear it — a torn dependency chain from a stale pin was unfixable.
             if (function_exists('wpc_delay_manifest_reset')) {
-                $wpc_dm519 = wpc_delay_manifest_reset('rebuild');
-                $wpc_did516[] = 'delay-reset:' . (int) $wpc_dm519['files'] . 'f/' . (int) $wpc_dm519['options'] . 'o';
+                $delay_reset = wpc_delay_manifest_reset('rebuild');
+                $actions[] = 'delay-reset:' . (int) $delay_reset['files'] . 'f/' . (int) $delay_reset['options'] . 'o';
             }
-            
-            
+            // The window makes every page render correct-but-slower instead of serving
+            // the suspect crit, and keeps those renders cacheable.
             if (function_exists('wpc_crit_bypass_start')) {
                 wpc_crit_bypass_start();
                 update_option('wpc_crit_soft_purge_at', time(), false);
-                $wpc_did516[] = 'bypass-window';
+                $actions[] = 'bypass-window';
             }
-            if (!$wpc_html516) {
-                $wpc_did516[] = 'html-purge-skipped(nothing-cached)';
-            } elseif ($wpc_shed516) {
-                $wpc_did516[] = 'html-purge-deferred(under-pressure)';
+            if (!$has_cached_html) {
+                $actions[] = 'html-purge-skipped(nothing-cached)';
+            } elseif ($under_pressure) {
+                $actions[] = 'html-purge-deferred(under-pressure)';
             } elseif (function_exists('wpc_r2_purge_html_layers')) {
                 wpc_r2_purge_html_layers();
-                $wpc_did516[] = 'purged(html+varnish+edge-html)';
+                $actions[] = 'purged(html+varnish+edge-html)';
             }
         } else {
-            
-            
-            $wpc_did516[] = 'no-artifacts(purge-skipped)';
+            // Nothing on disk to replace: a purge here is a guaranteed cold storm for
+            // zero benefit. Dispatch only.
+            $actions[] = 'no-artifacts(purge-skipped)';
         }
 
-        
-        
-        
-        $GLOBALS['wpc_gen_force496'] = 1;
+        // force=1 beats the service's 300s gen debounce; sync=1 beats its TEMPLATE
+        // cache. Only both together guarantee genuinely new bytes — this is the pair
+        // no single old control sent.
+        $GLOBALS['wpc_critical_generate_forced'] = 1;
         if (!class_exists('wps_criticalCss')) {
             @include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
         }
         if (class_exists('wps_criticalCss')) {
             try {
-                
-                
-                
-                $wpc_cc516 = new wps_criticalCss(home_url('/'));
-                $wpc_cc516->generateCriticalAjax(true);
-                $wpc_did516[] = 'regen-dispatched(force+sync)';
+                // v7.10.725 — an explicit page: in admin-ajax context the no-arg constructor
+                // resolves REQUEST_URI, i.e. admin-ajax.php itself — an endpoint the service
+                // cannot render, so the sync dispatch was aimed at a non-page.
+                $critical_css = new wps_criticalCss(home_url('/'));
+                // did and the answer's generation say what the homepage dispatch came to, not
+                // 'regen-dispatched' whatever the service answered (staging 2026-09-24 06:53).
+                $homeGenerationOutcome = $this->wpc_human_generation_outcome($critical_css->generateCriticalAjax(true), (string) $critical_css->urlKey);
+                $actions[] = $homeGenerationOutcome['status'] === 'accepted' ? 'regen-dispatched(sync)' : 'regen-' . $homeGenerationOutcome['status'] . '(' . $homeGenerationOutcome['type'] . ')';
             } catch (\Throwable $e) {
-                $wpc_did516[] = 'regen-failed';
+                $actions[] = 'regen-failed';
             }
         }
-        unset($GLOBALS['wpc_gen_force496']);
+        unset($GLOBALS['wpc_critical_generate_forced']);
 
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('rebuild-optimizations', '', '', [
-                'arts' => $wpc_arts516, 'html' => $wpc_html516 ? 1 : 0,
-                'shed' => $wpc_shed516 ? 1 : 0, 'did' => implode(' ', $wpc_did516),
+                'arts' => $crit_page_count, 'html' => $has_cached_html ? 1 : 0,
+                'shed' => $under_pressure ? 1 : 0, 'did' => implode(' ', $actions),
             ]);
         }
 
         wp_send_json_success([
-            'situation' => $wpc_arts516 > 0 ? ($wpc_shed516 ? 'rebuilt-deferred' : 'rebuilt') : 'first-run',
-            'artifacts' => $wpc_arts516,
-            'did'       => $wpc_did516,
-            'message'   => $wpc_arts516 > 0
-                ? ($wpc_shed516
+            'situation' => $crit_page_count > 0 ? ($under_pressure ? 'rebuilt-deferred' : 'rebuilt') : 'first-run',
+            'artifacts' => $crit_page_count,
+            'did'       => $actions,
+            'generation' => $homeGenerationOutcome,
+            'message'   => $crit_page_count > 0
+                ? ($under_pressure
                     ? 'Fresh generation dispatched. The cache drop was deferred because the server is under load — it lands with the new version.'
                     : 'Rebuilding. Pages render with full theme CSS (correct, slightly slower) until the fresh version lands, then speed up automatically. Images and the CDN were not touched.')
                 : 'No existing optimizations to replace — a first generation has been dispatched. Nothing was purged.',
@@ -2820,11 +2994,11 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_preload_page()
     {
-        
-        
-        
-        
-        
+        // v7.10.508 SECURITY — registered wp_ajax_ with NO capability check and NO nonce, and it
+        // forwarded $_SERVER['HTTP_REFERER'] verbatim to our preloader API together with the site's
+        // API key. Any logged-in user of any role (a subscriber on a membership or Woo site) could
+        // CSRF it into making us POST an arbitrary attacker-supplied URL under this account. Every
+        // sibling admin-bar handler already checks both; this one was missed.
         if (!current_user_can('manage_wpc_settings') && !current_user_can('manage_wpc_purge')) {
             wp_send_json_error('Forbidden.');
         }
@@ -2833,11 +3007,11 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-        
-        $wpc_ref508  = isset($_SERVER['HTTP_REFERER']) ? esc_url_raw((string) $_SERVER['HTTP_REFERER']) : '';
-        $wpc_host508 = wp_parse_url(home_url(), PHP_URL_HOST);
-        $wpc_rh508   = $wpc_ref508 !== '' ? wp_parse_url($wpc_ref508, PHP_URL_HOST) : '';
-        if ($wpc_ref508 === '' || !$wpc_rh508 || strcasecmp((string) $wpc_rh508, (string) $wpc_host508) !== 0) {
+        // Same-origin only: never hand a foreign URL to the preloader.
+        $referer  = isset($_SERVER['HTTP_REFERER']) ? esc_url_raw((string) $_SERVER['HTTP_REFERER']) : '';
+        $site_host = wp_parse_url(home_url(), PHP_URL_HOST);
+        $referer_host   = $referer !== '' ? wp_parse_url($referer, PHP_URL_HOST) : '';
+        if ($referer === '' || !$referer_host || strcasecmp((string) $referer_host, (string) $site_host) !== 0) {
             wp_send_json_error('Preload needs a same-site page reference.');
         }
 
@@ -2849,17 +3023,17 @@ class wps_ic_ajax extends wps_ic
 
         $url = WPS_IC_PRELOADER_API_URL;
 
-        self::wpc_requests70()->POST($url, ['single_url' => $wpc_ref508, 'apikey' => $options['api_key']]);
+        self::wpc_requests()->POST($url, ['single_url' => $referer, 'apikey' => $options['api_key']]);
 
-        
-        
+        // Dropped a cosmetic sleep(3): the preload POST above already completed, so the stall only
+        // pinned the worker for 3s — a worker-exhaustion footgun under concurrency.
         wp_send_json_success();
     }
 
-    
-
-
-
+    /**
+     * @return void
+     * @since 5.20.01
+     */
     public function wps_ic_purge_html()
     {
         if ((!current_user_can('manage_wpc_settings') && !current_user_can('manage_wpc_purge')) || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
@@ -2872,53 +3046,60 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('API Key empty!');
         }
 
-        
-        
-        
-        
+        // v7.10.725 — Refresh This Page: the free per-page lane. One URL's HTML layers
+        // (local + mirror + Varnish + edge, via the same primitive the land purge uses)
+        // plus a detached re-warm — the site-wide wipe below never runs for a page click.
+        // 60s idempotency window: a double-click must not purge twice.
         if (!empty($_POST['page_url'])) {
-            list($wpc_pclean725, $wpc_pkey725) = $this->wpc_page_target_725((string) wp_unslash($_POST['page_url']));
-            $wpc_thr725 = 'wpc_pgref_' . md5($wpc_pkey725);
-            if (get_transient($wpc_thr725) && empty($_POST['anyway'])) {
+            list($wpc_page_url, $wpc_page_key) = $this->wpc_resolve_page_target((string) wp_unslash($_POST['page_url']));
+            $wpc_page_throttle_key = 'wpc_pgref_' . md5($wpc_page_key);
+            if (get_transient($wpc_page_throttle_key) && empty($_POST['anyway'])) {
                 wp_send_json_success(['scope' => 'page', 'situation' => 'just-refreshed',
                     'message' => 'This page was refreshed less than a minute ago — the newest copy is already being prepared.']);
             }
-            set_transient($wpc_thr725, 1, MINUTE_IN_SECONDS);
-            $wpc_layers725 = [];
+            set_transient($wpc_page_throttle_key, 1, MINUTE_IN_SECONDS);
+            $wpc_page_layers = [];
             if (class_exists('wps_ic_cache_integrations')) {
-                $wpc_layers725 = wps_ic_cache_integrations::purgeUrlHtml($wpc_pkey725, $wpc_pclean725, ['context' => 'adminbar-page']);
+                $wpc_page_layers = wps_ic_cache_integrations::purgeUrlHtml($wpc_page_key, $wpc_page_url, ['context' => 'adminbar-page']);
             }
             if (function_exists('wpc_pl_sched')) {
-                wpc_pl_sched(time() + 5, 'wpc_url_warm', [$wpc_pclean725, 1]);
+                wpc_pl_sched(time() + 5, 'wpc_url_warm', [$wpc_page_url, 1]);
             } elseif (function_exists('wp_schedule_single_event')) {
-                wp_schedule_single_event(time() + 5, 'wpc_url_warm', [$wpc_pclean725, 1]);
+                wp_schedule_single_event(time() + 5, 'wpc_url_warm', [$wpc_page_url, 1]);
             }
             if (function_exists('wpc_cache_first_log')) {
-                wpc_cache_first_log('purge-page', $wpc_pkey725, $wpc_pclean725, ['layers' => array_keys(array_filter((array) $wpc_layers725))]);
+                wpc_cache_first_log('purge-page', $wpc_page_key, $wpc_page_url, ['layers' => array_keys(array_filter((array) $wpc_page_layers))]);
             }
             wp_send_json_success(['scope' => 'page', 'situation' => 'refreshed',
-                'layers' => array_keys(array_filter((array) $wpc_layers725)),
+                'layers' => array_keys(array_filter((array) $wpc_page_layers)),
                 'message' => 'This page\'s cache was refreshed — a fresh copy is being prepared right now.']);
         }
 
-        
-        
-        
-        
+        // v7.10.826 — NAME THE FAILING LAYER. Any integration branch below can throw on a given
+        // host stack; an uncaught one turns the whole response into the browser's "unknown
+        // error" with zero forensics. Everything already purged stays purged; the reply names
+        // the exception and the last layer reached so the next report is diagnosable.
         try {
         delete_transient('wps_ic_css_cache');
         delete_option('wps_ic_modified_css_cache');
         delete_option('wps_ic_css_combined_cache');
 
 
-        $wpc_warm_list114 = [];
+        $wpc_warm_list = [];
         if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'wpcHtmlUrlList')) {
-            $wpc_warm_list114 = array_slice((array) wps_ic_cache::wpcHtmlUrlList(12), 0, 6);
+            // A short list on purpose: after a purge the pages come back by visits, and a long
+            // speculative rewarm on a small box is the storm the purge was meant to end. Start
+            // Optimization is the button that warms everything.
+            $wpc_warm_max = max(1, (int) apply_filters('wpc_warm_batch_max', defined('WPC_WARM_BATCH_MAX') ? (int) WPC_WARM_BATCH_MAX : 6));
+            $wpc_warm_list = array_slice((array) wps_ic_cache::wpcHtmlUrlList(max(12, $wpc_warm_max)), 0, $wpc_warm_max);
         }
         $cache = new wps_ic_cache_integrations();
-        $cache::purgeAll(false, true, false, false, true);
+        // Hard: a purge a person starts to stop serving what is cached now cannot serve
+        // stale, or the click shows nothing until every copy has rewarmed. Only the page
+        // copies go; the content-addressed CSS/JS stores stay, as a serve-stale purge keeps them.
+        $cache::purgeAll(false, true, false, false, true, true, 'hard');
 
-        
+        // Todo: maybe remove?
         $cache::purgeCombinedFiles();
 
 
@@ -2938,17 +3119,12 @@ class wps_ic_ajax extends wps_ic
                     if (!class_exists('WPC_CloudflareAPI') && defined('WPS_IC_DIR')) {
                         @include_once WPS_IC_DIR . '/addons/cf-sdk/cf-sdk.php';
                     }
-                    if (class_exists('WPC_CloudflareAPI')) {
-                        $wpc_norm_sdk98 = new WPC_CloudflareAPI($cfSettings['token']);
-                        if (method_exists($wpc_norm_sdk98, 'patchHtmlRulesRespectOrigin')) {
-                            $wpc_norm_res98 = $wpc_norm_sdk98->patchHtmlRulesRespectOrigin($cfSettings['zone']);
-
-
-                            $wpc_norm_rules105 = is_array($wpc_norm_res98) ? array_diff_key($wpc_norm_res98, ['tiered_on' => 1]) : [];
-                            $wpc_purged[] = 'cf-rule-normalize:' . (!empty($wpc_norm_rules105) ? 'patched-' . count($wpc_norm_rules105) : 'in-target');
-                        }
+                    if (class_exists('wps_ic_cf_rules')) {
+                        $normalizeReport = wps_ic_cf_rules::converge($cfSettings['zone'], 'normalize');
+                        $normalizeWrites = array_filter($normalizeReport['rules'], function ($outcome) { return $outcome !== 'equal'; });
+                        $wpc_purged[] = 'cf-rule-normalize:' . (!$normalizeReport['ok'] ? 'failed' : (!empty($normalizeWrites) ? 'patched-' . count($normalizeWrites) : 'in-target'));
                     }
-                } catch (\Throwable $wpc_norm_e98) {
+                } catch (\Throwable $wpc_normalize_error) {
                     $wpc_purged[] = 'cf-rule-normalize-skip';
                 }
             }
@@ -2962,8 +3138,8 @@ class wps_ic_ajax extends wps_ic
                 if (class_exists('WPC_CloudflareAPI')) {
                     $cfapi = new WPC_CloudflareAPI($cfSettings['token']);
                     if ($cfapi) {
-                        
-                        
+                        // Legacy zone-wide path: BLOCKING purge — purgeCacheAsync's old 10ms timeout
+                        // couldn't complete a TLS handshake, so a verifiable blocking call is required.
                         $cfRes = $cfapi->purgeCache($cfSettings['zone']);
                         $wpc_purged[] = is_wp_error($cfRes) ? 'cf-edge-FAIL' : 'cf-edge';
                     }
@@ -2971,27 +3147,27 @@ class wps_ic_ajax extends wps_ic
             } elseif (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
 
 
-                $wpc_cf_res105 = method_exists('wps_ic_cache', 'cfUntaggedServesPossible')
+                $wpc_cf_purge_result = method_exists('wps_ic_cache', 'cfUntaggedServesPossible')
                     ? wps_ic_cache::cfPurgeAllHtml(true, true)
                     : wps_ic_cache::cfPurgeAllHtml(true);
-                $wpc_purged[]  = $wpc_cf_res105 ? ('cf-html-' . $wpc_cf_res105) : 'cf-html-FAIL';
+                $wpc_purged[]  = $wpc_cf_purge_result ? ('cf-html-' . $wpc_cf_purge_result) : 'cf-html-FAIL';
 
 
-                if ($wpc_cf_res105) {
+                if ($wpc_cf_purge_result) {
                     wpc_diag_sleep(2, 'purge-html');
-                    $wpc_vr106 = wp_remote_get(home_url('/'), [
+                    $wpc_verify_response = wp_remote_get(home_url('/'), [
                         'timeout' => 8, 'redirection' => 0,
                         'headers' => ['Accept' => 'text/html'],
                         'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36',
                     ]);
-                    $wpc_cfst106 = is_wp_error($wpc_vr106) ? '' : strtoupper((string) wp_remote_retrieve_header($wpc_vr106, 'cf-cache-status'));
-                    $wpc_age106  = is_wp_error($wpc_vr106) ? 0 : (int) wp_remote_retrieve_header($wpc_vr106, 'age');
-                    if ($wpc_cfst106 === '') {
+                    $wpc_verify_cache_status = is_wp_error($wpc_verify_response) ? '' : strtoupper((string) wp_remote_retrieve_header($wpc_verify_response, 'cf-cache-status'));
+                    $wpc_verify_age  = is_wp_error($wpc_verify_response) ? 0 : (int) wp_remote_retrieve_header($wpc_verify_response, 'age');
+                    if ($wpc_verify_cache_status === '') {
                         $wpc_purged[] = 'cf-verify:skipped(no-cf-header)';
-                    } elseif ($wpc_cfst106 === 'HIT' && $wpc_age106 > 15) {
-                        $wpc_purged[] = 'cf-verify-FAIL:still-cached(age=' . $wpc_age106 . 's)';
+                    } elseif ($wpc_verify_cache_status === 'HIT' && $wpc_verify_age > 15) {
+                        $wpc_purged[] = 'cf-verify-FAIL:still-cached(age=' . $wpc_verify_age . 's)';
                     } else {
-                        $wpc_purged[] = 'cf-verify:purged(' . strtolower($wpc_cfst106) . ($wpc_age106 ? ',age=' . $wpc_age106 . 's' : '') . ')';
+                        $wpc_purged[] = 'cf-verify:purged(' . strtolower($wpc_verify_cache_status) . ($wpc_verify_age ? ',age=' . $wpc_verify_age . 's' : '') . ')';
                     }
                 }
             } elseif (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeEdgeHtmlUrls')) {
@@ -3007,41 +3183,42 @@ class wps_ic_ajax extends wps_ic
         }
 
 
-        
+        // (token-bucket rails apply; fire-and-forget at shutdown, zero latency on this response).
         if (function_exists('wpc_warm_url_queue')) {
-            if (empty($wpc_warm_list114)) { $wpc_warm_list114 = [home_url('/')]; }
-            foreach ($wpc_warm_list114 as $wpc_wu114) {
-                wpc_warm_url_queue((string) $wpc_wu114, 'purge-html-button');
+            if (empty($wpc_warm_list)) { $wpc_warm_list = [home_url('/')]; }
+            foreach ($wpc_warm_list as $wpc_warm_url) {
+                wpc_warm_url_queue((string) $wpc_warm_url, 'purge-html-button');
             }
-            $wpc_purged[] = 'prewarm:' . count($wpc_warm_list114);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('warm-batch', '', '', ['src' => 'purge-html-button', 'n' => count($wpc_warm_list)]);
+            }
+            $wpc_purged[] = 'prewarm:' . count($wpc_warm_list);
         }
-        
-        
-        if (function_exists('wpc_purge_rewarm_hot_set')) {
-            $wpc_purged[] = 'rewarm:' . (int) wpc_purge_rewarm_hot_set('purge-html-button');
+        // The warm renders above never ask for crit (P-W5); the homepage's is asked for here.
+        if (function_exists('wpc_warm_home_dispatch_queue') && wpc_warm_home_dispatch_queue('purge-html-button')) {
+            $wpc_purged[] = 'home-crit:queued';
         }
-
-        
-        
+        // Dropped a cosmetic sleep(3): the purge above already completed synchronously, so blocking
+        // the worker for 3s only added latency + exhaustion risk.
         delete_transient('wps_ic_purging_cdn');
 
 
-        $wpc_plog97 = get_option('wpc_purge_debug_log', []);
+        $wpc_purge_log = get_option('wpc_purge_debug_log', []);
         wp_send_json_success([
             'layers' => $wpc_purged,
-            'log'    => array_slice(is_array($wpc_plog97) ? $wpc_plog97 : [], -6),
+            'log'    => array_slice(is_array($wpc_purge_log) ? $wpc_purge_log : [], -6),
         ]);
-        } catch (\Throwable $wpc_pe826) {
-            $wpc_last826 = isset($wpc_purged) && is_array($wpc_purged) && !empty($wpc_purged)
+        } catch (\Throwable $wpc_purge_error) {
+            $wpc_last_layer = isset($wpc_purged) && is_array($wpc_purged) && !empty($wpc_purged)
                 ? (string) end($wpc_purged) : 'pre-layers';
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('purge-html-throw', '', '', [
-                    'ex' => get_class($wpc_pe826), 'after' => $wpc_last826,
-                    'msg' => substr((string) $wpc_pe826->getMessage(), 0, 140),
+                    'ex' => get_class($wpc_purge_error), 'after' => $wpc_last_layer,
+                    'msg' => substr((string) $wpc_purge_error->getMessage(), 0, 140),
                 ]);
             }
-            wp_send_json_error('Purge threw ' . get_class($wpc_pe826) . ' after layer [' . $wpc_last826 . ']: '
-                . substr((string) $wpc_pe826->getMessage(), 0, 160)
+            wp_send_json_error('Purge threw ' . get_class($wpc_purge_error) . ' after layer [' . $wpc_last_layer . ']: '
+                . substr((string) $wpc_purge_error->getMessage(), 0, 160)
                 . ' — layers before it completed; details in the purge journal.');
         }
     }
@@ -3064,146 +3241,146 @@ class wps_ic_ajax extends wps_ic
 
     private function wpcCfControlTest($sdk, $zone, $probe)
     {
-        
-        
-        
-        
-        
-        
-        $wpc_cands573 = [home_url('/')];
+        // v7.10.573 — THE PROBE URL MUST BE ONE WE ACTUALLY CACHE. The old test used
+        // ?wpcdoc={time}, an unknown query param — which this plugin treats as a cache bypass by
+        // design and answers with no-store. Cloudflare then BYPASSes it, it can never reach HIT,
+        // and the verdict could only ever be INCONCLUSIVE. The test was unpassable on every site.
+        // Use the homepage: the canonical cacheable URL. The purge below is scoped to that one
+        // page's tag, so the whole cost is a single homepage MISS which re-warms immediately.
+        $probe_urls = [home_url('/')];
         if (!empty($_POST['probe_url'])) {
-            array_unshift($wpc_cands573, esc_url_raw((string) $_POST['probe_url']));
+            array_unshift($probe_urls, esc_url_raw((string) $_POST['probe_url']));
         }
-        $url = $wpc_cands573[0];
+        $url = $probe_urls[0];
         $hit = ['cf' => ''];
-        $wpc_why573 = '';
-        foreach ($wpc_cands573 as $wpc_u573) {
-            $url = $wpc_u573;
+        $miss_reason = '';
+        foreach ($probe_urls as $probe_url) {
+            $url = $probe_url;
             for ($i = 0; $i < 5; $i++) {
                 $hit = $probe($url);
                 if (strtoupper((string) ($hit['cf'] ?? '')) === 'HIT') { break; }
                 usleep(400000);
             }
-            if (strtoupper((string) ($hit['cf'] ?? '')) === 'HIT') { $wpc_why573 = ''; break; }
-            $wpc_cf573 = strtoupper((string) ($hit['cf'] ?? ''));
-            $wpc_cc573 = strtolower((string) ($hit['cc'] ?? ''));
-            $wpc_why573 = 'never reached HIT (cf=' . ($wpc_cf573 ?: 'none') . ')'
-                . (strpos($wpc_cc573, 'no-store') !== false
+            if (strtoupper((string) ($hit['cf'] ?? '')) === 'HIT') { $miss_reason = ''; break; }
+            $cf_status = strtoupper((string) ($hit['cf'] ?? ''));
+            $cache_control = strtolower((string) ($hit['cc'] ?? ''));
+            $miss_reason = 'never reached HIT (cf=' . ($cf_status ?: 'none') . ')'
+                . (strpos($cache_control, 'no-store') !== false
                     ? ' — origin sent no-store, so this URL is deliberately uncacheable' : '');
         }
-        
-        
-        
-        
-        
-        
-        
-        
+        // v7.10.574 — PURGE BY URL, NOT BY PER-URL TAG. A tag purge only reaches copies that
+        // carry the tag, and anything Cloudflare filled from the zero-PHP static mirror carries
+        // none (that path cannot emit headers). Receipted: purging the correct tag for this URL
+        // returned ok while the object stayed HIT and aged 1s -> 4s — a tag-plumbing miss read as
+        // an eviction failure, which is not what this test is asking. purge-by-URL is universal,
+        // available on every plan, independent of tagging, and reaches upper tiers — so it
+        // measures the thing we actually want to know. The tag purge rides along afterwards so a
+        // working tag path still refreshes the crown, but the VERDICT no longer depends on it.
         $method = 'url';
         $purge  = method_exists($sdk, 'purgeFilesAsync') ? $sdk->purgeFilesAsync($zone, [$url]) : null;
         if (function_exists('wpc_cf_url_tag') && method_exists($sdk, 'purgeByTags')) {
             $method .= '+tag:' . wpc_cf_url_tag($url);
             $sdk->purgeByTags($zone, [wpc_cf_url_tag($url)]);
         }
-        
-        
-        
-        
-        
-        $wpc_op179 = ['hook' => false, 'sg' => ''];
-        if (function_exists('wpc_foreign_purge610')) {
-            
-            
-            $wpc_op179['hook'] = (bool) wpc_foreign_purge610(false, 'cf-doctor-control');
+        // v7.21.179 — END-TO-END MEANS THE ORIGIN LAYERS TOO (beucomply: two doctor runs
+        // read STALE-REFILL because the control purged CF only and the refill re-read
+        // SiteGround's untouched dynamic cache — the SG socket purge fires on plugin
+        // purges, which this control never invoked). Purge the hosting layer between the
+        // CF purge and the refill wait, and receipt which strategy fired.
+        $origin_purge = ['hook' => false, 'sg' => ''];
+        if (function_exists('wpc_purge_foreign_caches')) {
+            // site-scope through the .610 rate-limited gateway (the raw legacy action is
+            // banned outside it); false = throttled inside the 120s window — receipted.
+            $origin_purge['hook'] = (bool) wpc_purge_foreign_caches(false, 'cf-doctor-control');
         }
         if (class_exists('wps_ic_siteground')) {
             try {
-                $wpc_sg179 = new wps_ic_siteground();
-                $wpc_op179['sg'] = $wpc_sg179->is_active()
-                    ? (string) $wpc_sg179->purge_cache()
+                $siteground = new wps_ic_siteground();
+                $origin_purge['sg'] = $siteground->is_active()
+                    ? (string) $siteground->purge_cache()
                     : 'inactive';
-            } catch (\Throwable $wpc_e179) {
-                $wpc_op179['sg'] = 'err:' . substr($wpc_e179->getMessage(), 0, 60);
+            } catch (\Throwable $sg_error) {
+                $origin_purge['sg'] = 'err:' . substr($sg_error->getMessage(), 0, 60);
             }
         }
-        
-        
-        
-        
-        
-        
-        
-        $wpc_s0575 = (string) ($hit['stamp'] ?? '');
+        // v7.10.575 — POLL FOR THE PURGE ITSELF, NOT JUST FOR THE TIER. .572 added a poll but put
+        // it on the branch that only runs AFTER the status has already flipped, so the purge got
+        // exactly one fixed 3s window and anything slower read as NOT EVICTED. Measured directly
+        // against this zone: a purge evicts and returns a FRESH render stamp, but propagation to a
+        // given PoP takes longer than 3s — the plugin probes FRA and saw age 1s -> 4s on an object
+        // that had genuinely been purged. Cloudflare allows up to ~30s. Wait for the observable to
+        // move, not for a guess about how long it should take.
+        $stamp_before = (string) ($hit['stamp'] ?? '');
         $post = $hit;
-        $wpc_waits575 = 0;
-        for ($wpc_i575 = 0; $wpc_i575 < 15; $wpc_i575++) {
+        $wait_count = 0;
+        for ($poll_index = 0; $poll_index < 15; $poll_index++) {
             wpc_diag_sleep(3, 'cf-controltest');
-            $wpc_waits575++;
+            $wait_count++;
             $post = $probe($url);
-            $wpc_c575 = strtoupper((string) ($post['cf'] ?? ''));
-            $wpc_t575 = (string) ($post['stamp'] ?? '');
-            
-            if ($wpc_c575 !== 'HIT' || ($wpc_t575 !== '' && $wpc_t575 !== $wpc_s0575)) {
+            $poll_status = strtoupper((string) ($post['cf'] ?? ''));
+            $poll_stamp = (string) ($post['stamp'] ?? '');
+            // Either signal ends the wait: the edge forgot it, or the bytes are new.
+            if ($poll_status !== 'HIT' || ($poll_stamp !== '' && $poll_stamp !== $stamp_before)) {
                 break;
             }
         }
-        
-        
-        
-        
-        
-        
+        // v7.10.570 — STATUS EVICTION IS NOT CONTENT EVICTION. With Argo Tiered Cache a purge can
+        // clear the edge PoP and leave the UPPER TIER stale: the next probe misses at the edge,
+        // refills from that stale tier, and reports a non-HIT status while serving the old bytes.
+        // The old verdict read exactly that as EVICTED — which is how "tiered = un-purgeable"
+        // went unnoticed. Re-probe once after the status flip and require the render stamp to have
+        // MOVED. A stale tier fails this; a real purge cannot.
         $was     = strtoupper((string) ($hit['cf'] ?? '')) === 'HIT';
         $still   = strtoupper((string) ($post['cf'] ?? '')) === 'HIT';
         $s0      = (string) ($hit['stamp'] ?? '');
         $s1      = (string) ($post['stamp'] ?? '');
-        
-        
-        
-        
-        
-        
-        $s2 = ''; $wpc_tries572 = 0;
+        // v7.10.572 — POLL, do not take one reading. A tag purge clears the edge quickly but an
+        // upper tier can lag by seconds, so a single probe at t+3s can read STALE-REFILL on a zone
+        // where the purge does in fact reach the tier — a false NOT-EARNED, which is worse than no
+        // test at all because it retires a working option. Give it up to ~18s and stop the moment
+        // the stamp moves. A tier that genuinely holds stale bytes still never moves, so this
+        // removes false negatives without weakening the proof.
+        $s2 = ''; $refill_tries = 0;
         if ($was && !$still) {
-            for ($wpc_i572 = 0; $wpc_i572 < 6; $wpc_i572++) {
-                $wpc_tries572++;
-                $wpc_r572 = $probe($url);
-                $s2 = (string) ($wpc_r572['stamp'] ?? '');
+            for ($refill_index = 0; $refill_index < 6; $refill_index++) {
+                $refill_tries++;
+                $refill_probe = $probe($url);
+                $s2 = (string) ($refill_probe['stamp'] ?? '');
                 if ($s2 !== '' && $s2 !== $s0) { break; }
-                if ($wpc_i572 < 5) { wpc_diag_sleep(3, 'cf-controltest-poll'); }
+                if ($refill_index < 5) { wpc_diag_sleep(3, 'cf-controltest-poll'); }
             }
         }
         $moved   = ($s0 !== '' && (($s1 !== '' && $s1 !== $s0) || ($s2 !== '' && $s2 !== $s0)));
         if (!$was) {
-            $verdict = 'INCONCLUSIVE — ' . ($wpc_why573 !== '' ? $wpc_why573 : 'the probe URL never cached')
+            $verdict = 'INCONCLUSIVE — ' . ($miss_reason !== '' ? $miss_reason : 'the probe URL never cached')
                 . '. Nothing was proven and nothing was changed.';
         } elseif ($still) {
-            $verdict = 'NOT EVICTED after ' . ($wpc_waits575 * 3) . 's of polling';
+            $verdict = 'NOT EVICTED after ' . ($wait_count * 3) . 's of polling';
         } elseif (!$moved) {
             $verdict = 'STALE-REFILL — status cleared but the bytes did not change (upper tier still holds it)';
         } else {
             $verdict = 'EVICTED';
         }
         if ($was && !$still && $moved) {
-            $wpc_tier570 = '';
+            $tier_suffix = '';
             try {
                 if (method_exists($sdk, 'getTieredCacheState')) {
-                    $wpc_tier570 = !empty($sdk->getTieredCacheState($zone)) ? '+tiered' : '';
+                    $tier_suffix = !empty($sdk->getTieredCacheState($zone)) ? '+tiered' : '';
                 }
             } catch (\Throwable $e) {
             }
-            update_option('wpc_cf_purge_verified', ['t' => time(), 'method' => $method . $wpc_tier570], false);
+            update_option('wpc_cf_purge_verified', ['t' => time(), 'method' => $method . $tier_suffix], false);
         }
         return [
             'url'          => $url,
-            'origin_purge' => $wpc_op179,
+            'origin_purge' => $origin_purge,
             'stamp_before' => $s0,
             'stamp_after'  => $s1,
             'stamp_refill' => $s2,
-            'refill_probes' => $wpc_tries572,
-            'purge_waits'  => $wpc_waits575,
-            'waited_s'     => $wpc_waits575 * 3,
-            'probe_note'   => $wpc_why573,
+            'refill_probes' => $refill_tries,
+            'purge_waits'  => $wait_count,
+            'waited_s'     => $wait_count * 3,
+            'probe_note'   => $miss_reason,
             'content_moved' => $moved ? 'yes' : 'NO',
             'purge_method' => $method,
             'purge_api'    => is_wp_error($purge) ? ('ERROR: ' . $purge->get_error_message()) : (!empty($purge['success']) ? 'ok' : 'fail'),
@@ -3249,10 +3426,10 @@ class wps_ic_ajax extends wps_ic
                 'cc'       => (string) wp_remote_retrieve_header($r, 'cache-control'),
                 'colo'     => (string) preg_replace('/^.*-/', '', (string) wp_remote_retrieve_header($r, 'cf-ray')),
                 'location' => (string) wp_remote_retrieve_header($r, 'location'),
-                
-                
-                
-                
+                // v7.10.570 — CONTENT fingerprint, not just status. Our own render marker
+                // (<!-- wpc VER r:UNIXTIME -->) changes on every fresh render, so it is the
+                // cheapest possible proof that the bytes are new rather than a stale copy
+                // refilled from somewhere. Falls back to a body hash if the marker is absent.
                 'stamp'    => (function ($b) {
                     if (preg_match('/<!-- wpc [0-9.]+ r:(\d+)/', $b, $m)) { return 'r' . $m[1]; }
                     return 'h' . substr(md5($b), 0, 10);
@@ -3282,15 +3459,15 @@ class wps_ic_ajax extends wps_ic
             if ($mode === 'tiered-on') {
 
 
-                
-                
-                
-                
-                
+                // v7.10.572 — the control test now polls for tier propagation, so give it room; and
+                // arm a SHUTDOWN revert before enabling anything. If this request dies for any
+                // reason — timeout, fatal, disconnect — tiered caching must not be left on without
+                // a verdict. That is precisely the un-purgeable state the whole exercise avoids.
+                // The guard disarms itself once the verdict has been handled below.
                 @set_time_limit(240);
-                $GLOBALS['wpc_tiered_armed572'] = true;
+                $GLOBALS['wpc_tiered_cache_revert_armed_ajax'] = true;
                 register_shutdown_function(function () use ($sdk, $cf) {
-                    if (empty($GLOBALS['wpc_tiered_armed572'])) {
+                    if (empty($GLOBALS['wpc_tiered_cache_revert_armed_ajax'])) {
                         return;
                     }
                     try {
@@ -3305,20 +3482,20 @@ class wps_ic_ajax extends wps_ic
                 });
                 $out['tiered_enable'] = method_exists($sdk, 'enableTieredCache') ? $sdk->enableTieredCache($cf['zone']) : 'n/a';
                 $out['control'] = $this->wpcCfControlTest($sdk, $cf['zone'], $probe);
-                
-                
-                
-                $wpc_ok570 = ($out['control']['verdict'] === 'EVICTED');
-                
-                
-                $GLOBALS['wpc_tiered_armed572'] = false;
-                if (!$wpc_ok570 && method_exists($sdk, 'disableTieredCache')) {
+                // v7.10.570 — SELF-REVERTING EXPERIMENT. Leaving tiers on after a failed eviction
+                // proof is precisely the historical un-purgeable state. The test either earns them
+                // or undoes itself; it never hands back a zone in a worse state than it found.
+                $eviction_proven = ($out['control']['verdict'] === 'EVICTED');
+                // INCONCLUSIVE now carries a reason string, so never prefix-match a verdict.
+                // Verdict reached: the shutdown guard is no longer needed either way.
+                $GLOBALS['wpc_tiered_cache_revert_armed_ajax'] = false;
+                if (!$eviction_proven && method_exists($sdk, 'disableTieredCache')) {
                     $out['tiered_reverted'] = $sdk->disableTieredCache($cf['zone']);
                     if (function_exists('wpc_cache_first_log')) {
                         wpc_cache_first_log('cf-tiered-reverted', '', '', ['verdict' => (string) $out['control']['verdict']]);
                     }
                 }
-                $out['verdict'] = $wpc_ok570
+                $out['verdict'] = $eviction_proven
                     ? 'EARNED — eviction proven with tiers ACTIVE and the body stamp moved ('
                         . $out['control']['stamp_before'] . ' -> '
                         . ($out['control']['stamp_refill'] !== '' ? $out['control']['stamp_refill'] : $out['control']['stamp_after'])
@@ -3330,36 +3507,36 @@ class wps_ic_ajax extends wps_ic
             }
             if ($mode === 'normalize') {
                 update_option('wpc_cf_rules_normalized_at', time(), false);
-                $res = method_exists($sdk, 'patchHtmlRulesRespectOrigin') ? $sdk->patchHtmlRulesRespectOrigin($cf['zone'], null, true) : null;
-                $out['normalize_raw'] = is_wp_error($res) ? ('ERROR: ' . $res->get_error_message()) : $res;
-                $wpc_norm_rules = is_array($res) ? array_diff_key($res, ['tiered_on' => 1]) : [];
-                $out['verdict'] = is_wp_error($res)
+                $res = wps_ic_cf_rules::converge($cf['zone'], 'selftest');
+                $out['normalize_raw'] = $res;
+                $ruleWrites = array_filter($res['rules'], function ($outcome) { return $outcome !== 'equal'; });
+                $out['verdict'] = !$res['ok']
                     ? 'Rule normalize FAILED — see normalize_raw (a missing Zone > Cache Rules > Edit scope shows here verbatim).'
-                    : (empty($wpc_norm_rules) ? 'Rules already in target state (no writes needed).' : 'Rules patched — old-keyed HTML entries are now orphaned; test Purge HTML.');
+                    : (empty($ruleWrites) ? 'Rules already in target state (no writes needed).' : 'Rules patched — old-keyed HTML entries are now orphaned; test Purge HTML.');
                 wp_send_json_success($out);
             }
 
 
             @set_time_limit(90);
-            
-            
-            
-            
-            
+            // ZONE STATE — APO caches WordPress HTML in a namespace plain file-purges MISS; legacy
+            // "ignore query string" cache level and Cache Reserve also change purge semantics.
+            // v7.10.568 — mode=report: EVERY fact needed to decide the combined-vs-split
+            // question in ONE call, so nobody has to correlate four consoles again. Read-only:
+            // it patches nothing, purges nothing, and flips no setting.
             if ($mode === 'report') {
                 $ks = method_exists($sdk, 'htmlRuleKeyState') ? $sdk->htmlRuleKeyState($cf['zone']) : ['devkey' => null];
-                
-                
-                
-                
+                // v7.10.571 — the LIVE rules cannot answer "can this zone key by device" while we
+                // are in combined mode, because combined deliberately strips cache_key. Probe the
+                // capability separately with a disabled, never-matching rule and stamp the answer
+                // so the .568 floor has something real to consume.
                 $cap = method_exists($sdk, 'probeDeviceKeySupport')
                     ? $sdk->probeDeviceKeySupport($cf['zone']) : ['supported' => null, 'detail' => 'sdk too old'];
-                
-                
-                
-                
-                
-                
+                // v7.10.668 — VERIFY EFFECT, NOT CAPABILITY. devkey_verified must reflect the DEPLOYED
+                // rules (the $ks readback above — htmlRuleKeyState requires EVERY HTML rule to carry
+                // cache_by_device_type), NEVER the capability probe. wpcompress.com proved the gap: CF
+                // ACCEPTED the field (probe = yes) while the Full HTML rule carried no cache_key, so
+                // split served device-blind (mobile got desktop CSS). Capability now lands in its own
+                // option, for the diagnostic only.
                 if (function_exists('update_option')) {
                     update_option('wpc_cf_devkey_verified', [
                         't'      => time(),
@@ -3385,7 +3562,7 @@ class wps_ic_ajax extends wps_ic
                 $dir = ($key !== '' && defined('WPS_IC_CRITICAL')) ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/' : '';
                 $sz  = function ($f) use ($dir) { return ($dir !== '' && @is_file($dir . $f)) ? (int) @filesize($dir . $f) : 0; };
                 $mob = $sz('critical_mobile.css'); $des = $sz('critical_desktop.css'); $cmb = $sz('critical_combined.css');
-                
+                // What the LIVE page actually ships, per device — the only proof that matters.
                 $peek = function ($ua) {
                     $r = wp_remote_get(home_url('/'), ['timeout' => 12, 'redirection' => 0, 'user-agent' => $ua,
                         'headers' => ['Accept' => 'text/html']]);
@@ -3406,7 +3583,7 @@ class wps_ic_ajax extends wps_ic
                 $uaM = 'Mozilla/5.0 (Linux; Android 11; moto g power) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36';
                 $uaD = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36';
                 $pm = $peek($uaM); $pd = $peek($uaD);
-                
+                // Capability, not current deployment — that distinction is the whole .571 fix.
                 $devkeyOk = !empty($cap['supported']);
                 $wants = (is_array($set) && !empty($set['minimal-mobile-css']) && $set['minimal-mobile-css'] == '1') ? 'split' : 'combined';
                 if (is_array($set) && isset($set['combined-crit']) && $set['combined-crit'] !== '') {
@@ -3438,10 +3615,10 @@ class wps_ic_ajax extends wps_ic
                      . '   [' . (string) ($cap['detail'] ?? '') . ']';
                 $L[] = 'device-key deployed on live rules : ' . (!empty($ks['devkey']) ? 'yes' : 'no')
                      . '   (expected NO while combined — combined strips cache_key by design)';
-                $wpc_miss571 = array_values(array_diff(['homepage', 'fullhtml'],
+                $missing_rules = array_values(array_diff(['homepage', 'fullhtml'],
                     array_keys(array_filter((array) ($ks['rules'] ?? []), function ($r) { return !empty($r['present']); }))));
                 $L[] = 'html rules found                  : ' . (int) ($ks['found'] ?? 0) . '/2'
-                     . (empty($wpc_miss571) ? '' : '   MISSING: ' . implode(', ', $wpc_miss571));
+                     . (empty($missing_rules) ? '' : '   MISSING: ' . implode(', ', $missing_rules));
                 $L[] = 'setting wants                     : ' . $wants;
                 $L[] = 'EFFECTIVE mode                    : ' . (($eff === null) ? 'unknown' : ($eff ? 'COMBINED' : 'SPLIT'));
                 $L[] = 'safety floor                      : ' . ($blocked ? 'ENGAGED (split refused)' : 'not engaged');
@@ -3492,41 +3669,41 @@ class wps_ic_ajax extends wps_ic
             } else {
                 $out['verdict'] = 'INCONCLUSIVE — control URL did not cache (rule/bypass matched it, or the self-fetch bypassed Cloudflare — no cf-cache-status). Test from a browser and re-run.';
             }
-            
+            // TAG PLUMBING VISIBILITY — is the origin even emitting the tags the purge relies on?
             $out['tag_emission'] = [
                 'hook_registered'     => function_exists('wpc_cf_emit_html_tags') && (bool) has_action('send_headers', 'wpc_cf_emit_html_tags'),
                 'homepage_tag'        => function_exists('wpc_cf_url_tag') ? wpc_cf_url_tag(home_url('/')) : 'n/a (warm.php not loaded)',
                 'untagged_serve_risk' => (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfUntaggedServesPossible')) ? wps_ic_cache::cfUntaggedServesPossible() : null,
             ];
             $out['purge_verified'] = get_option('wpc_cf_purge_verified');
-            
-            
-            
-            
+            // v7.21.189 — FETCH-SKIP VISIBILITY: the crit/CDN service fetches admit
+            // themselves by the x-origin-auth token skip (Optimizer Bypass) + the renderer
+            // ASN allow. A customer-deleted or demoted rule silently re-challenges every
+            // service fetch; surface its deployed state here, heal via Refresh Connection (the rules owner).
             $out['fetch_skip'] = (function () use ($sdk, $cf) {
                 try {
-                    if (!method_exists($sdk, 'wpc_find_bypass_rule740')) {
+                    if (!method_exists($sdk, 'wpc_find_bypass_rule')) {
                         return 'n/a (sdk)';
                     }
-                    $wpc_loc189 = $sdk->wpc_find_bypass_rule740($cf['zone']);
-                    if (empty($wpc_loc189['rule'])) {
-                        return $wpc_loc189['legacy']
-                            ? 'LEGACY-API rule only — press Refresh Auto Mode to re-provision the phased skip'
-                            : 'MISSING — service fetches face challenges; press Refresh Auto Mode to re-provision';
+                    $bypass_rule = $sdk->wpc_find_bypass_rule($cf['zone']);
+                    if (empty($bypass_rule['rule'])) {
+                        return $bypass_rule['legacy']
+                            ? 'LEGACY-API rule only (the owner keeps it; delete it in Cloudflare and press Refresh Connection to get the phased skip)'
+                            : 'MISSING — service fetches face challenges; press Refresh Connection to re-provision';
                     }
-                    $wpc_ap189 = isset($wpc_loc189['shape']['action_parameters']) && is_array($wpc_loc189['shape']['action_parameters'])
-                        ? $wpc_loc189['shape']['action_parameters'] : [];
+                    $action_params = isset($bypass_rule['shape']['action_parameters']) && is_array($bypass_rule['shape']['action_parameters'])
+                        ? $bypass_rule['shape']['action_parameters'] : [];
                     return [
                         'rule'    => 'present',
-                        'phases'  => !empty($wpc_ap189['phases']) ? $wpc_ap189['phases'] : 'MISSING (products-only skip: managed challenges still fire)',
-                        'ruleset' => !empty($wpc_ap189['ruleset']) ? $wpc_ap189['ruleset'] : 'MISSING (customer custom rules still run first)',
-                        'header'  => strpos((string) $wpc_loc189['expression'], 'x-origin-auth') !== false ? 'x-origin-auth' : 'UNEXPECTED-EXPRESSION',
+                        'phases'  => !empty($action_params['phases']) ? $action_params['phases'] : 'MISSING (products-only skip: managed challenges still fire)',
+                        'ruleset' => !empty($action_params['ruleset']) ? $action_params['ruleset'] : 'MISSING (customer custom rules still run first)',
+                        'header'  => strpos((string) $bypass_rule['expression'], 'x-origin-auth') !== false ? 'x-origin-auth' : 'UNEXPECTED-EXPRESSION',
                     ];
                 } catch (\Throwable $e) {
                     return 'ERROR: ' . $e->getMessage();
                 }
             })();
-            
+            // Rules snapshot — OURS and FOREIGN
             $wpc_rules = method_exists($sdk, 'listCacheRules') ? $sdk->listCacheRules($cf['zone']) : null;
             if (is_wp_error($wpc_rules)) {
                 $out['rules_snapshot'] = 'ERROR: ' . $wpc_rules->get_error_message();
@@ -3547,7 +3724,7 @@ class wps_ic_ajax extends wps_ic
                 : array_map(function ($p) {
                     return ['status' => $p['status'] ?? '', 'targets' => isset($p['targets'][0]['constraint']['value']) ? $p['targets'][0]['constraint']['value'] : '', 'actions' => array_map(function ($a) { return ($a['id'] ?? '') . (isset($a['value']) && is_scalar($a['value']) ? '=' . $a['value'] : ''); }, isset($p['actions']) && is_array($p['actions']) ? $p['actions'] : [])];
                 }, (is_array($wpc_pr) && isset($wpc_pr['result']) && is_array($wpc_pr['result'])) ? $wpc_pr['result'] : (is_array($wpc_pr) ? $wpc_pr : []));
-            
+            // Token privileges verbatim (also explains the stuck "Not verified yet" grid)
             $wpc_privs = $sdk->checkPrivileges($cf['zone']);
             $out['privileges'] = is_wp_error($wpc_privs) ? ('ERROR: ' . $wpc_privs->get_error_message()) : $wpc_privs;
             wp_send_json_success($out);
@@ -3565,7 +3742,7 @@ class wps_ic_ajax extends wps_ic
         $done = true;
 
 
-        
+        // (one wpc-html call covers every cached page; see cfPurgeAllHtml).
         if (class_exists('wps_ic_cache_integrations')) {
             wps_ic_cache_integrations::purgeAll(false, true, false, false, true);
         }
@@ -3598,8 +3775,8 @@ class wps_ic_ajax extends wps_ic
             } elseif (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
 
 
-                $wpc_fleet_res105 = wps_ic_cache::cfPurgeAllHtml(true);
-                $purged[] = $wpc_fleet_res105 ? ('cf-html-' . $wpc_fleet_res105) : 'cf-html-FAIL';
+                $cf_html_result = wps_ic_cache::cfPurgeAllHtml(true);
+                $purged[] = $cf_html_result ? ('cf-html-' . $cf_html_result) : 'cf-html-FAIL';
             } elseif (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeEdgeHtmlUrls')) {
 
                 $wpc_fleet_ok = wps_ic_cache::purgeEdgeHtmlUrls([home_url('/'), home_url()], true);
@@ -3617,15 +3794,15 @@ class wps_ic_ajax extends wps_ic
     {
         $cfSettings = get_option(WPS_IC_CF);
 
-        
-        
+        // Guard the keys, not just the array: a partially-populated WPS_IC_CF would otherwise throw
+        // an undefined-array-key warning on ['zone']/['token'].
         if (!empty($cfSettings) && !empty($cfSettings['zone']) && !empty($cfSettings['token'])) {
             $zone = $cfSettings['zone'];
             $cfapi = new WPC_CloudflareAPI($cfSettings['token']);
             if ($cfapi) {
                 $cfapi->purgeCache($zone);
-                
-                
+                // Dropped sleep(6): CF purge is async edge-side regardless, so the block did nothing
+                // for propagation — pure exhaustion risk.
             }
         }
 
@@ -3636,25 +3813,25 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success();
     }
 
-    
-
-
-
+    /**
+     * @return void
+     * @since 5.20.01
+     */
     public function wps_ic_purge_critical_css()
     {
-        
-        
-        
-        $wpc_pdbg343 = [
+        // Click-debug (.343): every purge fatal on a customer site was a white screen with
+        // no reason. Journal the click and turn any Throwable into a readable JSON error
+        // (surfaced in the toast AND remotely via pipeline_debug's cflog channels).
+        $click_debug = [
             'caps' => (current_user_can('manage_wpc_settings') ? 's' : '') . (current_user_can('manage_wpc_purge') ? 'p' : ''),
             'hard' => !empty($_POST['hard_purge']) ? 1 : 0,
             'nonce' => isset($_POST['wps_ic_nonce']) ? (wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action') ? 'ok' : 'bad') : 'absent',
         ];
         if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log('purge-click', 'crit', '', $wpc_pdbg343);
+            wpc_cache_first_log('purge-click', 'crit', '', $click_debug);
         }
         try {
-            return $this->wps_ic_purge_critical_css_run($wpc_pdbg343);
+            return $this->wps_ic_purge_critical_css_run($click_debug);
         } catch (\Throwable $e) {
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('purge-click-fatal', 'crit', '', ['msg' => substr($e->getMessage(), 0, 160), 'at' => basename($e->getFile()) . ':' . $e->getLine()]);
@@ -3663,7 +3840,7 @@ class wps_ic_ajax extends wps_ic
         }
     }
 
-    private function wps_ic_purge_critical_css_run($wpc_pdbg343 = [])
+    private function wps_ic_purge_critical_css_run($click_debug = [])
     {
         if ((!current_user_can('manage_wpc_settings') && !current_user_can('manage_wpc_purge')) || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
@@ -3675,43 +3852,43 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('API Key empty!');
         }
 
-        
-        
-        
-        $wpc_hard73 = !empty($_POST['hard_purge']) || apply_filters('wpc_crit_purge_hard', false);
-        
-        
-        
-        $wpc_nuke391 = $wpc_hard73 && apply_filters('wpc_purge_nuclear', false);
+        // Hard mode is explicit-only ("Remove Critical CSS" sends hard_purge=1 behind a
+        // confirm). Repeat soft clicks MUST stay serve-stale: escalating them wipes the
+        // whole HTML cache and cold-storms slow boxes.
+        $is_hard = !empty($_POST['hard_purge']) || apply_filters('wpc_crit_purge_hard', false);
+        // v7.10.391: the legacy wipe-everything hard path survives ONLY behind an explicit
+        // opt-in — no UI button may create a state where a layer must render cold AND is
+        // forbidden to cache the result (the post-purge 60s outage interaction).
+        $is_nuclear = $is_hard && apply_filters('wpc_purge_nuclear', false);
 
-        
-        
-        $wpc_detached111 = false;
+        // Answer the click FIRST in every mode (a slow button is what causes re-click
+        // cascades); store walking, DB cleanup and layer work continue detached.
+        $detached = false;
         if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')) && !apply_filters('wpc_purge_crit_sync', false)) {
             @ignore_user_abort(true);
             @set_time_limit(120);
             status_header(200);
             header('Content-Type: application/json; charset=utf-8');
-            echo wp_json_encode(['success' => true, 'data' => ['mode' => $wpc_hard73 ? 'hard-deleted:detached' : 'stale-marked:detached']]);
-            wpc_finish_request39();
-            $wpc_detached111 = true;
+            echo wp_json_encode(['success' => true, 'data' => ['mode' => $is_hard ? 'hard-deleted:detached' : 'stale-marked:detached']]);
+            wpc_finish_request();
+            $detached = true;
         }
 
-        
+        // Delete Transient for Critical Lock
         global $wpdb;
 
-        
+        // Get the correct options table name with prefix
         $options_table = $wpdb->options;
 
-        
-        
-        
+        // Delete transient values — CHUNKED: an unbounded LIKE DELETE on a bloated options
+        // table holds row locks while every pageview writes transients (site-wide stall).
+        // Third prefix sweeps the retired autoload=yes 'wps_critical_css_<key>' rows (one per URL, reader-less).
         do {
-            $wpc_del391 = $wpdb->query($wpdb->prepare("DELETE FROM $options_table WHERE option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s LIMIT 500", $wpdb->esc_like('_transient_wpc_critical_key_') . '%', $wpdb->esc_like('_transient_timeout_wpc_critical_key_') . '%', $wpdb->esc_like('wps_critical_css_') . '%'));
-            if ($wpc_del391 >= 500) {
+            $deleted_rows = $wpdb->query($wpdb->prepare("DELETE FROM $options_table WHERE option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s LIMIT 500", $wpdb->esc_like('_transient_wpc_critical_key_') . '%', $wpdb->esc_like('_transient_timeout_wpc_critical_key_') . '%', $wpdb->esc_like('wps_critical_css_') . '%'));
+            if ($deleted_rows >= 500) {
                 usleep(50000);
             }
-        } while ($wpc_del391 >= 500);
+        } while ($deleted_rows >= 500);
 
         delete_transient('wps_ic_css_cache');
         delete_option('wps_ic_modified_css_cache');
@@ -3719,46 +3896,49 @@ class wps_ic_ajax extends wps_ic
 
         $cache = new wps_ic_cache_integrations();
 
-        $wpc_purge_mode111 = 'hard-deleted';
-        if (!$wpc_hard73 && function_exists('wpc_crit_soft_purge_all')) {
-            $wpc_soft_n111 = wpc_crit_soft_purge_all();
+        // Purge Critical CSS marks every page stale. Remove Critical CSS is a wipe: the site's
+        // removal epoch goes up before anything is deleted or dispatched, so the service stops
+        // handing out every generation admitted before it, on every channel, and the
+        // regeneration below already carries the new value.
+        $purge_mode = 'hard-deleted';
+        if (!$is_hard) {
+            $marked_count = $cache::invalidateCritical('all', 'purge-critical', 'stale');
             update_option('wpc_crit_soft_purge_at', time(), false);
-            
-            
-            $wpc_purge_mode111 = ($wpc_soft_n111 > 0) ? 'stale-marked:' . (int) $wpc_soft_n111 : 'nothing-to-mark';
-        } elseif ($wpc_hard73 && !$wpc_nuke391 && function_exists('wpc_crit_delete_files196')) {
-            
-            
-            
-            
-            
-            
-            
-            $wpc_del196 = wpc_crit_delete_files196();
-            set_transient('wpc_ptick_hold196', 1, 600);
+            // n=0 = critless site (nothing on disk to mark): the redispatch below still
+            // owns the regen — a full HTML wipe here cold-storms for zero benefit.
+            $purge_mode = ($marked_count > 0) ? 'stale-marked:' . (int) $marked_count : 'nothing-to-mark';
+        } elseif (!$is_nuclear) {
+            // v7.21.196 — REMOVE MEANS DELETE. The .391 bypass window kept artifacts on disk
+            // and auto-lifted, so a broken artifact survived Remove and resurrected (rosario,
+            // twice in one day). The crit files are now UNLINKED; renders stay critless-but-
+            // CACHEABLE (the never-blank half of .391 that mattered), the measured state
+            // (lcp/fonts/used-css) is deliberately kept; the delay manifest is reset below. The
+            // removed generation cannot re-land: the service answers nothing below the epoch
+            // the wipe raises.
+            $deleted_dirs = $cache::invalidateCritical('all', 'remove-critical', 'wipe');
             update_option('wpc_crit_soft_purge_at', time(), false);
-            
-            
-            
+            // A page already in WPS_IC_CACHE is served from disk without entering PHP — the
+            // HTML layers must drop or every URL but the homepage keeps its inlined old crit.
+            // HTML + Varnish + CF only; optimized CSS/JS assets survive, so no cold storm.
+            // Hard, never serve-stale: a purge whose purpose is to stop serving the bytes it
+            // removes cannot serve stale. A stale copy still inlines the removed crit, and every
+            // critless rewarm is refused a store, so it would be served until it retires.
             if (function_exists('wpc_r2_purge_html_layers')) {
-                wpc_r2_purge_html_layers();
+                wpc_r2_purge_html_layers('hard');
             }
             if (function_exists('wpc_delay_manifest_reset')) {
                 wpc_delay_manifest_reset('crit-hard-purge');
             }
-            $wpc_purge_mode111 = 'hard-deleted:files:' . (int) $wpc_del196;
+            $purge_mode = 'hard-deleted:dirs:' . (int) $deleted_dirs;
         } else {
+            // The nuclear opt-in removes like Remove Critical and also drops the measured state.
+            $cache::invalidateCritical('all', 'purge-nuclear', 'wipe');
             $cache::purgeCriticalFiles();
             delete_option('wpc_crit_soft_purge_at');
         }
 
 
-        if (function_exists('wpc_inv2_reset')) {
-            wpc_inv2_reset('manual-purge-button');
-        }
-
-
-        if ($wpc_nuke391 || $wpc_purge_mode111 === 'hard-deleted') {
+        if ($is_nuclear || $purge_mode === 'hard-deleted') {
             $cache::purgeAll(false, true, false, false, true);
 
 
@@ -3766,19 +3946,20 @@ class wps_ic_ajax extends wps_ic
                 if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('purge-hard'); } else { @wp_cache_flush(); }
             }
         }
-        
-        if ($wpc_hard73 && function_exists('wpc_purge_rewarm_hot_set')) {
-            wpc_purge_rewarm_hot_set($wpc_nuke391 ? 'purge-critical-hard' : 'purge-critical-bypass');
-        }
 
 
-        if (function_exists('set_transient')) {
+        // With critical CSS off the click removes and purges exactly as with it on, and asks for
+        // no regeneration: on a crit-off test site it sent two forced generations and landed crit.
+        $critGenerationOff = function_exists('wpc_crit_generation_off') && wpc_crit_generation_off('');
+
+        if (!$critGenerationOff && function_exists('set_transient')) {
             set_transient('wpc_crit_regen_pending', 1, 10 * (defined('MINUTE_IN_SECONDS') ? MINUTE_IN_SECONDS : 60));
         }
 
 
-        
-        
+        // B1 (≤60s land contract): the purge itself owns the homepage regen — detached
+        // primary + cron backstop, NOT gated on cache mode; visitors are never the trigger.
+        // It decides the crit-off case itself (receipt purge-redispatch {dispatch:0}).
         if (function_exists('wpc_crit_purge_redispatch')) {
             wpc_crit_purge_redispatch();
         }
@@ -3787,50 +3968,50 @@ class wps_ic_ajax extends wps_ic
             wpc_warm_url_queue(home_url('/'), 'purge-critical-button');
         }
 
-        
-        
+        // Re-verify the purge crown after any manual purge, so the long edge TTL
+        // always rests on a receipt no older than the last human intervention.
         if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
             && !wp_next_scheduled('wpc_cf_selftest')) {
             wp_schedule_single_event(time() + 90, 'wpc_cf_selftest');
         }
 
-        
+        // Dropped a cosmetic sleep(3): purge already completed synchronously above.
         delete_transient('wps_ic_purging_cdn');
 
-        
-        
-        
-        
-        
-        if (apply_filters('wpc_crit_purge_regenerates', true)) {
-            $GLOBALS['wpc_gen_force496'] = 1;
+        // v7.10.509 — a purge that does not dispatch is a no-op at best: the next render sends an
+        // UNFORCED gen, which the service answers from its 300s debounce with the EXISTING
+        // crit_uuid — the identical stale artifact. "Remove Critical CSS" then cannot do the one
+        // job its own dialog claims ("use this when the current critical CSS is causing display
+        // problems"), because the automatic regeneration hands that exact crit straight back.
+        if (!$critGenerationOff && apply_filters('wpc_crit_purge_regenerates', true)) {
+            $GLOBALS['wpc_critical_generate_forced'] = 1;
             if (!class_exists('wps_criticalCss')) {
                 @include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
             }
             if (class_exists('wps_criticalCss')) {
                 try {
-                    $wpc_cc509 = new wps_criticalCss();
-                    $wpc_cc509->generateCriticalCSS('home', true);
+                    $homeCriticalCss = new wps_criticalCss();
+                    $homeCriticalCss->generateCriticalCSS('home');
                 } catch (\Throwable $e) {
                 }
             }
-            unset($GLOBALS['wpc_gen_force496']);
+            unset($GLOBALS['wpc_critical_generate_forced']);
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
                 try { wps_ic_cache::cfPurgeAllHtml(true, true); } catch (\Throwable $e) {}
             }
         }
 
-        if ($wpc_detached111) {
-            exit; 
+        if ($detached) {
+            exit; // response already flushed pre-wipe; wp_send_json here would warn on sent headers
         }
-        
-        wp_send_json_success(['mode' => $wpc_purge_mode111]);
+        // WHICH semantics ran (serve-stale vs hard) or "purge didn't purge" loops recur.
+        wp_send_json_success(['mode' => $purge_mode]);
     }
 
-    
-
-
-
+    /**
+     * @return void
+     * @since 5.20.01
+     */
     public function wps_ic_purge_cdn()
     {
         if ((!current_user_can('manage_wpc_settings') && !current_user_can('manage_wpc_purge')) || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
@@ -3843,25 +4024,12 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('API Key empty!');
         }
 
-        
+        // --- LOCAL caches (unchanged): html/css/js + critical ---
         $cache = new wps_ic_cache_integrations();
-        
-
-        if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead()) {
-            $cache::purgeCriticalFiles();
-        }
+        // Purging the CDN's images changes no URL the critical CSS carries: nothing to invalidate.
         $cache::purgeAll();
-        
-        if (function_exists('wpc_purge_rewarm_hot_set')) {
-            wpc_purge_rewarm_hot_set('purge-cdn-button');
-        }
 
-        
-        $CSSHash = substr(md5(microtime(true)), 0, 6);
-        $JSHash = strrev($CSSHash);
-
-        $options['css_hash'] = $CSSHash;
-        $options['js_hash'] = $JSHash;
+        if (class_exists('wps_ic_asset_version')) { wps_ic_asset_version::reset(); }
 
         if (!class_exists('wps_ic_log')) {
             include_once WPS_IC_DIR . 'classes/log.class.php';
@@ -3880,7 +4048,7 @@ class wps_ic_ajax extends wps_ic
 
         set_transient('wps_ic_purging_cdn', 'true', 30);
 
-        
+        // Real CDN-object eviction. The local purge + hash rotation above never touched the Bunny
 
 
         $cdn_report = ['attempted' => false];
@@ -3888,7 +4056,7 @@ class wps_ic_ajax extends wps_ic
             if (function_exists('set_time_limit')) {
                 @set_time_limit(60);
             }
-            $purge = wpc_customer_purge('', 'all', [], 'manual_purge', true); 
+            $purge = wpc_customer_purge('', 'all', [], 'manual_purge', true); // '' → this site's apikey; blocking
             $cdn_report = [
                 'attempted'   => true,
                 'ok'          => !empty($purge['ok']),
@@ -3905,7 +4073,7 @@ class wps_ic_ajax extends wps_ic
         }
 
 
-        self::wpc_requests70()->GET(
+        self::wpc_requests()->GET(
             WPS_IC_KEYSURL,
             ['action' => 'cdn_purge', 'apikey' => $options['api_key']],
             ['timeout' => 1, 'blocking' => false, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]
@@ -3913,8 +4081,8 @@ class wps_ic_ajax extends wps_ic
 
         delete_transient('wps_ic_purging_cdn');
 
-        
-        
+        // Always success: the LOCAL purge genuinely completed. Surface the CDN
+        // result as a sub-object so the UI can show a partial CDN failure
 
         wp_send_json_success([
             'local' => true,
@@ -3922,10 +4090,10 @@ class wps_ic_ajax extends wps_ic
         ]);
     }
 
-    
-
-
-
+    /**
+     * Exclude the image
+     * @since 4.0.0
+     */
     public function wps_ic_purge_local_variants()
     {
         if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'] ?? '', 'wps_ic_nonce_action')) {
@@ -3942,8 +4110,8 @@ class wps_ic_ajax extends wps_ic
             $dir = dirname($attachedFile);
             $baseName = pathinfo(wp_get_original_image_path($imageID) ?: $attachedFile, PATHINFO_FILENAME);
             $glob_base = preg_replace('/([*?\[\]{}])/', '[$1]', $dir . '/' . $baseName);
-            
-            
+            // Mime-aware: never glob the SOURCE format — for a webp original,
+            // {base}*.webp matches the original itself and WP's own thumbnails
             if ($mime !== 'image/avif') {
                 foreach ((array) @glob($glob_base . '*.avif') as $f) { if ($f && @unlink($f)) { $removed++; } }
             }
@@ -3980,11 +4148,11 @@ class wps_ic_ajax extends wps_ic
 
         $filedata = get_attached_file($attachment_id);
 
-        
+        // Get scaled file size
         $filesize = filesize($filedata);
         $wpScaledFilesize = wps_ic_format_bytes($filesize, null, null, false);
 
-        
+        // Get original filesize
         $originalFilepath = wp_get_original_image_path($attachment_id);
         $originalFilesize = filesize($originalFilepath);
         $filesize = wps_ic_format_bytes($originalFilesize, null, null, false);
@@ -3999,15 +4167,15 @@ class wps_ic_ajax extends wps_ic
 
         update_option('wps_ic_exclude_list', $exclude_list);
 
-        
+        // Return updated card HTML using the same render method as page load
         $output = $wps_ic->media_library->compress_details($attachment_id);
         wp_send_json_success(['html' => $output]);
     }
 
-    
-
-
-
+    /**
+     * Exclude the image
+     * @since 4.0.0
+     */
     public function wps_ic_simple_exclude_image()
     {
         if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
@@ -4019,17 +4187,17 @@ class wps_ic_ajax extends wps_ic
         $wps_ic->simple_exclude($_POST, 'html');
     }
 
-    
-
-
+    /**
+     * Connect Multsites With API
+     */
     public function wps_ic_api_mu_connect()
     {
         global $wps_ic;
 
-        
+        // Is localhost?
         $sites = get_sites();
 
-        
+        // API Key
         $apikey = sanitize_text_field($_POST['apikey']);
         $affiliate_code = get_option('wps_ic_affiliate_code');
 
@@ -4038,7 +4206,7 @@ class wps_ic_ajax extends wps_ic
 
             foreach ($sites as $key => $site) {
 
-                $call = self::wpc_requests70()->GET(WPS_IC_KEYSURL, ['action' => 'connect', 'apikey' => $apikey, 'site' => urlencode($site->domain . $site->path), 'affiliate_code' => $affiliate_code]);
+                $call = self::wpc_requests()->GET(WPS_IC_KEYSURL, ['action' => 'connect', 'apikey' => $apikey, 'site' => urlencode($site->domain . $site->path), 'affiliate_code' => $affiliate_code]);
 
                 if (!empty($call)) {
 
@@ -4073,13 +4241,36 @@ class wps_ic_ajax extends wps_ic
     }
 
 
-    
-
-
+    /**
+     * Lite Connect
+     */
     public function wps_lite_connect()
     {
         $connect = new wps_ic_connect();
         $call = $connect->connectLite();
+    }
+
+    /** The one field: an email claims the site for an account (wps_ic_plan::claim). A key goes through wps_ic_live_connect. */
+    public function wpc_claim()
+    {
+        $nonce = isset($_POST['nonce']) ? (string) $_POST['nonce'] : '';
+        if (!current_user_can('manage_wpc_settings') || (!wp_verify_nonce($nonce, 'wps_ic_nonce_action') && !wp_verify_nonce($nonce, 'wpc_live_connect'))) {
+            wp_send_json_error(['msg' => 'Forbidden.']);
+        }
+        $r = wps_ic_plan::claim(isset($_POST['value']) ? wp_unslash((string) $_POST['value']) : '');
+        if (isset($r['state']) && $r['state'] === 'error') {
+            wp_send_json_error($r);
+        }
+        wp_send_json_success($r);
+    }
+
+    public function wpc_claim_status()
+    {
+        $nonce = isset($_POST['nonce']) ? (string) $_POST['nonce'] : '';
+        if (!current_user_can('manage_wpc_settings') || (!wp_verify_nonce($nonce, 'wps_ic_nonce_action') && !wp_verify_nonce($nonce, 'wpc_live_connect'))) {
+            wp_send_json_error(['msg' => 'Forbidden.']);
+        }
+        wp_send_json_success(wps_ic_plan::status());
     }
 
 
@@ -4183,18 +4374,18 @@ class wps_ic_ajax extends wps_ic
     }
 
 
-    
-
-
+    /**
+     * Connect With API
+     */
     public function wps_ic_live_connect()
     {
         $connect = new wps_ic_connect();
         $call = $connect->connect();
     }
 
-    
-
-
+    /**
+     * Deauthorize site with remote api
+     */
     public function wps_ic_deauthorize_api()
     {
         if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
@@ -4203,30 +4394,30 @@ class wps_ic_ajax extends wps_ic
 
         global $wps_ic;
 
-        
+        // Vars
         $site = site_url();
         $options = new wps_ic_options();
         $apikey = $options->get_option('api_key');
 
-        
-        self::wpc_requests70()->GET(WPS_IC_KEYSURL, ['action' => 'disconnect', 'apikey' => $apikey, 'site' => urlencode($site)]);
+        // Verify API Key is our database and user has is confirmed getresponse
+        self::wpc_requests()->GET(WPS_IC_KEYSURL, ['action' => 'disconnect', 'apikey' => $apikey, 'site' => urlencode($site)]);
 
         $options->set_option('api_key', '');
         $options->set_option('response_key', '');
         $options->set_option('orp', '');
     }
 
-    
-
-
+    /**
+     * Heartbeat
+     */
     public function wps_ic_media_library_heartbeat()
     {
-        self::wpc_media_action_gate66();
+        self::wpc_require_media_action_capability();
         global $wps_ic, $wpdb;
         $html = [];
 
-        
-        
+        // FPM telemetry — capture REQUEST_TIME_FLOAT so we measure total wall (FPM queue wait +
+        // handler work). The "chip stagnation" symptom under bulk compress is FPM saturation.
         $hb_request_arrival_t = isset($_SERVER['REQUEST_TIME_FLOAT'])
             ? (float) $_SERVER['REQUEST_TIME_FLOAT']
             : microtime(true);
@@ -4234,17 +4425,17 @@ class wps_ic_ajax extends wps_ic
 
         $active_raw_fast = isset($_POST['active']) ? $_POST['active'] : [];
         $has_active = is_array($active_raw_fast) && !empty($active_raw_fast);
-        
-        
-        
+        // v7.21.314 — autonomous stale-compress watchdog: the card poll may not be
+        // running (tab closed on that card, stale JS), so bound stuck 'queueing'
+        // images here too. The heartbeat fires whenever ANY image is active.
         if ($has_active && method_exists(__CLASS__, 'wpc_v2_stale_compress_watchdog')) {
-            foreach ((array) $active_raw_fast as $wpc_aw314) {
-                $wpc_aid314 = is_array($wpc_aw314) ? (int) ($wpc_aw314['id'] ?? 0) : (int) $wpc_aw314;
-                if ($wpc_aid314 > 0) { self::wpc_v2_stale_compress_watchdog($wpc_aid314); }
+            foreach ((array) $active_raw_fast as $active_entry) {
+                $attachment_id = is_array($active_entry) ? (int) ($active_entry['id'] ?? 0) : (int) $active_entry;
+                if ($attachment_id > 0) { self::wpc_v2_stale_compress_watchdog($attachment_id); }
             }
         }
         if (!$has_active) {
-            
+            // Quick existence check: LIMIT 1 = single-row scan (~0.5ms) vs the full LIKE scan below.
             $like_fast = $wpdb->esc_like('_transient_wps_ic_heartbeat_') . '%';
             $any_hb = $wpdb->get_var($wpdb->prepare(
                 "SELECT option_id FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT 1",
@@ -4370,8 +4561,8 @@ class wps_ic_ajax extends wps_ic
     private function wpc_compute_heartbeat_payload($imageID)
     {
         if ($imageID <= 0) return [];
-        
-        
+        // Defensive: bail on non-attachment IDs (avoids confusing render on
+        // wrong post types if client active-list got polluted).
         $post_type = get_post_type($imageID);
         if ($post_type !== 'attachment') return [];
 
@@ -4421,8 +4612,8 @@ class wps_ic_ajax extends wps_ic
         }
 
 
-        
-        
+        // Announced-but-not-yet-persisted items — only emit when status=compressed
+        // (eager_flip already happened) so chips don't fire on a still-Optimizing card.
         if ($status === 'compressed' && !empty($announced)) {
             foreach ($announced as $vkey => $aentry) {
                 if (isset($variants[$vkey])) continue;
@@ -4450,7 +4641,7 @@ class wps_ic_ajax extends wps_ic
             }
         }
 
-        
+        // Stable order: oldest → newest so the client animates landings in arrival order.
         usort($recent, function ($a, $b) { return $a['ts'] - $b['ts']; });
 
         $ic_savings  = get_post_meta($imageID, 'ic_savings', true);
@@ -4479,7 +4670,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_bulkRestoreHeartbeat()
     {
-        self::wpc_bulk_gate67();
+        self::wpc_require_bulk_capability();
         $isDone = get_transient('wps_ic_bulk_done');
         $parsedImages = get_option('wps_ic_parsed_images');
         $bulkStatus = get_option('wps_ic_BulkStatus');
@@ -4488,8 +4679,8 @@ class wps_ic_ajax extends wps_ic
         if ($bulkProcess && $bulkProcess['status'] != 'restoring') {
             wp_send_json_error(['msg' => 'bulk-process-failed']);
         }
-        
-        
+        // This poll fires every ~3s from the browser while a restore is live (v2 OR
+        // legacy). Bump the liveness heartbeat here so an in-progress restore is never
 
         if ($bulkProcess && !$isDone && function_exists('wpc_bulk_heartbeat_touch')) {
             wpc_bulk_heartbeat_touch();
@@ -4502,7 +4693,7 @@ class wps_ic_ajax extends wps_ic
             $wd_fired = (int) get_option('wpc_bulk_restore_wd_fired', 0);
             if (!empty($wd_queue['queue']) && $wd_tick && (time() - $wd_tick) > 12 && (time() - $wd_fired) > 10) {
                 update_option('wpc_bulk_restore_wd_fired', time(), false);
-                $this->wpc_restore_slice_detach36();
+                $this->wpc_arm_restore_slice_on_shutdown();
                 error_log('[WPC Bulk Restore] WATCHDOG: no progress for ' . (time() - $wd_tick) . 's with '
                     . count($wd_queue['queue']) . ' queued — re-firing drain loopback');
                 if (method_exists($this, 'wpc_bulk_v2_restore_fire_loopback')) {
@@ -4574,24 +4765,24 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_success($output);
         }
 
-        
+        // Total Images in Restore Queue
         $imagesInRestoreQueue = !empty($bulkStatus['foundImageCount']) ? $bulkStatus['foundImageCount'] : 0;
         $imagesRestored = !empty($bulkStatus['restoredImageCount']) ? $bulkStatus['restoredImageCount'] : 0;
 
 
-        
+        // Not ready for output, nothing is done yet
         if (empty($parsedImages)) {
             wp_send_json_success(['status' => 'parsing', 'message' => 'We have found ' . $imagesInRestoreQueue . ($imagesInRestoreQueue == 1 ? ' image' : ' images') . ' to restore...']);
         }
 
         $progressBar = ($imagesInRestoreQueue > 0) ? round(($imagesRestored / $imagesInRestoreQueue) * 100) : 0;
 
-        
+        // Visual Patch so that user can see some progress
         if ($progressBar == 0) {
             $progressBar = 3;
         }
 
-        
+        // Bugfix, remove total index
         $onlyImages = $parsedImages;
         unset($onlyImages['total']);
 
@@ -4600,15 +4791,15 @@ class wps_ic_ajax extends wps_ic
             $lastID = array_key_last($onlyImages);
         }
 
-        
+        // If no images processed yet, return parsing status
         if ($lastID === null) {
             wp_send_json_success(['status' => 'parsing', 'message' => 'Restoring images...', 'finished' => $imagesRestored, 'total' => $imagesInRestoreQueue, 'progress' => $progressBar]);
         }
 
         $lastProgress = isset($_POST['lastProgress']) ? $_POST['lastProgress'] : 0;
 
-        
-        
+        // Build a 'current' object so the field-level UI (WPCRestore) can update the card without
+        // replacing innerHTML (preserves CSS crossfade + slide animations between polls).
         $currentThumb = wp_get_attachment_url($lastID);
         $currentFile  = get_attached_file($lastID);
         $currentPath  = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($lastID) : $currentFile;
@@ -4622,19 +4813,19 @@ class wps_ic_ajax extends wps_ic
                 $bytes_restored += (int) $meta['bytes'];
                 continue;
             }
-            
+            // Stat-once: populate the cache so subsequent polls skip the filesystem.
             $p = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($pid) : get_attached_file($pid);
             $b = ($p && file_exists($p)) ? (int) @filesize($p) : 0;
             $parsedImages[$pid]['bytes'] = $b;
             $bytes_restored += $b;
         }
         if (count($parsedImages) > 1) {
-            
+            // Persist the bytes cache (skip if only 'total' key is present)
             update_option('wps_ic_parsed_images', $parsedImages, false);
         }
 
-        
-        
+        // ETA from rolling average per-image wall time. parsed_images
+        // entries include 'restored_at' timestamps set by the drain handler.
         $eta_seconds = null;
         $recent_stamps = [];
         foreach ($parsedImages as $pid => $meta) {
@@ -4652,15 +4843,15 @@ class wps_ic_ajax extends wps_ic
         $output = [];
         $output['status']        = 'working';
         $output['parsedImages']  = $parsedImages;
-        
-        
+        // Legacy HTML kept for backwards-compat with any consumer that still
+        // reads response.data.html. New WPCRestore uses the JSON fields below.
         $output['html']          = $this->bulkRestoreHtml($lastID, $lastProgress);
         $output['finished']      = $imagesRestored;
         $output['total']         = $imagesInRestoreQueue;
         $output['progress']      = $progressBar;
         $output['parsedImage']   = isset($parsedImages[$lastID]) ? $parsedImages[$lastID] : [];
 
-        
+        // JSON fields for WPCRestore (field-level updates + animations)
         $output['driver']        = 'v2';
         $output['current']       = [
             'id'    => (int) $lastID,
@@ -4670,14 +4861,14 @@ class wps_ic_ajax extends wps_ic
             'url'   => (string) $currentThumb,
         ];
         $output['eta_seconds']      = $eta_seconds;
-        
+        // Elapsed time since the bulk restore started.
         $started_ms = (int) get_option('wpc_bulk_restore_started_ms', 0);
         $output['elapsed_seconds'] = $started_ms > 0
             ? (int) round((microtime(true) * 1000 - $started_ms) / 1000)
             : 0;
 
-        
-        
+        // Total bytes restored (cumulative). Showing disk reclaimed lets
+        // the user see concrete progress, not just a count.
         $output['bytes_restored']   = (int) $bytes_restored;
         $output['bytes_restored_h'] = $bytes_restored > 0
             ? wps_ic_format_bytes($bytes_restored, null, null, false)
@@ -4715,8 +4906,8 @@ class wps_ic_ajax extends wps_ic
             $bytes = isset($parsedImages[$rid]['bytes']) ? (int) $parsedImages[$rid]['bytes'] : 0;
             $stamp = isset($parsedImages[$rid]['restored_at']) ? (int) $parsedImages[$rid]['restored_at'] : 0;
 
-            
-            
+            // Backup source from wpc_backup_mode post_meta (the
+            // authoritative flag set by save_local_backup at compress time).
 
 
             $mode = (string) get_post_meta($rid, 'wpc_backup_mode', true);
@@ -4747,7 +4938,7 @@ class wps_ic_ajax extends wps_ic
         $queue_t = get_transient('wps_ic_restore_queue');
         $queue   = (is_array($queue_t) && !empty($queue_t['queue'])) ? $queue_t['queue'] : [];
         $done_ids = array_flip(array_filter($recent_ids, function ($k) { return $k !== 'total'; }));
-        
+        // Also exclude the currently-processing ID + everything in parsedImages.
         $done_ids[(int) $lastID] = true;
         foreach (array_keys($parsedImages) as $pid) {
             if ($pid === 'total') continue;
@@ -4777,11 +4968,11 @@ class wps_ic_ajax extends wps_ic
 
     public function bulkRestoreHtml($imageID, $lastProgress = '')
     {
-        
+        // Restore card. Layout:
 
 
-        
-        
+        // Legacy `.bulk-restore-status-top-right>h3` class preserved so the
+        // existing JS line that writes "X / Y" into it still works.
 
         $thumbUrl = wp_get_attachment_url($imageID);
         if (empty($thumbUrl)) $thumbUrl = '';
@@ -4800,7 +4991,7 @@ class wps_ic_ajax extends wps_ic
         $output .= '<div class="wpc-restore-card">';
         $output .=   '<div class="wpc-restore-card-body">';
 
-        
+        // Thumbnail
         $output .=     '<div class="wpc-restore-thumb">';
         if ($thumbUrl) {
             $output .= '<div class="wpc-restore-thumb-img" style="background-image:url(' . esc_url($thumbUrl) . ');"></div>';
@@ -4811,7 +5002,7 @@ class wps_ic_ajax extends wps_ic
         }
         $output .=     '</div>';
 
-        
+        // Meta (chips + filename)
         $output .=     '<div class="wpc-restore-meta">';
         $output .=       '<div class="wpc-chip-row">';
         $output .=         '<span class="wpc-chip wpc-chip-success">&#10003; ' . esc_html__('Restored', WPS_IC_TEXTDOMAIN) . '</span>';
@@ -4820,29 +5011,29 @@ class wps_ic_ajax extends wps_ic
         $output .=       '<h3 class="wpc-restore-filename" title="' . esc_attr($image_full_filename) . '">' . esc_html($image_full_filename) . '</h3>';
         $output .=     '</div>';
 
-        
+        // Counter + percentage badge (right column)
         $output .=     '<div class="wpc-restore-counter bulk-restore-status-top-right">';
         $output .=       '<h3 class="wpc-counter-main">' . $restoredCount . '<span class="wpc-counter-divider">/</span>' . $totalCount . '</h3>';
         $output .=       '<div class="wpc-counter-label">' . esc_html__('Images Restored', WPS_IC_TEXTDOMAIN) . '</div>';
         $output .=       '<span class="wpc-percent-badge">' . $pct . '% ' . esc_html__('complete', WPS_IC_TEXTDOMAIN) . '</span>';
         $output .=     '</div>';
 
-        $output .=   '</div>'; 
+        $output .=   '</div>'; // .wpc-restore-card-body
 
-        
+        // Full-width gradient progress bar at the bottom of the card
         $output .=   '<div class="wpc-restore-progress-track bulk-status-progress-bar">';
         $output .=     '<div class="wpc-restore-progress-fill progress-bar-inner" style="width:' . $pct . '%;"></div>';
         $output .=   '</div>';
 
-        $output .= '</div>'; 
-        $output .= '</div>'; 
+        $output .= '</div>'; // .wpc-restore-card
+        $output .= '</div>'; // .wps-ic-bulk-html-wrapper
 
         return $output;
     }
 
     public function wps_ic_bulkCompressHeartbeat()
     {
-        self::wpc_bulk_gate67();
+        self::wpc_require_bulk_capability();
 
 
         $bulkRunning = get_option('wps_ic_bulk_process');
@@ -4853,8 +5044,7 @@ class wps_ic_ajax extends wps_ic
 
             $final_sess = get_transient('wpc_bulk_session_ids') ?: [];
             $f_orig = 0; $f_now = 0; $f_variants = 0;
-            $f_count = is_array($final_sess) ? count($final_sess) : 0;
-            
+            // Per-image avg accumulator: each image contributes its own pct.
             $f_pct_sum = 0.0; $f_pct_n = 0;
             if (is_array($final_sess)) {
                 foreach ($final_sess as $fid) {
@@ -4881,11 +5071,23 @@ class wps_ic_ajax extends wps_ic
             $f_saved   = max(0, $f_orig - $f_now);
             $f_pct     = $f_orig > 0 ? round(100 * $f_saved / $f_orig, 1) : 0;
             $f_pct_avg = $f_pct_n > 0 ? round($f_pct_sum / $f_pct_n, 1) : 0;
+            // The run flag is gone: the numbers are the ledger's, and the run is `done` only when
+            // every image was dispatched or refused. Observed: this branch answered done with
+            // processed = total from the session list whenever the flag was absent, so a run
+            // that refused 51 of 51 images read as 51 processed (rig, 2026-09-26).
+            $completion = self::wpc_bulk_completion_json();
+            $run = self::wpc_bulk_run_json();
             wp_send_json_success([
                 'driver'          => 'v2',
-                'status'          => 'done',
-                'total'           => $f_count,
-                'processed'       => $f_count,
+                'status'          => ($run && $run['ended']) ? 'done' : 'stopped',
+                'running'         => false,
+                'total'           => $run ? (int) $run['total'] : 0,
+                'processed'       => $run ? (int) $run['landed'] : 0,
+                'dispatched'      => $run ? (int) $run['dispatched'] : 0,
+                'refused'         => $run ? $run['refused'] : [],
+                'missing'         => wps_ic_image_library::counts()['missing'],
+                'ledger'          => $run,
+                'completion'      => $completion,
                 'pending_drain'   => 0,
                 'queue_empty'     => true,
                 'cumulative_orig' => $f_orig,
@@ -4900,106 +5102,7 @@ class wps_ic_ajax extends wps_ic
             ]);
         }
 
-        $driver = !empty($bulkRunning['driver']) ? (string) $bulkRunning['driver'] : 'v1';
-
-
-        if ($driver === 'v2' || $driver === 'sequential') {
-            $this->bulkCompressHeartbeat_v2($bulkRunning);
-            return;
-        }
-
-        $bulkStatus = get_option('wps_ic_BulkStatus');
-        $parsedImages = get_option('wps_ic_parsed_images');
-
-        
-        $totalImagesFound = $bulkStatus['foundImageCount'];
-        $totalThumbsFound = $bulkStatus['foundThumbCount'];
-        $compressedImages = $bulkStatus['compressedImageCount'];
-
-        
-        $onlyImages = $parsedImages;
-        unset($onlyImages['total']);
-
-        
-        if (empty($onlyImages)) {
-            wp_send_json_success(['status' => 'parsing', 'message' => 'We have found ' . $totalImagesFound . ($totalImagesFound == 1 ? ' image' : ' images') . ' to optimize...']);
-        }
-
-        if (!empty($onlyImages)) {
-            $lastID = array_key_last($onlyImages);
-        }
-
-        
-        $stats = get_post_meta($lastID, 'ic_stats', true);
-        $original_filesize = isset($stats['original']['original']['size']) ? $stats['original']['original']['size'] : 0;
-        $compressed_filesize = isset($stats['original']['compressed']['size']) ? $stats['original']['compressed']['size'] : 0;
-
-        
-        $savedKB = wps_ic_format_bytes($original_filesize - $compressed_filesize) . ' Saved';
-        if ($original_filesize <= $compressed_filesize) {
-            $savedKB = 'No savings';
-        }
-
-        
-        $status = '<ul class="wps-icon-list">';
-        $status .= '<li><i class="wps-icon saved"></i>' . $savedKB . '</li>';
-        $status .= '<li><i class="wps-icon quality"></i> ' . ucfirst(self::$settings['optimization']) . ' Mode</li>';
-        if (self::$settings['generate_webp'] == '1') {
-            $status .= '<li><i class="wps-icon webp"></i> WebP Generated</li>';
-        }
-        $status .= '</ul>';
-
-        
-        $progressBar = ($totalImagesFound > 0) ? round(($compressedImages / $totalImagesFound) * 100) : 0;
-
-        
-        $full = wp_get_original_image_url($lastID);
-        $imageFileName = $full ? basename($full) : ('Image #' . $lastID);
-
-        
-        $originalSize = isset($parsedImages['total']['original']) ? $parsedImages['total']['original'] : 0;
-        $compressedSize = isset($parsedImages['total']['compressed']) ? $parsedImages['total']['compressed'] : 0;
-        $imagesAndThumbs = (!empty($bulkStatus['compressedImageCount']) ? $bulkStatus['compressedImageCount'] : 0) + (!empty($bulkStatus['compressedThumbs']) ? $bulkStatus['compressedThumbs'] : 0);
-
-        
-        $avgReduction = ($originalSize > 0 && $imagesAndThumbs > 0) ? (1 - ($compressedSize / $originalSize)) * 100 : 0;
-        $avgReduction = number_format($avgReduction, 1);
-        $avgReductionHTML = '<h3>' . $avgReduction . '%</h3><h5>Average Savings</h5>';
-
-        
-        $bulkSavings = wps_ic_format_bytes($originalSize - $compressedSize, null, null, false);
-        $bulkSavingsHTML = '<h3>' . $bulkSavings . '</h3><h5>Total Savings</h5>';
-
-        
-        $CompressedImagesHTML = '<h3>' . $compressedImages . '/' . $totalImagesFound . '</h3><h5>Original Images</h5>';
-        $CompressedThumbsHTML = '<h3>' . $imagesAndThumbs . '/' . $totalThumbsFound . '</h3><h5>Total Images</h5>';
-
-        $output['html'] = $this->bulkCompressHtml($lastID);
-        $output['status'] = $status;
-        $output['progress'] = $progressBar;
-        $output['parsedImage'] = $parsedImages[$lastID];
-        $output['lastFileName'] = $imageFileName;
-        $output['progressAvgReduction'] = $avgReductionHTML;
-        $output['progressTotalSavings'] = $bulkSavingsHTML;
-        $output['progressCompressedImages'] = $CompressedImagesHTML;
-        $output['progressCompressedThumbs'] = $CompressedThumbsHTML;
-
-        if ($compressedImages >= $totalImagesFound) {
-            delete_option('wps_ic_bulk_process');
-            set_transient('wps_ic_bulk_done', true, 60);
-        }
-
-        $isDone = get_transient('wps_ic_bulk_done');
-        if ($isDone) {
-            $output = [];
-            $output['status'] = 'done';
-            delete_option('wps_ic_bulk_process');
-            delete_transient('wps_ic_stuck_check');
-            delete_option('wps_ic_bulk_counter');
-            wp_send_json_success($output);
-        }
-
-        wp_send_json_success($output);
+        $this->bulkCompressHeartbeat_v2($bulkRunning);
     }
 
 
@@ -5009,7 +5112,7 @@ class wps_ic_ajax extends wps_ic
 
         $_wpc_hb_start_t = microtime(true);
         $session_ids = get_transient('wpc_bulk_session_ids') ?: [];
-        $queue_data  = self::wpc_bulk_queue_read199() ?: ['queue' => [], 'total_images' => 0];
+        $queue_data  = self::wpc_bulk_queue_read() ?: ['queue' => [], 'total_images' => 0];
         $total       = (int) ($queue_data['total_images'] ?? (count($session_ids) + count($queue_data['queue'])));
 
         $cumulative_orig = 0;
@@ -5053,8 +5156,8 @@ class wps_ic_ajax extends wps_ic
                     }
                     continue;
                 }
-                
-                
+                // Partial completion — evict and re-read so stats stay honest
+                // as bg retry fills the missing variants.
                 unset($completed_cache[$id]);
                 $cache_dirty = true;
             }
@@ -5087,7 +5190,7 @@ class wps_ic_ajax extends wps_ic
                 : 'optimizing';
             $expected = is_array($ic_st) ? (int) ($ic_st['expected_variants'] ?? 0) : 0;
 
-            
+            // Local helpers retained for downstream logging blocks.
             $pending = get_transient('wpc_v2_pending_' . $id);
             $still_draining = !empty($pending) && !empty($pending['pending']);
             $phase_a_done = (bool) get_transient('wpc_v2_phase_a_done_' . $id);
@@ -5121,8 +5224,8 @@ class wps_ic_ajax extends wps_ic
                 $is_completed_full = $is_completed;
             }
 
-            
-            
+            // Fire background retry for the missing variants when
+            // we advance an image with accounted < expected. One-shot per
 
 
             if ($is_completed && !$is_completed_full && function_exists('wpc_v2_fire_image_bg_retry')) {
@@ -5133,8 +5236,8 @@ class wps_ic_ajax extends wps_ic
                 }
             }
 
-            
-            
+            // Use medium_large so hero card renders crisp on retina;
+            // small UI rows downscale with no quality loss.
             $thumb = (string) wp_get_attachment_image_url($id, 'medium_large');
             if (!$thumb) $thumb = (string) wp_get_attachment_image_url($id, 'medium');
             if (!$thumb) $thumb = (string) wp_get_attachment_image_url($id, 'thumbnail');
@@ -5285,7 +5388,7 @@ class wps_ic_ajax extends wps_ic
 
                 $last_dash = strrpos($key, '-');
                 if ($last_dash === false) {
-                    
+                    // Canonical key — bare size label means JPEG (or jpg).
                     $size_label = $key;
                     $format     = 'jpeg';
                 } else {
@@ -5294,10 +5397,10 @@ class wps_ic_ajax extends wps_ic
                 }
                 $format = strtolower($format);
                 if ($format === 'jpg') $format = 'jpeg';
-                
-                
+                // Only accept known formats. Anything else is malformed and
+                // would render an empty pill in the bulk UI.
                 if (!in_array($format, ['jpeg', 'webp', 'avif'], true)) continue;
-                
+                // Zero bytes = not a real landed variant; skip.
                 if (empty($v['size'])) continue;
                 $bytes_v    = (int) ($v['size'] ?? 0);
                 $orig_v     = (int) ($v['originalSize'] ?? 0);
@@ -5319,7 +5422,7 @@ class wps_ic_ajax extends wps_ic
         }
 
 
-        
+        //   • Cursor still applies (announced_ms > since_ms)
         $persisted_keys_by_image = [];
         foreach ($new_variants as $nv) {
             $persisted_keys_by_image[$nv['id']][$nv['key']] = true;
@@ -5330,7 +5433,7 @@ class wps_ic_ajax extends wps_ic
             if (isset($completed_cache[$id])) continue;
             $announced = get_transient('wpc_v2_announced_' . $id);
             if (!is_array($announced) || empty($announced)) continue;
-            
+            // Per-image parent metadata lookup (same pattern as persisted loop).
             $p_thumb = (string) wp_get_attachment_image_url($id, 'thumbnail');
             if (!$p_thumb) $p_thumb = (string) wp_get_attachment_image_url($id, 'full');
             $p_title = get_the_title($id);
@@ -5364,7 +5467,7 @@ class wps_ic_ajax extends wps_ic
         usort($new_variants, function ($a, $b) { return $b['ms'] - $a['ms']; });
         $new_variants = array_slice($new_variants, 0, 200);
 
-        
+        // Newest-first for completion list (last appended to session = newest).
         $completed = array_reverse($completed);
         $bytes_saved = max(0, $cumulative_orig - $cumulative_now);
         $savings_pct = $cumulative_orig > 0
@@ -5395,7 +5498,6 @@ class wps_ic_ajax extends wps_ic
 
                 delete_option('wps_ic_bulk_process');
                 delete_transient('wps_ic_bulk_running');
-                wps_ic_local::wpc_counts_invalidate37();
                 foreach ($session_ids as $cid) {
                     $cid = (int) $cid;
                     if ($cid <= 0) continue;
@@ -5414,12 +5516,12 @@ class wps_ic_ajax extends wps_ic
 
                     if (get_post_meta($cid, 'ic_status', true) !== 'compressed') {
                         update_post_meta($cid, 'ic_status', 'compressed');
-                        
+                        // Refresh the path-A optimized-ids cache (see wp-compress-core.php).
                         if (function_exists('wpc_invalidate_local_cache')) wpc_invalidate_local_cache();
                     }
                     set_transient('wpc_v2_phase_a_done_' . $cid, time(), 3600);
-                    
-                    
+                    // Clear "still in flight" markers so ML's compress_details
+                    // doesn't render the Optimizing card on next poll.
                     delete_transient('wps_ic_compress_' . $cid);
                     delete_transient('wpc_v2_pending_' . $cid);
                     delete_transient('wpc_v2_warming_' . $cid);
@@ -5445,45 +5547,53 @@ class wps_ic_ajax extends wps_ic
             }
         }
 
-        
-        
+        // Log telemetry BEFORE wp_send_json_success (which calls
+        // wp_die and halts the script). Sampled 1/10 ticks to bound log size.
         $this->wpc_log_bulk_heartbeat_telemetry(
             $_wpc_hb_start_t, count($session_ids), $variants_total,
             count($active), count($completed), count($new_variants)
         );
 
-        if (!empty($queue_data['queue']) && empty(self::wpc_bulk_inflight199())
+        if (!empty($queue_data['queue']) && empty(self::wpc_bulk_inflight_ids())
             && !get_transient('wpc_bulk_stop_signal')
             && !get_transient('wpc_bulk_compress_draining')
-            && !(function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197())) {
+            && !(function_exists('wpc_v2_is_store_broken_active') && wpc_v2_is_store_broken_active())) {
             self::wpc_bulk_v2_fire_loopback();
         }
-        $wpc_led204 = self::wpc_bulk_ledger_summary202();
-        $wpc_total204 = $wpc_led204
-            ? ($wpc_led204['queued'] + $wpc_led204['inflight'] + $wpc_led204['verified'] + $wpc_led204['parked'] + $wpc_led204['skipped'])
-            : 0;
-        $wpc_slots204 = self::wpc_bulk_inflight199();
-        if ($wpc_led204 && !empty($wpc_slots204) && !empty($active)) {
-            $active = array_values(array_filter($active, function ($a) use ($wpc_slots204) {
-                return is_array($a) && isset($a['id']) && isset($wpc_slots204[(int) $a['id']]);
+        // The run's numbers are the ledger's (wps_ic_image_library::progress()); the session scan
+        // above only builds the cards. A run with no ledger shows the queue's total. What the
+        // completion card prints is built only once the queue is empty, when the page may reveal it.
+        $completion = $queue_empty ? self::wpc_bulk_completion_json() : null;
+        $run = self::wpc_bulk_run_json();
+        $run_total = $run ? (int) $run['total'] : 0;
+        $run_done = $run ? (int) $run['verified'] : count($completed);
+        $inflight_ids = self::wpc_bulk_inflight_ids();
+        if ($run && !empty($inflight_ids) && !empty($active)) {
+            $active = array_values(array_filter($active, function ($a) use ($inflight_ids) {
+                return is_array($a) && isset($a['id']) && isset($inflight_ids[(int) $a['id']]);
             }));
         }
 
         wp_send_json_success([
-            
+            // v2 contract
             'driver'          => 'v2',
-            'total'           => $wpc_total204 > 0 ? $wpc_total204 : $total,
-            'processed'       => $wpc_led204 ? (int) $wpc_led204['verified'] : count($completed),
+            'total'           => $run_total > 0 ? $run_total : $total,
+            'processed'       => $run_done,
 
 
             'pending_drain'   => count($active) + $pending_drain_in_completed,
-            'inflight'        => count(self::wpc_bulk_inflight199()),
-            'ledger'          => self::wpc_bulk_ledger_summary202(),
+            'inflight'        => count(self::wpc_bulk_inflight_ids()),
+            'ledger'          => $run,
+            'completion'      => $completion,
             'halt'            => [
                 'stop'         => (bool) get_transient('wpc_bulk_stop_signal'),
-                'store_broken' => function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197(),
+                'store_broken' => function_exists('wpc_v2_is_store_broken_active') && wpc_v2_is_store_broken_active(),
+                // The service's site-wide hold (429 capacity, 401 unknown key): reason and until.
+                'service_hold' => (static function () {
+                    $h = wps_ic_image_optimize::service_hold();
+                    return $h === null ? null : ['reason' => (string) ($h['reason'] ?? ''), 'until' => (int) ($h['until'] ?? 0)];
+                })(),
             ],
-            'reconcile'       => self::wpc_bulk_reconcile202(),
             'generated_at'    => time(),
             'cumulative_orig' => $cumulative_orig,
             'cumulative_now'  => $cumulative_now,
@@ -5505,8 +5615,8 @@ class wps_ic_ajax extends wps_ic
             'up_next'         => $up_next,
 
 
-            'progress'                 => $total > 0 ? round(100 * count($completed) / $total) : 0,
-            'progressCompressedImages' => '<h3>' . count($completed) . '/' . $total . '</h3><h5>Original Images</h5>',
+            'progress'                 => ($run_total > 0 ? $run_total : $total) > 0 ? round(100 * $run_done / ($run_total > 0 ? $run_total : $total)) : 0,
+            'progressCompressedImages' => '<h3>' . $run_done . '/' . ($run_total > 0 ? $run_total : $total) . '</h3><h5>Original Images</h5>',
             'progressTotalSavings'     => '<h3>' . wps_ic_format_bytes($bytes_saved, null, null, false) . '</h3><h5>Total Savings</h5>',
             'progressAvgReduction'     => '<h3>' . $savings_pct . '%</h3><h5>Average Savings</h5>',
             'progressCompressedThumbs' => '',
@@ -5545,19 +5655,19 @@ class wps_ic_ajax extends wps_ic
         $image_filename = basename($thumbnail[0]);
         $image_full_filename = basename($full[0]);
 
-        
+        // Use the same savings data as single image (unscaled baseline → best variant)
         $ic_savings = get_post_meta($imageID, 'ic_savings', true);
         $ic_baseline = get_post_meta($imageID, 'ic_savings_baseline', true);
         $ic_saved_bytes = get_post_meta($imageID, 'ic_savings_bytes', true);
 
-        
+        // Before = unscaled original, After = baseline minus saved bytes
         if ($ic_baseline > 0) {
             $original_filesize = wps_ic_format_bytes($ic_baseline, null, null, false);
             $after_size = $ic_baseline - $ic_saved_bytes;
             $compressed_filesize = wps_ic_format_bytes($after_size, null, null, false);
             $savings = floatval($ic_savings);
         } else {
-            
+            // Fallback to ic_stats if ic_savings not yet available
             $stats = get_post_meta($imageID, 'ic_stats', true);
             if (empty($stats)) {
                 $uploadfile = get_attached_file($imageID);
@@ -5571,7 +5681,7 @@ class wps_ic_ajax extends wps_ic
                 : 0;
         }
 
-        
+        // Original image URL for the before preview
         $backup_images = get_post_meta($imageID, 'ic_backup_images', true);
         if (!empty($backup_images['full']) && !file_exists($backup_images['full'])) {
             $original_image = $thumbnail[0];
@@ -5661,26 +5771,26 @@ class wps_ic_ajax extends wps_ic
             delete_transient('wpc_v2_pending_' . (int) $sid);
         }
 
-        self::wpc_bulk_ledger_close202();
-        
+        self::wpc_bulk_ledger_close();
+        // Wipe local state FIRST so the next page render sees a clean slate.
         delete_option('wps_ic_parsed_images');
         delete_option('wps_ic_BulkStatus');
         delete_option('wps_ic_bulk_process');
         set_transient('wps_ic_bulk_done', true, 60);
 
-        self::wpc_bulk_queue_write199(null);
-        delete_option('wpc_bulk_inflight199');
-        delete_option('wpc_bulk_counted201');
+        self::wpc_bulk_queue_write(null);
+        delete_option(WPC_BULK_INFLIGHT_OPTION);
         delete_transient('wps_ic_restore_queue');
         delete_transient('wpc_bulk_session_ids');
         delete_transient('wps_ic_bulk_running');
         delete_transient('wpc_bulk_completed_cache');
-        wps_ic_local::wpc_counts_invalidate37();
 
-        
+        // Legacy `wps_ic_compress_*` direct options.
         $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like('wps_ic_compress_') . '%'));
 
-        
+        // Release drain chain locks; the cron carrier has nothing left to carry.
+        if (function_exists('wp_clear_scheduled_hook')) { wp_clear_scheduled_hook(self::BULK_DRAIN_CRON); }
+        delete_transient('wpc_bulk_loopback_unconfirmed');
         wpc_worker_unlock('wpc_bulk_v2_chain');
         wpc_worker_unlock('wpc_bulk_v2_restore_chain');
 
@@ -5711,12 +5821,13 @@ class wps_ic_ajax extends wps_ic
         }
 
 
-        $counts = wps_ic_local::countLibraryImages();
+        $counts = wps_ic_image_library::counts();
 
 
         wp_send_json_success([
-            'uncompressed' => count($counts['uncompressed']),
-            'compressed'   => count($counts['compressed']),
+            'uncompressed' => $counts['population'],
+            'compressed'   => $counts['compressed'],
+            'missing'      => $counts['missing'],
         ]);
 
 
@@ -5724,7 +5835,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_getBulkStats()
     {
-        self::wpc_bulk_gate67();
+        self::wpc_require_bulk_capability();
         $bulkStatus = get_option('wps_ic_BulkStatus');
         $parsedImages = get_option('wps_ic_parsed_images');
 
@@ -5741,12 +5852,22 @@ class wps_ic_ajax extends wps_ic
             $output .= '<h2>Image Compression Complete!</h2>';
             $output .= '</div>';
 
-            
-            if (!empty($bulkStatus)) {
-                $totalImages = !empty($bulkStatus['compressedImageCount']) ? $bulkStatus['compressedImageCount'] : 0;
-                $totalThumbs = !empty($bulkStatus['compressedThumbs']) ? $bulkStatus['compressedThumbs'] : 0;
-                $originalSize = !empty($bulkStatus['total']['original']['size']) ? $bulkStatus['total']['original']['size'] : 0;
-                $compressedSize = !empty($bulkStatus['total']['compressed']['size']) ? $bulkStatus['total']['compressed']['size'] : 0;
+            // The completion numbers: images from the run's ledger, bytes from each verified
+            // image's variant set (no running tally to drift from either).
+            $run = wps_ic_image_library::progress();
+            if ($run !== null) {
+                $totalImages = (int) $run['verified'];
+                $totalThumbs = 0;
+                $originalSize = 0;
+                $compressedSize = 0;
+                foreach ($run['verified_ids'] as $verified_id) {
+                    foreach (wps_ic_image_variants::get($verified_id) as $v) {
+                        if (!is_array($v)) continue;
+                        $totalThumbs++;
+                        $originalSize += (int) ($v['originalSize'] ?? 0);
+                        $compressedSize += (int) ($v['size'] ?? 0);
+                    }
+                }
                 $savings = $originalSize - $compressedSize;
                 $avgReduction = ($originalSize > 0 && $totalThumbs > 0) ? round((1 - ($compressedSize / $originalSize)) * 100, 1) : 0;
 
@@ -5779,7 +5900,7 @@ class wps_ic_ajax extends wps_ic
             $output .= '<h2>Image Restore Complete</h2>';
             $output .= '</div>';
 
-            
+            // Show stats for restore completion
             if (!empty($bulkStatus)) {
                 $restoredCount = !empty($bulkStatus['restoredImageCount']) ? $bulkStatus['restoredImageCount'] : 0;
                 $output .= '<div class="bulk-restore-status-progress" style="display:flex;justify-content:center;margin-top:10px;">';
@@ -5847,20 +5968,12 @@ class wps_ic_ajax extends wps_ic
         }
 
 
-        
+        // Be defensive: if absent, treat as inactive (don't bust the cache).
         $last_ts = (int) wp_remote_retrieve_header($resp, 'x-wpc-last-callback-at');
         $seen    = (int) get_option('wpc_v2_last_customer_activity_at', 0);
         $busted  = false;
 
         if ($last_ts > 0 && $last_ts > $seen) {
-            delete_transient('wpc_bulk_library_counts');
-            
-            
-            $wpc_snap_ba = get_option('wpc_bulk_library_counts_d');
-            if (is_array($wpc_snap_ba)) {
-                $wpc_snap_ba['t'] = 0;
-                update_option('wpc_bulk_library_counts_d', $wpc_snap_ba, false);
-            }
             update_option('wpc_v2_last_customer_activity_at', $last_ts, false);
             $busted = true;
         }
@@ -5893,30 +6006,30 @@ class wps_ic_ajax extends wps_ic
         $wait_ms = isset($_POST['wait_ms']) ? (int) $_POST['wait_ms'] : 0;
         $limit   = isset($_POST['limit'])   ? (int) $_POST['limit']   : 100;
 
-        
+        // Never pin an FPM worker under load; bound pathological waits from any client.
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()) { $wait_ms = 0; }
         $wait_ms = max(0, min($wait_ms, 30000));
 
-        $wpc_lp_t0751 = microtime(true);
+        $poll_started_at = microtime(true);
         $result = wpc_v2_pull_manifest_tick($limit, $wait_ms);
-        
-        
+        // The parked long-poll seconds are intentional idle, not render cost — waive the measured
+        // hold (never more than was requested) so the slow-render journal judges the remainder.
         if ($wait_ms > 0) {
-            $wpc_lp_held751 = (int) round((microtime(true) - $wpc_lp_t0751) * 1000);
+            $held_ms = (int) round((microtime(true) - $poll_started_at) * 1000);
             $GLOBALS['wpc_sr_waived_ms'] = (isset($GLOBALS['wpc_sr_waived_ms']) ? (int) $GLOBALS['wpc_sr_waived_ms'] : 0)
-                + min($wpc_lp_held751, $wait_ms);
+                + min($held_ms, $wait_ms);
         }
         $result['enabled'] = true;
         wp_send_json_success($result);
     }
 
-    
-
-
-
+    /**
+     * @return void
+     * @since v6
+     */
     public function wps_ic_isBulkRunning()
     {
-        self::wpc_bulk_gate67();
+        self::wpc_require_bulk_capability();
         $bulkRunning = get_option('wps_ic_bulk_process');
         if (!$bulkRunning || empty($bulkRunning['status'])) {
             wp_send_json_error('not-running');
@@ -5927,7 +6040,7 @@ class wps_ic_ajax extends wps_ic
 
 
         if ($driver === 'sequential') {
-            $queue_data = self::wpc_bulk_queue_read199();
+            $queue_data = self::wpc_bulk_queue_read();
             $remaining = (is_array($queue_data) && !empty($queue_data['queue']))
                 ? array_values(array_map('intval', $queue_data['queue']))
                 : [];
@@ -5947,16 +6060,16 @@ class wps_ic_ajax extends wps_ic
         ]);
     }
 
-    
-
-
-
+    /**
+     * @return void
+     * @since v6
+     */
     public function wpc_ic_start_bulk_restore()
     {
         if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
-        
+        // Performance Lab - generate webp on upload
         if (function_exists('webp_uploads_create_sources_property')) {
             wp_send_json_error(['msg' => 'performance-lab-compatibility']);
         }
@@ -5973,7 +6086,7 @@ class wps_ic_ajax extends wps_ic
         $rs_t0 = microtime(true);
         error_log('[WPC RestoreStart] handler ENTERED at ' . gmdate('H:i:s'));
 
-        
+        // Delete previously parsed images
         delete_transient('wps_ic_bulk_done');
         delete_option('wps_ic_parsed_images');
 
@@ -5985,8 +6098,8 @@ class wps_ic_ajax extends wps_ic
             is_array($imagesToRestore['compressed'] ?? null) ? count($imagesToRestore['compressed']) : 0
         ));
 
-        
-        
+        // Queue + drain-chain rewrite. The legacy path looped ALL compressed
+        // images calling restoreV4() synchronously in one request, which hit
 
 
         if (!empty($imagesToRestore['compressed'])) {
@@ -6010,59 +6123,30 @@ class wps_ic_ajax extends wps_ic
             ]);
             set_transient('wps_ic_bulk_running', date('y-m-d H:i:s'), 2 * HOUR_IN_SECONDS);
             if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
-            
+            // Clear leftover stop-signal from a previous run.
             delete_transient('wpc_bulk_stop_signal');
 
 
             update_option('wpc_bulk_restore_started_ms', (int) round(microtime(true) * 1000), false);
 
-            
+            // Fire the drain chain. Non-blocking — returns immediately.
             self::wpc_bulk_v2_restore_fire_loopback();
-            $this->wpc_restore_slice_detach36();
+            $this->wpc_arm_restore_slice_on_shutdown();
 
             error_log(sprintf('[WPC RestoreStart] returning bulk-restored — total handler wall %dms (queued %d images)',
                 (int) round((microtime(true) - $rs_t0) * 1000), $total));
             wp_send_json_success('bulk-restored');
         }
 
-        $send = $local->sendToAPI('restore');
-
-        if ($send['status'] == 'success') {
-            update_option('wps_ic_bulk_process', ['date' => date('y-m-d H:i:s'), 'status' => 'restoring']);
-            set_transient('wps_ic_bulk_running', date('y-m-d H:i:s'), 60 * 5);
-            if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
-
-            
-            $local = new wps_ic_local();
-
-            
-            $send = $local->sendBulkRestoreToApi();
-
-            if ($send['status'] == 'failed') {
-
-                $reason = $send['reason'];
-
-                if ($reason == 'bad-apikey') {
-                    $reason = 'bulk-process-bad-apikey';
-                }
-
-                wp_send_json_error(['msg' => $reason, 'send' => print_r($send, true)]);
-
-            } elseif ($send['status'] == 'success') {
-
-                update_option('wps_ic_bulk_process', ['date' => date('y-m-d H:i:s'), 'status' => 'restoring']);
-                set_transient('wps_ic_bulk_running', date('y-m-d H:i:s'), 60 * 5);
-                if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
-                wp_send_json_success($send);
-            } else {
-                wp_send_json_error($send);
-            }
-
-
-            wp_send_json_success($send);
-        } else {
-            wp_send_json_error($send);
+        // Nothing compressed, nothing to restore. This branch used to ask the v1 service
+        // (/stop, then /bulk-restore-start and /bulk-restore-process): those routes answer
+        // 404 since the v2 orchestrator replaced it, so the card showed the 404 body as the
+        // reason. The answer is now the fact itself, shown by the "Restore could not start" popup.
+        delete_transient('wpc_restore_start_inflight');
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('bulk-restore-refused', '', '', ['reason' => 'nothing-compressed']);
         }
+        wp_send_json_error(['msg' => 'No optimized images to restore.', 'reason' => 'nothing-compressed']);
     }
 
     public function olderBackup($imageID)
@@ -6073,7 +6157,7 @@ class wps_ic_ajax extends wps_ic
         if (!empty($backup_images) && is_array($backup_images)) {
             $compressed_images = get_post_meta($imageID, 'ic_compressed_images', true);
 
-            
+            // Remove Generated Images
             if (!empty($compressed_images)) {
 
                 foreach ($compressed_images as $index => $path) {
@@ -6101,17 +6185,17 @@ class wps_ic_ajax extends wps_ic
 
             $path_to_image = get_attached_file($imageID);
 
-            
+            // Restore only full
             $restore_image_path = $backup_images['full'];
 
-            
+            // If backup file exists
             if (file_exists($restore_image_path)) {
                 unlink($path_to_image);
 
-                
+                // Restore from local backups
                 $copy = copy($restore_image_path, $path_to_image);
 
-                
+                // Delete the backup
                 unlink($restore_image_path);
             }
 
@@ -6122,7 +6206,7 @@ class wps_ic_ajax extends wps_ic
             delete_transient('wps_ic_compress_' . $imageID);
             delete_post_meta($imageID, 'ic_bulk_running');
 
-            
+            // Remove meta tags
             delete_post_meta($imageID, 'ic_stats');
             delete_post_meta($imageID, 'ic_compressed_images');
             delete_post_meta($imageID, 'ic_compressed_thumbs');
@@ -6136,10 +6220,10 @@ class wps_ic_ajax extends wps_ic
         return false;
     }
 
-    
-
-
-
+    /**
+     * @return void
+     * @since v6
+     */
     public function wpc_ic_start_bulk_compress()
     {
         if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
@@ -6158,57 +6242,34 @@ class wps_ic_ajax extends wps_ic
         }
         set_transient('wpc_bulk_start_inflight', time(), 10);
 
-        
+        // Clean up previous bulk state
         delete_transient('wps_ic_bulk_done');
         delete_option('wps_ic_parsed_images');
         delete_option('wps_ic_bulk_counter');
 
-        
-        $compress = new wps_local_compress();
-        $image_ids = $compress->getAllImageIDs();
+        // The queue is the population the splash counted (wps_ic_image_library): the same ids,
+        // so the run's total is the number the admin was shown. A parked image stays in it; the
+        // dispatch door refuses it and the ledger records the refusal.
+        $image_ids = wps_ic_image_library::population();
         $total = count($image_ids);
 
         if ($total === 0) {
+            delete_transient('wpc_bulk_start_inflight');
             wp_send_json_error(['msg' => 'no-images-found']);
         }
 
-        if (function_exists('wpc_v2_attempts_admit197')) {
-            $wpc_adm314 = false;
-            foreach ($image_ids as $wpc_id314) {
-                if (wpc_v2_attempts_admit197((int) $wpc_id314) === true) {
-                    $wpc_adm314 = true;
-                    break;
-                }
-            }
-            if (!$wpc_adm314) {
-                delete_transient('wpc_bulk_start_inflight');
-                error_log('[WPC Bulk] start refused - none of ' . $total . ' remaining image(s) admissible (parked/backoff)');
-                wp_send_json_error(['msg' => 'all-parked', 'count' => $total]);
-            }
-        }
 
-        self::wpc_bulk_queue_write199([
+        self::wpc_bulk_queue_write([
             'queue' => array_values($image_ids),
             'total_images' => $total,
         ]);
-        delete_option('wpc_bulk_inflight199');
-        delete_option('wpc_bulk_counted201');
-        self::wpc_bulk_ledger_init202(array_values($image_ids));
-
-        
-        update_option('wps_ic_BulkStatus', [
-            'foundImageCount' => $total,
-            'compressedImageCount' => 0,
-            'compressedThumbs' => 0,
-            'total' => ['original' => ['size' => 0], 'compressed' => ['size' => 0]],
-        ]);
-
-
-        $is_v2 = function_exists('wpc_use_v2_protocol') && wpc_use_v2_protocol() && class_exists('WPS_LocalV2');
+        delete_option(WPC_BULK_INFLIGHT_OPTION);
+        delete_option('wps_ic_BulkStatus');
+        self::wpc_bulk_ledger_init(array_values($image_ids));
 
 
         $sequential = (bool) get_option('wpc_bulk_sequential', 0);
-        $driver = $sequential ? 'sequential' : ($is_v2 ? 'v2' : 'v1');
+        $driver = $sequential ? 'sequential' : 'v2';
 
         update_option('wps_ic_bulk_process', [
             'date'   => date('y-m-d H:i:s'),
@@ -6221,16 +6282,13 @@ class wps_ic_ajax extends wps_ic
         if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
 
         if ($driver === 'sequential') {
-            
-            
+            // Pre-populate session_ids with the full queue so the heartbeat
+            // tally + completion list pick up everything that lands.
             set_transient('wpc_bulk_session_ids', array_values(array_map('intval', $image_ids)), 2 * HOUR_IN_SECONDS);
             delete_transient('wpc_bulk_stop_signal');
             delete_transient('wpc_bulk_completed_cache');
-            wps_ic_local::wpc_counts_invalidate37();
-
-
             delete_transient('wpc_bulk_completion_cleanup_done');
-            
+            // No loopback fire — JS owns the iteration.
 
             wp_send_json([
                 'success' => true,
@@ -6243,13 +6301,12 @@ class wps_ic_ajax extends wps_ic
             ]);
         }
 
-        if ($is_v2) {
+        if ($driver === 'v2') {
             set_transient('wpc_bulk_session_ids', [], 2 * HOUR_IN_SECONDS);
             delete_transient('wpc_bulk_stop_signal');
             delete_transient('wpc_bulk_completed_cache');
-            wps_ic_local::wpc_counts_invalidate37();
-            
-            
+            // Clear the one-shot completion-cleanup guard so a
+            // fresh bulk can fire its per-image cleanup at terminal state.
             delete_transient('wpc_bulk_completion_cleanup_done');
             self::wpc_bulk_v2_fire_loopback();
         }
@@ -6274,7 +6331,7 @@ class wps_ic_ajax extends wps_ic
 
         $bulkRunning = get_option('wps_ic_bulk_process');
         if (!empty($bulkRunning['driver']) && $bulkRunning['driver'] === 'v2') {
-            $queue = self::wpc_bulk_queue_read199();
+            $queue = self::wpc_bulk_queue_read();
             $session_ids = get_transient('wpc_bulk_session_ids') ?: [];
             $any_active = false;
             foreach ($session_ids as $sid) {
@@ -6300,41 +6357,57 @@ class wps_ic_ajax extends wps_ic
         ini_set('memory_limit', '2024M');
         ini_set('max_execution_time', '180');
 
-        $queue_data = self::wpc_bulk_queue_read199();
+        $queue_data = self::wpc_bulk_queue_read();
         if (empty($queue_data['queue'])) {
-            
-            self::wpc_bulk_ledger_close202();
+            // Queue empty — bulk is done
+            self::wpc_bulk_ledger_close();
             delete_option('wps_ic_bulk_process');
             delete_transient('wps_ic_bulk_running');
             set_transient('wps_ic_bulk_done', true, 60);
             wp_send_json_success(['finished' => true]);
         }
 
-        
+        // While the service holds the site (wps_ic_image_optimize::hold_on_refusal()) the queue
+        // waits as it is: nothing is dequeued or backed up.
+        if (wps_ic_image_optimize::service_hold() !== null) {
+            wp_send_json_success(['held' => wps_ic_image_optimize::service_hold()]);
+        }
+
+        // Take next image from queue
         $imageID = intval($queue_data['queue'][0]);
         unset($queue_data['queue'][0]);
         $queue_data['queue'] = array_values($queue_data['queue']);
-        self::wpc_bulk_queue_write199($queue_data);
+        self::wpc_bulk_queue_write($queue_data);
 
 
         $compress = new wps_local_compress();
-        $backupOk = $compress->backup_all_sizes($imageID);
-        if (!$backupOk) {
-            $wpc_br78 = self::wpc_bulk_backup_fail_reason78($imageID);
-            set_transient('wpc_v2_compress_failed_' . $imageID, $wpc_br78, 900);
-            error_log('[WPC Bulk] SKIPPED image=' . $imageID . ' — backup failed: ' . $wpc_br78);
+        $backup = $compress->backup_result($imageID);
+        if ($backup !== 'ok') {
+            $backup_fail_reason = self::wpc_bulk_backup_fail_reason($imageID);
+            set_transient('wpc_v2_compress_failed_' . $imageID, $backup_fail_reason, 900);
+            error_log('[WPC Bulk] SKIPPED image=' . $imageID . ' — backup failed: ' . $backup_fail_reason);
+            self::wpc_bulk_ledger_mark($imageID, 'skipped', $backup === 'source-missing' ? 'source-missing' : 'backup-failed');
         } else {
 
 
             $used_v2 = false;
             if (function_exists('wpc_use_v2_protocol') && wpc_use_v2_protocol() && class_exists('WPS_LocalV2')) {
-                $v2_result = self::run_v2_optimize($imageID);
+                $v2_result = wps_ic_image_optimize::dispatch($imageID, 'bulk');
+                if (empty($v2_result['ok']) && wps_ic_image_optimize::service_hold() !== null
+                    && (($v2_result['reason'] ?? '') === 'service-hold' || in_array($v2_result['error'] ?? '', ['pool_full', 'invalid_apikey'], true))) {
+                    // The service refused the site, not the image: back to the head of the queue
+                    // until the hold ends (wps_ic_image_optimize::hold_on_refusal()).
+                    $queue_data = self::wpc_bulk_queue_read();
+                    $queue_data = is_array($queue_data) ? $queue_data : [];
+                    $queue_data['queue'] = array_values(array_unique(array_merge([$imageID], array_map('intval', (array) ($queue_data['queue'] ?? [])))));
+                    self::wpc_bulk_queue_write($queue_data);
+                    wp_send_json_success(['held' => wps_ic_image_optimize::service_hold()]);
+                }
                 if (!empty($v2_result['ok'])) {
+                    self::wpc_bulk_ledger_mark($imageID, 'inflight', ($v2_result['outcome'] ?? '') === wps_ic_image_optimize::DEDUPLICATED ? wps_ic_image_optimize::DEDUPLICATED : '');
                     $used_v2 = true;
-                } elseif (!empty($v2_result['error']) && $v2_result['error'] === 'already_in_flight') {
-
-
-                    error_log('[WPC Bulk] SKIPPED image=' . $imageID . ' — already_in_flight');
+                } elseif (!empty($v2_result['refused'])) {
+                    self::wpc_bulk_ledger_mark($imageID, self::wpc_bulk_ledger_state_for_refusal($v2_result['reason']), (string) $v2_result['reason']);
                     $used_v2 = true;
                 }
             }
@@ -6343,29 +6416,16 @@ class wps_ic_ajax extends wps_ic
             }
         }
 
-        
+        // Check if compression actually succeeded
         $status = get_post_meta($imageID, 'ic_status', true);
         $total = $queue_data['total_images'];
         $leftover = count($queue_data['queue']);
 
-        $bulkStatus = get_option('wps_ic_BulkStatus');
-
         if ($status === 'compressed') {
-            
-            $bulkStatus['compressedImageCount'] = ($bulkStatus['compressedImageCount'] ?? 0) + 1;
-
-            $variants = get_post_meta($imageID, 'ic_local_variants', true);
-            $bulkStatus['compressedThumbs'] = ($bulkStatus['compressedThumbs'] ?? 0) + (is_array($variants) ? count($variants) : 0);
-
-            $baseline = intval(get_post_meta($imageID, 'ic_savings_baseline', true));
-            $bytes_saved = intval(get_post_meta($imageID, 'ic_savings_bytes', true));
-            $bulkStatus['total']['original']['size'] = ($bulkStatus['total']['original']['size'] ?? 0) + $baseline;
-            $bulkStatus['total']['compressed']['size'] = ($bulkStatus['total']['compressed']['size'] ?? 0) + ($baseline - $bytes_saved);
+            self::wpc_bulk_ledger_mark($imageID, 'verified');
         }
-
-        update_option('wps_ic_BulkStatus', $bulkStatus);
-
-        $done = $bulkStatus['compressedImageCount'];
+        $run = wps_ic_image_library::progress();
+        $done = $run ? (int) $run['verified'] : 0;
         $progress = $total > 0 ? round(($done / $total) * 100) : 100;
 
         wp_send_json_success([
@@ -6380,28 +6440,106 @@ class wps_ic_ajax extends wps_ic
         ]);
     }
 
-    
+    /**
+     * Fire a non-blocking loopback POST to wpc_bulk_v2_drain. Used by
+     * wpc_ic_start_bulk_compress to kick off the chain AND by wpc_bulk_v2_drain
+     * itself to self-chain after each ~25 s slice. Cookies are forwarded so
+     * the handler runs as the originating user (current_user_can passes).
+     */
 
 
+    /**
+     * The hosts a loopback to this site is opened against, in the order they are tried: the
+     * `wpc_loopback_connect_host` filter's list (default 127.0.0.1, localhost, the site's own
+     * host), de-duplicated with the order kept. One list for the bulk self-chain, the async
+     * dispatcher and the image doctor's probe.
+     */
+    public static function loopback_connect_chain($host, $is_https, $port)
+    {
+        $host = (string) $host;
+        $chain = apply_filters('wpc_loopback_connect_host', ['127.0.0.1', 'localhost', $host], $host, $is_https, $port);
+        if (is_string($chain) && $chain !== '') { $chain = [$chain]; }
+        if (!is_array($chain) || empty($chain)) { $chain = ['127.0.0.1', 'localhost', $host]; }
+        return array_values(array_unique(array_filter(array_map('strval', $chain))));
+    }
 
+    /**
+     * The loopback list in the order to try it on this site: the host that connected last time
+     * (transient `wpc_loopback_host`, 24 h) first, and every host refused in the last 24 h
+     * (transient `wpc_loopback_refused`, host => when) left out, so each is retried once a day.
+     * When every host was refused the whole list is tried. Observed (ticket 12006): Plesk's
+     * nginx listens only on the public IPs, so every dispatch first waited on a refused
+     * 127.0.0.1 and localhost before the domain answered; the one-hour hold on refused loopback
+     * literals this replaces covered only errno 111 and only the async dispatcher.
+     */
+    public static function loopback_order(array $chain)
+    {
+        $refused = self::loopback_refused_hosts();
+        $kept = array_values(array_filter($chain, static function ($h) use ($refused) { return !isset($refused[$h]); }));
+        if (empty($kept)) {
+            return $chain;
+        }
+        $remembered = (string) get_transient('wpc_loopback_host');
+        if ($remembered !== '' && in_array($remembered, $kept, true)) {
+            $kept = array_values(array_merge([$remembered], array_diff($kept, [$remembered])));
+        }
+        return $kept;
+    }
 
+    /** Hosts refused in the last 24 h, host => unix time. */
+    public static function loopback_refused_hosts()
+    {
+        $map = get_transient('wpc_loopback_refused');
+        $out = [];
+        foreach (is_array($map) ? $map : [] as $h => $t) {
+            if ((int) $t > time() - DAY_IN_SECONDS) {
+                $out[(string) $h] = (int) $t;
+            }
+        }
+        return $out;
+    }
 
-
+    /**
+     * Record one probe sequence: the hosts that refused, and the host that connected (''
+     * when none did). Logs `loopback-host {chosen, refused}` when the remembered host changes.
+     */
+    public static function loopback_remember($connected, array $refused)
+    {
+        $connected = (string) $connected;
+        $map = self::loopback_refused_hosts();
+        $before = $map;
+        foreach ($refused as $h) {
+            $map[(string) $h] = time();
+        }
+        if ($connected !== '') {
+            unset($map[$connected]);
+        }
+        if ($map !== $before) {
+            if (empty($map)) {
+                delete_transient('wpc_loopback_refused');
+            } else {
+                set_transient('wpc_loopback_refused', $map, DAY_IN_SECONDS);
+            }
+        }
+        if ($connected !== '' && (string) get_transient('wpc_loopback_host') !== $connected) {
+            set_transient('wpc_loopback_host', $connected, DAY_IN_SECONDS);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('loopback-host', '', '', ['chosen' => $connected, 'refused' => array_keys($map)]);
+            }
+        }
+    }
 
     public static function wpc_loopback_open_socket($host, $port, $is_https, $connect_budget = 0.2)
     {
         $host = (string) $host;
         if ($host === '') { return false; }
-        if (function_exists('wpc_render_guard39_active') && wpc_render_guard39_active()) { return false; }
+        if (function_exists('wpc_render_guard_active') && wpc_render_guard_active()) { return false; }
         $port           = (int) $port;
         $is_https       = (bool) $is_https;
         $connect_budget = max(0.05, (float) $connect_budget);
 
 
-        $connect_chain = apply_filters('wpc_loopback_connect_host', ['127.0.0.1', 'localhost', $host], $host, $is_https, $port);
-        if (is_string($connect_chain) && $connect_chain !== '') { $connect_chain = [$connect_chain]; }
-        if (!is_array($connect_chain) || empty($connect_chain)) { $connect_chain = ['127.0.0.1', 'localhost', $host]; }
-        $connect_chain = array_values(array_unique(array_filter(array_map('strval', $connect_chain))));
+        $connect_chain = self::loopback_order(self::loopback_connect_chain($host, $is_https, $port));
         if (empty($connect_chain)) { return false; }
 
 
@@ -6414,41 +6552,73 @@ class wps_ic_ajax extends wps_ic
         ]]) : stream_context_create();
 
         $miss = [];
+        $refused = [];
         foreach ($connect_chain as $chost) {
             if ($chost === '') { continue; }
             $errno  = 0;
             $errstr = '';
             $remote = ($is_https ? 'tls://' : 'tcp://') . $chost . ':' . $port;
-            $sock   = @stream_socket_client($remote, $errno, $errstr, $connect_budget, STREAM_CLIENT_CONNECT, $ssl_ctx);
+            $sock   = wpc_loopback_connect($remote, $errno, $errstr, $connect_budget, $ssl_ctx);
             if ($sock) {
-                return $sock; 
+                self::loopback_remember($chost, $refused);
+                return $sock; // FIRST successful rung wins; caller writes its HMAC body + closes.
             }
             $miss[] = $chost . '(' . $errno . ')';
+            $refused[] = $chost;
         }
-        
+        self::loopback_remember('', $refused);
+        // Single line on total failure (avoid per-fire log spam on split-container hosts where all rungs miss).
         error_log('[WPC LoopbackOpen] all_rungs_miss port=' . $port . ' tries=' . implode(',', $miss));
         return false;
     }
 
+    /**
+     * Fire the next compress slice through a loopback POST to wpc_bulk_v2_drain_loop, and wait
+     * (at most `wpc_loopback_confirm_timeout`, 2.5 s) for the worker to answer `queued`: a
+     * loopback counts only when the worker answered. Called by the Start handler, by each slice
+     * to chain the next one, and by the heartbeat when nothing is draining.
+     *
+     * A run never depends on this call alone: while a v2 compress run has work, a cron event
+     * (wpc_bulk_drain_cron_arm) carries it once a minute, so the run finishes without an open
+     * admin tab; the loopback only makes it faster. Every way the chain can stop logs
+     * `bulk-drain-stalled {reason}` (wpc_bulk_drain_stalled).
+     *
+     * Observed (ticket 12006, finde-online.de, Plesk nginx): the request was written and the
+     * socket closed at once; no slice ran and nothing recorded it: 0 dispatched for 5 minutes
+     * after Start, and a slice the page kicked did not chain the next. On wpctest.hprime.eu every
+     * cookieless admin-ajax POST answers a 200 "Checking your browser" page, which is why the
+     * answer must carry `queued`, not only a 2xx status.
+     */
     public static function wpc_bulk_v2_fire_loopback()
     {
-        
-        $q = self::wpc_bulk_queue_read199();
+        // WORK-GATE — only fire when the compress queue actually has work.
+        $q = self::wpc_bulk_queue_read();
         if (empty($q['queue'])
-            && !(get_option('wps_ic_bulk_process') && !empty(self::wpc_bulk_inflight199()))) { return false; }
-        
-        
+            && !(get_option('wps_ic_bulk_process') && !empty(self::wpc_bulk_inflight_ids()))) { return false; }
+        // The cron carrier is armed whatever happens to the loopback below.
+        self::wpc_bulk_drain_cron_arm();
+        // RISK #5 — skip if a worker is already draining; flag a redrain so a tick
+        // arriving mid-slice is never dropped (mirror v2-pull-manifest.php:773-784).
         if (($lock_ts = (int) get_transient('wpc_bulk_compress_draining')) > 0) {
             set_transient('wpc_bulk_compress_redrain_pending', time(), 60);
             return false;
         }
+        // A loopback that went unanswered in the last 10 minutes is not retried on every
+        // heartbeat (each try waits for the answer); the cron carries the run meanwhile.
+        if ((int) get_transient('wpc_bulk_loopback_unconfirmed') > 0) {
+            return false;
+        }
         set_transient('wpc_bulk_compress_draining', time(), 15);
         $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
-        if ($apikey === '') { delete_transient('wpc_bulk_compress_draining'); return false; }
+        if ($apikey === '') {
+            delete_transient('wpc_bulk_compress_draining');
+            self::wpc_bulk_drain_stalled('no-apikey');
+            return false;
+        }
         $ts  = time();
-        $sig = hash_hmac('sha256', 'wpc_bulk_compress_drain.' . $ts, $apikey); 
+        $sig = hash_hmac('sha256', 'wpc_bulk_compress_drain.' . $ts, $apikey); // DISTINCT namespace
         $url   = admin_url('admin-ajax.php');
-        $parts = wp_parse_url($url);                                           
+        $parts = wp_parse_url($url);                                           // RISK #2 — loopback/origin host, NOT edge
         if (empty($parts['host'])) { delete_transient('wpc_bulk_compress_draining'); return false; }
         $is_https = (!empty($parts['scheme']) && $parts['scheme'] === 'https');
         $port = $is_https ? 443 : 80;
@@ -6460,51 +6630,152 @@ class wps_ic_ajax extends wps_ic
 
 
         $fp = self::wpc_loopback_open_socket($host, $port, $is_https, 0.2);
-        if (!$fp) { delete_transient('wpc_bulk_compress_draining'); error_log('[WPC BulkCompressDrain] loopback_connect_failed host=' . $host . ' port=' . $port); return false; }
-        @stream_set_timeout($fp, 0, 100000); @fwrite($fp, $req); @fclose($fp);
+        if (!$fp) {
+            delete_transient('wpc_bulk_compress_draining');
+            error_log('[WPC BulkCompressDrain] loopback_connect_failed host=' . $host . ' port=' . $port);
+            self::wpc_bulk_drain_stalled('loopback-refused', ['host' => $host]);
+            return false;
+        }
+        @fwrite($fp, $req);
+        $answer = self::wpc_loopback_read_answer($fp, (float) apply_filters('wpc_loopback_confirm_timeout', 2.5, 'wpc_bulk_v2_drain_loop', 0));
+        @fclose($fp);
+        if (!self::wpc_loopback_answer_queued($answer)) {
+            delete_transient('wpc_bulk_compress_draining');
+            set_transient('wpc_bulk_loopback_unconfirmed', time(), 10 * MINUTE_IN_SECONDS);
+            $status = preg_match('#^HTTP/\S+\s+(\d{3})#', $answer, $m) ? (int) $m[1] : 0;
+            self::wpc_bulk_drain_stalled('loopback-unconfirmed', ['host' => $host, 'status' => $status]);
+            return false;
+        }
+        delete_transient('wpc_bulk_loopback_unconfirmed');
         delete_transient('wpc_bulk_compress_redrain_pending');
         return true;
+    }
+
+    /** Whether a loopback worker's answer is a 2xx whose body starts with `queued` (plain or chunked). */
+    public static function wpc_loopback_answer_queued($answer)
+    {
+        return (bool) preg_match('#^HTTP/\d(?:\.\d)?\s+2\d\d\b#', (string) $answer)
+            && (bool) preg_match('#\r\n\r\n(?:[0-9a-fA-F]+\r\n)?queued#', (string) $answer);
+    }
+
+    /** What a loopback worker answered within $budget seconds ('' when nothing came back). */
+    public static function wpc_loopback_read_answer($fp, $budget)
+    {
+        $budget = max(0.1, (float) $budget);
+        $deadline = microtime(true) + $budget;
+        @stream_set_timeout($fp, (int) floor($budget), (int) (($budget - floor($budget)) * 1000000));
+        $buf = '';
+        while (microtime(true) < $deadline && strlen($buf) < 1024) {
+            $chunk = @fread($fp, 512);
+            if ($chunk === false || $chunk === '') {
+                $meta = @stream_get_meta_data($fp);
+                if (@feof($fp) || !empty($meta['timed_out'])) { break; }
+                usleep(20000);
+                continue;
+            }
+            $buf .= $chunk;
+            if (self::wpc_loopback_answer_queued($buf)) { break; }
+        }
+        return $buf;
+    }
+
+    /**
+     * Keep one cron event (`wpc_bulk_drain_cron`) queued while a v2 compress run has work. It
+     * runs a slice when no loopback reaches this site (a host that refuses or gates cookieless
+     * requests), after a slice that could not chain, and after a worker died mid-slice.
+     */
+    public static function wpc_bulk_drain_cron_arm($delay = 60)
+    {
+        if (!function_exists('wp_next_scheduled') || !function_exists('wp_schedule_single_event')) { return; }
+        if (!wp_next_scheduled(self::BULK_DRAIN_CRON)) {
+            wp_schedule_single_event(time() + max(1, (int) $delay), self::BULK_DRAIN_CRON);
+        }
+    }
+
+    /** Whether the running compress run has images left: queued, or sent and not yet landed. */
+    public static function wpc_bulk_has_work()
+    {
+        $q = self::wpc_bulk_queue_read();
+        return !empty($q['queue']) || !empty(self::wpc_bulk_inflight_ids());
+    }
+
+    /** The cron carrier: one slice of the running v2 compress run (the worker lock keeps it single). */
+    public static function wpc_bulk_drain_cron_run()
+    {
+        $bp = get_option('wps_ic_bulk_process');
+        if (empty($bp) || ($bp['driver'] ?? '') !== 'v2' || ($bp['status'] ?? '') !== 'compressing') { return; }
+        @ignore_user_abort(true);
+        self::run_compress_drain_slice();
+    }
+
+    /**
+     * Receipt `bulk-drain-stalled {reason, queued, ...}` for a way the drain chain stopped:
+     * loopback-refused, loopback-unconfirmed, no-apikey, no-progress (the queue head did not move
+     * over three slices), no-heartbeat (nothing advanced the run for 5 minutes). One line per
+     * reason per 10 minutes.
+     */
+    public static function wpc_bulk_drain_stalled($reason, array $fields = [])
+    {
+        $reason = (string) $reason;
+        $seen = get_transient('wpc_bulk_drain_stalled_seen');
+        $seen = is_array($seen) ? $seen : [];
+        if (isset($seen[$reason]) && (int) $seen[$reason] > time() - 10 * MINUTE_IN_SECONDS) { return; }
+        $seen[$reason] = time();
+        set_transient('wpc_bulk_drain_stalled_seen', $seen, 10 * MINUTE_IN_SECONDS);
+        $q = self::wpc_bulk_queue_read();
+        $fields = ['reason' => $reason, 'queued' => is_array($q) ? count((array) ($q['queue'] ?? [])) : 0] + $fields;
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('bulk-drain-stalled', '', '', $fields);
+        }
+        error_log('[WPC Bulk] drain stalled reason=' . $reason);
     }
 
 
     public function wpc_bulk_v2_drain()
     {
-        
+        // PRIV (tab poll / watchdog) — guard UNCHANGED. Auth: requires admin cookies.
         if (!current_user_can('manage_wpc_settings')) {
             wp_die('', '', ['response' => 403]);
         }
-        $this->run_compress_drain_slice();
+        self::run_compress_drain_slice();
         wp_die('', '', ['response' => 200]);
     }
 
-    
-
-
-
-
+    /**
+     * L0+L1 COMPRESS NOPRIV LOOP HANDLER. Cookieless fsockopen self-chain
+     * target. Auth ENTIRELY on HMAC (distinct namespace), then close the client
+     * connection (FPM/LiteSpeed) and run the shared slice detached.
+     */
     public function wpc_bulk_v2_drain_loop()
     {
-        
+        // RISK #1 — auth ENTIRELY on HMAC, copied verbatim from v2-pull-manifest.php:870-881, namespace swapped.
         $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
         $ts     = isset($_POST['t']) ? (int) $_POST['t'] : 0;
         $sig    = isset($_POST['sig']) ? (string) $_POST['sig'] : '';
         if ($apikey === '' || $ts <= 0 || $sig === '' || abs(time() - $ts) > 60) { http_response_code(401); exit('auth'); }
-        $expected = hash_hmac('sha256', 'wpc_bulk_compress_drain.' . $ts, $apikey); 
+        $expected = hash_hmac('sha256', 'wpc_bulk_compress_drain.' . $ts, $apikey); // DISTINCT namespace
         if (!hash_equals($expected, $sig)) { http_response_code(401); exit('sig'); }
-        
-        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { http_response_code(200); echo 'queued'; wpc_finish_request39(); }
-        elseif (function_exists('litespeed_finish_request')) { http_response_code(200); echo 'queued'; @litespeed_finish_request(); }
+        // The worker must outlive the caller's socket: set before any output, since PHP stops a
+        // script at its first write to a client that has gone unless ignore_user_abort is on.
         @ignore_user_abort(true);
-        @set_time_limit(60); 
-        $this->run_compress_drain_slice();
+        // Answer `queued` (the caller waits for it, wpc_bulk_v2_fire_loopback) and release the
+        // client; without FPM/LiteSpeed the answer is flushed and the slice runs on the same request.
+        http_response_code(200);
+        echo 'queued';
+        if (!(function_exists('wpc_finish_request') && wpc_finish_request())) {
+            while (ob_get_level() > 0 && @ob_end_flush()) {}
+            @flush();
+        }
+        @set_time_limit(60); // RISK #6 advisory — the 8s wall in the slice is the REAL bound
+        self::run_compress_drain_slice();
         exit;
     }
 
-    private function run_compress_drain_slice()
+    private static function run_compress_drain_slice()
     {
         delete_transient('wpc_bulk_compress_draining');
         if (!get_option('wps_ic_bulk_process')) {
-            
+            // No active bulk — nothing to do (e.g. user hit Stop between fires).
             return;
         }
 
@@ -6513,15 +6784,18 @@ class wps_ic_ajax extends wps_ic
         @ignore_user_abort(true);
 
         global $wpdb;
-        
-        
+        // Acquire chain lock with timeout=0 (immediate). If held, another
+        // chain is already draining — silent bail.
         $got = wpc_worker_lock('wpc_bulk_v2_chain', 0) ? 1 : 0;
         if (!$got) {
+            // Another worker holds the chain; the cron asks again in a minute in case that worker
+            // is the last one (a run whose final slices find the lock held otherwise stops there).
+            self::wpc_bulk_drain_cron_arm();
             return;
         }
 
-        $wpc_depth199 = max(1, (int) apply_filters('wpc_bulk_depth', defined('WPC_BULK_DEPTH') ? WPC_BULK_DEPTH : 4));
-        $batch_K       = defined('WPC_BULK_K') ? max(1, (int) WPC_BULK_K) : $wpc_depth199;
+        $pipeline_depth = max(1, (int) apply_filters('wpc_bulk_depth', defined('WPC_BULK_DEPTH') ? WPC_BULK_DEPTH : 4));
+        $batch_K       = defined('WPC_BULK_K') ? max(1, (int) WPC_BULK_K) : $pipeline_depth;
 
 
         $wall_budget_s = 45.0;
@@ -6536,6 +6810,7 @@ class wps_ic_ajax extends wps_ic
         }
         $started       = microtime(true);
         $iter_count    = 0;
+        $service_hold  = null;
 
         try {
             while ((microtime(true) - $started) < $wall_budget_s) {
@@ -6545,135 +6820,138 @@ class wps_ic_ajax extends wps_ic
                     error_log('[WPC Bulk] drain paused mid-iteration');
                     break;
                 }
-                
+                // Liveness heartbeat — server chain is alive and advancing.
                 if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
-                
-                
+                // RISK #3 — memory guard. Exit the loop (→ finally RELEASE_LOCK →
+                // self-chain re-fires a fresh worker; queue still non-empty so work advances).
                 $mem_limit = wp_convert_hr_to_bytes((string) @ini_get('memory_limit'));
                 if ($mem_limit > 0 && memory_get_usage(true) > (int) ($mem_limit * 0.8)) {
                     error_log('[WPC Bulk] drain slice mem-cap break usage=' . memory_get_usage(true) . ' limit=' . $mem_limit);
                     break;
                 }
-                if (function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197()) {
+                if (function_exists('wpc_v2_is_store_broken_active') && wpc_v2_is_store_broken_active()) {
                     set_transient('wpc_bulk_stop_signal', 1, 600);
                     error_log('[WPC Bulk] HALT — broken-store flag armed (DB writes not persisting); bulk stopped, admin notice live');
                     break;
                 }
-                $queue_data = self::wpc_bulk_queue_read199();
+                // The service refused the site (429 pool_full, 401 invalid_apikey): the run waits
+                // out the hold with its queue intact and the cron picks it up when the hold ends
+                // (wps_ic_image_optimize::hold_on_refusal()). Observed: the drain dequeued and sent
+                // the next batch straight into the same 429, and every image was marked skipped.
+                $service_hold = wps_ic_image_optimize::service_hold();
+                if ($service_hold !== null) {
+                    break;
+                }
+                $queue_data = self::wpc_bulk_queue_read();
                 if (empty($queue_data['queue'])) {
 
-                    if (!$sequential && !empty(self::wpc_bulk_inflight199())) {
-                        if (!self::wpc_bulk_pipeline_drain199()) {
+                    if (!$sequential && !empty(self::wpc_bulk_inflight_ids())) {
+                        if (!self::wpc_drain_bulk_pipeline()) {
                             break;
                         }
                         continue;
                     }
-                    self::wpc_bulk_status_count201();
-                    self::wpc_bulk_ledger_close202();
+                    self::wpc_bulk_status_count();
+                    self::wpc_bulk_ledger_close();
                     delete_option('wps_ic_bulk_process');
                     delete_transient('wps_ic_bulk_running');
-                    wps_ic_local::wpc_counts_invalidate37(true);
-                    delete_option('wpc_bulk_inflight199');
-                    delete_option('wpc_bulk_counted201');
+                    delete_option(WPC_BULK_INFLIGHT_OPTION);
                     set_transient('wps_ic_bulk_done', true, 60);
                     break;
                 }
 
-                $wpc_slots199 = $batch_K;
+                $free_slots = $batch_K;
                 if (!$sequential) {
-                    $wpc_slots199 = $wpc_depth199 - count(self::wpc_bulk_inflight199());
-                    if ($wpc_slots199 <= 0) {
-                        if (!self::wpc_bulk_pipeline_drain199()) {
+                    $free_slots = $pipeline_depth - count(self::wpc_bulk_inflight_ids());
+                    if ($free_slots <= 0) {
+                        if (!self::wpc_drain_bulk_pipeline()) {
                             break;
                         }
                         continue;
                     }
                 }
-                
-                $batch = array_map('intval', array_slice($queue_data['queue'], 0, min($batch_K, $wpc_slots199)));
+                // Atomic dequeue of K imageIDs
+                $batch = array_map('intval', array_slice($queue_data['queue'], 0, min($batch_K, $free_slots)));
                 $queue_data['queue'] = array_values(array_slice($queue_data['queue'], count($batch)));
-                self::wpc_bulk_queue_write199($queue_data);
+                self::wpc_bulk_queue_write($queue_data);
 
-                
+                // Append to session-ids for the rolling-tally + completion-list UI
                 $session_ids = get_transient('wpc_bulk_session_ids') ?: [];
                 foreach ($batch as $id) {
                     $session_ids[] = $id;
                 }
                 set_transient('wpc_bulk_session_ids', $session_ids, 2 * HOUR_IN_SECONDS);
 
-                
+                // Per-image backup (disk I/O — fast, sequential is fine). The dispatch door
+                // answers whether each image may go; it is asked before the backup so a refused
+                // image costs no disk work, and again by dispatch_batch() under the lock.
                 $preps = [];
+                $held_back = [];
                 $compress = new wps_local_compress();
+                $ledger = self::wpc_bulk_ledger_get();
                 foreach ($batch as $id) {
 
 
                     if (get_post_meta($id, 'wps_ic_exclude_live', true) === 'true') {
                         error_log('[WPC Bulk] SKIPPED image=' . $id . ' — excluded mid-bulk');
-                        self::wpc_bulk_ledger_mark202($id, 'skipped');
+                        self::wpc_bulk_ledger_mark($id, 'skipped', 'excluded');
                         continue;
                     }
-                    $wpc_adm199 = function_exists('wpc_v2_attempts_admit197') ? wpc_v2_attempts_admit197($id) : true;
-                    if ($wpc_adm199 !== true) {
-                        error_log('[WPC Bulk] SKIPPED image=' . $id . ' — ' . $wpc_adm199 . ' (queue flows around it)');
-                        if ($wpc_adm199 === 'parked_attempt_cap') {
-                            self::wpc_bulk_ledger_mark202($id, 'parked');
-                        } else {
-                            self::wpc_bulk_ledger_mark202($id, 'skipped');
-                        }
+                    $refused_by = wps_ic_image_optimize::admit($id, 'bulk');
+                    if ($refused_by === 'service-hold') {
+                        $held_back[] = $id;
                         continue;
                     }
-                    wp_cache_delete($id, 'post_meta');
-                    $wpc_pend309 = get_transient('wpc_v2_pending_' . $id);
-                    $wpc_icc309  = get_post_meta($id, 'ic_compressing', true);
-                    $wpc_iccs309 = is_array($wpc_icc309) && !empty($wpc_icc309['status']) ? (string) $wpc_icc309['status'] : '';
-                    $wpc_icct309 = is_array($wpc_icc309) ? (int) ($wpc_icc309['time'] ?? 0) : 0;
-                    if (!empty($wpc_pend309['pending'])
-                        || (($wpc_iccs309 === 'optimizing' || $wpc_iccs309 === 'queueing')
-                            && $wpc_icct309 > 0 && (time() - $wpc_icct309) < (int) apply_filters('wpc_bulk_inflight_grace', 900))) {
-                        error_log('[WPC Bulk] SKIPPED image=' . $id . ' — already in flight server-side (no attempt burned; results land via pull)');
-                        self::wpc_bulk_ledger_mark202($id, 'skipped');
+                    if ($refused_by !== null) {
+                        self::wpc_bulk_ledger_mark($id, self::wpc_bulk_ledger_state_for_refusal($refused_by), $refused_by);
                         continue;
                     }
-                    $backupOk = $compress->backup_all_sizes($id);
-                    if (!$backupOk) {
+                    $backup = $compress->backup_result($id);
+                    if ($backup === 'source-missing') {
+                        // The file went between the door's question and the backup: not an
+                        // attempt (a retry cannot bring it back), recorded as what it is.
+                        self::wpc_bulk_ledger_mark($id, 'skipped', 'source-missing');
+                        continue;
+                    }
+                    if ($backup !== 'ok') {
                         error_log('[WPC Bulk] SKIPPED image=' . $id . ' — backup failed');
-                        if (function_exists('wpc_v2_attempts_bump197')) { wpc_v2_attempts_bump197($id, 'backup_failed'); }
-                        self::wpc_bulk_ledger_mark202($id, 'skipped');
+                        if (function_exists('wpc_v2_bump_attempts')) { wpc_v2_bump_attempts($id, 'backup_failed'); }
+                        self::wpc_bulk_ledger_mark($id, 'skipped', 'backup-failed');
                         continue;
                     }
-                    $wpc_att199 = function_exists('wpc_v2_attempts_bump197') ? wpc_v2_attempts_bump197($id, 'new') : 1;
-                    $wpc_led202 = self::wpc_bulk_ledger_get202();
-                    $prep = self::prepare_v2_optimize($id, [
-                        'triggerContext'  => 'bulk-compress',
-                        'resubmit_reason' => $wpc_att199 > 1 ? 'retry_' . $wpc_att199 : 'new',
-                        'attempt'         => $wpc_att199,
-                        'run_id'          => $wpc_led202 !== false ? (string) $wpc_led202['run_id'] : '',
-                    ]);
-                    if (!empty($prep['ok'])) {
-                        $preps[$id] = $prep;
-                    } else {
-                        error_log('[WPC Bulk] PREP_FAILED image=' . $id . ' — ' . ($prep['error'] ?? 'unknown'));
-                        self::wpc_bulk_ledger_mark202($id, 'skipped');
-                    }
+                    $preps[$id] = [
+                        'triggerContext' => 'bulk-compress',
+                        'run_id'         => $ledger !== false ? (string) $ledger['run_id'] : '',
+                    ];
                 }
 
                 if (!empty($preps)) {
                     if (function_exists('wpc_cache_first_log')) {
                         wpc_cache_first_log('bulk-batch', '', '', ['n' => count($preps), 'ids' => implode(',', array_slice(array_keys($preps), 0, 12))]);
                     }
-                    $wpc_sent309 = self::wpc_bulk_v2_dispatch_batch($preps);
-                    if (!is_array($wpc_sent309)) { $wpc_sent309 = array_map('intval', array_keys($preps)); }
-                    $wpc_im199 = get_option('wpc_bulk_inflight199');
-                    if (!is_array($wpc_im199)) { $wpc_im199 = []; }
-                    foreach (array_keys($preps) as $wpc_ii199) {
-                        if (!in_array((int) $wpc_ii199, $wpc_sent309, true)) {
-                            self::wpc_bulk_ledger_mark202((int) $wpc_ii199, 'skipped');
+                    $dispatched = wps_ic_image_optimize::dispatch_batch($preps, 'bulk');
+                    $inflight_ids = get_option(WPC_BULK_INFLIGHT_OPTION);
+                    if (!is_array($inflight_ids)) { $inflight_ids = []; }
+                    foreach ($dispatched['refused'] as $refused_id => $refused_by) {
+                        if ($refused_by === 'service-hold') {
+                            $held_back[] = (int) $refused_id;
                             continue;
                         }
-                        $wpc_im199[(int) $wpc_ii199] = time();
-                        self::wpc_bulk_ledger_mark202((int) $wpc_ii199, 'inflight');
+                        self::wpc_bulk_ledger_mark((int) $refused_id, self::wpc_bulk_ledger_state_for_refusal($refused_by), $refused_by);
                     }
-                    update_option('wpc_bulk_inflight199', $wpc_im199, false);
+                    foreach ($dispatched['failed'] as $failed_id => $error) {
+                        error_log('[WPC Bulk] FAILED image=' . $failed_id . ' — ' . $error);
+                        if ($error === 'pool_full' || $error === 'invalid_apikey') {
+                            $held_back[] = (int) $failed_id;   // the site was refused, not the image
+                            continue;
+                        }
+                        self::wpc_bulk_ledger_mark((int) $failed_id, 'skipped', (string) $error);
+                    }
+                    foreach ($dispatched['sent'] as $sent_id) {
+                        $inflight_ids[(int) $sent_id] = time();
+                        self::wpc_bulk_ledger_mark((int) $sent_id, 'inflight', in_array((int) $sent_id, $dispatched['deduplicated'], true) ? wps_ic_image_optimize::DEDUPLICATED : '');
+                    }
+                    update_option(WPC_BULK_INFLIGHT_OPTION, $inflight_ids, false);
 
 
                     if (function_exists('wpc_v2_pull_enabled') && wpc_v2_pull_enabled()) {
@@ -6688,21 +6966,29 @@ class wps_ic_ajax extends wps_ic
                     }
 
 
-                    self::wpc_bulk_status_count201();
+                    self::wpc_bulk_status_count();
+                }
+                if (!empty($held_back)) {
+                    // Back to the head of the queue, in their order, to be sent after the hold.
+                    $queue_data = self::wpc_bulk_queue_read();
+                    $rest = is_array($queue_data) && isset($queue_data['queue']) ? array_map('intval', (array) $queue_data['queue']) : [];
+                    $queue_data = is_array($queue_data) ? $queue_data : [];
+                    $queue_data['queue'] = array_values(array_unique(array_merge($held_back, $rest)));
+                    self::wpc_bulk_queue_write($queue_data);
                 }
                 $iter_count++;
 
 
                 if (!$sequential && !empty($preps)) {
-                    self::wpc_bulk_pipeline_drain199();
+                    self::wpc_drain_bulk_pipeline();
                 }
-                
+                // p99 Phase B is ~17s for parents-only; family AVIFs add 5–10s).
                 if ($sequential && !empty($preps)) {
                     $wait_img_id    = (int) array_keys($preps)[0];
                     $wait_start     = microtime(true);
                     $wait_max_s     = 25.0;
                     while (true) {
-                        
+                        // Wall budget guard — let the chain re-fire for this same image.
                         if ((microtime(true) - $started) >= $wall_budget_s) break;
                         if ((microtime(true) - $wait_start) >= $wait_max_s) break;
                         if (get_transient('wpc_bulk_stop_signal')) break;
@@ -6716,7 +7002,7 @@ class wps_ic_ajax extends wps_ic
                         $ic_c_status = is_array($ic_c) ? ($ic_c['status'] ?? '') : '';
                         if ($ic_c_status === 'compressed') break;
 
-                        usleep(250000); 
+                        usleep(250000); // 250 ms
                     }
                 }
             }
@@ -6725,37 +7011,51 @@ class wps_ic_ajax extends wps_ic
         }
 
 
-        $queue_data = self::wpc_bulk_queue_read199();
+        if ($service_hold === null) {
+            $service_hold = wps_ic_image_optimize::service_hold();
+        }
+        if ($service_hold !== null && get_option('wps_ic_bulk_process')) {
+            // Not a stall: the queue waits for the hold, and the cron resumes it when it ends.
+            self::wpc_bulk_drain_cron_arm(max(10, (int) $service_hold['until'] - time() + 1));
+            error_log('[WPC Bulk] drain holding for the service: ' . (string) ($service_hold['reason'] ?? '') . ' until ' . (int) $service_hold['until']);
+            return;
+        }
+
+        $queue_data = self::wpc_bulk_queue_read();
         $redrain    = (int) get_transient('wpc_bulk_compress_redrain_pending') > 0;
         if ($redrain) { delete_transient('wpc_bulk_compress_redrain_pending'); }
 
 
-        $wpc_bchain75_ok = true;
+        $chain_ok = true;
         if (!empty($queue_data['queue']) && is_array($queue_data['queue'])) {
-            $wpc_bsig75 = md5((string) $queue_data['queue'][0] . ':' . count($queue_data['queue'])
-                . ':' . count(self::wpc_bulk_inflight199()));
-            $wpc_bsf75  = '';
-            $wpc_bup75  = wp_get_upload_dir();
-            if (!empty($wpc_bup75['basedir'])) {
-                $wpc_bsd75 = rtrim($wpc_bup75['basedir'], '/\\') . '/wpci-journal';
-                if (!is_dir($wpc_bsd75)) { @wp_mkdir_p($wpc_bsd75); }
-                $wpc_bsf75 = is_dir($wpc_bsd75) ? $wpc_bsd75 . '/.bulk_state' : '';
+            $queue_signature = md5((string) $queue_data['queue'][0] . ':' . count($queue_data['queue'])
+                . ':' . count(self::wpc_bulk_inflight_ids()));
+            $state_file  = '';
+            $uploads  = wp_get_upload_dir();
+            if (!empty($uploads['basedir'])) {
+                $journal_dir = rtrim($uploads['basedir'], '/\\') . '/wpci-journal';
+                if (!is_dir($journal_dir)) { @wp_mkdir_p($journal_dir); }
+                $state_file = is_dir($journal_dir) ? $journal_dir . '/.bulk_state' : '';
             }
-            if ($wpc_bsf75 !== '') {
-                $wpc_bst75 = json_decode((string) @file_get_contents($wpc_bsf75), true);
-                $wpc_brep75 = (is_array($wpc_bst75) && isset($wpc_bst75['sig']) && $wpc_bst75['sig'] === $wpc_bsig75)
-                    ? (int) $wpc_bst75['reps'] + 1 : 1;
-                wpc_fs_put($wpc_bsf75, json_encode(['sig' => $wpc_bsig75, 'reps' => $wpc_brep75]));
-                if ($wpc_brep75 >= 3) {
-                    $wpc_bchain75_ok = false;
-                    error_log(sprintf('[WPC Bulk] no-progress x%d (queue head/len unchanged) — self-chain halted; admin poll resumes on demand', $wpc_brep75));
+            if ($state_file !== '') {
+                $bulk_state = json_decode((string) @file_get_contents($state_file), true);
+                $repeat_count = (is_array($bulk_state) && isset($bulk_state['sig']) && $bulk_state['sig'] === $queue_signature)
+                    ? (int) $bulk_state['reps'] + 1 : 1;
+                wpc_fs_put($state_file, json_encode(['sig' => $queue_signature, 'reps' => $repeat_count]));
+                if ($repeat_count >= 3) {
+                    $chain_ok = false;
+                    error_log(sprintf('[WPC Bulk] no-progress x%d (queue head/len unchanged) — self-chain halted; the cron retries once a minute', $repeat_count));
+                    self::wpc_bulk_drain_stalled('no-progress', ['slices' => $repeat_count]);
                 }
             }
         }
-        $wpc_tail199 = empty($queue_data['queue']) && get_option('wps_ic_bulk_process')
-            && !empty(self::wpc_bulk_inflight199());
-        if (($wpc_bchain75_ok && !empty($queue_data['queue'])) || $redrain || $wpc_tail199) {
+        $drain_tail = empty($queue_data['queue']) && get_option('wps_ic_bulk_process')
+            && !empty(self::wpc_bulk_inflight_ids());
+        if (($chain_ok && !empty($queue_data['queue'])) || $redrain || $drain_tail) {
             self::wpc_bulk_v2_fire_loopback();
+        } elseif (!empty($queue_data['queue']) && get_option('wps_ic_bulk_process')) {
+            // Not chained (no progress): the cron event still retries the run once a minute.
+            self::wpc_bulk_drain_cron_arm();
         }
 
         error_log(sprintf('[WPC Bulk] drain slice complete iters=%d K=%d wall=%.2fs',
@@ -6763,7 +7063,7 @@ class wps_ic_ajax extends wps_ic
     }
 
 
-    public static function wpc_bulk_queue_read199()
+    public static function wpc_bulk_queue_read()
     {
         $o = get_option('wpc_bulk_queue199');
         if (is_array($o) && isset($o['queue'])) {
@@ -6773,7 +7073,7 @@ class wps_ic_ajax extends wps_ic
         return (is_array($t) && isset($t['queue'])) ? $t : false;
     }
 
-    public static function wpc_bulk_queue_write199($data)
+    public static function wpc_bulk_queue_write($data)
     {
         if (!is_array($data)) {
             delete_option('wpc_bulk_queue199');
@@ -6784,9 +7084,9 @@ class wps_ic_ajax extends wps_ic
         set_transient('wps_ic_compress_queue', $data, HOUR_IN_SECONDS);
     }
 
-    public static function wpc_bulk_inflight199()
+    public static function wpc_bulk_inflight_ids()
     {
-        $m = get_option('wpc_bulk_inflight199');
+        $m = get_option(WPC_BULK_INFLIGHT_OPTION);
         if (!is_array($m)) {
             $m = [];
         }
@@ -6821,18 +7121,18 @@ class wps_ic_ajax extends wps_ic
             $out[$id] = (int) $ts;
         }
         if ($out !== $m) {
-            update_option('wpc_bulk_inflight199', $out, false);
+            update_option(WPC_BULK_INFLIGHT_OPTION, $out, false);
         }
         return $out;
     }
 
-    public static function wpc_bulk_ledger_get202()
+    public static function wpc_bulk_ledger_get()
     {
         $l = get_option('wpc_bulk_run_ledger');
         return (is_array($l) && !empty($l['run_id'])) ? $l : false;
     }
 
-    public static function wpc_bulk_ledger_init202(array $ids)
+    public static function wpc_bulk_ledger_init(array $ids)
     {
         $l = [
             'run_id'  => 'r' . dechex(time()) . substr(md5(uniqid('', true)), 0, 6),
@@ -6852,13 +7152,20 @@ class wps_ic_ajax extends wps_ic
         return $l['run_id'];
     }
 
-    public static function wpc_bulk_ledger_mark202($id, $st)
+    /**
+     * One image's state in the run. $why names the refusal (the door's gate, 'excluded',
+     * 'backup-failed' or the send error) for an image that was not dispatched; a row that went
+     * out keeps `sent` through every later state, so the run can say what was dispatched. An
+     * image the service answered with its duplicate answer goes inflight with $why
+     * 'deduplicated', kept as `dedup` through every later state, never as a refusal.
+     */
+    public static function wpc_bulk_ledger_mark($id, $st, $why = '')
     {
         $id = (int) $id;
         if ($id <= 0 || !in_array($st, ['queued', 'inflight', 'verified', 'parked', 'skipped'], true)) {
             return;
         }
-        $l = self::wpc_bulk_ledger_get202();
+        $l = self::wpc_bulk_ledger_get();
         if ($l === false) {
             return;
         }
@@ -6866,35 +7173,27 @@ class wps_ic_ajax extends wps_ic
         if ($prev === $st || $prev === 'verified') {
             return;
         }
-        $l['images'][$id] = ['st' => $st, 'ts' => time()];
+        $row = ['st' => $st, 'ts' => time()];
+        if ($st === 'inflight' || !empty($l['images'][$id]['sent'])) {
+            $row['sent'] = 1;
+        }
+        if (($st === 'inflight' && $why === 'deduplicated') || !empty($l['images'][$id]['dedup'])) {
+            $row['dedup'] = 1;
+            $why = '';
+        }
+        if ($why !== '') {
+            $row['why'] = (string) $why;
+        }
+        $l['images'][$id] = $row;
         update_option('wpc_bulk_run_ledger', $l, false);
         if (defined('WPC_BULK_DEBUG') && WPC_BULK_DEBUG) {
             error_log('[WPC BulkLedger] image=' . $id . ' ' . ($prev === '' ? '(new)' : $prev) . '->' . $st . ' run=' . $l['run_id']);
         }
     }
 
-    public static function wpc_bulk_ledger_summary202()
+    public static function wpc_bulk_ledger_close()
     {
-        $l = self::wpc_bulk_ledger_get202();
-        if ($l === false) {
-            return null;
-        }
-        $c = ['queued' => 0, 'inflight' => 0, 'verified' => 0, 'parked' => 0, 'skipped' => 0];
-        foreach ($l['images'] as $row) {
-            $st = is_array($row) && isset($row['st']) ? (string) $row['st'] : '';
-            if (isset($c[$st])) {
-                $c[$st]++;
-            }
-        }
-        $c['run_id']  = (string) $l['run_id'];
-        $c['started'] = (int) $l['started'];
-        $c['at']      = time();
-        return $c;
-    }
-
-    public static function wpc_bulk_ledger_close202()
-    {
-        $l = self::wpc_bulk_ledger_get202();
+        $l = self::wpc_bulk_ledger_get();
         if ($l === false) {
             return 0;
         }
@@ -6902,7 +7201,7 @@ class wps_ic_ajax extends wps_ic
         foreach ($l['images'] as $lid => $row) {
             $lst = is_array($row) && isset($row['st']) ? (string) $row['st'] : '';
             if ($lst === 'queued' || $lst === 'inflight') {
-                $l['images'][(int) $lid] = ['st' => 'skipped', 'ts' => time()];
+                $l['images'][(int) $lid] = ['st' => 'skipped', 'ts' => time()] + (!empty($row['sent']) ? ['sent' => 1] : []) + (!empty($row['dedup']) ? ['dedup' => 1] : []);
                 $n++;
             }
         }
@@ -6913,67 +7212,6 @@ class wps_ic_ajax extends wps_ic
         return $n;
     }
 
-    public static function wpc_bulk_run_summary_fetch202($run_id)
-    {
-        $orch_url = function_exists('wpc_v2_orchestrator_url') ? wpc_v2_orchestrator_url() : '';
-        $apikey   = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
-        $run_id   = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $run_id);
-        if ($orch_url === '' || $apikey === '' || $run_id === '') {
-            return ['ok' => false, 'reason' => 'no_orch_or_run'];
-        }
-        $canonical = 'apikey=' . $apikey . '&run=' . $run_id;
-        $resp = wp_remote_get(rtrim($orch_url, '/') . '/optimize-v2/run-summary?apikey=' . rawurlencode($apikey) . '&run=' . rawurlencode($run_id), [
-            'timeout' => 6,
-            'headers' => [
-                'Accept'          => 'application/json',
-                'X-WPC-Sig'       => hash_hmac('sha256', $canonical, $apikey),
-                'X-WPC-Timestamp' => (string) time(),
-            ],
-        ]);
-        if (is_wp_error($resp) || (int) wp_remote_retrieve_response_code($resp) !== 200) {
-            return ['ok' => false, 'reason' => is_wp_error($resp) ? 'http_error' : ('http_' . wp_remote_retrieve_response_code($resp))];
-        }
-        $j = json_decode((string) wp_remote_retrieve_body($resp), true);
-        if (!is_array($j)) {
-            return ['ok' => false, 'reason' => 'bad_json'];
-        }
-        return ['ok' => true, 'summary' => $j];
-    }
-
-    public static function wpc_bulk_reconcile202()
-    {
-        $led = self::wpc_bulk_ledger_summary202();
-        if ($led === null) {
-            return null;
-        }
-        if ((time() - (int) get_option('wpc_bulk_recon_at202', 0)) < 30) {
-            $last = get_option('wpc_bulk_recon_last202');
-            return is_array($last) ? $last : null;
-        }
-        update_option('wpc_bulk_recon_at202', time(), false);
-        $r = self::wpc_bulk_run_summary_fetch202($led['run_id']);
-        if (empty($r['ok'])) {
-            $out = ['sync' => 'unavailable', 'reason' => (string) ($r['reason'] ?? ''), 'at' => time()];
-            update_option('wpc_bulk_recon_last202', $out, false);
-            return $out;
-        }
-        $svc = $r['summary'];
-        $svc_images = 0;
-        if (isset($svc['image_count'])) {
-            $svc_images = (int) $svc['image_count'];
-        } elseif (isset($svc['images']) && is_array($svc['images'])) {
-            $svc_images = count($svc['images']);
-        }
-        $mismatch = ($svc_images > 0 && $svc_images > ($led['verified'] + $led['inflight']));
-        $out = ['sync' => $mismatch ? 'syncing' : 'ok', 'service_images' => $svc_images, 'at' => time()];
-        if ($mismatch) {
-            error_log('[WPC BulkLedger] reconcile mismatch run=' . $led['run_id']
-                . ' service_images=' . $svc_images . ' ledger_verified=' . $led['verified'] . ' inflight=' . $led['inflight']);
-        }
-        update_option('wpc_bulk_recon_last202', $out, false);
-        return $out;
-    }
-
     public static function wpc_wire_doctor_report($urlKey, $html)
     {
         $lanes = [];
@@ -6981,41 +7219,20 @@ class wps_ic_ajax extends wps_ic
         $set = is_array($set) ? $set : [];
         $cd = defined('WPS_IC_CRITICAL') ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/' : '';
 
+        // The crit lane reports whether a crit that paints is on disk for each device: that is
+        // the whole park condition on the size axis. It used to grade the service's budget stamp
+        // (wave_ok, x=, the 0.97 ratio) and answered FAIL on every over-cap crit; with no size
+        // judgment in the park verdict that FAIL would be a lie on every uncapped crit.
         foreach (['desktop', 'mobile'] as $dv) {
-            $crit_head = $cd !== '' ? (string) @file_get_contents($cd . 'critical_' . $dv . '.css', false, null, 0, 700) : '';
-            if (!preg_match('/wpc-budget-final:\s*(?:mobile\s+|desktop\s+)?(over|ok)\s+out=(\d+)\s+cap=(\d+)[^*]*/', $crit_head, $cm)) {
-                $lanes['crit_' . $dv] = ['verdict' => strlen($crit_head) > 64 ? 'WARN' : 'FAIL',
-                    'detail' => strlen($crit_head) > 64 ? 'crit present, no stamp parsed' : 'no crit artifact on disk',
-                    'fix' => 'Refresh Auto Mode / wait for land'];
-                continue;
-            }
-            $stamp   = $cm[0];
-            $cap     = max(1, (int) $cm[3]);
-            $x       = preg_match('/\bx=([0-9.]+)/', $stamp, $xm) ? (float) $xm[1] : ((int) $cm[2] / $cap);
-            $wok     = preg_match('/\bwave_ok=([01])\b/', $stamp, $wm) ? (int) $wm[1] : null;
-            $newfmt  = strpos($stamp, 'fonts=') !== false;
-            $markers = preg_match('/\b(?:still-over|rescope-abort|lossy)\b/', $stamp) === 1;
-            $grace   = (float) apply_filters('wpc_forfeit_over_grace', 1.15);
-            if ($cm[1] === 'ok') {
-                $lossy = !$newfmt && (int) $cm[2] >= (int) floor($cap * (float) apply_filters('wpc_trim_forfeit_ratio', 0.97));
-                $why   = $lossy ? 'ok-but-trimmed-to-fit (old format, out>=97% cap)' : 'ok';
-            } elseif ($wok === 1) {
-                $lossy = false; $why = 'over but WAVE-LICENSED (wave_ok=1) — parks per .172 ladder';
-            } elseif ($wok === 0) {
-                $lossy = true; $why = 'over, service says NOT wave-servable (wave_ok=0)';
-            } else {
-                $lossy = !($newfmt && !$markers && $x <= $grace);
-                $why   = 'over, no wave token — graded: newfmt=' . (int) $newfmt . ' markers=' . (int) $markers . ' x=' . $x . ' grace=' . $grace;
-            }
-            $fst = json_decode((string) @file_get_contents($cd . 'forfeit_state_' . $dv . '.json'), true);
+            $crit_blob = $cd !== '' ? (string) @file_get_contents($cd . 'critical_' . $dv . '.css') : '';
+            $crit_paints = $crit_blob !== '' && class_exists('wps_rewriteLogic') && wps_rewriteLogic::crit_payload_present($crit_blob);
             $lanes['crit_' . $dv] = [
-                'verdict' => $lossy ? 'FAIL' : 'PASS',
-                'detail'  => $cm[1] . ' x=' . $x . ' wave_ok=' . ($wok === null ? 'absent' : $wok)
-                    . ' | forfeit-computed=' . ($lossy ? 'STANDDOWN' : 'park') . ' (' . $why . ')'
-                    . ' | state=' . (is_array($fst) && isset($fst['mode']) ? (string) $fst['mode'] : 'none'),
+                'verdict' => $crit_paints ? 'PASS' : 'FAIL',
+                'detail'  => $crit_paints ? 'crit on disk, ' . strlen($crit_blob) . ' bytes, parks'
+                    : ($crit_blob === '' ? 'no crit artifact on disk' : 'crit on disk paints nothing (faces/comments only)'),
             ];
-            if ($lossy) {
-                $lanes['crit_' . $dv]['fix'] = $wok === 0 ? 'service: wave-license or trim' : 'service trim under cap OR ship wave_ok=1 on this leg';
+            if (!$crit_paints) {
+                $lanes['crit_' . $dv]['fix'] = 'Refresh Auto Mode / wait for land';
             }
         }
         if (function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($urlKey)) {
@@ -7024,22 +7241,22 @@ class wps_ic_ajax extends wps_ic
 
         $ucs_on = !empty($set['used-css']) && $set['used-css'] == '1';
         $tpl = $cd !== '' ? trim((string) @file_get_contents($cd . 'used_tpl.txt')) : '';
-        
-        
-        
-        
+        // v7.21.222 — the sidecar is not the store: install purges delete used_tpl.txt while
+        // the tpl-keyed used.css survives (live receipt: .220 landed, .221 doctor read
+        // PENDING off the missing sidecar). Fall back to the page's own tpl.txt; if the
+        // store holds that key, re-write the sidecar and report the truth.
         if ($tpl === '' && function_exists('wpc_dispatch_tpl_key')) {
-            $tpl222 = (string) wpc_dispatch_tpl_key($urlKey);
-            if ($tpl222 !== '' && function_exists('wpc_used_css_path') && @is_readable(wpc_used_css_path($tpl222))) {
-                $tpl = $tpl222;
+            $dispatch_tpl_candidate = (string) wpc_dispatch_tpl_key($urlKey);
+            if ($dispatch_tpl_candidate !== '' && function_exists('wpc_used_css_path') && @is_readable(wpc_used_css_path($dispatch_tpl_candidate))) {
+                $tpl = $dispatch_tpl_candidate;
                 if ($cd !== '' && function_exists('wpc_crit_meta_write')) {
                     wpc_crit_meta_write($cd . 'used_tpl.txt', $tpl);
                 }
             }
         }
         $ucs_file = ($tpl !== '' && function_exists('wpc_used_css_path')) ? wpc_used_css_path($tpl) : '';
-        $crit_on199 = !empty($set['critical']['css']) && $set['critical']['css'] == '1';
-        if (!$ucs_on && $crit_on199 && !isset($set['used-css'])) {
+        $crit_on = !empty($set['critical']['css']) && $set['critical']['css'] == '1';
+        if (!$ucs_on && $crit_on && !isset($set['used-css'])) {
             $lanes['used_css'] = ['verdict' => 'FAIL',
                 'detail' => 'PILLAR DRIFT: Optimize CSS is ON but the used-css rider is unset (saved pre-.148)',
                 'fix' => 'toggle Optimize CSS off/on (rewrites the .825 rider), then Refresh'];
@@ -7047,46 +7264,46 @@ class wps_ic_ajax extends wps_ic
             $lanes['used_css'] = ['verdict' => 'FAIL', 'detail' => 'setting OFF — originals restore post-paint (~30-40 rows)', 'fix' => 'enable Used CSS (Optimize CSS pillar) + Refresh'];
         } elseif ($ucs_file !== '' && @is_readable($ucs_file)) {
             $lanes['used_css'] = ['verdict' => 'PASS', 'detail' => 'tpl ' . $tpl . ' landed'];
-            
-            
-            
-            if (function_exists('wpc_css_host_twin_heal231')) {
-                $th232 = 0; $tf232 = 0;
-                foreach (['', 'desktop', 'mobile'] as $dv232) {
-                    $fp232 = wpc_used_css_path($tpl, $dv232);
-                    if ($fp232 === '' || !@is_readable($fp232)) { continue; }
-                    $cb232 = (string) @file_get_contents($fp232);
-                    if ($cb232 === '') { continue; }
-                    $hb232 = wpc_css_host_twin_heal231($cb232);
-                    if (function_exists('wpc_used_css_strip_faces245')) { $hb232 = wpc_used_css_strip_faces245($hb232); }
-                    if (function_exists('wpc_used_css_bg_park255')) { $hb232 = wpc_used_css_bg_park255($hb232); }
-                    if (is_string($hb232) && $hb232 !== $cb232
-                        && wpc_fs_put($fp232 . '.tmp', $hb232, LOCK_EX) !== false
-                        && @rename($fp232 . '.tmp', $fp232)) {
-                        $tf232++;
-                        $th232 += substr_count($cb232, '://') - substr_count($hb232, '://');
+            // v7.21.232 — the doctor HEALS foreign-host residue in the stored used-css
+            // directly (the reconciler sweep is version-gated and unobservable from a
+            // paste; the doctor is neither). Serve-off gated inside the heal itself.
+            if (function_exists('wpc_heal_stored_css_host_twins')) {
+                $twin_hosts_healed = 0; $twin_files_healed = 0;
+                foreach (['', 'desktop', 'mobile'] as $sheet_device) {
+                    $sheet_path = wpc_used_css_path($tpl, $sheet_device);
+                    if ($sheet_path === '' || !@is_readable($sheet_path)) { continue; }
+                    $sheet_css = (string) @file_get_contents($sheet_path);
+                    if ($sheet_css === '') { continue; }
+                    $healed_css = wpc_heal_stored_css_host_twins($sheet_css);
+                    if (function_exists('wpc_strip_used_css_font_faces')) { $healed_css = wpc_strip_used_css_font_faces($healed_css); }
+                    if (function_exists('wpc_park_used_css_backgrounds')) { $healed_css = wpc_park_used_css_backgrounds($healed_css); }
+                    if (is_string($healed_css) && $healed_css !== $sheet_css
+                        && wpc_fs_put($sheet_path . '.tmp', $healed_css, LOCK_EX) !== false
+                        && @rename($sheet_path . '.tmp', $sheet_path)) {
+                        $twin_files_healed++;
+                        $twin_hosts_healed += substr_count($sheet_css, '://') - substr_count($healed_css, '://');
                     }
                 }
-                if ($tf232 > 0) {
-                    $lanes['used_css']['twin_heal'] = 'healed ' . $tf232 . ' stored file(s) - purge HTML cache so the mint links the new ?uv=';
+                if ($twin_files_healed > 0) {
+                    $lanes['used_css']['twin_heal'] = 'healed ' . $twin_files_healed . ' stored file(s) - purge HTML cache so the mint links the new ?uv=';
                     if (function_exists('wpc_cache_first_log')) {
-                        wpc_cache_first_log('doctor-twin-healed', (string) $urlKey, '', ['files' => $tf232, 'tpl' => $tpl]);
+                        wpc_cache_first_log('doctor-twin-healed', (string) $urlKey, '', ['files' => $twin_files_healed, 'tpl' => $tpl]);
                     }
                 } else {
-                    $fr232 = 0;
-                    foreach (['', 'desktop', 'mobile'] as $dv232) {
-                        $fp232 = wpc_used_css_path($tpl, $dv232);
-                        if ($fp232 !== '' && @is_readable($fp232)) {
-                            $fb232 = (string) @file_get_contents($fp232);
-                            if (preg_match_all('#url\(\s*["\']?https?://([^/"\')\s]+)/wp-content/#i', $fb232, $fm232)) {
-                                foreach ($fm232[1] as $fh232) {
-                                    if (strcasecmp($fh232, (string) parse_url(home_url('/'), PHP_URL_HOST)) !== 0) { $fr232++; }
+                    $foreign_residue = 0;
+                    foreach (['', 'desktop', 'mobile'] as $sheet_device) {
+                        $sheet_path = wpc_used_css_path($tpl, $sheet_device);
+                        if ($sheet_path !== '' && @is_readable($sheet_path)) {
+                            $residue_css = (string) @file_get_contents($sheet_path);
+                            if (preg_match_all('#url\(\s*["\']?https?://([^/"\')\s]+)/wp-content/#i', $residue_css, $residue_host_matches)) {
+                                foreach ($residue_host_matches[1] as $residue_host) {
+                                    if (strcasecmp($residue_host, (string) parse_url(home_url('/'), PHP_URL_HOST)) !== 0) { $foreign_residue++; }
                                 }
                             }
                         }
                     }
-                    $lanes['used_css']['twin_heal'] = $fr232 > 0
-                        ? 'FOREIGN RESIDUE: ' . $fr232 . ' foreign-host urls remain (no local twin or serve-on)'
+                    $lanes['used_css']['twin_heal'] = $foreign_residue > 0
+                        ? 'FOREIGN RESIDUE: ' . $foreign_residue . ' foreign-host urls remain (no local twin or serve-on)'
                         : 'clean (no foreign-host urls in stored css)';
                 }
             }
@@ -7094,113 +7311,112 @@ class wps_ic_ajax extends wps_ic
                 if (!wpc_used_css_load_sheets($tpl)) {
                     $lanes['used_css']['sheets'] = wpc_used_css_sheets_land($cd, $tpl) ? 'landed-now (droplist arms on next mint - purge HTML cache)' : 'NO MANIFEST (originals will restore; droplist inert)';
                 } else {
-                    $sh225 = wpc_used_css_load_sheets($tpl);
-                    $lanes['used_css']['sheets'] = count($sh225) < 3
-                        ? 'THIN manifest (n=' . count($sh225) . ') - service sheets enumeration incomplete; droplist cannot drop; combine lane covers the restore'
-                        : 'present (droplist active, n=' . count($sh225) . ')';
+                    $sheet_manifest = wpc_used_css_load_sheets($tpl);
+                    $lanes['used_css']['sheets'] = count($sheet_manifest) < 3
+                        ? 'THIN manifest (n=' . count($sheet_manifest) . ') - service sheets enumeration incomplete; droplist cannot drop; combine lane covers the restore'
+                        : 'present (droplist active, n=' . count($sheet_manifest) . ')';
                 }
             }
         } else {
             $lanes['used_css'] = ['verdict' => 'PENDING', 'detail' => 'setting on, no template landed (tpl=' . ($tpl === '' ? 'none' : $tpl) . ')',
                 'fix' => 'pointer artifacts{} consume lands it on the next tick; check log pointer-usedcss-landed / pointer-artifacts-unmatched'];
-            
-            
+            // v7.21.217 — PENDING is not a diagnosis: probe /v2/latest NOW (admin-triggered,
+            // cap-gated) and report exactly what the service offers vs what we can consume.
             if (defined('WPS_IC_CRITICAL_API_URL') && function_exists('home_url')) {
-                $opt217 = (array) get_option(defined('WPS_IC_OPTIONS') ? WPS_IC_OPTIONS : 'wps_ic');
-                if (!empty($opt217['api_key'])) {
-                    $lr217 = wp_remote_get(str_replace('/generate', '/v2/latest', WPS_IC_CRITICAL_API_URL)
-                        . '?url=' . urlencode(home_url('/')) . '&apikey=' . urlencode((string) $opt217['api_key']), ['timeout' => 6]);
-                    $lc217 = !is_wp_error($lr217) ? (int) wp_remote_retrieve_response_code($lr217) : 0;
-                    $ld217 = $lc217 === 200 ? json_decode((string) wp_remote_retrieve_body($lr217), true) : null;
-                    if (is_array($ld217)) {
-                        if (function_exists('wpc_rum_sample_land46')) {
-                            wpc_rum_sample_land46($ld217);
+                $pluginOptions = (array) get_option(defined('WPS_IC_OPTIONS') ? WPS_IC_OPTIONS : 'wps_ic');
+                if (!empty($pluginOptions['api_key'])) {
+                    $latestAnswer = wp_remote_get(wpc_crit_service_read_url('/v2/latest', ['url' => home_url('/'), 'apikey' => (string) $pluginOptions['api_key']],
+                        ltrim((string) (new wps_ic_url_key())->setup(home_url('/')), '/')), ['timeout' => 6]);
+                    $latestCode = !is_wp_error($latestAnswer) ? (int) wp_remote_retrieve_response_code($latestAnswer) : 0;
+                    $latestJson = $latestCode === 200 ? json_decode((string) wp_remote_retrieve_body($latestAnswer), true) : null;
+                    if (is_array($latestJson)) {
+                        if (function_exists('wpc_rum_sample_store')) {
+                            wpc_rum_sample_store($latestJson);
                         }
-                        $a217 = isset($ld217['artifacts']) && is_array($ld217['artifacts']) ? $ld217['artifacts'] : [];
+                        $latestArtifacts = isset($latestJson['artifacts']) && is_array($latestJson['artifacts']) ? $latestJson['artifacts'] : [];
                         $lanes['used_css']['latest_probe'] = [
-                            'ready'          => (int) !empty($ld217['ready']),
-                            'artifact_keys'  => implode(',', array_slice(array_keys($a217), 0, 14)),
-                            'used_css_url'   => !empty($a217['used_css']) ? 'present' : 'ABSENT',
-                            'tpl_derivable'  => (!empty($a217['tpl_key']) || !empty($ld217['tpl_key'])
-                                || (!empty($a217['used_css_mobile']) && strpos((string) $a217['used_css_mobile'], 'tpl-') !== false)) ? 'yes'
+                            'ready'          => (int) !empty($latestJson['ready']),
+                            'artifact_keys'  => implode(',', array_slice(array_keys($latestArtifacts), 0, 14)),
+                            'used_css_url'   => !empty($latestArtifacts['used_css']) ? 'present' : 'ABSENT',
+                            'tpl_derivable'  => (!empty($latestArtifacts['tpl_key']) || !empty($latestJson['tpl_key'])
+                                || (!empty($latestArtifacts['used_css_mobile']) && strpos((string) $latestArtifacts['used_css_mobile'], 'tpl-') !== false)) ? 'yes'
                                 : ((function_exists('wpc_dispatch_tpl_key') && wpc_dispatch_tpl_key($urlKey) !== '') ? 'local-tpl' : 'NO-and-no-local-tpl-yet'),
                         ];
-                        
-                        
-                        
-                        
-                        $du220 = '';
-                        foreach ([$a217, $ld217] as $ds220) {
-                            foreach (['used_css_url', 'used_css', 'usedCss'] as $dk220) {
-                                if ($du220 === '' && !empty($ds220[$dk220]) && is_string($ds220[$dk220])
-                                    && strpos($ds220[$dk220], 'http') === 0) {
-                                    $du220 = trim($ds220[$dk220]);
+                        // v7.21.220 — the probe holds the url AND the tpl; landing is one
+                        // fetch. The pointer lane's callers only run on crit RESOLUTION
+                        // paths, which a landed-and-parked site never re-enters — so the
+                        // doctor acts instead of prescribing (cap-gated admin request).
+                        $latest_used_css_url = '';
+                        foreach ([$latestArtifacts, $latestJson] as $latest_source) {
+                            foreach (['used_css_url', 'used_css', 'usedCss'] as $latest_key) {
+                                if ($latest_used_css_url === '' && !empty($latest_source[$latest_key]) && is_string($latest_source[$latest_key])
+                                    && strpos($latest_source[$latest_key], 'http') === 0) {
+                                    $latest_used_css_url = trim($latest_source[$latest_key]);
                                 }
                             }
                         }
-                        $dt220 = function_exists('wpc_dispatch_tpl_key') ? (string) wpc_dispatch_tpl_key($urlKey) : '';
-                        if ($du220 !== '' && $dt220 !== '' && function_exists('wpc_used_css_fetch')
-                            && function_exists('wpc_used_css_path') && !@is_readable(wpc_used_css_path($dt220))) {
+                        $latest_tpl_key = function_exists('wpc_dispatch_tpl_key') ? (string) wpc_dispatch_tpl_key($urlKey) : '';
+                        if ($latest_used_css_url !== '' && $latest_tpl_key !== '' && function_exists('wpc_used_css_fetch')
+                            && function_exists('wpc_used_css_path') && !@is_readable(wpc_used_css_path($latest_tpl_key))) {
                             if (function_exists('wpc_crit_meta_write') && $cd !== '') {
-                                wpc_crit_meta_write($cd . 'used_css_url.txt', $du220);
-                                wpc_crit_meta_write($cd . 'used_tpl.txt', $dt220);
+                                wpc_crit_meta_write($cd . 'used_css_url.txt', $latest_used_css_url);
+                                wpc_crit_meta_write($cd . 'used_tpl.txt', $latest_tpl_key);
                             }
-                            $dw221 = '';
-                            $dl220 = wpc_used_css_fetch($du220, $dt220, '', $dw221);
-                            if ($dl220 && function_exists('wpc_used_css_scoped_purge')) { wpc_used_css_scoped_purge($dt220); }
-                            if ($dl220 && function_exists('wpc_cache_first_log')) {
-                                wpc_cache_first_log('doctor-usedcss-landed', (string) $urlKey, '', ['tpl' => $dt220]);
+                            $latest_fetch_why = '';
+                            $latest_landed = wpc_used_css_fetch($latest_used_css_url, $latest_tpl_key, '', $latest_fetch_why);
+                            if ($latest_landed && function_exists('wpc_used_css_scoped_purge')) { wpc_used_css_scoped_purge($latest_tpl_key); }
+                            if ($latest_landed && function_exists('wpc_cache_first_log')) {
+                                wpc_cache_first_log('doctor-usedcss-landed', (string) $urlKey, '', ['tpl' => $latest_tpl_key]);
                             }
-                            if ($dl220 && function_exists('wpc_used_css_sheets_land')) {
-                                $dsu223 = '';
-                                foreach ([$a217, $ld217] as $ds223) {
-                                    if ($dsu223 === '' && !empty($ds223['used_css_sheets']) && is_string($ds223['used_css_sheets'])
-                                        && strpos($ds223['used_css_sheets'], 'http') === 0) {
-                                        $dsu223 = trim($ds223['used_css_sheets']);
+                            if ($latest_landed && function_exists('wpc_used_css_sheets_land')) {
+                                $latest_sheets_url = '';
+                                foreach ([$latestArtifacts, $latestJson] as $sheets_source) {
+                                    if ($latest_sheets_url === '' && !empty($sheets_source['used_css_sheets']) && is_string($sheets_source['used_css_sheets'])
+                                        && strpos($sheets_source['used_css_sheets'], 'http') === 0) {
+                                        $latest_sheets_url = trim($sheets_source['used_css_sheets']);
                                     }
                                 }
-                                $lanes['used_css']['latest_probe']['sheets'] = wpc_used_css_sheets_land($cd, $dt220, $dsu223) ? 'landed' : 'no-manifest';
+                                $lanes['used_css']['latest_probe']['sheets'] = wpc_used_css_sheets_land($cd, $latest_tpl_key, $latest_sheets_url) ? 'landed' : 'no-manifest';
                             }
-                            $lanes['used_css']['latest_probe']['landed_now'] = $dl220 ? 'yes'
-                                : 'fetch-failed:' . ($dw221 !== '' ? $dw221 : 'unknown') . ' url=' . substr($du220, 0, 120);
-                            if ($dl220) {
+                            $lanes['used_css']['latest_probe']['landed_now'] = $latest_landed ? 'yes'
+                                : 'fetch-failed:' . ($latest_fetch_why !== '' ? $latest_fetch_why : 'unknown') . ' url=' . substr($latest_used_css_url, 0, 120);
+                            if ($latest_landed) {
                                 $lanes['used_css']['verdict'] = 'PASS';
-                                $lanes['used_css']['detail']  = 'landed by doctor from /v2/latest (tpl ' . $dt220 . ')';
+                                $lanes['used_css']['detail']  = 'landed by doctor from /v2/latest (tpl ' . $latest_tpl_key . ')';
                                 $lanes['used_css']['fix']     = '';
                             }
                         }
                     } else {
-                        $lanes['used_css']['latest_probe'] = ['http' => $lc217, 'body' => 'not-json-or-error'];
+                        $lanes['used_css']['latest_probe'] = ['http' => $latestCode, 'body' => 'not-json-or-error'];
                     }
                 }
             }
         }
 
-        
-        
-        
+        // v7.21.278 — CRITCOMBINE RECEIPT RETRIEVAL (joint diagnostic). The .271 rows are
+        // on disk in the cache-first log; the crit team pairs them by timestamp against their
+        // gen ledger. Tail-read (last 64KB), last 3 receipt rows, UTC stamps.
         try {
-            $wpc_lf278 = defined('WPS_IC_CACHE') ? rtrim(WPS_IC_CACHE, '/') . '/wpc-cflog.jsonl' : '';
-            if ($wpc_lf278 !== '' && @is_readable($wpc_lf278)) {
-                $wpc_sz278 = (int) @filesize($wpc_lf278);
-                $wpc_fh278 = @fopen($wpc_lf278, 'r');
-                $wpc_rows278 = [];
-                if ($wpc_fh278) {
-                    if ($wpc_sz278 > 65536) { @fseek($wpc_fh278, -65536, SEEK_END); @fgets($wpc_fh278); }
-                    while (($wpc_ln278 = fgets($wpc_fh278)) !== false) {
-                        if (strpos($wpc_ln278, 'critcombine-receipt') === false
-                            && strpos($wpc_ln278, 'crit-sanity-') === false
-                            && strpos($wpc_ln278, 'crit-blind-served') === false) { continue; }
-                        $wpc_j278 = json_decode(trim($wpc_ln278), true);
-                        if (is_array($wpc_j278)) {
-                            $wpc_rows278[] = gmdate('H:i:s', (int) ($wpc_j278['t'] ?? 0)) . 'Z '
-                                . json_encode($wpc_j278['layers'] ?? []);
+            $wpc_cflog_file = function_exists('wpc_cflog_path') ? wpc_cflog_path() : '';
+            if ($wpc_cflog_file !== '' && @is_readable($wpc_cflog_file)) {
+                $wpc_cflog_size = (int) @filesize($wpc_cflog_file);
+                $wpc_cflog_handle = @fopen($wpc_cflog_file, 'r');
+                $wpc_combine_receipts = [];
+                if ($wpc_cflog_handle) {
+                    if ($wpc_cflog_size > 65536) { @fseek($wpc_cflog_handle, -65536, SEEK_END); @fgets($wpc_cflog_handle); }
+                    while (($wpc_cflog_line = fgets($wpc_cflog_handle)) !== false) {
+                        if (strpos($wpc_cflog_line, 'critcombine-receipt') === false
+                            && strpos($wpc_cflog_line, 'crit-misses-page-sections') === false) { continue; }
+                        $wpc_cflog_row = json_decode(trim($wpc_cflog_line), true);
+                        if (is_array($wpc_cflog_row)) {
+                            $wpc_combine_receipts[] = gmdate('H:i:s', (int) ($wpc_cflog_row['t'] ?? 0)) . 'Z '
+                                . json_encode($wpc_cflog_row['layers'] ?? []);
                         }
                     }
-                    @fclose($wpc_fh278);
+                    @fclose($wpc_cflog_handle);
                 }
-                if (!empty($wpc_rows278)) {
-                    $lanes['critcombine'] = ['verdict' => 'INFO', 'receipts' => array_slice($wpc_rows278, -6)];
+                if (!empty($wpc_combine_receipts)) {
+                    $lanes['critcombine'] = ['verdict' => 'INFO', 'receipts' => array_slice($wpc_combine_receipts, -6)];
                 }
             }
         } catch (\Throwable $e) {
@@ -7219,37 +7435,37 @@ class wps_ic_ajax extends wps_ic
             ? (bool) wps_ic_js_delay_v3::wpc_delay_master_on($set) : false;
         $lanes['js_delay'] = ['verdict' => $delay_on ? 'PASS' : 'FAIL', 'detail' => $delay_on ? 'delay master on' : 'delay OFF'];
 
-        
-        
-        
-        
+        // v7.21.226 — CDN truth lane. Live receipt (bestexteriorsinc): dashboard CDN off,
+        // yet the mint's lazy vars still carry api_url=https://cdn.* and runtime swaps
+        // re-fetch every lazy image from the zone — the dup-download class. Name every
+        // input so the stale key is one paste away.
         try {
-            $cdn226 = [];
-            foreach (['lazy', 'live-cdn', 'css', 'js', 'fonts'] as $ck226) {
-                $cdn226[$ck226] = isset($set[$ck226]) ? (string) $set[$ck226] : 'unset';
+            $cdn_state = [];
+            foreach (['lazy', 'live-cdn', 'css', 'js', 'fonts'] as $cdn_key) {
+                $cdn_state[$cdn_key] = isset($set[$cdn_key]) ? (string) $set[$cdn_key] : 'unset';
             }
-            foreach (['jpg', 'png', 'gif', 'svg'] as $sk226) {
-                $cdn226['serve.' . $sk226] = isset($set['serve'][$sk226]) ? (string) $set['serve'][$sk226] : 'unset';
+            foreach (['jpg', 'png', 'gif', 'svg'] as $serve_type) {
+                $cdn_state['serve.' . $serve_type] = isset($set['serve'][$serve_type]) ? (string) $set['serve'][$serve_type] : 'unset';
             }
-            $cdn226['ic_custom_cname'] = (string) get_option('ic_custom_cname', '');
-            $cdn226['ic_cdn_zone_name'] = (string) get_option('ic_cdn_zone_name', '');
-            $cdn226['suppressed'] = (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) ? 1 : 0;
-            $mintApi226 = '';
-            if (is_string($html) && $html !== '' && preg_match('/"api_url":"([^"]+)"/', $html, $am226)) {
-                $mintApi226 = stripslashes($am226[1]);
+            $cdn_state['ic_custom_cname'] = (string) get_option('ic_custom_cname', '');
+            $cdn_state['ic_cdn_zone_name'] = (string) get_option('ic_cdn_zone_name', '');
+            $cdn_state['suppressed'] = (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) ? 1 : 0;
+            $mintApiUrl = '';
+            if (is_string($html) && $html !== '' && preg_match('/"api_url":"([^"]+)"/', $html, $api_url_match)) {
+                $mintApiUrl = stripslashes($api_url_match[1]);
             }
-            $cdn226['mint_api_url'] = $mintApi226 !== '' ? $mintApi226 : 'absent';
-            $servesOn226 = 0;
-            foreach (['jpg', 'png', 'gif', 'svg'] as $sk226) {
-                if (isset($set['serve'][$sk226]) && $set['serve'][$sk226] == '1') { $servesOn226++; }
+            $cdn_state['mint_api_url'] = $mintApiUrl !== '' ? $mintApiUrl : 'absent';
+            $servesOn = 0;
+            foreach (['jpg', 'png', 'gif', 'svg'] as $serve_type) {
+                if (isset($set['serve'][$serve_type]) && $set['serve'][$serve_type] == '1') { $servesOn++; }
             }
-            $leak226 = ($cdn226['suppressed'] === 1 || $servesOn226 === 0) && $mintApi226 !== '';
+            $cdn_leak = ($cdn_state['suppressed'] === 1 || $servesOn === 0) && $mintApiUrl !== '';
             $lanes['cdn'] = [
-                'verdict' => $leak226 ? 'FAIL' : 'INFO',
-                'detail'  => ($leak226 ? 'CDN RESURRECTION: zone emitted while CDN is off - lazy runtime re-fetches images through the zone (dup downloads). ' : '')
-                    . 'state: ' . json_encode($cdn226),
+                'verdict' => $cdn_leak ? 'FAIL' : 'INFO',
+                'detail'  => ($cdn_leak ? 'CDN RESURRECTION: zone emitted while CDN is off - lazy runtime re-fetches images through the zone (dup downloads). ' : '')
+                    . 'state: ' . json_encode($cdn_state),
             ];
-            if ($leak226) { $lanes['cdn']['fix'] = 'strip api_url when suppressed/all-serve-off (plugin) + purge; verify which key still reads on'; }
+            if ($cdn_leak) { $lanes['cdn']['fix'] = 'strip api_url when suppressed/all-serve-off (plugin) + purge; verify which key still reads on'; }
         } catch (\Throwable $e) {
         }
         if (is_string($html) && $html !== '') {
@@ -7261,21 +7477,26 @@ class wps_ic_ajax extends wps_ic
             } else {
                 $lanes['cache_freshness'] = ['verdict' => 'WARN', 'detail' => 'no loader in cached copy'];
             }
-            if (function_exists('wpc_stale43_plan') && defined('WPS_IC_CACHE') && !empty($urlKey)) {
-                $wpc_sp43 = [];
-                foreach (['', 'mobile_'] as $wpc_v43) {
-                    $wpc_sp43[] = ($wpc_v43 === '' ? 'desktop' : 'mobile') . ':' . wpc_stale43_plan(WPS_IC_CACHE . $urlKey . '/', $wpc_v43);
+            if (function_exists('wpc_stale_serve_plan') && defined('WPS_IC_CACHE') && !empty($urlKey)) {
+                $wpc_stale_plans = [];
+                foreach (['', 'mobile_'] as $wpc_stale_variant) {
+                    $wpc_stale_plans[] = ($wpc_stale_variant === '' ? 'desktop' : 'mobile') . ':' . wpc_stale_serve_plan(WPS_IC_CACHE . $urlKey . '/', $wpc_stale_variant);
                 }
-                $wpc_mk43 = rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt';
-                $lanes['cache_freshness']['detail'] .= ' | stale43: ' . implode(' ', $wpc_sp43)
-                    . ' mark=' . (@is_file($wpc_mk43) ? (time() - (int) @file_get_contents($wpc_mk43)) . 's-ago' : 'none');
+                $wpc_stale_mark_file = rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt';
+                $lanes['cache_freshness']['detail'] .= ' | stale43: ' . implode(' ', $wpc_stale_plans)
+                    . ' mark=' . (@is_file($wpc_stale_mark_file) ? (time() - (int) @file_get_contents($wpc_stale_mark_file)) . 's-ago' : 'none');
             }
             if (strpos($html, 'KGZ1bmN0aW9uKCl7dmFyIG5kPWZhbHNl') !== false) {
                 $lanes['frozen_backstop'] = ['verdict' => 'FAIL',
                     'detail' => 'delay registry carries a FROZEN font backstop (pre-nodefer mint) — replays old font code every view',
                     'fix' => 'purge HTML cache'];
-            } elseif (strpos($html, 'id="wpc-lf-flip924"') !== false
-                && strpos($html, 'data-nodefer="1" id="wpc-lf-flip924"') === false) {
+            // The rename sweep moved the flip tag's id to wpc-late-faces-flip. Cached HTML minted
+            // before it (and before .212, which added data-nodefer) still carries the old id, so
+            // the diagnostic reads both spellings: either one without data-nodefer is a frozen mint.
+            } elseif ((strpos($html, 'id="wpc-lf-flip924"') !== false
+                    && strpos($html, 'data-nodefer="1" id="wpc-lf-flip924"') === false)
+                || (strpos($html, 'id="wpc-late-faces-flip"') !== false
+                    && strpos($html, 'data-nodefer="1" id="wpc-late-faces-flip"') === false)) {
                 $lanes['frozen_backstop'] = ['verdict' => 'FAIL', 'detail' => 'backstop tag without data-nodefer (pre-.212 mint)', 'fix' => 'purge HTML cache'];
             } else {
                 $lanes['frozen_backstop'] = ['verdict' => 'PASS', 'detail' => 'no swallowed font scripts'];
@@ -7284,36 +7505,36 @@ class wps_ic_ajax extends wps_ic
                 $lanes['js_delay']['detail'] .= $tm[1] === '0'
                     ? ' | interaction-only (lab-clean)' : ' | timed fallback ' . $tm[1] . 's (unmeasured page)';
             }
-            
-            
-            
-            
-            
-            if (preg_match_all('/<script\b[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>/i', $html, $wpc_sm262)) {
-                $wpc_eag262 = [];
-                foreach ($wpc_sm262[0] as $wpc_i262 => $wpc_st262) {
-                    if (stripos($wpc_st262, 'wpc-delayed') !== false || stripos($wpc_st262, 'text/wpc') !== false) { continue; }
-                    
-                    
-                    if (stripos($wpc_sm262[1][$wpc_i262], 'data:') === 0) { continue; }
-                    $wpc_bn262 = basename((string) parse_url($wpc_sm262[1][$wpc_i262], PHP_URL_PATH));
-                    if ($wpc_bn262 === '' || stripos($wpc_bn262, 'delay-v3-loader') !== false
-                        || stripos($wpc_bn262, 'local-lazy') !== false) { continue; }
-                    $wpc_eag262[] = $wpc_bn262;
+            // v7.21.262 — EAGER-JS CENSUS. 33 JS rows on a lab run while the lane says
+            // lab-clean = the keep closure, and nobody could name its members without
+            // view-source archaeology. Every script the mint serves eager (src, not
+            // delay-typed, not our own loader/pixel) is named here so a keep can be cut
+            // surgically instead of guessed at.
+            if (preg_match_all('/<script\b[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>/i', $html, $wpc_script_matches)) {
+                $wpc_eager_scripts = [];
+                foreach ($wpc_script_matches[0] as $wpc_script_index => $wpc_script_tag) {
+                    if (stripos($wpc_script_tag, 'wpc-delayed') !== false || stripos($wpc_script_tag, 'text/wpc') !== false) { continue; }
+                    // .270 — data: URI scripts are inlined configs (the .47 conversion), zero
+                    // network rows; counting them buried the real closure in noise.
+                    if (stripos($wpc_script_matches[1][$wpc_script_index], 'data:') === 0) { continue; }
+                    $wpc_script_name = basename((string) parse_url($wpc_script_matches[1][$wpc_script_index], PHP_URL_PATH));
+                    if ($wpc_script_name === '' || stripos($wpc_script_name, 'delay-v3-loader') !== false
+                        || stripos($wpc_script_name, 'local-lazy') !== false) { continue; }
+                    $wpc_eager_scripts[] = $wpc_script_name;
                 }
-                if (!empty($wpc_eag262)) {
-                    $lanes['js_delay']['eager_js'] = count($wpc_eag262) . ' eager: '
-                        . implode(',', array_slice($wpc_eag262, 0, 14))
-                        . (count($wpc_eag262) > 14 ? ',+' . (count($wpc_eag262) - 14) : '');
-                    if (count($wpc_eag262) > 6) {
+                if (!empty($wpc_eager_scripts)) {
+                    $lanes['js_delay']['eager_js'] = count($wpc_eager_scripts) . ' eager: '
+                        . implode(',', array_slice($wpc_eager_scripts, 0, 14))
+                        . (count($wpc_eager_scripts) > 14 ? ',+' . (count($wpc_eager_scripts) - 14) : '');
+                    if (count($wpc_eager_scripts) > 6) {
                         $lanes['js_delay']['fix'] = 'keep closure is broad - name the member that NEEDS eager and cut the rest';
                     }
                 }
             }
-            $wpc_imt227 = substr_count($html, '<img');
-            $wpc_imp227 = substr_count($html, 'src="data:image/svg+xml');
-            $lanes['images_lazy']['detail'] .= ' | mint imgs: ' . $wpc_imt227 . ', true-parked: ' . $wpc_imp227
-                . ($wpc_imp227 === 0 && $wpc_imt227 > 12 ? ' (NOT PARKED - every src fetches in lab)' : '');
+            $wpc_img_total = substr_count($html, '<img');
+            $wpc_img_parked = substr_count($html, 'src="data:image/svg+xml');
+            $lanes['images_lazy']['detail'] .= ' | mint imgs: ' . $wpc_img_total . ', true-parked: ' . $wpc_img_parked
+                . ($wpc_img_parked === 0 && $wpc_img_total > 12 ? ' (NOT PARKED - every src fetches in lab)' : '');
             $lanes['fonts'] = [
                 'verdict' => 'INFO',
                 'detail' => '@font-face in mint: ' . substr_count($html, '@font-face')
@@ -7321,95 +7542,98 @@ class wps_ic_ajax extends wps_ic
                     . ' | late-faces: ' . (strpos($html, 'id="wpc-late-faces"') !== false ? 'present' : 'absent'),
             ];
         } else {
-            
-            
-            $wpc_cw287 = [];
-            $wpc_set287 = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
-            
-            
-            $wpc_cw287[] = 'setting=' . ((is_array($wpc_set287) && !empty($wpc_set287['cache']['advanced']) && $wpc_set287['cache']['advanced'] == '1') ? 'on' : 'OFF');
-            $wpc_cw287[] = 'wp_cache=' . ((defined('WP_CACHE') && WP_CACHE) ? '1' : '0');
-            $wpc_ac287 = defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR . '/advanced-cache.php' : '';
-            $wpc_cw287[] = 'dropin=' . (($wpc_ac287 !== '' && @is_file($wpc_ac287))
-                ? ((strpos((string) @file_get_contents($wpc_ac287), 'wpc') !== false || strpos((string) @file_get_contents($wpc_ac287), 'WPC') !== false) ? 'ours' : 'FOREIGN')
+            // v7.21.287 — NAME THE WHY (staging: WARN persisted all day at 510ms TTFB and
+            // nobody could tell setting-off from write-fail from drop-in-dead in one paste).
+            $wpc_cache_notes = [];
+            $wpc_settings = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
+            // .290 — the toggle is NESTED (settings[cache][advanced]); the flat read
+            // compared an array to '1' and printed a false OFF (staging receipt).
+            $wpc_cache_notes[] = 'setting=' . ((is_array($wpc_settings) && !empty($wpc_settings['cache']['advanced']) && $wpc_settings['cache']['advanced'] == '1') ? 'on' : 'OFF');
+            $wpc_cache_notes[] = 'wp_cache=' . ((defined('WP_CACHE') && WP_CACHE) ? '1' : '0');
+            $wpc_dropin_file = defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR . '/advanced-cache.php' : '';
+            $wpc_cache_notes[] = 'dropin=' . (($wpc_dropin_file !== '' && @is_file($wpc_dropin_file))
+                ? ((strpos((string) @file_get_contents($wpc_dropin_file), 'wpc') !== false || strpos((string) @file_get_contents($wpc_dropin_file), 'WPC') !== false) ? 'ours' : 'FOREIGN')
                 : 'MISSING');
             if (function_exists('wpc_cache_dir_for')) {
-                $wpc_cd287 = (string) wpc_cache_dir_for($urlKey);
-                $wpc_cw287[] = 'dir=' . ($wpc_cd287 !== '' && is_dir($wpc_cd287) ? (is_writable($wpc_cd287) ? 'writable' : 'READONLY') : 'absent');
+                $wpc_cache_dir = (string) wpc_cache_dir_for($urlKey);
+                $wpc_cache_notes[] = 'dir=' . ($wpc_cache_dir !== '' && is_dir($wpc_cache_dir) ? (is_writable($wpc_cache_dir) ? 'writable' : 'READONLY') : 'absent');
             } elseif (defined('WPS_IC_CACHE')) {
-                $wpc_cw287[] = 'dir=' . (is_dir(WPS_IC_CACHE) ? (is_writable(WPS_IC_CACHE) ? 'writable' : 'READONLY') : 'ABSENT');
+                $wpc_cache_notes[] = 'dir=' . (is_dir(WPS_IC_CACHE) ? (is_writable(WPS_IC_CACHE) ? 'writable' : 'READONLY') : 'ABSENT');
             }
-            
-            
-            
-            $wpc_lw288 = function_exists('get_option') ? get_option('wpc_cache_lastwrite288') : null;
-            $wpc_cw287[] = 'lastwrite=' . (is_array($wpc_lw288)
-                ? ((time() - (int) $wpc_lw288['t']) . 's-ago ' . $wpc_lw288['variant'] . ' ' . $wpc_lw288['bytes'] . 'b [' . $wpc_lw288['key'] . ']')
+            // .288 — the full forensics: last successful write (splits never-writes from
+            // reads-miss), the exact file paths both variants would read, existence/age/
+            // bytes at each, and the drop-in's own version stamp.
+            $wpc_last_write = function_exists('get_option') ? get_option('wpc_cache_lastwrite288') : null;
+            $wpc_cache_notes[] = 'lastwrite=' . (is_array($wpc_last_write)
+                ? ((time() - (int) $wpc_last_write['t']) . 's-ago ' . $wpc_last_write['variant'] . ' ' . $wpc_last_write['bytes'] . 'b [' . $wpc_last_write['key'] . ']')
                 : 'NEVER');
             if (defined('WPS_IC_CACHE') && !empty($urlKey)) {
-                foreach (['index.html', 'index.html_gzip', 'mobile_index.html', 'mobile_index.html_gzip'] as $wpc_pv288) {
-                    $wpc_fp288 = WPS_IC_CACHE . $urlKey . '/' . $wpc_pv288;
-                    $wpc_cw287[] = $wpc_pv288 . '=' . (@is_file($wpc_fp288)
-                        ? ((int) @filesize($wpc_fp288) . 'b/' . (time() - (int) @filemtime($wpc_fp288)) . 's')
+                foreach (['index.html', 'index.html_gzip', 'mobile_index.html', 'mobile_index.html_gzip', 'localonly_index.html_gzip', 'mobile_localonly_index.html_gzip'] as $wpc_page_variant) {
+                    $wpc_variant_file = WPS_IC_CACHE . $urlKey . '/' . $wpc_page_variant;
+                    $wpc_cache_notes[] = $wpc_page_variant . '=' . (@is_file($wpc_variant_file)
+                        ? ((int) @filesize($wpc_variant_file) . 'b/' . (time() - (int) @filemtime($wpc_variant_file)) . 's')
                         : 'ABSENT');
                 }
-                $wpc_cw287[] = 'key=' . $urlKey;
-                $wpc_mk43 = rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt';
-                $wpc_cw287[] = 'stale43_mark=' . (@is_file($wpc_mk43) ? (time() - (int) @file_get_contents($wpc_mk43)) . 's-ago' : 'none');
+                $wpc_cache_notes[] = 'key=' . $urlKey;
+                $wpc_stale_mark_file = rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt';
+                $wpc_cache_notes[] = 'stale43_mark=' . (@is_file($wpc_stale_mark_file) ? (time() - (int) @file_get_contents($wpc_stale_mark_file)) . 's-ago' : 'none');
             }
-            if ($wpc_ac287 !== '' && @is_file($wpc_ac287)
-                && preg_match('/Version:\s*([0-9.]+)/', (string) @file_get_contents($wpc_ac287), $wpc_avm288)) {
-                $wpc_cw287[] = 'dropin_v=' . $wpc_avm288[1];
+            if ($wpc_dropin_file !== '' && @is_file($wpc_dropin_file)
+                && preg_match('/Version:\s*([0-9.]+)/', (string) @file_get_contents($wpc_dropin_file), $wpc_dropin_version_match)) {
+                $wpc_cache_notes[] = 'dropin_v=' . $wpc_dropin_version_match[1];
             }
             $lanes['cache_freshness'] = ['verdict' => 'WARN',
-                'detail' => 'no cached copy found (uncached or purged) | ' . implode(' ', $wpc_cw287)];
+                'detail' => 'no cached copy found (uncached or purged) | ' . implode(' ', $wpc_cache_notes)];
         }
-        
-        
-        
-        
+        // v7.21.238 — RENDER HEALTH: renders were ALTERNATING raw/optimized for minutes
+        // with no cached copy (168-request raw waterfalls). Name every gate that can shed
+        // or veto the rewrite so one paste distinguishes load-shed spiral / bypass window /
+        // stale-mark / kick exhaustion — no more guessing at an un-SSH-able box.
         try {
-            $rh238 = [];
-            $rh238['under_pressure'] = (function_exists('wpc_under_pressure') && wpc_under_pressure()) ? 1 : 0;
-            $rh238['loadavg'] = function_exists('sys_getloadavg') ? implode(',', array_map(function ($v) { return round($v, 2); }, (array) sys_getloadavg())) : 'n/a';
-            $rh238['update_window_until'] = (int) get_option('wpc_update_window_until', 0) - time();
-            $rh238['crit_bypass'] = (function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($urlKey)) ? 1 : 0;
-            $rh238['kick_dead'] = (function_exists('wpc_kick_is_dead') && wpc_kick_is_dead($urlKey)) ? 1 : 0;
-            $rh238['kick_budget_ok'] = (function_exists('wpc_kick_budget_ok') && !wpc_kick_budget_ok()) ? 0 : 1;
-            foreach (['upgrade', 'all'] as $sk238) {
-                $sv238 = (int) get_transient('wpc_crit_stale_' . md5($sk238));
-                if ($sv238 > 0) { $rh238['stale_mark_' . $sk238] = (time() - $sv238) . 's ago'; }
+            $health_facts = [];
+            $health_facts['under_pressure'] = (function_exists('wpc_under_pressure') && wpc_under_pressure()) ? 1 : 0;
+            $health_facts['loadavg'] = function_exists('sys_getloadavg') ? implode(',', array_map(function ($v) { return round($v, 2); }, (array) sys_getloadavg())) : 'n/a';
+            $health_facts['update_window_until'] = (int) get_option('wpc_update_window_until', 0) - time();
+            $health_facts['crit_bypass'] = (function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($urlKey)) ? 1 : 0;
+            $health_facts['kick_dead'] = (function_exists('wpc_kick_is_dead') && wpc_kick_is_dead($urlKey)) ? 1 : 0;
+            $health_facts['kick_admissions_left'] = function_exists('wpc_kick_admit_room') ? wpc_kick_admit_room() : -1;
+            $health_facts['service_holds'] = function_exists('wpc_gen_holds_for') ? implode(' ', array_map(function ($hold) {
+                return $hold['scope'] . ':' . $hold['type'] . ($hold['until'] < PHP_INT_MAX ? ':' . ($hold['until'] - time()) . 's' : '') . ($hold['pass'] ? ':corpus-passes' : '');
+            }, wpc_gen_holds_for($urlKey))) : '';
+            foreach (['upgrade', 'all'] as $stale_scope) {
+                $stale_marked_at = (int) get_transient('wpc_crit_stale_' . md5($stale_scope));
+                if ($stale_marked_at > 0) { $health_facts['stale_mark_' . $stale_scope] = (time() - $stale_marked_at) . 's ago'; }
             }
             if ($cd !== '') {
-                foreach (['critical_desktop.css', 'critical_mobile.css', 'tpl.txt'] as $cf238) {
-                    $rh238[$cf238] = @is_readable($cd . $cf238)
-                        ? (int) @filesize($cd . $cf238) . 'b/' . (time() - (int) @filemtime($cd . $cf238)) . 's'
+                foreach (['critical_desktop.css', 'critical_mobile.css', 'tpl.txt'] as $crit_file) {
+                    $health_facts[$crit_file] = @is_readable($cd . $crit_file)
+                        ? (int) @filesize($cd . $crit_file) . 'b/' . (time() - (int) @filemtime($cd . $crit_file)) . 's'
                         : 'ABSENT';
                 }
             }
-            
-            
-            
-            
-            $rh238['combined_on'] = (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_combined_crit_on'))
+            // v7.21.242 — the CF split-brain (crit-team receipt: mobile viewport served the
+            // desktop crit under a device-blind edge). The floors exist; name every input so
+            // one paste says which lied: combined verdict, sticky cf-fronted flag, devkey
+            // readback stamp, combined artifact presence, and the mint's actual crit class.
+            $health_facts['combined_on'] = (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_combined_crit_on'))
                 ? (int) (bool) wps_rewriteLogic::wpc_combined_crit_on() : -1;
-            $rh238['cf_fronted_seen'] = (int) !empty(get_option('wpc_cf_fronted_seen', 0));
-            $dk242 = get_option('wpc_cf_devkey_verified');
-            $rh238['devkey'] = is_array($dk242)
-                ? (!empty($dk242['devkey']) ? 'yes/src=' . (isset($dk242['src']) ? (string) $dk242['src'] : '') : 'no')
+            $health_facts['cf_fronted_seen'] = (int) !empty(get_option('wpc_cf_fronted_seen', 0));
+            $devkey_state = get_option('wpc_cf_devkey_verified');
+            $health_facts['devkey'] = is_array($devkey_state)
+                ? (!empty($devkey_state['devkey']) ? 'yes/src=' . (isset($devkey_state['src']) ? (string) $devkey_state['src'] : '') : 'no')
                 : 'absent';
-            $rh238['combined_artifact'] = ($cd !== '' && @is_readable($cd . 'critical_combined.css'))
+            $health_facts['combined_artifact'] = ($cd !== '' && @is_readable($cd . 'critical_combined.css'))
                 ? (int) @filesize($cd . 'critical_combined.css') . 'b' : 'ABSENT';
-            if (is_string($html) && $html !== '' && preg_match('/id="wpc-critical-css" class="([^"]+)"/', $html, $cc242)) {
-                $rh238['mint_crit_class'] = $cc242[1];
+            if (is_string($html) && $html !== '' && preg_match('/id="wpc-critical-css" class="([^"]+)"/', $html, $crit_class_match)) {
+                $health_facts['mint_crit_class'] = $crit_class_match[1];
             }
-            if ($rh238['cf_fronted_seen'] === 1 && $rh238['devkey'] !== 'yes/src=readback'
-                && $rh238['combined_on'] !== 1) {
-                $rh238['VERDICT'] = 'DEVICE-SPLIT ON A DEVICE-BLIND EDGE - floor failed to hold';
+            if ($health_facts['cf_fronted_seen'] === 1 && $health_facts['devkey'] !== 'yes/src=readback'
+                && $health_facts['combined_on'] !== 1) {
+                $health_facts['VERDICT'] = 'DEVICE-SPLIT ON A DEVICE-BLIND EDGE - floor failed to hold';
             }
             $lanes['render_health'] = [
-                'verdict' => ($rh238['under_pressure'] || $rh238['crit_bypass']) ? 'WARN' : 'INFO',
-                'detail'  => json_encode($rh238),
+                'verdict' => ($health_facts['under_pressure'] || $health_facts['crit_bypass']) ? 'WARN' : 'INFO',
+                'detail'  => json_encode($health_facts),
             ];
         } catch (\Throwable $e) {
         }
@@ -7430,8 +7654,9 @@ class wps_ic_ajax extends wps_ic
             foreach ([WPS_IC_CACHE . $urlKey . '/index.html', WPS_IC_CACHE . $urlKey . '/mobile_index.html'] as $f) {
                 if (@is_readable($f)) { $html = (string) @file_get_contents($f); break; }
             }
-            if ($html === '' && @is_readable(WPS_IC_CACHE . $urlKey . '/index.html_gzip') && function_exists('gzdecode')) {
-                $html = (string) @gzdecode((string) @file_get_contents(WPS_IC_CACHE . $urlKey . '/index.html_gzip'));
+            $wpc_stored_gzip = wpc_copy_present_gzip(WPS_IC_CACHE . $urlKey);
+            if ($html === '' && $wpc_stored_gzip !== '' && function_exists('gzdecode')) {
+                $html = (string) @gzdecode((string) @file_get_contents($wpc_stored_gzip));
             }
         }
         wp_send_json_success([
@@ -7447,171 +7672,98 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('forbidden');
         }
         wp_send_json_success([
-            'ledger'    => self::wpc_bulk_ledger_get202(),
-            'summary'   => self::wpc_bulk_ledger_summary202(),
-            'reconcile' => get_option('wpc_bulk_recon_last202'),
-            'inflight'  => self::wpc_bulk_inflight199(),
-            'counted'   => get_option('wpc_bulk_counted201'),
+            'ledger'    => self::wpc_bulk_ledger_get(),
+            'summary'   => wps_ic_image_library::progress(),
+            'inflight'  => self::wpc_bulk_inflight_ids(),
         ]);
     }
 
-    public static function wpc_bulk_status_count201()
+    /**
+     * Mark every session image, and every image the ledger says was sent, that reached
+     * `ic_status = compressed` as verified in the ledger, the run's one tally
+     * (wps_ic_image_library::progress() reads it). An image already verified is not read again.
+     * The ledger's own sent rows are read because an image can land after the page's cleanup
+     * deleted the session list (the completion card counts landings through here).
+     */
+    public static function wpc_bulk_status_count()
     {
         $session_ids = get_transient('wpc_bulk_session_ids') ?: [];
-        if (!is_array($session_ids) || empty($session_ids)) {
-            return;
+        if (!is_array($session_ids)) {
+            $session_ids = [];
         }
-        $counted = get_option('wpc_bulk_counted201');
-        if (!is_array($counted)) {
-            $counted = [];
-        }
-        $bs = get_option('wps_ic_BulkStatus') ?: [];
-        $new = 0;
-        foreach (array_values(array_unique(array_map('intval', $session_ids))) as $id) {
-            if ($id <= 0 || isset($counted[$id])) {
-                continue;
-            }
-            wp_cache_delete($id, 'post_meta');
-            if (get_post_meta($id, 'ic_status', true) !== 'compressed') {
-                continue;
-            }
-            $counted[$id] = 1;
-            $new++;
-            self::wpc_bulk_ledger_mark202($id, 'verified');
-            $bs['compressedImageCount'] = ($bs['compressedImageCount'] ?? 0) + 1;
-            $variants = get_post_meta($id, 'ic_local_variants', true);
-            if (is_array($variants)) {
-                $bs['compressedThumbs'] = ($bs['compressedThumbs'] ?? 0) + count($variants);
-                foreach ($variants as $v) {
-                    if (!is_array($v)) continue;
-                    $bs['total']['original']['size']   = ($bs['total']['original']['size'] ?? 0) + (int) ($v['originalSize'] ?? 0);
-                    $bs['total']['compressed']['size'] = ($bs['total']['compressed']['size'] ?? 0) + (int) ($v['size'] ?? 0);
+        $ledger = self::wpc_bulk_ledger_get();
+        if (is_array($ledger)) {
+            foreach ((array) ($ledger['images'] ?? []) as $lid => $row) {
+                if (is_array($row) && !empty($row['sent'])) {
+                    $session_ids[] = (int) $lid;
                 }
             }
         }
-        if ($new > 0) {
-            update_option('wpc_bulk_counted201', $counted, false);
-            update_option('wps_ic_BulkStatus', $bs);
-            wps_ic_local::wpc_counts_invalidate37();
+        if (empty($session_ids)) {
+            return;
+        }
+        foreach (array_values(array_unique(array_map('intval', $session_ids))) as $id) {
+            if ($id <= 0 || (is_array($ledger) && ($ledger['images'][$id]['st'] ?? '') === 'verified')) {
+                continue;
+            }
+            wp_cache_delete($id, 'post_meta');
+            if (get_post_meta($id, 'ic_status', true) === 'compressed') {
+                self::wpc_bulk_ledger_mark($id, 'verified');
+            }
         }
     }
 
-    public static function wpc_bulk_pipeline_drain199()
+    /** The completion card's numbers (wps_ic_image_library::completion()) after counting landings. */
+    private static function wpc_bulk_completion_json()
+    {
+        self::wpc_bulk_status_count();
+        return wps_ic_image_library::completion();
+    }
+
+    /** The run's progress for a JSON answer: the owner's numbers without the id list. */
+    private static function wpc_bulk_run_json()
+    {
+        $run = wps_ic_image_library::progress();
+        if ($run !== null) {
+            unset($run['verified_ids']);
+        }
+        return $run;
+    }
+
+    /** The ledger state for an image the dispatch door refused: a parked image is counted as parked. */
+    private static function wpc_bulk_ledger_state_for_refusal($refused_by)
+    {
+        return ($refused_by === 'parked' || $refused_by === 'parked_attempt_cap') ? 'parked' : 'skipped';
+    }
+
+    public static function wpc_drain_bulk_pipeline()
     {
         if (!function_exists('wpc_v2_pull_enabled') || !wpc_v2_pull_enabled()) {
             return false;
         }
         if (function_exists('wpc_v2_pull_manifest_tick')) {
-            $wpc_wait199 = max(0, (int) apply_filters('wpc_bulk_longpoll_ms', 25000));
-            wpc_v2_pull_manifest_tick(100, $wpc_wait199);
+            $wait_ms = max(0, (int) apply_filters('wpc_bulk_longpoll_ms', 25000));
+            wpc_v2_pull_manifest_tick(100, $wait_ms);
         }
         if (function_exists('wpc_v2_journal_drain_run')) {
             try { wpc_v2_journal_drain_run(); } catch (\Throwable $e) {}
         }
-        self::wpc_bulk_status_count201();
+        self::wpc_bulk_status_count();
         return true;
     }
 
-    public static function wpc_bulk_v2_dispatch_batch(array $preps)
-    {
-        $wpc_sent309 = [];
-        if (empty($preps)) return $wpc_sent309;
-
-        
-        if (function_exists('curl_multi_init') && function_exists('curl_multi_exec') && count($preps) > 1) {
-            $mh = curl_multi_init();
-            $handles = [];
-            foreach ($preps as $id => $p) {
-                $env = $p['client']->build_envelope($id, $p['variants'], $p['options']);
-                if (empty($env['ok'])) {
-                    error_log('[WPC Bulk] envelope_build_failed image=' . $id . ' — ' . ($env['error'] ?? 'unknown'));
-                    continue;
-                }
-                $hdrs = [];
-                foreach ($env['headers'] as $k => $v) {
-                    $hdrs[] = $k . ': ' . $v;
-                }
-                $ch = curl_init();
-                curl_setopt_array($ch, [
-                    CURLOPT_URL            => $env['url'],
-                    CURLOPT_POST           => true,
-                    CURLOPT_POSTFIELDS     => $env['body_json'],
-                    CURLOPT_HTTPHEADER     => $hdrs,
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_TIMEOUT        => 30,
-                    CURLOPT_CONNECTTIMEOUT => 10,
-                    CURLOPT_SSL_VERIFYPEER => true,
-                    CURLOPT_USERAGENT      => 'WPCompress/7.02 bulk-multi',
-                ]);
-                curl_multi_add_handle($mh, $ch);
-                
-                
-                if (function_exists('wpc_cache_first_log')) {
-                    wpc_cache_first_log('media-wire-out', (string) $id, '', [
-                        'transport' => (string) ($env['headers']['X-WPC-Source-Transport'] ?? '?'),
-                        'bytes'     => strlen((string) $env['body_json']),
-                        'lane'      => 'bulk',
-                    ]);
-                }
-                $handles[$id] = ['ch' => $ch, 'client' => $p['client'], 't0' => $p['t0']];
-            }
-
-            
-            $running = null;
-            do {
-                curl_multi_exec($mh, $running);
-                if ($running) curl_multi_select($mh, 0.5);
-            } while ($running > 0);
-
-            
-            foreach ($handles as $id => $h) {
-                $body_raw  = curl_multi_getcontent($h['ch']);
-                $http_code = (int) curl_getinfo($h['ch'], CURLINFO_HTTP_CODE);
-                $wall_ms   = (int) round((microtime(true) - $h['t0']) * 1000);
-                if (function_exists('wpc_cache_first_log')) {
-                    wpc_cache_first_log('media-wire-in', (string) $id, '', [
-                        'code' => $http_code, 'len' => strlen((string) $body_raw),
-                        'ms' => $wall_ms, 'curl' => (string) curl_error($h['ch']), 'lane' => 'bulk',
-                    ]);
-                }
-                $result    = $h['client']->process_response($id, $http_code, $body_raw);
-                if (empty($result['ok'])) {
-                    error_log(sprintf('[WPC Bulk] FAILED image=%d wall=%dms err=%s',
-                        $id, $wall_ms, $result['error'] ?? 'unknown'));
-                } else {
-                    $wpc_sent309[] = (int) $id;
-                }
-                curl_multi_remove_handle($mh, $h['ch']);
-                curl_close($h['ch']);
-            }
-            curl_multi_close($mh);
-            return $wpc_sent309;
-        }
-
-        
-        foreach ($preps as $id => $p) {
-            $result = $p['client']->optimize($id, $p['variants'], $p['options']);
-            if (empty($result['ok'])) {
-                error_log('[WPC Bulk] FAILED image=' . $id . ' — ' . ($result['error'] ?? 'unknown'));
-            } else {
-                $wpc_sent309[] = (int) $id;
-            }
-        }
-        return $wpc_sent309;
-    }
-
-    
-
-
-
-
+    /**
+     * Fire a non-blocking loopback POST to wpc_bulk_v2_restore_drain.
+     * Mirrors wpc_bulk_v2_fire_loopback (compress side). Cookies forwarded so
+     * the handler runs as the originating user.
+     */
     public static function wpc_bulk_v2_restore_fire_loopback()
     {
-        
+        // WORK-GATE — only fire when the restore queue actually has work.
         $q = get_transient('wps_ic_restore_queue');
         if (empty($q['queue'])) { return false; }
-        
-        
+        // RISK #5 — skip if a worker is already draining; flag a redrain so a tick
+        // arriving mid-slice is never dropped (mirror v2-pull-manifest.php:773-784).
         if (($lock_ts = (int) get_transient('wpc_bulk_restore_draining')) > 0) {
             set_transient('wpc_bulk_restore_redrain_pending', time(), 60);
             return false;
@@ -7620,9 +7772,9 @@ class wps_ic_ajax extends wps_ic
         $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
         if ($apikey === '') { delete_transient('wpc_bulk_restore_draining'); return false; }
         $ts  = time();
-        $sig = hash_hmac('sha256', 'wpc_bulk_restore_drain.' . $ts, $apikey); 
+        $sig = hash_hmac('sha256', 'wpc_bulk_restore_drain.' . $ts, $apikey); // DISTINCT namespace
         $url   = admin_url('admin-ajax.php');
-        $parts = wp_parse_url($url);                                           
+        $parts = wp_parse_url($url);                                           // RISK #2 — loopback/origin host, NOT edge
         if (empty($parts['host'])) { delete_transient('wpc_bulk_restore_draining'); return false; }
         $is_https = (!empty($parts['scheme']) && $parts['scheme'] === 'https');
         $port = $is_https ? 443 : 80;
@@ -7643,7 +7795,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wpc_bulk_v2_restore_drain()
     {
-        
+        // PRIV (tab poll / watchdog) — guard UNCHANGED.
         if (!current_user_can('manage_wpc_settings')) {
             wp_die('', '', ['response' => 403]);
         }
@@ -7651,40 +7803,40 @@ class wps_ic_ajax extends wps_ic
         wp_die('', '', ['response' => 200]);
     }
 
-    
-
-
-
-
+    /**
+     * L0+L1 RESTORE NOPRIV LOOP HANDLER. Cookieless fsockopen self-chain
+     * target. Auth ENTIRELY on HMAC (distinct namespace), then close the client
+     * connection (FPM/LiteSpeed) and run the shared slice detached.
+     */
     public function wpc_bulk_v2_restore_drain_loop()
     {
-        
+        // RISK #1 — auth ENTIRELY on HMAC, copied verbatim from v2-pull-manifest.php:870-881, namespace swapped.
         $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
         $ts     = isset($_POST['t']) ? (int) $_POST['t'] : 0;
         $sig    = isset($_POST['sig']) ? (string) $_POST['sig'] : '';
         if ($apikey === '' || $ts <= 0 || $sig === '' || abs(time() - $ts) > 60) { http_response_code(401); exit('auth'); }
-        $expected = hash_hmac('sha256', 'wpc_bulk_restore_drain.' . $ts, $apikey); 
+        $expected = hash_hmac('sha256', 'wpc_bulk_restore_drain.' . $ts, $apikey); // DISTINCT namespace
         if (!hash_equals($expected, $sig)) { http_response_code(401); exit('sig'); }
-        
-        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { http_response_code(200); echo 'queued'; wpc_finish_request39(); }
+        // LAYER 0 — close the client connection then run detached (FPM/LiteSpeed only; mod_php falls through).
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { http_response_code(200); echo 'queued'; wpc_finish_request(); }
         elseif (function_exists('litespeed_finish_request')) { http_response_code(200); echo 'queued'; @litespeed_finish_request(); }
         @ignore_user_abort(true);
-        @set_time_limit(60); 
+        @set_time_limit(60); // RISK #6 advisory — the 8s wall in the slice is the REAL bound
         $this->run_restore_drain_slice();
         exit;
     }
 
-    public function wpc_restore_slice_detach36()
+    public function wpc_arm_restore_slice_on_shutdown()
     {
-        static $armed36 = false;
-        if ($armed36 || !function_exists('add_action')) {
+        static $armed = false;
+        if ($armed || !function_exists('add_action')) {
             return false;
         }
-        $armed36 = true;
+        $armed = true;
         $self = $this;
         add_action('shutdown', function () use ($self) {
-            if (function_exists('wpc_finish_request39') && empty($GLOBALS['wpc_released39'])) {
-                wpc_finish_request39();
+            if (function_exists('wpc_finish_request') && empty($GLOBALS['wpc_response_released'])) {
+                wpc_finish_request();
             }
             @ignore_user_abort(true);
             @set_time_limit(60);
@@ -7715,22 +7867,22 @@ class wps_ic_ajax extends wps_ic
 
         try {
             $started = microtime(true);
-            
-            
+            // 8s wall budget (was 25s). restoreV4 ~2-5s per image,
+            // so 2-3 restores per slice. Self-chain after for more.
             $wall_budget_s = 8.0;
             $compress = new wps_local_compress();
             $processed = 0;
 
             while ((microtime(true) - $started) < $wall_budget_s) {
-                
+                // Responsive Stop signal + bulk_process check.
                 if (get_transient('wpc_bulk_stop_signal') || !get_option('wps_ic_bulk_process')) {
                     error_log('[WPC Bulk Restore] drain paused mid-iteration');
                     break;
                 }
-                
+                // Liveness heartbeat — server chain is alive and advancing.
                 if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
-                
-                
+                // RISK #3 — memory guard. Exit the loop (→ finally RELEASE_LOCK →
+                // self-chain re-fires a fresh worker; queue still non-empty so work advances).
                 $mem_limit = wp_convert_hr_to_bytes((string) @ini_get('memory_limit'));
                 if ($mem_limit > 0 && memory_get_usage(true) > (int) ($mem_limit * 0.8)) {
                     error_log('[WPC Bulk Restore] drain slice mem-cap break usage=' . memory_get_usage(true) . ' limit=' . $mem_limit);
@@ -7738,20 +7890,19 @@ class wps_ic_ajax extends wps_ic
                 }
                 $queue = get_transient('wps_ic_restore_queue');
                 if (empty($queue['queue'])) {
-                    
+                    // Queue drained — mark bulk done.
                     delete_option('wps_ic_bulk_process');
                     delete_transient('wps_ic_bulk_running');
-                    wps_ic_local::wpc_counts_invalidate37(true);
                     delete_transient('wps_ic_restore_queue');
                     set_transient('wps_ic_bulk_done', true, 60);
 
 
                     if (function_exists('wpc_purge_compat')) {
-                        
-                        
+                        // Blocking and result-logged. The bulk-done signal
+                        // (wps_ic_bulk_done transient) is already set above, so blocking this one
 
 
-                        
+                        // A Throwable must never 500 the restore response.
                         try {
                             $purge_res = wpc_purge_compat('all', [], 'restore_all', '', true);
                             $purge_ok  = is_array($purge_res) && !empty($purge_res['ok']);
@@ -7786,7 +7937,7 @@ class wps_ic_ajax extends wps_ic
                 ];
                 update_option('wps_ic_parsed_images', $parsed, false);
 
-                
+                // Update restoredImageCount for the progress bar.
                 $bulkStatus = get_option('wps_ic_BulkStatus') ?: [];
                 $bulkStatus['restoredImageCount'] = ($bulkStatus['restoredImageCount'] ?? 0) + 1;
                 update_option('wps_ic_BulkStatus', $bulkStatus);
@@ -7804,8 +7955,8 @@ class wps_ic_ajax extends wps_ic
             wpc_worker_unlock('wpc_bulk_v2_restore_chain');
         }
 
-        
-        
+        // Self-chain if more work remains. RISK #5 — redrain-aware: a tick that
+        // arrived mid-slice (flagged the redrain transient) is never dropped.
         $queue   = get_transient('wps_ic_restore_queue');
         $redrain = (int) get_transient('wpc_bulk_restore_redrain_pending') > 0;
         if ($redrain) { delete_transient('wpc_bulk_restore_redrain_pending'); }
@@ -7817,11 +7968,11 @@ class wps_ic_ajax extends wps_ic
             $processed, microtime(true) - $started));
     }
 
-    
-
-
-
-
+    /**
+     * JS calls this after the rolling-tally poller observes 2
+     * consecutive polls of fully drained state. Wipes the session list so
+     * the next bulk starts fresh. Fallback: 2h transient TTL auto-expires.
+     */
     public function wps_ic_bulkCompressCleanup()
     {
         if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'] ?? '', 'wps_ic_nonce_action')) {
@@ -7834,20 +7985,19 @@ class wps_ic_ajax extends wps_ic
         delete_transient('wps_ic_bulk_running');
         delete_transient('wpc_bulk_session_ids');
         delete_transient('wps_ic_bulk_done');
-        wps_ic_local::wpc_counts_invalidate37();
-        
-        
+        // Per-image transients written during a bulk run. None of these are
+        // load-bearing after bulk-done (they're all "in-flight" markers).
         foreach ($session_snapshot as $id) {
             $id = (int) $id;
             if ($id <= 0) continue;
-            delete_transient('wpc_v2_announced_'       . $id);  
-            delete_transient('wpc_v2_bg_retry_fired_'  . $id);  
-            delete_transient('wpc_v2_phase_a_done_'    . $id);  
-            delete_transient('wpc_v2_pending_'         . $id);  
+            delete_transient('wpc_v2_announced_'       . $id);  // 5min TTL, written by /bg_swap_announce
+            delete_transient('wpc_v2_bg_retry_fired_'  . $id);  // 60s TTL, heartbeat retry guard
+            delete_transient('wpc_v2_phase_a_done_'    . $id);  // 1h TTL, drain-complete marker
+            delete_transient('wpc_v2_pending_'         . $id);  // 10min TTL, Phase B pending list
             delete_transient('wps_ic_compress_'        . $id);
-            delete_transient('wps_ic_heartbeat_'       . $id);  
-            delete_transient('wpc_v2_t0_ms_'           . $id);  
-            delete_transient('wpc_v2_warming_'         . $id);  
+            delete_transient('wps_ic_heartbeat_'       . $id);  // 5min TTL, ML chip animation
+            delete_transient('wpc_v2_t0_ms_'           . $id);  // 1h TTL, click-time stamp
+            delete_transient('wpc_v2_warming_'         . $id);  // ML "warming" indicator
             delete_transient('wpc_v2_callbacks_blocked_' . $id);
         }
         wp_send_json_success(['ok' => true, 'cleaned' => count($session_snapshot)]);
@@ -7869,26 +8019,25 @@ class wps_ic_ajax extends wps_ic
         delete_option('wpc_bulk_restore_done_ms');
         delete_transient('wps_ic_bulk_done');
         delete_transient('wps_ic_restore_queue');
-        wps_ic_local::wpc_counts_invalidate37();
         foreach ($restore_ids as $id) {
             $id = (int) $id;
             if ($id <= 0) continue;
             delete_transient('wpc_v2_announced_'         . $id);
             delete_transient('wpc_v2_callbacks_blocked_' . $id);
-            delete_transient('wps_ic_heartbeat_'         . $id);  
+            delete_transient('wps_ic_heartbeat_'         . $id);  // ML chip animation
         }
         wp_send_json_success(['ok' => true, 'cleaned' => count($restore_ids)]);
     }
 
-    
-
-
-
-
-
-
-
-
+    /**
+     * Agency relay for the three Custom DNS actions.
+     *
+     * Deliberately NOT wpc_agency_forward_json(): that packs arguments into a json `form`
+     * query param, and the cnameAdd/cnameRetry/cnameRemove handlers already deployed on
+     * customer sites read `$_GET['cname']` and nothing else. api_comms' dedicated methods
+     * speak the shape those sites actually parse, so this works against every plugin version
+     * in the field rather than only ones we could re-release. They emit JSON and exit.
+     */
     private function agencyCnameRelay($method, $cname = '')
     {
         global $api;
@@ -7907,7 +8056,7 @@ class wps_ic_ajax extends wps_ic
             $api::$comms->$method($apikey, $cname);
         }
 
-        
+        // api_comms always terminates; only reached if that ever stops being true.
         wp_send_json_error(['msg' => 'The site did not answer.']);
     }
 
@@ -7934,8 +8083,8 @@ class wps_ic_ajax extends wps_ic
         }
 
         if ($this->isAgencyPortal()) {
-            
-            
+            // retry() re-derives the hostname from the site's own managed_cname(); the argument
+            // is only carried because api_comms' signature takes one.
             $this->agencyCnameRelay('cnameRetry', sanitize_text_field($_POST['cname'] ?? ''));
         }
 
@@ -7964,8 +8113,8 @@ class wps_ic_ajax extends wps_ic
         $options = new wps_ic_options();
         $preset = sanitize_text_field($_POST['value']);
         $configuration = $options->get_preset($preset);
-        if (function_exists('wpc_preset_cache_gate67')) {
-            $configuration = wpc_preset_cache_gate67($configuration);
+        if (function_exists('wpc_drop_preset_advanced_cache_if_foreign')) {
+            $configuration = wpc_drop_preset_advanced_cache_if_foreign($configuration);
         }
         update_option(WPS_IC_SETTINGS, $configuration);
         wp_send_json_success($configuration);
@@ -7994,9 +8143,9 @@ class wps_ic_ajax extends wps_ic
 
         if ($this->isAgencyPortal()) {
             $cname_remote = sanitize_text_field((string) $cname_input);
-            
-            
-            
+            // add('') on the site means "unlink", not "save nothing" — it deletes
+            // ic_custom_cname and answers success. Refuse rather than let a dropped field
+            // silently retire a customer's live CDN hostname from the portal.
             if ($cname_remote === '') {
                 wp_send_json_error(['msg' => 'Enter the domain you have pointed at the CDN.']);
             }
@@ -8027,14 +8176,14 @@ class wps_ic_ajax extends wps_ic
         }
 
         if (!empty($lazyExcludeList)) {
-            $lazyExcludeList = self::wpc_split_patterns19($lazyExcludeList);
+            $lazyExcludeList = self::wpc_split_exclude_patterns($lazyExcludeList);
             update_option('wpc-ic-lazy-exclude', $lazyExcludeList);
         } else {
             delete_option('wpc-ic-lazy-exclude');
         }
 
         if (!empty($delayExcludeList)) {
-            $delayExcludeList = self::wpc_split_patterns19($delayExcludeList);
+            $delayExcludeList = self::wpc_split_exclude_patterns($delayExcludeList);
             update_option('wpc-ic-delay-js-exclude', $delayExcludeList);
         } else {
             delete_option('wpc-ic-delay-js-exclude');
@@ -8093,7 +8242,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_RestoreFinished()
     {
-        self::wpc_bulk_gate67();
+        self::wpc_require_bulk_capability();
         global $wps_ic;
 
         $count = absint($_POST['count'] ?? 0) . ' of ' . absint($_POST['count'] ?? 0);
@@ -8159,7 +8308,7 @@ class wps_ic_ajax extends wps_ic
         if ($compressed_images_queue['queue']) {
             $attID = $compressed_images_queue['queue'][0];
 
-            
+            // First Image
             set_transient('wps_ic_restore_' . $attID, ['imageID' => $attID, 'status' => 'restoring'], 300);
 
 
@@ -8171,15 +8320,15 @@ class wps_ic_ajax extends wps_ic
             $compressed_images_queue['queue'] = array_values($compressed_images_queue['queue']);
 
 
-            
-
-
+            /**
+             * Calculate Progress
+             */
             $leftover_images = count($compressed_images_queue['queue']);
             $total_images = $compressed_images_queue['total_images'];
             $done_images = $total_images - $leftover_images;
             $progress_percent = round(($done_images / $total_images) * 100);
 
-            
+            // Bulk Stats
             $bulkStats['images_restored'] += 1;
 
             set_transient('wps_ic_bulk_stats', $bulkStats, 1800);
@@ -8193,7 +8342,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_media_library_bulk_heartbeat()
     {
-        self::wpc_bulk_gate67();
+        self::wpc_require_bulk_capability();
         global $wpdb, $wps_ic;
         $like_compress = $wpdb->esc_like('_transient_wps_ic_compress_') . '%';
         $like_restore  = $wpdb->esc_like('_transient_wps_ic_restore_') . '%';
@@ -8227,40 +8376,49 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_error();
     }
 
-    
-
-
-    public static function wpc_bulk_gate67()
+    /**
+     * Live Compress
+     */
+    public static function wpc_require_bulk_capability()
     {
         if (!function_exists('current_user_can') || (!current_user_can('manage_wpc_settings') && !current_user_can('manage_options'))) {
             wp_send_json_error(['msg' => 'forbidden'], 403);
         }
     }
 
-    public static function wpc_media_action_gate66()
+    public static function wpc_require_media_action_capability()
     {
-        $wpc_id66 = isset($_POST['attachment_id']) ? absint($_POST['attachment_id']) : 0;
+        $attachment_id = isset($_POST['attachment_id']) ? absint($_POST['attachment_id']) : 0;
         if (!function_exists('current_user_can') || !current_user_can('upload_files')
-            || ($wpc_id66 > 0 && !current_user_can('edit_post', $wpc_id66))) {
+            || ($attachment_id > 0 && !current_user_can('edit_post', $attachment_id))) {
             wp_send_json_error(['msg' => 'forbidden'], 403);
         }
     }
 
     public function wps_ic_restore_live()
     {
-        self::wpc_media_action_gate66();
+        self::wpc_require_media_action_capability();
         if (function_exists('webp_uploads_create_sources_property')) {
             wp_send_json_error(['msg' => 'performance-lab-compatibility']);
         }
         @set_time_limit(120);
 
-        
+        // FPM telemetry: capture the FPM accept moment for wall + queue-wait.
         $restore_request_arrival_t = isset($_SERVER['REQUEST_TIME_FLOAT'])
             ? (float) $_SERVER['REQUEST_TIME_FLOAT']
             : microtime(true);
 
         $imageID = absint($_POST['attachment_id']);
 
+        // Rule: a restore with nothing to restore from is refused here, before the async hand-off,
+        // so the click sees the refusal. Observed: "Cloud Only" images answered queued/success and
+        // the card flipped to restored while the files stayed compressed (review 2026-09-26, A-D1).
+        // The answer reuses the existing "Backup not found" popup (msg failed-to-get-backup).
+        $refusal = (isset(self::$local) && method_exists(self::$local, 'restore_refusal'))
+            ? self::$local->restore_refusal($imageID) : null;
+        if ($refusal !== null) {
+            wp_send_json_error(['msg' => 'failed-to-get-backup', 'reason' => $refusal['reason'], 'mode' => $refusal['mode']]);
+        }
 
         set_transient('wps_ic_compress_' . $imageID, [
             'imageID' => $imageID,
@@ -8295,13 +8453,13 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_success(['queued' => true, 'immediate' => false]);
         }
 
-        
-        
+        // Capture purge URLs BEFORE the files are deleted (same post-delete
+        // glob-sweeps-empty-floor bug as the async worker; see that path's comment).
         $purge_urls_pre_sync = function_exists('wpc_customer_purge_attachment_urls')
             ? wpc_customer_purge_attachment_urls($imageID) : [];
         self::$local->restoreV4($imageID);
 
-        
+        // Verify restore succeeded
         $status = get_post_meta($imageID, 'ic_status', true);
         if ($status !== 'restored') {
             if (function_exists('wpc_v2_telemetry_record')) {
@@ -8319,8 +8477,8 @@ class wps_ic_ajax extends wps_ic
             if (!empty($purge_urls)) {
 
 
-                
-                
+                // Log the dispatch so the attempt is traceable; a fire-and-forget call can't
+                // capture the outcome. A Throwable must never 500 the restore response.
                 try {
                     wpc_purge_compat('urls', $purge_urls, 'restore_image', '', false);
                     error_log('[WPC Purge] restore_image dispatched (non-blocking, on-click sync path) urls=' . count($purge_urls));
@@ -8330,7 +8488,7 @@ class wps_ic_ajax extends wps_ic
             }
         }
 
-        
+        // Return updated column HTML directly — no heartbeat needed
         global $wps_ic;
         $html = $wps_ic->media_library->compress_details($imageID);
         if (function_exists('wpc_v2_telemetry_record')) {
@@ -8345,11 +8503,11 @@ class wps_ic_ajax extends wps_ic
 
     public function wpc_purge_variants()
     {
-        
+        // Auth: admin-only
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['msg' => 'forbidden'], 403);
         }
-        
+        // Nonce: standard WP AJAX nonce check
         check_ajax_referer('wpc_purge_variants', 'nonce');
 
         $imageID = isset($_REQUEST['imageID']) ? (int) $_REQUEST['imageID'] : 0;
@@ -8368,7 +8526,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_variant_count()
     {
-        self::wpc_media_action_gate66();
+        self::wpc_require_media_action_capability();
         $imageID = absint($_POST['attachment_id'] ?? 0);
         if ($imageID <= 0) {
             wp_send_json_error(['msg' => 'invalid-id']);
@@ -8447,8 +8605,8 @@ class wps_ic_ajax extends wps_ic
                 if ($fmt_lower === 'jpg') $fmt_lower = 'jpeg';
                 $fmt_up = strtoupper($fmt_lower);
                 $size_label = isset($aentry['sizeLabel']) ? (string) $aentry['sizeLabel'] : '';
-                
-                
+                // Belt-and-suspenders: strip any format suffix the encoder may
+                // have included in sizeLabel (chip shows format separately).
                 foreach (['-avif', '-webp', '-jpeg', '-jpg', '-png'] as $suffix) {
                     if (substr($size_label, -strlen($suffix)) === $suffix) {
                         $size_label = substr($size_label, 0, -strlen($suffix));
@@ -8466,9 +8624,9 @@ class wps_ic_ajax extends wps_ic
             }
         }
 
-        
+        // Stable order: oldest → newest so the client animates landings in arrival order.
         usort($recent, function ($a, $b) { return $a['ts'] - $b['ts']; });
-        
+        // Reuse the early status read — meta hasn't changed mid-handler.
         $status = $status_early;
 
 
@@ -8506,8 +8664,8 @@ class wps_ic_ajax extends wps_ic
         if ($status === 'compressed' && !empty($_POST['want_html'])) {
             global $wps_ic;
             if ($wps_ic && $wps_ic->media_library) {
-                
-                
+                // Cache flush before render — Phase B callbacks ran in other
+                // workers; this worker's local cache may still see stale meta.
                 wp_cache_delete('_transient_wps_ic_compress_' . $imageID, 'options');
                 wp_cache_delete('_transient_timeout_wps_ic_compress_' . $imageID, 'options');
                 wp_cache_delete($imageID, 'post_meta');
@@ -8543,14 +8701,14 @@ class wps_ic_ajax extends wps_ic
         $has_pending = !empty($pending) && !empty($pending['pending']);
 
 
-        
+        // Case (c): genuinely in flight + no variants yet → don't interfere.
         if ($has_pending && $variant_count === 0) {
             wp_send_json_success(['cleared' => false, 'reason' => 'phase-b-pending-no-variants-yet']);
         }
 
 
         if ($variant_count > 0) {
-            
+            // Per-variant gap telemetry + t0-based retry pull.
             $expected_sizes = ['thumbnail','medium','medium_large','large','1536x1536','2048x2048','scaled','original'];
             $expected_fmts  = ['jpeg', 'webp', 'avif'];
             $missing_keys = [];
@@ -8565,8 +8723,8 @@ class wps_ic_ajax extends wps_ic
                 }
             }
 
-            
-            
+            // Fire t0-based retry pull if anything missing. Synchronous
+            // because we want it to land before we ack the cleanup.
             $retry_queued = 0;
             if (!empty($missing_keys)
                 && function_exists('wpc_v2_pull_manifest_fetch')
@@ -8627,7 +8785,7 @@ class wps_ic_ajax extends wps_ic
                     header('Content-Length: ' . strlen($out));
                 }
                 echo $out;
-                if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) wpc_finish_request39();
+                if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) wpc_finish_request();
                 ignore_user_abort(true);
                 @set_time_limit(60);
 
@@ -8635,7 +8793,7 @@ class wps_ic_ajax extends wps_ic
                 $bg_attempt  = 0;
                 while (time() < $bg_deadline) {
                     $bg_attempt++;
-                    
+                    // Re-read variants to see which are still missing.
                     wp_cache_delete($imageID, 'post_meta');
                     $cur_variants = get_post_meta($imageID, 'ic_local_variants', true);
                     if (!is_array($cur_variants)) $cur_variants = [];
@@ -8675,12 +8833,12 @@ class wps_ic_ajax extends wps_ic
                         '[WPC BulkCleanup] imageID=%d bg_retry attempt=%d still_missing=[%s]',
                         $imageID, $bg_attempt, implode(', ', $still_missing)
                     ));
-                    
-                    $wpc_now56 = microtime(true);
-                    if (isset($wpc_lt56) && ($wpc_now56 - $wpc_lt56) < 1.0) {
-                        usleep((int) ((1.0 - ($wpc_now56 - $wpc_lt56)) * 1000000));
+                    // Same floor as the BGRetry loop: an instant empty/429 answer must not spin.
+                    $poll_now = microtime(true);
+                    if (isset($last_poll_at) && ($poll_now - $last_poll_at) < 1.0) {
+                        usleep((int) ((1.0 - ($poll_now - $last_poll_at)) * 1000000));
                     }
-                    $wpc_lt56 = microtime(true);
+                    $last_poll_at = microtime(true);
                     if (function_exists('get_transient') && (int) get_transient('wpc_v2_pull_cooloff') > 0) {
                         error_log(sprintf('[WPC BulkCleanup] imageID=%d cooloff_active — standing down at attempt=%d', $imageID, $bg_attempt));
                         break;
@@ -8705,7 +8863,7 @@ class wps_ic_ajax extends wps_ic
             ]);
         }
 
-        
+        // Case (b): zero variants, no pending → genuine failure. Clear entirely.
         delete_post_meta($imageID, 'ic_compressing');
         delete_transient('wps_ic_compress_' . $imageID);
         delete_transient('wpc_v2_warming_' . $imageID);
@@ -8713,14 +8871,14 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success(['cleared' => true, 'imageID' => $imageID]);
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
+    // v7.21.315 — STALE-COMPRESS WATCHDOG. The async single-image path returns
+    // queued:true and detaches a worker to POST Phase A. If that outbound POST never
+    // reaches the service (host egress block, DNS, TLS, service reject) the image sits
+    // at ic_compressing=queueing forever, get_card keeps reporting is-compressing, and
+    // the ML card spins with no terminal (eleven-ecu). Bound it: a queueing/optimizing
+    // image past the deadline with nothing pending and no variants landed is declared
+    // failed — markers cleared (card returns to a retryable Compress state) and a short
+    // error transient stamped so the poller renders a real message and STOPS.
     public static function wpc_v2_stale_compress_watchdog($imageID)
     {
         $imageID = (int) $imageID;
@@ -8733,19 +8891,19 @@ class wps_ic_ajax extends wps_ic
         if ($started <= 0) return false;
         $deadline = (int) apply_filters('wpc_v2_compress_stall_seconds', 90, $imageID);
         if ((time() - $started) < $deadline) return false;
-        
+        // Still genuinely in flight? Any pending pull or freshly-landed variant means keep waiting.
         if (!empty(get_transient('wpc_v2_pending_' . $imageID))) return false;
         $vs = get_post_meta($imageID, 'ic_local_variants', true);
         if (is_array($vs) && !empty($vs)) return false;
-        
+        // Declare failed — clear the in-flight markers so the card is retryable, stamp the reason.
         delete_post_meta($imageID, 'ic_compressing');
         delete_transient('wps_ic_compress_' . $imageID);
         delete_transient('wpc_v2_pending_' . $imageID);
         delete_transient('wpc_lazy_v2_trigger_' . $imageID);
-        
-        
-        
-        
+        // Detach-death vs service problem: the async worker drops a breadcrumb the
+        // instant it reaches the dispatch. Absent breadcrumb = the detached FPM worker
+        // was killed before it POSTed (detach-hostile host) — auto-switch this site to
+        // synchronous dispatch so the next optimize runs inline and actually completes.
         $worker_reached = !empty(get_transient('wpc_v2_worker_reached_' . $imageID));
         if (!$worker_reached) {
             update_option('wpc_v2_async_unreliable', time(), false);
@@ -8761,10 +8919,10 @@ class wps_ic_ajax extends wps_ic
         return true;
     }
 
-    
-    
-    
-    
+    // v7.21.315 — one-shot per-site connectivity + per-image state diagnostic. Admin-only.
+    // The decisive read for "stuck spinning": does an outbound apikey-signed call actually
+    // reach the optimization service from THIS host? Reuses the manifest fetch (DNS + egress
+    // + TLS + apikey auth in one round trip).
     public function wpc_v2_compress_probe()
     {
         if (!current_user_can('manage_options') && !current_user_can('manage_wpc_settings')) {
@@ -8779,12 +8937,12 @@ class wps_ic_ajax extends wps_ic
             'pull_enabled'   => function_exists('wpc_v2_pull_enabled') ? (bool) wpc_v2_pull_enabled() : null,
             'async_enabled'  => (bool) apply_filters('wpc_v2_async_dispatch_enabled', true),
             'can_detach'     => function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'),
-            'store_broken'   => function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197(),
+            'store_broken'   => function_exists('wpc_v2_is_store_broken_active') && wpc_v2_is_store_broken_active(),
             'async_dispatch_ok' => self::wpc_v2_async_dispatch_ok(),
             'async_unreliable_since' => (int) get_option('wpc_v2_async_unreliable', 0),
             'last_dispatch_error' => get_option('wpc_v2_last_dispatch_error', null),
         ];
-        
+        // Live reachability: outbound apikey-signed manifest call, timed.
         if (function_exists('wpc_v2_pull_manifest_fetch')) {
             $t0 = microtime(true);
             $r  = wpc_v2_pull_manifest_fetch(0, 1, 0);
@@ -8800,7 +8958,7 @@ class wps_ic_ajax extends wps_ic
             $out['reachability'] = ['ok' => null, 'reason' => 'manifest_fetch_unavailable'];
         }
         $out['post_reachability'] = self::wpc_v2_probe_post();
-        
+        // Raw loopback reachability (the async detach target).
         $out['loopback'] = ['admin_ajax' => admin_url('admin-ajax.php')];
         if ($imageID > 0) {
             wp_cache_delete($imageID, 'post_meta');
@@ -8812,7 +8970,7 @@ class wps_ic_ajax extends wps_ic
                 'attempts'       => get_post_meta($imageID, 'ic_v2_attempts', true),
                 'pending'        => !empty(get_transient('wpc_v2_pending_' . $imageID)),
                 'last_error'     => get_transient('wpc_v2_compress_failed_' . $imageID),
-                'admit'          => function_exists('wpc_v2_attempts_admit197') ? wpc_v2_attempts_admit197($imageID) : null,
+                'admit'          => wps_ic_image_optimize::refusal($imageID, 'bulk') ?? true,
                 'variants'       => is_array(get_post_meta($imageID, 'ic_local_variants', true)) ? count(get_post_meta($imageID, 'ic_local_variants', true)) : 0,
                 'worker_reached' => !empty(get_transient('wpc_v2_worker_reached_' . $imageID)),
                 'last_envelope'  => get_transient('wpc_v2_last_envelope_' . $imageID),
@@ -8821,11 +8979,11 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success($out);
     }
 
-    
-    
-    
-    
-    
+    // v7.21.316 — POST-reachability. The manifest probe proves GET works; the actual
+    // dispatch is a POST. On hosts with a forward proxy/WAF that holds or blocks POST
+    // bodies (GET passes, POST hangs) the encode never completes. This times a real
+    // bounded POST to the orchestrator so a GET-ok/POST-blocked split is provable in
+    // one call instead of waiting for the client's long timeout to expire.
     public static function wpc_v2_probe_post($force = false)
     {
         if (!function_exists('wpc_v2_orchestrator_url') || !function_exists('wp_remote_post')) {
@@ -8861,23 +9019,23 @@ class wps_ic_ajax extends wps_ic
         return $out;
     }
 
-    
-    
-    
-    
-    
+    // v7.21.317 — LARGE-BODY reachability. The 56-byte probe proves small packets pass;
+    // the real dispatch is a ~100-250KB body. This POSTs ~100KB of dummy JSON to the encode
+    // endpoint with an INVALID apikey: a fast 4xx means the large body arrived (handler
+    // rejected the key); a timeout means the host blackholes large POST bodies (MSS/PMTUD or
+    // an outbound appliance) — the definitive site-side proof, no encode involved.
     public static function wpc_v2_probe_post_large($force = false)
     {
         if (!function_exists('wpc_v2_orchestrator_url') || !function_exists('wp_remote_post')) {
             return ['ok' => null, 'reason' => 'unavailable'];
         }
-        
+        // Cache 5 min: this is a 15s blocking call and the debug overlay polls every 4s.
         if (!$force) {
             $cached = get_transient('wpc_v2_probe_large_cache');
             if (is_array($cached)) { $cached['cached'] = true; return $cached; }
         }
         $url = rtrim((string) wpc_v2_orchestrator_url(), '/') . '/optimize-v2';
-        $pad = str_repeat('x', 100 * 1024); 
+        $pad = str_repeat('x', 100 * 1024); // ~100KB
         $body = wp_json_encode(['apikey' => 'invalid-probe-key-0000', 'imageID' => '0', 'probe' => 1, 'pad' => $pad]);
         $t0 = microtime(true);
         $resp = wp_remote_post($url, [
@@ -8889,9 +9047,9 @@ class wps_ic_ajax extends wps_ic
         ]);
         $ms = (int) round((microtime(true) - $t0) * 1000);
         if (is_wp_error($resp)) {
-            
-            
-            
+            // Proactive arm: a failed large-body probe IS the blackhole proof — flip the site to
+            // source.url now so the very next optimize (single or bulk) skips the doomed inline
+            // path and its 30s timeout. Self-clears in 7 days like every other auto-heal.
             $err_code = $resp->get_error_code();
             $timed_out = stripos((string) $resp->get_error_message(), 'timed out') !== false
                 || stripos((string) $resp->get_error_message(), 'cURL error 28') !== false
@@ -8914,10 +9072,10 @@ class wps_ic_ajax extends wps_ic
         return $out;
     }
 
-    
-    
-    
-    
+    // v7.21.315 — FULL DEBUG DUMP. Admin-only, read-only. One call returns everything
+    // needed to diagnose a stuck bulk/single run without touching debug.log: connectivity,
+    // dispatch mode + auto-heal state, the bulk ledger, drain locks, recent dispatch error,
+    // and the full per-image state for every attachment id passed in ?ids=1,2,3.
     public function wpc_v2_full_debug()
     {
         if (!current_user_can('manage_options') && !current_user_can('manage_wpc_settings')) {
@@ -8956,15 +9114,15 @@ class wps_ic_ajax extends wps_ic
                 'prefer_source_url_since' => (int) get_option('wpc_v2_prefer_source_url', 0),
                 'can_detach'         => function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'),
                 'last_dispatch_error'=> get_option('wpc_v2_last_dispatch_error', null),
-                'store_broken'       => function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197(),
+                'store_broken'       => function_exists('wpc_v2_is_store_broken_active') && wpc_v2_is_store_broken_active(),
                 'store_broken_note'  => get_option('wps_ic', null) ? null : null,
             ],
             'bulk' => [
                 'process'            => get_option('wps_ic_bulk_process', null),
                 'heartbeat'          => (int) get_transient('wpc_bulk_heartbeat'),
-                'queue_len'          => (function () { $q = self::wpc_bulk_queue_read199(); return is_array($q) && isset($q['queue']) ? count($q['queue']) : 0; })(),
-                'inflight'           => self::wpc_bulk_inflight199(),
-                'ledger'             => self::wpc_bulk_ledger_summary202(),
+                'queue_len'          => (function () { $q = self::wpc_bulk_queue_read(); return is_array($q) && isset($q['queue']) ? count($q['queue']) : 0; })(),
+                'inflight'           => self::wpc_bulk_inflight_ids(),
+                'ledger'             => self::wpc_bulk_run_json(),
                 'draining'           => (int) get_transient('wpc_bulk_compress_draining'),
                 'stop_signal'        => (bool) get_transient('wpc_bulk_stop_signal'),
                 'sequential'         => (bool) get_option('wpc_bulk_sequential', 0),
@@ -8991,7 +9149,7 @@ class wps_ic_ajax extends wps_ic
                 'ic_status'      => get_post_meta($imageID, 'ic_status', true),
                 'ic_compressing' => is_array($ic) ? $ic : $ic,
                 'attempts'       => get_post_meta($imageID, 'ic_v2_attempts', true),
-                'admit'          => function_exists('wpc_v2_attempts_admit197') ? wpc_v2_attempts_admit197($imageID) : null,
+                'admit'          => wps_ic_image_optimize::refusal($imageID, 'bulk') ?? true,
                 'pending'        => !empty(get_transient('wpc_v2_pending_' . $imageID)),
                 'worker_reached' => !empty(get_transient('wpc_v2_worker_reached_' . $imageID)),
                 'last_error'     => get_transient('wpc_v2_compress_failed_' . $imageID),
@@ -9005,20 +9163,20 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_get_card()
     {
-        self::wpc_media_action_gate66();
+        self::wpc_require_media_action_capability();
         $imageID = absint($_POST['attachment_id'] ?? 0);
         if ($imageID <= 0) {
             wp_send_json_error(['msg' => 'invalid-id']);
         }
         self::wpc_v2_stale_compress_watchdog($imageID);
-        $wpc_fail315 = get_transient('wpc_v2_compress_failed_' . $imageID);
+        $failure_reason = get_transient('wpc_v2_compress_failed_' . $imageID);
         global $wps_ic;
         if (!$wps_ic || !$wps_ic->media_library) {
             wp_send_json_error(['msg' => 'not-ready']);
         }
         $html = $wps_ic->media_library->compress_details($imageID);
 
-        
+        // Hint flags so the poller knows whether to keep polling without parsing HTML.
         $pending = (
             (strpos($html, 'is-restoring') !== false) ||
             (strpos($html, 'is-compressing') !== false) ||
@@ -9026,23 +9184,23 @@ class wps_ic_ajax extends wps_ic
             !empty(get_post_meta($imageID, '_wpc_pending_thumb_regen', true))
         );
 
-        if (!empty($wpc_fail315)) { $pending = false; }
-        if ($pending && function_exists('wpc_regen_nudge23')) {
-            wpc_regen_nudge23($imageID);
+        if (!empty($failure_reason)) { $pending = false; }
+        if ($pending && function_exists('wpc_schedule_thumb_regen')) {
+            wpc_schedule_thumb_regen($imageID);
         }
         wp_send_json_success([
             'html'      => $html,
             'pending'   => $pending,
             'imageID'   => $imageID,
             'ic_status' => get_post_meta($imageID, 'ic_status', true),
-            'failed'    => !empty($wpc_fail315),
-            'error'     => $wpc_fail315 ? (string) $wpc_fail315 : '',
+            'failed'    => !empty($failure_reason),
+            'error'     => $failure_reason ? (string) $failure_reason : '',
         ]);
     }
 
     public function wps_ic_compress_live()
     {
-        self::wpc_media_action_gate66();
+        self::wpc_require_media_action_capability();
         if (function_exists('webp_uploads_create_sources_property')) {
             wp_send_json_error(['msg' => 'performance-lab-compatibility']);
         }
@@ -9099,14 +9257,14 @@ class wps_ic_ajax extends wps_ic
 
 
         if (function_exists('wpc_use_v2_protocol') && wpc_use_v2_protocol() && class_exists('WPS_LocalV2')) {
-            
-            
-            
-            
-            
-            $wpc_async_ok314 = self::wpc_v2_async_dispatch_ok();
+            // Try async loopback dispatch FIRST. Phase A POST blocks
+            // an FPM worker for 9-14s in the synchronous path; on a 2-4 worker
+            // v7.21.314 — on a host proven detach-hostile (the watchdog saw a
+            // detached worker die before it POSTed) skip async entirely and run
+            // inline; the token dance below is bypassed so sync actually fires.
+            $async_ok = self::wpc_v2_async_dispatch_ok();
 
-            if ($wpc_async_ok314 && self::dispatch_async_loopback('wpc_async_phase_a', $imageID)) {
+            if ($async_ok && self::dispatch_async_loopback('wpc_async_phase_a', $imageID)) {
 
 
                 $expected_seed = function_exists('wpc_v2_compute_expected_variants')
@@ -9117,12 +9275,12 @@ class wps_ic_ajax extends wps_ic
                     'expected_variants' => $expected_seed,
                     'time'              => time(),
                 ]);
-                
-                
-                
-                
-                
-                
+                // v7.21.353 — DETERMINISTIC DETACH-DEATH: the .314 watchdog rode the
+                // media-page heartbeat + a 90s stall window, so a host whose detached
+                // workers die (platformtraining: three silent clicks, zero receipts)
+                // self-healed only if someone kept the page open. Verify the worker
+                // breadcrumb ~20s after the handoff on cron: absent = worker died pre-
+                // dispatch -> flag detach-hostile + re-run THIS image synchronously.
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('media-async-handoff', (string) $imageID, '', []);
                 }
@@ -9152,7 +9310,7 @@ class wps_ic_ajax extends wps_ic
             }
 
 
-            if ($wpc_async_ok314 && !self::claim_async_token_for_sync('wpc_async_phase_a', $imageID)) {
+            if ($async_ok && !self::claim_async_token_for_sync('wpc_async_phase_a', $imageID)) {
                 global $wps_ic;
                 wp_cache_delete($imageID, 'post_meta');
                 $inflight_html = (isset($wps_ic) && isset($wps_ic->media_library))
@@ -9167,12 +9325,12 @@ class wps_ic_ajax extends wps_ic
                     wp_send_json_error(['msg' => 'backup-failed']);
                 }
             }
-            
-            
-            
-            
+            // v7.21.314 — breadcrumb on the SYNC path too: worker_reached means
+            // "the dispatch code ran" regardless of async/sync, so a stuck job with
+            // NO breadcrumb is unambiguously detach-death, and one WITH it is a
+            // service/return problem — never misattributed.
             set_transient('wpc_v2_worker_reached_' . $imageID, time(), 600);
-            $v2_result = self::run_v2_optimize($imageID, ['resubmit_reason' => 'user_recompress']);
+            $v2_result = wps_ic_image_optimize::dispatch($imageID, 'ml-button', ['resubmit_reason' => 'user_recompress']);
             if (!empty($v2_result['ok'])) {
                 global $wps_ic;
 
@@ -9199,7 +9357,7 @@ class wps_ic_ajax extends wps_ic
                 error_log('[WPC V2Route] imageID=' . $imageID . ' already_in_flight — JS will heartbeat-poll for completion');
                 wp_send_json_success(['html' => $html, 'immediate' => false, 'v2' => true, 'in_flight' => true]);
             }
-            
+            // v2 failed — log and fall through to v1 for graceful degradation
             error_log(sprintf(
                 '[WPC V2Route] imageID=%d FAILED error=%s http_code=%d detail=%s wall_ms=%d — falling through to v1',
                 $imageID,
@@ -9208,46 +9366,46 @@ class wps_ic_ajax extends wps_ic
                 substr((string) ($v2_result['detail'] ?? ''), 0, 200),
                 (int) ($v2_result['wall_ms'] ?? 0)
             ));
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            $wpc_transport317 = empty($v2_result['ok'])
+            // v7.21.314 — SURFACE THE REAL ERROR. The dispatch set ic_compressing=optimizing
+            // BEFORE the dispatch POST, so a failed POST otherwise leaves the card stuck at
+            // 'optimizing' forever with no reason. Stamp the concrete client error so the probe
+            // and the ML card show exactly why (http code + detail) instead of an endless spinner.
+            // v7.21.317 — LARGE-BODY BLACKHOLE AUTO-SWITCH. A 'transport' failure (cURL 28
+            // timeout / http 0) on a dispatch that carried inline bytes is the signature of a
+            // host that blackholes large POST bodies. Switch the site to source.url dispatch
+            // (~1KB envelope; the service fetches the source) and RETRY this image once inline-
+            // free so the click still completes. Service confirmed source.url works fleet-wide.
+            $transport_failed = empty($v2_result['ok'])
                 && (($v2_result['error'] ?? '') === 'transport'
                     || (int) ($v2_result['http_code'] ?? 0) === 0
                     || stripos((string) ($v2_result['detail'] ?? ''), 'timed out') !== false
                     || stripos((string) ($v2_result['detail'] ?? ''), 'cURL error 28') !== false);
-            if ($wpc_transport317 && !self::wpc_v2_prefer_source_url()) {
+            if ($transport_failed && !self::wpc_v2_prefer_source_url()) {
                 update_option('wpc_v2_prefer_source_url', time(), false);
                 error_log('[WPC V2Route] imageID=' . $imageID . ' TRANSPORT TIMEOUT with inline body — host blackholes large POST; switched to source.url dispatch, retrying inline-free');
-                $wpc_retry317 = self::run_v2_optimize($imageID, ['resubmit_reason' => 'source_url_retry', 'force_url_source' => true]);
-                if (!empty($wpc_retry317['ok'])) {
+                $retry_result = wps_ic_image_optimize::dispatch($imageID, 'ml-button', ['resubmit_reason' => 'source_url_retry', 'force_url_source' => true]);
+                if (!empty($retry_result['ok'])) {
                     global $wps_ic;
                     wp_cache_delete($imageID, 'post_meta');
-                    $wpc_rhtml317 = (isset($wps_ic) && isset($wps_ic->media_library)) ? $wps_ic->media_library->compress_details($imageID) : '';
+                    $details_html = (isset($wps_ic) && isset($wps_ic->media_library)) ? $wps_ic->media_library->compress_details($imageID) : '';
                     set_transient('wpc_v2_phase_a_done_' . $imageID, time(), 3600);
                     error_log('[WPC V2Route] imageID=' . $imageID . ' source.url retry SUCCESS');
-                    wp_send_json_success(['html' => $wpc_rhtml317, 'immediate' => true, 'v2' => true, 'source_url_retry' => true, 'jobId' => $wpc_retry317['jobId'] ?? null]);
+                    wp_send_json_success(['html' => $details_html, 'immediate' => true, 'v2' => true, 'source_url_retry' => true, 'jobId' => $retry_result['jobId'] ?? null]);
                 }
-                $v2_result = $wpc_retry317; 
+                $v2_result = $retry_result; // fall through with the retry's error if it too failed
             }
             if (empty($v2_result['ok']) && ($v2_result['error'] ?? '') !== 'already_in_flight') {
-                $wpc_de314 = 'dispatch to the optimization service failed: ' . (string) ($v2_result['error'] ?? 'unknown')
+                $dispatch_error = 'dispatch to the optimization service failed: ' . (string) ($v2_result['error'] ?? 'unknown')
                     . ' (http ' . (int) ($v2_result['http_code'] ?? 0) . ')'
                     . (($v2_result['detail'] ?? '') !== '' ? ' — ' . substr((string) $v2_result['detail'], 0, 240) : '');
-                set_transient('wpc_v2_compress_failed_' . $imageID, $wpc_de314, 900);
-                update_option('wpc_v2_last_dispatch_error', ['id' => $imageID, 'err' => $wpc_de314, 't' => time()], false);
-                $wpc_icn314 = get_post_meta($imageID, 'ic_compressing', true);
-                if (is_array($wpc_icn314) && in_array(($wpc_icn314['status'] ?? ''), ['optimizing', 'queueing'], true)) {
+                set_transient('wpc_v2_compress_failed_' . $imageID, $dispatch_error, 900);
+                update_option('wpc_v2_last_dispatch_error', ['id' => $imageID, 'err' => $dispatch_error, 't' => time()], false);
+                $compressing_meta = get_post_meta($imageID, 'ic_compressing', true);
+                if (is_array($compressing_meta) && in_array(($compressing_meta['status'] ?? ''), ['optimizing', 'queueing'], true)) {
                     delete_post_meta($imageID, 'ic_compressing');
                 }
                 delete_transient('wps_ic_compress_' . $imageID);
-                error_log('[WPC V2Route] imageID=' . $imageID . ' dispatch error surfaced + optimizing state cleared: ' . $wpc_de314);
+                error_log('[WPC V2Route] imageID=' . $imageID . ' dispatch error surfaced + optimizing state cleared: ' . $dispatch_error);
             }
 
 
@@ -9273,73 +9431,18 @@ class wps_ic_ajax extends wps_ic
         if ($newStatus === 'compressed') {
             wp_send_json_success(['html' => $html, 'immediate' => true]);
         }
-        
-        
-        if (wp_next_scheduled('wpc_retry_compress', [$imageID])) {
-            wp_send_json_success(['html' => $html, 'retry_scheduled' => true]);
-        }
         wp_send_json_error(['msg' => 'unable-to-contact-api', 'html' => $html]);
     }
 
 
+    /**
+     * The old name of the dispatch door, kept for the render-side caller that re-runs a click
+     * whose detached worker died (addons/cache/warm.php, wpc_async_verify353). Every other
+     * caller asks wps_ic_image_optimize::dispatch() with its own reason.
+     */
     public static function run_v2_optimize($imageID, array $option_overrides = [])
     {
-        $imageID = (int) $imageID;
-
-
-        $lock_opt = 'wpc_v2_inflight_' . $imageID;
-        if (!add_option($lock_opt, time(), '', 'no')) {
-            $existing = (int) get_option($lock_opt, 0);
-            if ($existing > 0 && (time() - $existing) > 300) {
-                
-                delete_option($lock_opt);
-                if (!add_option($lock_opt, time(), '', 'no')) {
-                    return ['ok' => false, 'error' => 'already_in_flight', 'imageID' => $imageID];
-                }
-            } else {
-                return ['ok' => false, 'error' => 'already_in_flight', 'imageID' => $imageID];
-            }
-        }
-
-        try {
-            $prep = self::prepare_v2_optimize($imageID, $option_overrides);
-            if (empty($prep['ok'])) {
-                return $prep;
-            }
-
-
-            $variants_count = is_array($prep['variants']) ? count($prep['variants']) : 0;
-            $formats_arr    = isset($prep['options']['formats']) && is_array($prep['options']['formats'])
-                ? $prep['options']['formats']
-                : ['jpeg', 'webp', 'avif'];
-            $formats_count  = max(1, count($formats_arr));
-            if ($variants_count > 0 && function_exists('wpc_v2_ic_compressing_set_expected')) {
-                wpc_v2_ic_compressing_set_expected($imageID, $variants_count * $formats_count);
-            }
-
-            $t0 = $prep['t0'];
-            $result = $prep['client']->optimize($imageID, $prep['variants'], $prep['options']);
-            $wall_ms = (int) round((microtime(true) - $t0) * 1000);
-
-            if (empty($result['ok'])) {
-                return [
-                    'ok'       => false,
-                    'error'    => $result['error']  ?? 'optimize_failed',
-                    'detail'   => $result['detail'] ?? '',
-                    'http_code'=> $result['http_code'] ?? 0,
-                    'wall_ms'  => $wall_ms,
-                ];
-            }
-
-            return [
-                'ok'               => true,
-                'jobId'            => $result['jobId'] ?? '',
-                'wall_ms'          => $wall_ms,
-                'variants_written' => $result['write']['variants_written'] ?? [],
-            ];
-        } finally {
-            delete_option($lock_opt);
-        }
+        return wps_ic_image_optimize::dispatch((int) $imageID, 'ml-button', $option_overrides);
     }
 
 
@@ -9472,7 +9575,7 @@ class wps_ic_ajax extends wps_ic
                     if ($w_env < 200 || $w_env >= $nat_w_env) continue;
                     $near_env = false;
                     foreach ($variants as $ve) {
-                        $vw = isset($ve['maxWidth']) ? (int) $ve['maxWidth'] : 0; 
+                        $vw = isset($ve['maxWidth']) ? (int) $ve['maxWidth'] : 0; // 8% satisfies the need
                         if ($vw >= $w_env && $vw > 0 && ($vw - $w_env) / $w_env < 0.08) { $near_env = true; break; }
                     }
                     if ($near_env) continue;
@@ -9554,7 +9657,7 @@ class wps_ic_ajax extends wps_ic
 
         update_post_meta($imageID, '_wpc_compress_started_at', time());
 
-        
+        // Clear the pending transient from any previous compress BEFORE
 
 
         delete_transient('wpc_v2_pending_' . $imageID);
@@ -9563,13 +9666,13 @@ class wps_ic_ajax extends wps_ic
         delete_transient('wpc_v2_callbacks_blocked_' . $imageID);
 
 
-        
-        
-        
-        
-        
-        
-        
+        // v7.21.350 — THE COUNT READ A VARIABLE THAT DID NOT EXIST YET: $dispatch_options
+        // is first assigned ~40 lines below, so expected_variants was ALWAYS 0 — which
+        // silently disabled the accounting slot release ($exp > 0 gate), the
+        // missing-variant background retry (expected <= 0 exits), and full completion
+        // detection, fleet-wide (surfaced by the .349 media-dispatch receipt on
+        // eleven-ecu: ev:0 on every dispatch). Derive the envelope formats FIRST and
+        // count against them; the merge below reuses the same list.
         $env_formats = ['jpeg', 'webp', 'avif'];
         if (apply_filters('wpc_envelope_formats_v2', (string) get_option('wpc_envelope_formats_v2', '1') === '1')) {
             $s_fmt    = get_option(WPS_IC_SETTINGS);
@@ -9579,16 +9682,16 @@ class wps_ic_ajax extends wps_ic
             if ($ceil_fmt === 'webp' || $ceil_fmt === 'avif' || !empty($s_fmt['generate_webp'])) $env_formats[] = 'webp';
             if ($ceil_fmt === 'avif' || !empty($s_fmt['picture_avif'])) $env_formats[] = 'avif';
         }
-        if (function_exists('wpc_rewrites_jpeg_inplace12') && !wpc_rewrites_jpeg_inplace12()) {
+        if (function_exists('wpc_should_rewrite_jpeg_inplace') && !wpc_should_rewrite_jpeg_inplace()) {
             $env_formats = array_values(array_diff($env_formats, ['jpeg']));
             if (empty($env_formats)) {
                 $env_formats = ['avif'];
             }
         }
-        $wpc_fmts350 = is_array($option_overrides['formats'] ?? null) ? $option_overrides['formats'] : $env_formats;
+        $formats = is_array($option_overrides['formats'] ?? null) ? $option_overrides['formats'] : $env_formats;
         $expected_now = 0;
         if (!empty($variants)) {
-            $expected_now = count($variants) * max(1, count($wpc_fmts350));
+            $expected_now = count($variants) * max(1, count($formats));
         }
         update_post_meta($imageID, 'ic_compressing', [
             'status'            => 'optimizing',
@@ -9596,17 +9699,17 @@ class wps_ic_ajax extends wps_ic
             'time'              => time(),
         ]);
         wp_cache_delete($imageID, 'post_meta');
-        
-        
+        // v7.21.349 — the dispatch receipt: proves an image reached wire-prep, from BOTH
+        // lanes (bulk + media-library click). Absence in the log = never dispatched.
         if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log('media-dispatch', (string) $imageID, '', ['ctx' => (string) ($option_overrides['triggerContext'] ?? 'single'), 'ev' => $expected_now, 'vc' => is_array($variants) ? count($variants) : -1, 'fmts' => implode(',', (array) $wpc_fmts350)]);
+            wpc_cache_first_log('media-dispatch', (string) $imageID, '', ['ctx' => (string) ($option_overrides['triggerContext'] ?? 'single'), 'ev' => $expected_now, 'vc' => is_array($variants) ? count($variants) : -1, 'fmts' => implode(',', (array) $formats)]);
         }
 
         $t0 = microtime(true);
 
 
-        
-        
+        // TTL covers all realistic pull-arrival windows. Expired transient is
+        // still benign — modal shows "—" for that variant, no functional impact.
         set_transient('wpc_v2_t0_ms_' . $imageID, (int) round($t0 * 1000), 1800);
 
 
@@ -9618,8 +9721,11 @@ class wps_ic_ajax extends wps_ic
 
 
         $client = new WPS_LocalV2($apikey, $orchestrator_url);
+        // Rule: the level travels from the one settings reader. Observed: this envelope hardcoded
+        // 'intelligent', so a site set to lossless or ultra was dispatched as intelligent
+        // (review 2026-09-26, A-D3, B-F7).
         $dispatch_options = array_merge([
-            'level'          => 'intelligent',
+            'level'          => function_exists('wpc_v2_level') ? wpc_v2_level() : 'intelligent',
             'formats'        => $env_formats,
             'triggerContext' => 'media-library-click',
             'callback_url'   => rest_url('wpc/v2/bg_swap'),
@@ -9642,16 +9748,16 @@ class wps_ic_ajax extends wps_ic
         $imageID = (int) $imageID;
         if ($imageID <= 0) return '';
 
-        
+        // Strip format suffix
         $base = preg_replace('/-(avif|webp|png|jpe?g)$/i', '', $key);
 
-        
+        // Cache attachment metadata across calls in the same render pass
         if ($cached_meta === null) {
             $cached_meta = wp_get_attachment_metadata($imageID);
         }
         if (!is_array($cached_meta)) $cached_meta = [];
 
-        
+        // Plugin ladder widths: width is in the key, compute proportional height
         if (preg_match('/^wpc_(\d+)$/i', $base, $m)) {
             $w = (int) $m[1];
             $h = self::compute_proportional_height_for_modal($imageID, $w, $cached_meta);
@@ -9663,19 +9769,19 @@ class wps_ic_ajax extends wps_ic
             return $h > 0 ? ($w . '×' . $h) : ($w . '×?');
         }
 
-        
+        // WP-named sub-sizes (medium, large, medium_large, thumbnail, 1536x1536, 2048x2048)
         if (!empty($cached_meta['sizes'][$base]['width']) && !empty($cached_meta['sizes'][$base]['height'])) {
             return (int) $cached_meta['sizes'][$base]['width'] . '×' . (int) $cached_meta['sizes'][$base]['height'];
         }
 
 
-        
-        
+        // (e.g. "800x1085") — not a WP-named size, so the lookup above misses. Parse the dims straight
+        // from the key. AFTER the named-size check so 1536x1536 / 2048x2048 keep their metadata dims.
         if (preg_match('/^(\d+)x(\d+)$/i', $base, $m)) {
             return (int) $m[1] . '×' . (int) $m[2];
         }
 
-        
+        // "original" / "unscaled" → the encoded master's dims, NOT the pristine source.
 
 
         $base_lower = strtolower($base);
@@ -9705,7 +9811,7 @@ class wps_ic_ajax extends wps_ic
                     return (int) $cd[0] . '×' . (int) $cd[1];
                 }
             }
-            
+            // Manual constrain fallback (longest edge → maxWidth, aspect preserved).
             $longest = max($sw, $sh);
             if ($longest > $maxw) {
                 $scale = $maxw / $longest;
@@ -9715,7 +9821,7 @@ class wps_ic_ajax extends wps_ic
             return $sw . '×' . $sh;
         }
 
-        
+        // "scaled" → top-level metadata dims (the scaled-down dims, post big_image_size_threshold)
         if ($base_lower === 'scaled') {
             if (!empty($cached_meta['width']) && !empty($cached_meta['height'])) {
                 return (int) $cached_meta['width'] . '×' . (int) $cached_meta['height'];
@@ -9723,21 +9829,21 @@ class wps_ic_ajax extends wps_ic
             return '';
         }
 
-        
+        // "thumb" → fallback to "thumbnail" sub-size if it exists (legacy alias)
         if ($base_lower === 'thumb' && !empty($cached_meta['sizes']['thumbnail']['width'])) {
             return (int) $cached_meta['sizes']['thumbnail']['width'] . '×' . (int) $cached_meta['sizes']['thumbnail']['height'];
         }
 
-        
+        // Unknown — empty
         return '';
     }
 
-    
-
-
-
-
-
+    /**
+     * Helper for compute_variant_dimensions_string: derive proportional height for
+     * a target ladder width based on source aspect ratio. Tries unscaled-original
+     * first (most accurate), falls back to metadata top-level dims (still preserves
+     * aspect ratio since WP scaling is proportional). Returns 0 if unresolvable.
+     */
     private static function compute_proportional_height_for_modal($imageID, $width, $meta)
     {
         $width = (int) $width;
@@ -9767,15 +9873,15 @@ class wps_ic_ajax extends wps_ic
     {
         $key = (string) $key;
 
-        
+        // Strip format suffix — format already shown in the badge
         $base = preg_replace('/-(avif|webp|png|jpe?g)$/i', '', $key);
 
-        
+        // Plugin-internal ladder widths: rename to srcset descriptor form
         if (preg_match('/^wpc_(\d+)$/i', $base, $m)) {
             return $m[1] . 'w';
         }
 
-        
+        // Already in srcset-descriptor form, pass through
         if (preg_match('/^(\d+)w$/i', $base)) {
             return $base;
         }
@@ -9789,14 +9895,14 @@ class wps_ic_ajax extends wps_ic
             return $base === '1536x1536' ? 'Max 1536' : 'Max 2048';
         }
 
-        
-        
+        // Everything else: humanize the WP-native key
+        // ('medium_large' becomes 'Medium large'; 'scaled' becomes 'Scaled'.)
         return ucfirst(str_replace(['_', '-'], ' ', $base));
     }
 
-    
-
-
+    /**
+     * Get per-image optimization stats for the modal.
+     */
     public function wps_ic_image_stats()
     {
 
@@ -9845,7 +9951,7 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error(['msg' => 'No variant data available']);
         }
 
-        
+        // Build quality grade from AI data
         $quality_grade = '';
         if (!empty($ic_ai['ssim'])) {
             $ssim = floatval($ic_ai['ssim']);
@@ -9856,7 +9962,7 @@ class wps_ic_ajax extends wps_ic
             else $quality_grade = 'B';
         }
 
-        
+        // Brand icon
         $brand_svg = class_exists('whtlbl_whitelabel_plugin')
             ? '<svg width="28" height="28" viewBox="0 0 640 512" fill="currentColor"><path d="M528-16l-32 0 0 64-64 0 0 32 64 0 0 64 32 0 0-64 64 0 0-32-64 0 0-64zM288 320c80.6-35.8 128.6-57.2 144-64-15.4-6.8-63.4-28.2-144-64-35.8-80.6-57.2-128.6-64-144-6.8 15.4-28.2 63.4-64 144-80.6 35.8-128.6 57.2-144 64 15.4 6.8 63.4 28.2 144 64 35.8 80.6 57.2 128.6 64 144 6.8-15.4 28.2-63.4 64-144zm-64 65.2l-34.8-78.2-5-11.2-11.2-5-78.2-34.8 78.2-34.8 11.2-5 5-11.2 34.8-78.2 34.8 78.2 5 11.2 11.2 5 78.2 34.8-78.2 34.8-11.2 5-5 11.2-34.8 78.2zM496 384l0-16-32 0 0 64-64 0 0 32 64 0 0 64 32 0 0-64 64 0 0-32-64 0 0-48z"/></svg>'
             : '<svg width="28" height="28" viewBox="0 0 512 512" fill="currentColor"><path d="M322.4 192C358.9 59.4 379.4-15.3 384-32L340.9 3.9 38.4 256 0 288 198.4 288 189.6 320c-36.5 132.6-57 207.3-61.6 224l43.1-35.9 302.5-252.1 38.4-32-198.4 0 8.8-32zm101.2 64L185.9 454.1c34.3-124.6 52.4-190.6 54.5-198.1l-152 0 237.7-198.1C291.8 182.5 273.7 248.5 271.6 256l152 0z"/></svg>';
@@ -9891,7 +9997,7 @@ class wps_ic_ajax extends wps_ic
             if (is_string($op) && $op !== '' && @file_exists($op)) $full_orig = (int) @filesize($op);
         }
 
-        
+        // Separate optimized from skipped, sort optimized by savings desc
         $optimized_rows = [];
         $skipped_rows = [];
         foreach ($variants as $label => $data) {
@@ -9902,7 +10008,7 @@ class wps_ic_ajax extends wps_ic
             $base = preg_replace('/-(avif|webp|jpe?g|png)$/i', '', $label);
             $orig = $canonical_orig($base);
 
-            
+            // Tier 3: stored ic_local_variants originalSize. May be stale (drifts across
 
 
             if ($orig <= 0) {
@@ -9924,8 +10030,8 @@ class wps_ic_ajax extends wps_ic
             $orig_is_full = false;
             if ($orig <= 0 && $full_orig > 0) { $orig = $full_orig; $orig_is_full = true; }
 
-            
-            
+            // Always recompute savings from current orig/opt at render time. The stored
+            // `savings` field drifts when the variant entry is partially rewritten (e.g. service
 
 
             $pct = ($orig > 0 && $opt > 0 && $opt < $orig)
@@ -9969,13 +10075,13 @@ class wps_ic_ajax extends wps_ic
         $html .= '.swal2-container:has(.wpc-stats-swal){left:160px !important;right:0 !important;width:auto !important;}';
         $html .= 'body.folded .swal2-container:has(.wpc-stats-swal),body.auto-fold .swal2-container:has(.wpc-stats-swal){left:36px !important;}';
         $html .= '@media screen and (max-width:782px){.swal2-container:has(.wpc-stats-swal){left:0 !important;}}';
-        
+        // Inner content: scroll. Both possible class names (post-v9 = html-container, pre-v9 = content).
         $html .= 'body .wpc-stats-swal .swal2-html-container,body .wpc-stats-swal .swal2-content{';
         $html .= 'max-height:calc(85vh - 120px) !important;overflow-y:auto !important;';
 
 
         $html .= 'margin:0 -18px 0 0 !important;padding:0 18px 0 0 !important;text-align:left !important;}';
-        
+        // Minimal scrollbar
         $html .= '.wpc-stats-swal .swal2-html-container::-webkit-scrollbar,';
         $html .= '.wpc-stats-swal .swal2-content::-webkit-scrollbar{width:6px;}';
         $html .= '.wpc-stats-swal .swal2-html-container::-webkit-scrollbar-track,';
@@ -9986,11 +10092,11 @@ class wps_ic_ajax extends wps_ic
         $html .= '.wpc-stats-swal .swal2-content::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,0.22);}';
         $html .= '.wpc-stats-swal .swal2-html-container,.wpc-stats-swal .swal2-content{';
         $html .= 'scrollbar-width:thin;scrollbar-color:rgba(0,0,0,0.12) transparent;}';
-        
+        // Close X
         $html .= '.wpc-stats-swal .swal2-close{top:12px !important;right:16px !important;font-size:24px !important;}';
-        
+        // Inner modal layout
         $html .= '.wpc-stats-modal{padding:0;}';
-        
+        // Modal header scrolls normally. Only the table thead is sticky.
         $html .= '.wpc-stats-modal-header{padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid #eef1f5;}';
 
 
@@ -10011,27 +10117,27 @@ class wps_ic_ajax extends wps_ic
         $html .= '<div class="wpc-stats-table-wrap"><table class="wpc-stats-grid" id="wpc-stats-table">';
         $html .= '<thead><tr>';
         $html .= '<th class="wpc-th-variant">' . esc_html__('Variant', 'wp-compress-image-optimizer') . '</th>';
-        
-        
+        // Dimensions column (testing aid). Hide later via CSS:
+        //   .wpc-th-dimensions, .wpc-td-dimensions { display: none !important; }
         $html .= '<th class="wpc-th-dimensions">' . esc_html__('Dimensions', 'wp-compress-image-optimizer') . '</th>';
-        
-        
+        // Arrival time since click. Testing aid. Hide via CSS:
+        //   .wpc-th-tplus, .wpc-td-tplus { display: none !important; }
 
-        
-        
+        // SweetAlert2's HTML sanitizer, so the column showed despite the CSS rule.
+        // Inline styles survive sanitization, so this actually hides it. Testing aid only.
         $html .= '<th class="wpc-th-tplus" style="display:none">T+</th>';
         $html .= '<th class="wpc-th-orig">' . esc_html__('Original', 'wp-compress-image-optimizer') . '</th>';
         $html .= '<th class="wpc-th-opt">' . esc_html__('Optimized', 'wp-compress-image-optimizer') . '</th>';
         $html .= '<th class="wpc-th-savings wpc-th-active-sort">' . esc_html__('Savings', 'wp-compress-image-optimizer') . ' <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></th>';
         $html .= '</tr></thead><tbody>';
 
-        
+        // Format helper for T+ column. ms → "2.07s" / "12.45s" / "—" when 0.
         $fmt_tplus = function ($ms) {
             if (!$ms || $ms <= 0) return '—';
             return number_format($ms / 1000, 2) . 's';
         };
 
-        
+        // Optimized rows
         foreach ($optimized_rows as $r) {
             $html .= '<tr class="wpc-row-enter">';
             $html .= '<td class="wpc-td-variant"><div class="wpc-cell-variant"><span class="wpc-format-badge ' . esc_attr($r['fmt_class']) . '">' . esc_html($r['fmt_label']) . '</span><span class="wpc-variant-name">' . esc_html($r['display_label']) . '</span></div></td>';
@@ -10048,7 +10154,7 @@ class wps_ic_ajax extends wps_ic
             $html .= '</tr>';
         }
 
-        
+        // Skipped accordion toggle
         if (!empty($skipped_rows)) {
             $html .= '<tr class="wpc-skipped-toggle-row"><td colspan="6">';
             $html .= '<button class="wpc-skipped-toggle-btn" onclick="(function(b){var r=document.querySelectorAll(\'.wpc-skipped-row\'),s=b.querySelector(\'span\'),v=b.classList.toggle(\'is-active\');r.forEach(function(el,i){if(v){setTimeout(function(){el.classList.add(\'is-visible\')},i*30)}else{el.classList.remove(\'is-visible\')}});s.textContent=v?\'Hide skipped variants\':\'Show ' . count($skipped_rows) . ' skipped variants\'})(this)">';
@@ -10056,7 +10162,7 @@ class wps_ic_ajax extends wps_ic
             $html .= '<svg class="wpc-skipped-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>';
             $html .= '</button></td></tr>';
 
-            
+            // Skipped rows (hidden by default)
             foreach ($skipped_rows as $r) {
                 $html .= '<tr class="wpc-skipped-row">';
                 $html .= '<td class="wpc-td-variant"><div class="wpc-cell-variant"><span class="wpc-format-badge ' . esc_attr($r['fmt_class']) . '">' . esc_html($r['fmt_label']) . '</span><span class="wpc-variant-name">' . esc_html($r['display_label']) . '</span></div></td>';
@@ -10083,16 +10189,16 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success(['html' => $html]);
     }
 
-    
-
-
+    /**
+     * Count Uncompressed Images
+     */
     public function wps_ic_count_uncompressed_images()
     {
         if (!$this->isAgencyPortal() && !current_user_can('manage_wpc_settings') && !current_user_can('manage_options')) {
             wp_send_json_error('Forbidden.');
         }
 
-        
+        // ids-only + hard cap: a 100k library must not hold a worker walking every file.
         $args = ['post_type' => 'attachment', 'post_status' => 'inherit', 'fields' => 'ids',
             'posts_per_page' => (int) apply_filters('wpc_uncompressed_count_cap', 2000),
             'no_found_rows' => true, 'update_post_meta_cache' => false, 'update_post_term_cache' => false,
@@ -10101,12 +10207,12 @@ class wps_ic_ajax extends wps_ic
         $uncompressed_attachments = new WP_Query($args);
         $total_file_size = 0;
         foreach ((array) $uncompressed_attachments->posts as $postID) {
-            $wpc_meta330 = wp_get_attachment_metadata($postID);
-            if (is_array($wpc_meta330) && !empty($wpc_meta330['filesize'])) {
-                $total_file_size += (int) $wpc_meta330['filesize'];
+            $attachment_meta = wp_get_attachment_metadata($postID);
+            if (is_array($attachment_meta) && !empty($attachment_meta['filesize'])) {
+                $total_file_size += (int) $attachment_meta['filesize'];
             } else {
-                $wpc_fs330 = @filesize((string) get_attached_file($postID));
-                $total_file_size += (int) $wpc_fs330;
+                $file_size = @filesize((string) get_attached_file($postID));
+                $total_file_size += (int) $file_size;
             }
         }
 
@@ -10149,7 +10255,7 @@ class wps_ic_ajax extends wps_ic
             $settings['retina'] = 0;
         }
 
-        
+        // Agency mode: relay to remote site. save_mode() terminates via wp_send_json_*.
         if ($this->isAgencyPortal()) {
             global $api;
             $apikey = sanitize_text_field($_POST['apikey'] ?? '');
@@ -10167,17 +10273,17 @@ class wps_ic_ajax extends wps_ic
         $wpc_excludes['delay_js'] = [];
         update_option('wpc-excludes', $wpc_excludes);
 
-        if (function_exists('wpc_preset_cache_gate67')) {
-            $settings = wpc_preset_cache_gate67($settings);
+        if (function_exists('wpc_drop_preset_advanced_cache_if_foreign')) {
+            $settings = wpc_drop_preset_advanced_cache_if_foreign($settings);
         }
 
         update_option(WPS_IC_SETTINGS, $settings);
         update_option(WPS_IC_PRESET, $preset);
 
-        
+        // Preload Page
         $cacheLogic = new wps_ic_cache();
 
-        
+        // Remove generateCriticalCSS Options
         delete_option('wps_ic_gen_hp_url');
 
         if (!class_exists('wps_ic_htaccess')) {
@@ -10191,8 +10297,8 @@ class wps_ic_ajax extends wps_ic
             $htaccess->removeAdvancedCache();
             $htaccess->setWPCache(false);
         } elseif (!empty($settings['cache']['advanced'])) {
-            
-            
+            // Setup Advanced Caching
+            // Add WP_CACHE to wp-config.php
             $htaccess->setWPCache(true);
             $htaccess->setAdvancedCache();
         }
@@ -10231,12 +10337,12 @@ class wps_ic_ajax extends wps_ic
             $purge_on_new_post = '';
         }
 
-        
+        // Start building the HTML
         $html = '<div class="cdn-popup-loading" style="display: none;">';
         $html .= '<div class="wpc-popup-saving-logo-container">';
         $html .= '<div class="wpc-popup-saving-preparing-logo">';
         $html .= '<img src="' . WPS_IC_URI . 'assets/images/logo/blue-icon.svg" class="wpc-ic-popup-logo-saving"/>';
-        $html .= '<span class="wpc-ic-popup-logo-saving-loader" aria-hidden="true"></span>'; 
+        $html .= '<span class="wpc-ic-popup-logo-saving-loader" aria-hidden="true"></span>'; // CSS brand ring (was preparing.svg <img>)
         $html .= '</div>';
         $html .= '</div>';
         $html .= '</div>';
@@ -10279,7 +10385,7 @@ class wps_ic_ajax extends wps_ic
         $html .= '</div>';
 
 
-        
+        // Return the HTML as an AJAX response
         wp_send_json_success(['html' => $html]);
     }
 
@@ -10327,7 +10433,7 @@ class wps_ic_ajax extends wps_ic
             unset($wpc_excludes['per_page_settings'][$id]['skip_lazy']);
         }
 
-        
+        // Update the 'wpc-excludes' option with the new data
         update_option('wpc-excludes', $wpc_excludes);
 
         if ($id == 'home') {
@@ -10355,7 +10461,7 @@ class wps_ic_ajax extends wps_ic
         $id = sanitize_text_field($_POST['id']);
         $setting = sanitize_text_field($_POST['setting']);
 
-        
+        // Fetch the data from 'wpc-excludes' option
         $wpc_excludes = get_option('wpc-excludes', []);
         $excludes = isset($wpc_excludes['page_excludes_files'][$id]) ? $wpc_excludes['page_excludes_files'][$id] : [];
 
@@ -10367,12 +10473,12 @@ class wps_ic_ajax extends wps_ic
 
         $setting_name = ['cdn' => esc_html__('CDN', WPS_IC_TEXTDOMAIN), 'adaptive' => esc_html__('Adaptive Images', WPS_IC_TEXTDOMAIN), 'advanced_cache' => esc_html__('Advanced Cache', WPS_IC_TEXTDOMAIN), 'critical_css' => esc_html__('Critical CSS', WPS_IC_TEXTDOMAIN), 'delay_js' => esc_html__('JavaScript', WPS_IC_TEXTDOMAIN), 'delay_js_v2' => esc_html__('JavaScript', WPS_IC_TEXTDOMAIN)];
 
-        
+        // Start building the HTML
         $html = '<div class="cdn-popup-loading" style="display: none;">';
         $html .= '<div class="wpc-popup-saving-logo-container">';
         $html .= '<div class="wpc-popup-saving-preparing-logo">';
         $html .= '<img src="' . WPS_IC_URI . 'assets/images/logo/blue-icon.svg" class="wpc-ic-popup-logo-saving"/>';
-        $html .= '<span class="wpc-ic-popup-logo-saving-loader" aria-hidden="true"></span>'; 
+        $html .= '<span class="wpc-ic-popup-logo-saving-loader" aria-hidden="true"></span>'; // CSS brand ring (was preparing.svg <img>)
         $html .= '</div>';
         $html .= '</div>';
         $html .= '</div>';
@@ -10413,7 +10519,7 @@ class wps_ic_ajax extends wps_ic
         $html .= '</div>';
 
 
-        
+        // Return the HTML as an AJAX response
         wp_send_json_success(['html' => $html]);
     }
 
@@ -10430,12 +10536,12 @@ class wps_ic_ajax extends wps_ic
         $id = sanitize_text_field($_POST['id']);
         $setting = sanitize_text_field($_POST['setting']);
         $excludes = $_POST['excludes'];
-        $excludes = self::wpc_split_patterns19($excludes);
+        $excludes = self::wpc_split_exclude_patterns($excludes);
 
-        
+        // Fetch the entire 'wpc-excludes' option
         $wpc_excludes = get_option('wpc-excludes', []);
 
-        
+        // Create 'page_excludes_files' key if it doesn't exist
         if (!isset($wpc_excludes['page_excludes_files'])) {
             $wpc_excludes['page_excludes_files'] = [];
         }
@@ -10446,7 +10552,7 @@ class wps_ic_ajax extends wps_ic
 
         $wpc_excludes['page_excludes_files'][$id][$setting] = $excludes;
 
-        
+        // Update the 'wpc-excludes' option with the new data
         update_option('wpc-excludes', $wpc_excludes);
 
         if ($id == 'home') {
@@ -10460,12 +10566,12 @@ class wps_ic_ajax extends wps_ic
         $cache = new wps_ic_cache_integrations();
         $cache::purgeAll($url_key);
 
-        if ($setting == 'combine_js' || $setting == 'css_combine' || $setting == 'delay_js') {
+        if ($setting == 'combine_js' || $setting == 'delay_js') {
             $cache::purgeCombinedFiles($url_key);
         }
 
         if ($setting == 'critical_css') {
-            $cache::purgeCriticalFiles($url_key);
+            $cache::invalidateCritical($url_key, 'page-settings', 'wipe');
         }
 
         wp_send_json_success();
@@ -10495,7 +10601,7 @@ class wps_ic_ajax extends wps_ic
         $process_all = false;
         if (isset($_POST['post_status']) && is_array($_POST['post_status'])) {
             $post_status = array_map('sanitize_text_field', $_POST['post_status']);
-            
+            //To get statuses, we have to process all posts
             $process_all = true;
         } else {
             $post_status = ['optimized', 'skipped', 'unoptimized'];
@@ -10560,32 +10666,32 @@ class wps_ic_ajax extends wps_ic
 
             $cache = new wps_ic_cache_integrations();
 
-            if ($setting_name == 'combine_js' || $setting_name == 'css_combine' || $setting_name == 'delay_js') {
+            if ($setting_name == 'combine_js' || $setting_name == 'delay_js') {
                 $cache::purgeCombinedFiles($url_key);
             }
             if ($setting_name == 'critical_css') {
-                
-                
-                
-                
-                
-                
-                $cache::purgeCriticalFiles($url_key);
+                // v7.10.507 — PURGE ALONE WAS A TRAP. Deleting the crit files without forcing means
+                // the next render dispatches an UNFORCED gen, which the service answers from its 300s
+                // debounce by returning the EXISTING crit_uuid — the same stale artifact. So the user
+                // threw away their copy and re-downloaded an identical one, and nothing on the wire
+                // changed because the page HTML was still cached with the old crit inlined. Purging
+                // crit now means: drop it, force a REAL regeneration, and turn the page cache over.
+                $cache::invalidateCritical($url_key, 'page-critical-toggle', 'wipe');
                 if (apply_filters('wpc_crit_purge_regenerates', true)) {
-                    $GLOBALS['wpc_gen_force496'] = 1;
+                    $GLOBALS['wpc_critical_generate_forced'] = 1;
                     if (!class_exists('wps_criticalCss')) {
                         @include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
                     }
                     if (class_exists('wps_criticalCss')) {
                         try {
-                            $wpc_cc507 = new wps_criticalCss();
-                            $wpc_cc507->generateCriticalCSS($id, true);
+                            $critical_css = new wps_criticalCss();
+                            $critical_css->generateCriticalCSS($id);
                         } catch (\Throwable $e) {
                         }
                     }
-                    unset($GLOBALS['wpc_gen_force496']);
-                    
-                    
+                    unset($GLOBALS['wpc_critical_generate_forced']);
+                    // The crit is inlined INTO the HTML, so the edge must turn over or the visitor
+                    // keeps seeing the old one — this is why "I removed it and it is still there".
                     if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
                         try { wps_ic_cache::cfPurgeAllHtml(true, true); } catch (\Throwable $e) {}
                     }
@@ -10594,11 +10700,11 @@ class wps_ic_ajax extends wps_ic
 
             $cache::purgeAll($url_key);
         } else if ($setting_action == 'generate' && $setting_name == 'critical_css') {
-            
-            $GLOBALS['wpc_gen_force496'] = 1;
+            // Explicit user action: bypass the service's 300s gen debounce (v7.10.496).
+            $GLOBALS['wpc_critical_generate_forced'] = 1;
             $critical = new wps_criticalCss();
-            $critical->generateCriticalCSS($id, true);
-            unset($GLOBALS['wpc_gen_force496']);
+            $critical->generateCriticalCSS($id);
+            unset($GLOBALS['wpc_critical_generate_forced']);
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
                 try { wps_ic_cache::cfPurgeAllHtml(true, true); } catch (\Throwable $e) {}
             }
@@ -10606,13 +10712,13 @@ class wps_ic_ajax extends wps_ic
 
             $wpc_excludes = get_option('wpc-excludes', []);
 
-            
+            // If 'page_excludes' doesn't exist within 'wpc-excludes', initialize it as an empty array
             if (!isset($wpc_excludes['page_excludes'])) {
                 $wpc_excludes['page_excludes'] = [];
             }
 
 
-            
+            // Ensure each $post_id is an array within 'page_excludes'
             if (!isset($wpc_excludes['page_excludes'][$id])) {
                 $wpc_excludes['page_excludes'][$id] = [];
             }
@@ -10647,16 +10753,16 @@ class wps_ic_ajax extends wps_ic
 
                 $cache = new wps_ic_cache_integrations();
 
-                if ($setting_name == 'combine_js' || $setting_name == 'css_combine' || $setting_name == 'delay_js') {
+                if ($setting_name == 'combine_js' || $setting_name == 'delay_js') {
                     $cache::purgeCombinedFiles($url_key);
                 }
                 if ($setting_name == 'critical_css') {
-                    $cache::purgeCriticalFiles($url_key);
+                    $cache::invalidateCritical($url_key, 'page-settings-save', 'wipe');
                 }
 
                 $cache::purgeAll($url_key);
 
-                
+                // Update the 'wpc-excludes' option with the modified data
                 update_option('wpc-excludes', $wpc_excludes);
             }
         }
@@ -10724,8 +10830,8 @@ class wps_ic_ajax extends wps_ic
         $url_key_class = new wps_ic_url_key();
         $url_key = $url_key_class->setup($url);
 
-        
-        
+        // Only purge HTML cache for the tested page — preserves CDN cache,
+        // Critical CSS, and CSS/JS hashes so visitors aren't affected
         $cache = new wps_ic_cache_integrations();
         $cache::purgeCacheFiles($url_key);
 
@@ -10735,7 +10841,7 @@ class wps_ic_ajax extends wps_ic
         unset($tests['home']);
         update_option(WPS_IC_TESTS, $tests);
 
-        
+        // Save history of tests
         $history = get_option(WPS_IC_LITE_GPS_HISTORY);
         if (empty($history)) {
             $history = [];
@@ -10743,7 +10849,7 @@ class wps_ic_ajax extends wps_ic
         $history[time()] = get_option(WPS_IC_LITE_GPS);
         update_option(WPS_IC_LITE_GPS_HISTORY, $history);
 
-        
+        // Delete data
         delete_transient('wpc_test_running');
         delete_transient('wpc_initial_test');
         delete_option(WPS_IC_LITE_GPS);
@@ -10751,7 +10857,7 @@ class wps_ic_ajax extends wps_ic
 
         set_transient('wpc_initial_test', 'running', 5 * 60);
 
-        
+        // Test
         $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
         $response = $requests->POST(self::$PAGESPEED_URL_HOME, $args, ['timeout' => 5, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
 
@@ -10816,8 +10922,8 @@ class wps_ic_ajax extends wps_ic
         if ($code === 200 && is_array($data) && !empty($data['run_id']) && (($data['status'] ?? '') === 'accepted')) {
             return ['ok' => true, 'data' => ['run_id' => (string) $data['run_id'], 'mode' => (string) ($data['mode'] ?? 'advisory_dry_run')]];
         }
-        
-        
+        // The service reports errors as {"status":"failed - <reason>"} (verified live), NOT an `error`
+        // key — strip the "failed - " prefix; fall back to an `error` key or the HTTP code.
         $raw = '';
         if (is_array($data)) {
             if (!empty($data['status']) && stripos((string) $data['status'], 'accepted') === false) {
@@ -10877,7 +10983,7 @@ class wps_ic_ajax extends wps_ic
         if ($code !== 200 || !is_array($data)) {
             return ['ok' => false, 'data' => ['msg' => 'Optimizer returned an unexpected response (HTTP ' . $code . ').', 'transient' => true]];
         }
-        return ['ok' => true, 'data' => $data]; 
+        return ['ok' => true, 'data' => $data]; // {state, step, scores, dry_run, report}
     }
 
 
@@ -10956,7 +11062,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_get_cache_cookies()
     {
-        self::wpc_bulk_gate67();
+        self::wpc_require_bulk_capability();
         if ($this->isAgencyPortal()) {
             global $api;
             $apikey          = sanitize_text_field($_POST['apikey'] ?? '');
@@ -10988,6 +11094,90 @@ class wps_ic_ajax extends wps_ic
     }
 
 
+    /**
+     * Save the editable query-parameter lists (option `wps_ic_cache_query_params`): `params` are
+     * the parameters whose value varies the cache, `exclude_params` the ones stripped from the key.
+     * In the agency portal there is no local option to write — the lists are relayed to the client
+     * site, which stores them through comms::saveCacheQueryParams().
+     */
+    public function wps_ic_save_cache_query_params_settings()
+    {
+        if ((!$this->isAgencyPortal() && !current_user_can('manage_wpc_settings')) || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+            wp_send_json_error('Forbidden.');
+        }
+
+        if ($this->isAgencyPortal()) {
+            global $api;
+            $apikey         = sanitize_text_field($_POST['apikey'] ?? '');
+            $query_params   = array_values(array_filter(explode("\n", rtrim(sanitize_textarea_field($_POST['cache_query_params'] ?? ''), "\n"))));
+            $ignore_params  = array_values(array_filter(explode("\n", rtrim(sanitize_textarea_field($_POST['ignore_query_params'] ?? ''), "\n"))));
+            $form           = ['params' => $query_params, 'exclude_params' => $ignore_params];
+            if (!empty($apikey) && !empty($api) && !empty($api::$comms)) {
+                $api::$comms->saveRemoteCacheQueryParams($apikey, $form);
+            }
+            wp_send_json_success();
+        }
+
+        $query_params_setting = get_option('wps_ic_cache_query_params', []);
+        $query_params_setting = is_array($query_params_setting) ? $query_params_setting : [];
+
+        $query_params = sanitize_textarea_field($_POST['cache_query_params'] ?? '');
+        $query_params = rtrim($query_params, "\n");
+        $query_params_setting['params'] = array_values(array_filter(array_map('trim', explode("\n", $query_params)), 'strlen'));
+
+        $ignore_params = sanitize_textarea_field($_POST['ignore_query_params'] ?? '');
+        $ignore_params = rtrim($ignore_params, "\n");
+        $query_params_setting['exclude_params'] = array_values(array_filter(array_map('trim', explode("\n", $ignore_params)), 'strlen'));
+
+        $updated = update_option('wps_ic_cache_query_params', $query_params_setting);
+
+        if ($updated) {
+            // Every stored page was keyed under the OLD rules: a parameter that now varies the key
+            // has no entry yet, and one that is now ignored has entries that must collapse.
+            $cache = new wps_ic_cache_integrations();
+            $cache::purgeAll(false, true, false, false, true);
+
+            $settings = get_option(WPS_IC_SETTINGS);
+            if (!empty($settings['cache']['advanced']) && $settings['cache']['advanced'] == '1') {
+                if (!class_exists('wps_ic_htaccess')) {
+                    include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+                }
+
+                $htaccess = new wps_ic_htaccess();
+                $htaccess->setAdvancedCache();
+            }
+        }
+
+        wp_send_json_success();
+    }
+
+    /**
+     * Fill the "Cache by Query Parameter" popup. Answers the two lists as newline-separated text,
+     * read from the client site when this runs in the agency portal.
+     */
+    public function wps_ic_get_cache_query_params()
+    {
+        self::wpc_require_bulk_capability();
+        if ($this->isAgencyPortal()) {
+            global $api;
+            $apikey               = sanitize_text_field($_POST['apikey'] ?? '');
+            $query_params_setting = (!empty($apikey) && !empty($api) && !empty($api::$comms))
+                                    ? $api::$comms->getRemoteCacheQueryParams($apikey)
+                                    : [];
+            $query_params  = !empty($query_params_setting['params'])         ? implode("\n", $query_params_setting['params'])         : '';
+            $ignore_params = !empty($query_params_setting['exclude_params']) ? implode("\n", $query_params_setting['exclude_params']) : '';
+            wp_send_json_success(['cache_query_params' => $query_params, 'ignore_query_params' => $ignore_params]);
+        }
+
+        $query_params_setting = get_option('wps_ic_cache_query_params', []);
+        $query_params_setting = is_array($query_params_setting) ? $query_params_setting : [];
+
+        $query_params  = !empty($query_params_setting['params'])         ? implode("\n", $query_params_setting['params'])         : '';
+        $ignore_params = !empty($query_params_setting['exclude_params']) ? implode("\n", $query_params_setting['exclude_params']) : '';
+
+        wp_send_json_success(['cache_query_params' => $query_params, 'ignore_query_params' => $ignore_params]);
+    }
+
     public function wps_ic_run_tests()
     {
         if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
@@ -11002,7 +11192,7 @@ class wps_ic_ajax extends wps_ic
         $warmup_class = new wps_ic_preload_warmup();
         if ($warmup_class->isOptimized($id) == '1') {
             $warmup_class->doTest($id, $retest, true);
-            
+            #$warmup_class->doTestLCP($id, true);
         } else {
             $warmup_class->optimizeSingle($id);
         }
@@ -11014,7 +11204,7 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-        
+        // Agency mode: relay to remote site
         if ($this->isAgencyPortal()) {
             global $api;
             $apikey = sanitize_text_field($_POST['apikey'] ?? '');
@@ -11044,33 +11234,10 @@ class wps_ic_ajax extends wps_ic
         $warmup_class = new wps_ic_preload_warmup();
         $pages = $warmup_class->getPagesToOptimize();
 
+        // Reports only. The pages are warmed by the warm run's own ticks (cron and front-end
+        // requests), so closing this page never stops the run and polling never adds a render.
         $status = $warmup_class->get_optimization_status();
-
         $next_page = null;
-        if (!empty($status['mode']) && $status['mode'] == 'local') {
-            $next_page = reset($pages['pages']);
-            if ($next_page !== false) {
-                $count = 1;
-                $transient = get_transient('wpc_last_optimised_page');
-                if (!empty($transient)) {
-                    if ($transient['id'] == $next_page['id'] && $transient['count'] == 2) {
-                        $warmup_class->addError($next_page['id'], 'skip');
-                    } else if ($transient['id'] == $next_page['id'] && $transient['count'] == 1) {
-                        $count = 2;
-                    } else {
-                        $count = 1;
-                    }
-                }
-                if ($warmup_class->isRedirected($next_page['link'])) {
-                    $warmup_class->addError($next_page['id'], 'redirect');
-                }
-                $warmup_class->localCacheWarmup($next_page['link']);
-                $status['id'] = $next_page['id'];
-                $status['pageTitle'] = ($status['id'] === 'home') ? 'Home Page' : get_the_title($status['id']);
-                $status['status'] = 'warmup';
-                set_transient('wpc_last_optimised_page', ['id' => $next_page['id'], 'count' => $count]);
-            }
-        }
 
 
         if ($pages['unoptimized'] == 0) {
@@ -11083,7 +11250,8 @@ class wps_ic_ajax extends wps_ic
             }
         }
 
-        $response = ['optimizationStatus' => $status, 'optimized' => $pages['total'] - $pages['unoptimized'], 'total' => $pages['total'], 'connectivity' => true, $next_page, $pages['pages']];
+        $response = ['optimizationStatus' => $status, 'optimized' => $pages['total'] - $pages['unoptimized'], 'total' => $pages['total'], 'connectivity' => true, $next_page, $pages['pages'],
+            'run' => function_exists('wpc_warm_run_status') ? wpc_warm_run_status() : ['live' => false]];
         wp_send_json_success($response);
     }
 
@@ -11170,13 +11338,13 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_get_purge_rules()
     {
-        
+        // Verify nonce for security
         if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
             wp_send_json_error(['message' => 'Invalid nonce'], 403);
             wp_die();
         }
 
-        
+        // Check user capabilities — bypassed in agency portal
         if (!$this->isAgencyPortal() && !current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
@@ -11199,7 +11367,7 @@ class wps_ic_ajax extends wps_ic
 
         $post_publish = $purge_rules['post-publish'];
 
-        
+        //Checkboxes for post publish purge
         $all_pages = 0;
         $home_page = 0;
         $recent_posts_widget = 0;
@@ -11234,13 +11402,13 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_export_settings()
     {
-        
+        // Verify nonce for security
         if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
             wp_send_json_error(['message' => 'Invalid nonce'], 403);
             wp_die();
         }
 
-        
+        // Check user capabilities
         if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
@@ -11252,8 +11420,8 @@ class wps_ic_ajax extends wps_ic
         $cache_cookies  = sanitize_text_field($_POST['cookies'] ?? '');
         $apikey         = sanitize_text_field($_POST['apikey'] ?? '');
 
-        
-        
+        // In agency mode, inject the remote site's settings so get_option()
+        // calls below return the client site's values, not the local agency ones.
         if ($apikey && $this->isAgencyPortal()) {
             global $api;
             $remoteSettings = $api::$comms->getRemoteSettings($apikey);
@@ -11295,19 +11463,19 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_import_settings()
     {
-        
+        // Verify nonce for security
         if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
             wp_send_json_error(['message' => 'Invalid nonce'], 403);
             wp_die();
         }
 
-        
+        // Check user capabilities
         if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
         }
 
-        
+        // Get data
         $import_data = $_POST['importData'];
         $apikey      = sanitize_text_field($_POST['apikey'] ?? '');
 
@@ -11329,7 +11497,7 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error(['msg' => 'No import data provided']);
         }
 
-        
+        // In agency mode, relay the import to the remote client site.
         if ($apikey && $this->isAgencyPortal()) {
             global $api;
             $call = $api::$comms->importRemoteSettings($apikey, $import_data);
@@ -11347,24 +11515,23 @@ class wps_ic_ajax extends wps_ic
         }
 
         if (isset($import_data['excludes'])) {
-            update_option('wpc-excludes', $import_data['excludes']);
+            // An export from an older site carries two Delay JS lists; store the one.
+            update_option('wpc-excludes', wpc_delay_excludes_fold($import_data['excludes']));
         }
 
         if (isset($import_data['cache'])) {
             update_option('wps_ic_purge_rules', $import_data['cache'], false);
         }
 
-        
+        // Import cache cookies
         if (isset($import_data['cache_cookies'])) {
             update_option('wps_ic_cache_cookies', $import_data['cache_cookies']);
         }
 
         $cache = new wps_ic_cache_integrations();
 
-
-        if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead()) {
-            $cache::purgeCriticalFiles();
-        }
+        // The agency relay of an import (comms importSettings) makes this same call.
+        $cache::invalidateCritical('all', 'settings-import', 'stale');
         $cache::purgeAll();
 
         wp_send_json_success(['msg' => 'Settings imported successfully']);
@@ -11373,13 +11540,13 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_set_default_settings()
     {
-        
+        // Verify nonce for security
         if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
             wp_send_json_error(['message' => 'Invalid nonce'], 403);
             wp_die();
         }
 
-        
+        // Check user capabilities
         if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
@@ -11390,8 +11557,8 @@ class wps_ic_ajax extends wps_ic
         update_option('wps_ic_purge_rules', $purge_rules, false);
 
         $configuration = $options->get_preset('aggressive');
-        if (function_exists('wpc_preset_cache_gate67')) {
-            $configuration = wpc_preset_cache_gate67($configuration);
+        if (function_exists('wpc_drop_preset_advanced_cache_if_foreign')) {
+            $configuration = wpc_drop_preset_advanced_cache_if_foreign($configuration);
         }
         update_option(WPS_IC_SETTINGS, $configuration);
         update_option(WPS_IC_PRESET, 'aggressive');
@@ -11400,9 +11567,7 @@ class wps_ic_ajax extends wps_ic
 
         $cache = new wps_ic_cache_integrations();
 
-        if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead()) {
-            $cache::purgeCriticalFiles();
-        }
+        $cache::invalidateCritical('all', 'settings-defaults', 'stale');
         $cache::purgeAll(false, false, false, false);
 
         wp_send_json_success();
@@ -11415,14 +11580,14 @@ class wps_ic_ajax extends wps_ic
             wp_die();
         }
 
-        
+        // Check user capabilities — bypassed in agency portal
         if (!$this->isAgencyPortal() && !current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
         }
 
-        
-        
+        // A CF (re)connect/save can change the emit host + the edge's MIME behavior, so
+        // invalidate the durable asset-MIME proof; the next render re-verifies the live CF edge.
         if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'invalidate_asset_mime_proof')) {
             wps_rewriteLogic::invalidate_asset_mime_proof();
         }
@@ -11444,7 +11609,6 @@ class wps_ic_ajax extends wps_ic
             $siteUrl     = site_url();
             $options     = get_option(WPS_IC_OPTIONS);
             $apikey      = $options['api_key'];
-            $prevCfCname = (string) get_option(WPS_IC_CF_CNAME);
         }
 
         if (empty($cf)) {
@@ -11454,57 +11618,51 @@ class wps_ic_ajax extends wps_ic
 
         $zoneName = str_replace(['http://', 'https://', '/'], '', $siteUrl);
 
-        $body = $requests->GET(WPS_IC_KEYSURL, ['action' => 'updateCFCname', 'apikey' => $apikey, 'cname' => $cname, 'token' => $cf['token'], 'zoneName' => $zoneName, 'siteUrl' => $siteUrl, 'zone' => $cf['zone'], 'time' => microtime(true)], ['timeout' => 30]);
+        // Rule: the host keys answers is stored only when keys said success. keys d9b24cde (hub ask
+        // 044) answers an empty token with {success:false, data:{code:'cf-token-missing', cfName:<the
+        // row's own host>}}; this handler checked only for a body, stored that old host back and
+        // answered success, so the portal's "change Cloudflare host" kept the old host with no
+        // message (the portal holds no site token since 7.24.22). A refusal keeps the site as it
+        // is and answers the code; a timeout or broken answer changes nothing either.
+        $keys = $requests->keys('updateCFCname', ['apikey' => $apikey, 'cname' => $cname, 'token' => $cf['token'] ?? '', 'zoneName' => $zoneName, 'siteUrl' => $siteUrl, 'zone' => $cf['zone'] ?? '', 'time' => microtime(true)], 30);
+        if (!$keys['ok']) {
+            $code = $keys['code'] !== '' ? $keys['code'] : ($keys['step'] !== '' ? $keys['step'] : $keys['why']);
+            $msg = $keys['code'] === 'cf-token-missing'
+                ? ($this->isAgencyPortal()
+                    ? 'The portal holds no Cloudflare token for this site, so the host cannot be changed from here. Change it in the WP Compress settings on the site itself. Nothing was changed.'
+                    : 'No Cloudflare token is stored. Reconnect Cloudflare, then save the host again. Nothing was changed.')
+                : 'The provisioning server did not accept the new host (' . $code . '). Nothing was changed.';
+            wp_send_json_error(['code' => $code, 'msg' => $msg]);
+        }
+        $data    = (array) $keys['data'];
+        $cfCname = (string) ($data['cfName'] ?? '');
+        $body    = $keys['data'];
 
-        if (!empty($body)) {
-            $data    = (array)$body->data;
-            $cfCname = $data['cfName'];
-
+        if ($cfCname !== '') {
             if ($this->isAgencyPortal()) {
                 if (!empty($apikey) && !empty($api) && !empty($api::$comms)) {
                     $api::$comms->saveRemoteCFOption($apikey, null, $cfCname);
                 }
             } else {
-                update_option(WPS_IC_CF_CNAME, $cfCname);
-
-
-                if ((string) $cfCname !== $prevCfCname) {
-                    update_option('wpc_v2_force_provision', 1, false);
-                    
-                    
-
-
-                    update_option('wpc_cf_cname_verified', '0', false);
-                    if (function_exists('wpc_v2_config_sync_lazy_enabled') && function_exists('wpc_v2_get_zone_id')) {
-                        $wpc_zid = (string) wpc_v2_get_zone_id();
-                        if ($wpc_zid === '' || !ctype_digit($wpc_zid)) {
-                            $wpc_zid = (string) $cfCname;
-                        }
-                        wpc_v2_config_sync_lazy_enabled(
-                            $wpc_zid,
-                            function_exists('wpc_v2_get_lazy_enabled') ? wpc_v2_get_lazy_enabled() : false
-                        );
-                    } elseif (function_exists('wpc_v2_schedule_config_sync')) {
-                        wpc_v2_schedule_config_sync();
-                    }
-
-
+                // A new host is unverified until proven: the owner clears the emit gate's
+                // verdict, arms the provisioning flag and schedules the sync that carries it.
+                if (wpc_cf_cname_persist($cfCname, 'ajax-cf-save')) {
                     if (class_exists('WPC_CloudflareAPI') && !empty($cf['token'])) {
                         $cfapi_verify = new WPC_CloudflareAPI($cf['token']);
-                        if ($cfapi_verify && $cfapi_verify->verifyCfCnameLive($cfCname, 1, 5)) {
+                        if ($cfapi_verify && $cfapi_verify->verifyCfCnameLive($cfCname, 1, 5) && wpc_cf_cname_gate_legacy()) {
                             update_option('wpc_cf_cname_verified', 1, false);
                         }
                     }
                 }
             }
-        } else {
-            wp_send_json_error();
         }
 
         if (!$this->isAgencyPortal()) {
             $cache = new wps_ic_cache_integrations();
             $cache->purgeAll(false, false, false, false);
         }
+        // The success shape stays {success, data:<keys' data>} for the popup; the answer keeps the
+        // host keys named, never its refusal.
         wp_send_json_success($body);
     }
 
@@ -11515,7 +11673,7 @@ class wps_ic_ajax extends wps_ic
             wp_die();
         }
 
-        
+        // Check user capabilities — bypassed in agency portal
         if (!$this->isAgencyPortal() && !current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
@@ -11537,8 +11695,8 @@ class wps_ic_ajax extends wps_ic
 
     public function wpc_v2_diag()
     {
-        
-        
+        // ── AUTH: capability + nonce, fail-closed with JSON 403 before any read. ──
+        // wp_ajax_ registration (no nopriv) already blocks logged-out callers.
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['error' => 'forbidden_capability'], 403);
         }
@@ -11548,7 +11706,7 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error(['error' => 'bad_nonce'], 403);
         }
 
-        
+        // ── NULL-SAFE READ HELPERS (closures — add no class surface, never write). ──
         $meta = function ($id, $key) {
             if ($id <= 0) return null;
             $v = get_post_meta((int) $id, $key, true);
@@ -11564,7 +11722,7 @@ class wps_ic_ajax extends wps_ic
             return ($v === false) ? null : $v;
         };
         $trans_exists = function ($key) {
-            
+            // Existence WITHOUT leaking the value (one-shot dispatch tokens).
             return get_transient($key) !== false;
         };
 
@@ -11617,7 +11775,7 @@ class wps_ic_ajax extends wps_ic
                     }
                     if (isset($fmt_counts[$fmt])) $fmt_counts[$fmt]++; else $fmt_counts['other']++;
 
-                    
+                    // Size label = key with any trailing -webp/-avif stripped.
                     $sl = $vkey;
                     if (substr($sl, -5) === '-avif' || substr($sl, -5) === '-webp') {
                         $sl = substr($sl, 0, -5);
@@ -11627,7 +11785,7 @@ class wps_ic_ajax extends wps_ic
             }
             $variants_serialized_bytes = is_array($variants_raw) ? strlen(@serialize($variants_raw)) : 0;
 
-            
+            // Heartbeat ({imageID,status,event,time,bg_variant_fmt,bg_variant_size}).
             $hb = $trans('wps_ic_heartbeat_' . $image_id);
             $hb_out = is_array($hb) ? [
                 'status'          => isset($hb['status']) ? $hb['status'] : null,
@@ -11641,15 +11799,15 @@ class wps_ic_ajax extends wps_ic
 
             $cmp = $trans('wps_ic_compress_' . $image_id);
 
-            
+            // t0 click stamp (ms).
             $t0  = $trans('wpc_v2_t0_ms_' . $image_id);
             $t0i = ($t0 !== null) ? (int) $t0 : null;
 
-            
+            // Drain-complete marker ("Phase A fully landed").
             $pad = $trans('wpc_v2_phase_a_done_' . $image_id);
 
-            
-            
+            // Pending variants awaiting drain-to-disk. New shape { jobId, pending:{...},
+            // recorded_at }; legacy shape is a flat { key => ... } map.
             $pending = $trans('wpc_v2_pending_' . $image_id);
             if (is_array($pending)) {
                 $pmap = (isset($pending['pending']) && is_array($pending['pending'])) ? $pending['pending'] : $pending;
@@ -11680,7 +11838,7 @@ class wps_ic_ajax extends wps_ic
                     'size_labels'           => array_keys($size_labels),
                     'variant_keys'          => $variant_keys,
                     'serialized_bytes'      => $variants_serialized_bytes,
-                    
+                    // Echo the raw payload only when small, to keep the JSON sane.
                     'raw'                   => ($variants_serialized_bytes > 0 && $variants_serialized_bytes <= 8192) ? $variants_raw : null,
                     'raw_omitted_too_large' => ($variants_serialized_bytes > 8192),
                 ],
@@ -11693,7 +11851,7 @@ class wps_ic_ajax extends wps_ic
                 ],
 
                 'heartbeat'         => $hb_out,
-                'compress_state'    => $cmp,                         
+                'compress_state'    => $cmp,                         // 'sent-to-api' | {imageID,status,time} | null
                 'restore_state'     => is_array($rst) ? ['status' => isset($rst['status']) ? $rst['status'] : null] : $rst,
                 'restoring_guard'   => $trans_exists('wpc_restoring_' . $image_id),
                 't0_ms'             => $t0i,
@@ -11717,14 +11875,14 @@ class wps_ic_ajax extends wps_ic
                                         : (int) $opt('wpc_v2_pull_cursor_ms', 0),
             'pull_enabled'       => function_exists('wpc_v2_pull_enabled') ? (bool) wpc_v2_pull_enabled() : null,
 
-            'last_drain_skip'    => $opt('wpc_v2_last_drain_skip'),   
-            'last_extdrain'      => $opt('wpc_v2_last_extdrain'),     
-            'last_drain_stats'   => $opt('wpc_v2_last_drain_stats'),  
+            'last_drain_skip'    => $opt('wpc_v2_last_drain_skip'),   // {t,reason,...}
+            'last_extdrain'      => $opt('wpc_v2_last_extdrain'),     // {t,src,ua}
+            'last_drain_stats'   => $opt('wpc_v2_last_drain_stats'),  // {t,ingested,failed,...}
         ];
 
 
         $bp = $opt('wps_ic_bulk_process', null);
-        $cq = $trans('wps_ic_compress_queue'); 
+        $cq = $trans('wps_ic_compress_queue'); // { queue:[], total_images }
         $rq = $trans('wps_ic_restore_queue');
 
 
@@ -11762,13 +11920,13 @@ class wps_ic_ajax extends wps_ic
         $apikey   = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : (isset(self::$apikey) ? self::$apikey : '');
         $live_cdn = isset(self::$settings['live-cdn']) ? (string) self::$settings['live-cdn'] : null;
         $out['account'] = [
-            'apikey_present'         => (is_string($apikey) && $apikey !== ''), 
+            'apikey_present'         => (is_string($apikey) && $apikey !== ''), // BOOL ONLY — never the key
             'live_cdn'               => ($live_cdn === '1'),
             'live_cdn_raw'           => $live_cdn,
             'zone_id'                => function_exists('wpc_v2_get_zone_id') ? wpc_v2_get_zone_id() : null,
             'cf_asset_mime_ok'       => ((string) $opt('wpc_v2_cf_asset_mime_ok', '') === '1'),
             'cf_asset_mime_retry'    => $trans_exists('wpc_v2_cf_asset_mime_retry'),
-            
+            // Reading this filter is side-effect-free.
             'async_dispatch_enabled' => (bool) apply_filters('wpc_v2_async_dispatch_enabled', true),
         ];
 
@@ -11784,11 +11942,11 @@ class wps_ic_ajax extends wps_ic
 
     public static function wpc_v2_prefer_source_url()
     {
-        
-        
-        
-        
-        
+        // Set when a large inline-body dispatch timed out (cURL 28 / transport) on a host
+        // whose egress blackholes large POST bodies (MSS/PMTUD or an outbound appliance):
+        // small packets pass, ~100-250KB envelopes never fully arrive. Switching to
+        // source.url makes the envelope ~1KB (service fetches the source itself), dodging
+        // the blackhole. 7-day self-clear so a fixed host returns to faster inline dispatch.
         $t = (int) get_option('wpc_v2_prefer_source_url', 0);
         return $t > 0 && (time() - $t) < 7 * DAY_IN_SECONDS;
     }
@@ -11797,15 +11955,15 @@ class wps_ic_ajax extends wps_ic
     {
         if (!apply_filters('wpc_v2_async_dispatch_enabled', true)) return false;
         $un = (int) get_option('wpc_v2_async_unreliable', 0);
-        if ($un > 0 && (time() - $un) < 7 * DAY_IN_SECONDS) return false; 
+        if ($un > 0 && (time() - $un) < 7 * DAY_IN_SECONDS) return false; // detach-hostile host — sync
         return true;
     }
 
     public static function dispatch_async_loopback($action, $imageID)
     {
         if (!function_exists('wp_remote_post')) return false;
-        
-        
+        // Filterable kill-switch for hosts where loopback is unreliable.
+        // Default true; admins can disable via add_filter('wpc_v2_async_dispatch_enabled', '__return_false').
         if (!apply_filters('wpc_v2_async_dispatch_enabled', true)) return false;
 
         $imageID = (int) $imageID;
@@ -11813,21 +11971,21 @@ class wps_ic_ajax extends wps_ic
 
         $token = wp_generate_password(32, false, false);
         $token_key = 'wpc_async_token_' . $action . '_' . $imageID;
-        set_transient($token_key, $token, 60); 
+        set_transient($token_key, $token, 60); // 60s TTL — covers Phase A worst-case + slack
 
         $url   = admin_url('admin-ajax.php');
         $parts = wp_parse_url($url);
         if (!is_array($parts) || empty($parts['host'])) {
-            
-            
+            // Can't derive a loopback target — free the token (so a delayed request can't double-run after
+            // the caller goes inline) and tell the caller to run synchronously.
             delete_transient($token_key);
             error_log('[WPC AsyncDispatch] loopback bad_admin_url action=' . $action . ' imageID=' . $imageID . ' url=' . $url);
             return false;
         }
 
         $is_https = (!empty($parts['scheme']) && $parts['scheme'] === 'https');
-        
-        
+        // Honor an explicit non-standard port from admin_url (e.g. proxied/dev/staging :8443), else the
+        // scheme's standard port.
         $port = !empty($parts['port']) ? (int) $parts['port'] : ($is_https ? 443 : 80);
         $host = (string) $parts['host'];
 
@@ -11835,23 +11993,14 @@ class wps_ic_ajax extends wps_ic
         $path = (!empty($parts['path']) ? $parts['path'] : '/admin-ajax.php');
 
 
-        $connect_chain = apply_filters('wpc_loopback_connect_host', ['127.0.0.1', 'localhost', $host], $host, $is_https, $port);
-        if (is_string($connect_chain) && $connect_chain !== '') $connect_chain = [$connect_chain];
-        if (!is_array($connect_chain) || empty($connect_chain)) $connect_chain = ['127.0.0.1', 'localhost', $host];
-        
-        $connect_chain = array_values(array_unique(array_filter(array_map('strval', $connect_chain))));
-        if (count($connect_chain) > 1 && function_exists('wpc_admin_held69') && wpc_admin_held69('wpc_lb_refused78')) {
-            $connect_chain = array_values(array_filter($connect_chain, static function ($h) {
-                return !($h === '127.0.0.1' || $h === '::1' || strtolower($h) === 'localhost');
-            }));
-        }
+        $connect_chain = self::loopback_order(self::loopback_connect_chain($host, $is_https, $port));
 
 
         $can_detach   = (function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'));
         $confirm_want = $can_detach && ((float) apply_filters('wpc_loopback_confirm_timeout', 2.5, $action, $imageID) > 0);
 
-        
-        
+        // ONE wall-clock deadline across ALL connect+confirm attempts so a sick box can't stack
+        // (connect_timeout × N) + read on top of each other. Default 2.5s total; filterable.
         $total_budget   = (float) apply_filters('wpc_loopback_total_budget', 2.5, $action, $imageID);
         $hard_deadline  = microtime(true) + max(0.3, $total_budget);
         $connect_budget = $is_https ? 0.7 : 0.4;
@@ -11866,6 +12015,8 @@ class wps_ic_ajax extends wps_ic
 
         $landed    = false;
         $used_host = '';
+        $connected_host = '';
+        $refused_hosts  = [];
         foreach ($connect_chain as $chost) {
             if ($chost === '') continue;
             if (microtime(true) >= $hard_deadline) break;
@@ -11892,14 +12043,15 @@ class wps_ic_ajax extends wps_ic
             $errstr  = '';
             $remote  = ($is_https ? 'tls://' : 'tcp://') . $chost . ':' . $port;
             $cbudget = min($connect_budget, max(0.05, $hard_deadline - microtime(true)));
-            $sock    = @stream_socket_client($remote, $errno, $errstr, $cbudget, STREAM_CLIENT_CONNECT, $ssl_ctx);
+            $sock    = wpc_loopback_connect($remote, $errno, $errstr, $cbudget, $ssl_ctx);
             if (!$sock) {
                 error_log('[WPC AsyncDispatch] loopback connect_miss action=' . $action . ' imageID=' . $imageID
                     . ' try=' . $chost . ' port=' . $port . ' errno=' . $errno . ' err=' . $errstr);
-                if ($is_loopback_literal && (int) $errno === 111 && function_exists('wpc_admin_hold69')) {
-                    wpc_admin_hold69('wpc_lb_refused78', HOUR_IN_SECONDS);
-                }
+                $refused_hosts[] = $chost;
                 continue;
+            }
+            if ($connected_host === '') {
+                $connected_host = $chost;
             }
 
 
@@ -11912,8 +12064,8 @@ class wps_ic_ajax extends wps_ic
             }
 
             if (!$confirm_want || !$send_token) {
-                
-                
+                // Confirmation disabled (mod_php / filtered off) OR this is the tokenless public rung (which
+                // can never run work) → don't read. Close and let the token re-check below decide.
                 @fclose($sock);
                 $used_host = $chost;
                 if ($send_token) break;
@@ -11938,8 +12090,8 @@ class wps_ic_ajax extends wps_ic
                     continue;
                 }
                 $buf .= $chunk;
-                
-                
+                // Confirmed iff the STATUS LINE is 2xx (handler emits 200 + 'queued' AFTER consuming the
+                // token). Also accept the literal 'queued' body marker as a secondary witness.
                 if (preg_match('#^HTTP/\d(?:\.\d)?\s+(2\d\d)\b#', $buf) || strpos($buf, "\r\n\r\nqueued") !== false) {
                     $landed    = true;
                     $used_host = $chost;
@@ -11952,9 +12104,11 @@ class wps_ic_ajax extends wps_ic
                 . ' try=' . $chost . ' bytes=' . strlen($buf));
         }
 
+        self::loopback_remember($connected_host, $refused_hosts);
+
         if ($landed) {
-            
-            
+            // CONFIRMED: a worker reached verify_async_token, consumed the token (delete precedes the echo),
+            // and is running the work in its own FPM slot. Click returns fast; this read cost tens of ms.
             error_log('[WPC AsyncDispatch] loopback CONFIRMED action=' . $action . ' imageID=' . $imageID . ' via=' . $used_host);
             return true;
         }
@@ -11966,10 +12120,10 @@ class wps_ic_ajax extends wps_ic
         return false;
     }
 
-    
-
-
-
+    /**
+     * Verify the one-shot token from a loopback request. Returns the imageID
+     * on success, false on failure. Deletes the token on success (single-use).
+     */
     private static function verify_async_token($action)
     {
         $imageID = isset($_POST['image_id']) ? (int) $_POST['image_id'] : 0;
@@ -11983,13 +12137,12 @@ class wps_ic_ajax extends wps_ic
     }
 
 
-    public static function wpc_bulk_backup_fail_reason78($imageID)
+    public static function wpc_bulk_backup_fail_reason($imageID)
     {
         $imageID = (int) $imageID;
-        $orig = function_exists('wp_get_original_image_path') ? (string) wp_get_original_image_path($imageID) : '';
-        $att  = function_exists('get_attached_file') ? (string) get_attached_file($imageID) : '';
-        if (($orig === '' || !file_exists($orig)) && ($att === '' || !file_exists($att))) {
-            return 'source file missing on disk (' . basename($att !== '' ? $att : $orig) . ') - restore or re-upload the file';
+        if (wps_ic_image_library::source_state($imageID) === 'missing') {
+            $att = (string) get_attached_file($imageID);
+            return 'source file missing on disk (' . basename($att) . ') - restore or re-upload the file';
         }
         $up   = function_exists('wp_get_upload_dir') ? wp_get_upload_dir() : [];
         $base = isset($up['basedir']) ? (string) $up['basedir'] : '';
@@ -12024,15 +12177,15 @@ class wps_ic_ajax extends wps_ic
 
         $imageID = self::verify_async_token('wpc_async_phase_a');
         if (!$imageID) {
-            
-            
+            // No telemetry record — failed-auth requests shouldn't show up as
+            // legitimate handler time. Just 403 and exit.
             status_header(403);
             exit;
         }
 
 
         @ignore_user_abort(true);
-        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { http_response_code(200); echo 'queued'; wpc_finish_request39(); }
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { http_response_code(200); echo 'queued'; wpc_finish_request(); }
         elseif (function_exists('litespeed_finish_request')) { http_response_code(200); echo 'queued'; @litespeed_finish_request(); }
         @set_time_limit(120);
 
@@ -12047,7 +12200,7 @@ class wps_ic_ajax extends wps_ic
                         'outcome'  => 'failed_backup',
                     ]);
                 }
-                
+                // Clear queueing state so heartbeat doesn't loop on a dead job.
                 update_post_meta($imageID, 'ic_compressing', [
                     'status' => 'backup_failed',
                     'time'   => time(),
@@ -12062,21 +12215,17 @@ class wps_ic_ajax extends wps_ic
             self::$local->wait_for_regen_or_clear_stale($imageID, 15);
         }
 
-        
-        
-        
-        
-        
-        
-        
+        // Run Phase A synchronously in THIS worker. The click AJAX has already
+        // returned to the user; this worker can take its time.
+        // v7.21.314 — breadcrumb: prove the detached worker survived past the
+        // handoff and actually reached the service dispatch. If this is ABSENT
+        // when the watchdog later declares the image failed, the detached FPM
+        // worker was killed before it could POST (detach-hostile host) — the
+        // watchdog uses that to auto-switch this site to synchronous dispatch.
         set_transient('wpc_v2_worker_reached_' . $imageID, time(), 600);
         $outcome = 'unknown';
-        if (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'run_v2_optimize')) {
-            $result = wps_ic_ajax::run_v2_optimize($imageID);
-            $outcome = !empty($result['ok']) ? 'success' : ('failed_' . ($result['error'] ?? 'unknown'));
-        } else {
-            $outcome = 'no_v2_handler';
-        }
+        $result = wps_ic_image_optimize::dispatch($imageID, 'ml-button');
+        $outcome = !empty($result['ok']) ? 'success' : ('failed_' . ($result['error'] ?? 'unknown'));
 
         if (function_exists('wpc_v2_telemetry_record')) {
             $ms = (int) round((microtime(true) - $arrival_t) * 1000);
@@ -12086,18 +12235,18 @@ class wps_ic_ajax extends wps_ic
             ]);
         }
 
-        
-        
+        // Loopback caller used blocking=false so the response body is ignored.
+        // Just exit cleanly to free the FPM worker.
         status_header(200);
         exit;
     }
 
 
-    
-
-
-
-
+    /**
+     * Async delivery re-verify worker (the seamless-save loopback leg).
+     * One-shot token (120s transient, consumed on use); runs the canonical resolver
+     * verify so the post-save promote lands seconds after a tile/Next-Gen save.
+     */
     public function wpc_delivery_verify_async()
     {
         $tok    = isset($_POST['tok']) ? (string) $_POST['tok'] : '';
@@ -12128,12 +12277,12 @@ class wps_ic_ajax extends wps_ic
 
 
         @ignore_user_abort(true);
-        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { http_response_code(200); echo 'queued'; wpc_finish_request39(); }
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { http_response_code(200); echo 'queued'; wpc_finish_request(); }
         elseif (function_exists('litespeed_finish_request')) { http_response_code(200); echo 'queued'; @litespeed_finish_request(); }
         @set_time_limit(120);
 
-        
-        
+        // Existing path — performs the file ops + regen + sets ic_status.
+        // wpcWatchCard polls every 12s and picks up the state transition.
         $outcome = 'unknown';
         if (isset(self::$local) && method_exists(self::$local, 'restoreV4')) {
 
@@ -12150,7 +12299,7 @@ class wps_ic_ajax extends wps_ic
                 if (!empty($purge_urls)) {
 
 
-                    
+                    // "everything stays stale" hang went unnoticed. A Throwable must never 500 it.
                     try {
                         $purge_res = wpc_purge_compat('urls', $purge_urls, 'restore_image', '', true);
                         $purge_ok  = is_array($purge_res) && !empty($purge_res['ok']);
@@ -12202,7 +12351,7 @@ class wps_ic_ajax extends wps_ic
         }
 
 
-        
+        // Yield to an active bulk restore (foreground). BGRetry self-
 
 
         if (function_exists('wpc_v2_active_restore_count') && wpc_v2_active_restore_count() > 0) {
@@ -12213,12 +12362,12 @@ class wps_ic_ajax extends wps_ic
 
         $t0_ms = (int) get_transient('wpc_v2_t0_ms_' . $imageID);
         if ($t0_ms <= 0) {
-            
+            // No t0 → can't address-by-time on the manifest. Bail clean.
             status_header(200);
             exit;
         }
 
-        
+        // Read expected_variants + current variants to compute missing keys.
         $ic = get_post_meta($imageID, 'ic_compressing', true);
         $expected = is_array($ic) ? (int) ($ic['expected_variants'] ?? 0) : 0;
         if ($expected <= 0) {
@@ -12250,8 +12399,8 @@ class wps_ic_ajax extends wps_ic
                 break;
             }
 
-            
-            
+            // Build missing list (size×format combos that aren't on disk and
+            // aren't recorded as no-improvement).
             $missing = [];
             foreach ($expected_sizes as $sz) {
                 foreach ($expected_fmts as $fmt) {
@@ -12288,15 +12437,15 @@ class wps_ic_ajax extends wps_ic
                 '[WPC BGRetry] imageID=%d attempt=%d accounted=%d/%d still_missing=%d',
                 $imageID, $attempt, $accounted, $expected, count($missing)
             ));
-            
-            
-            
-            
-            $wpc_now56 = microtime(true);
-            if (isset($wpc_lt56) && ($wpc_now56 - $wpc_lt56) < 1.0) {
-                usleep((int) ((1.0 - ($wpc_now56 - $wpc_lt56)) * 1000000));
+            // The long-poll is SUPPOSED to hold 0-5s, but an empty or 429 answer returns at once
+            // and this loop then spun at ~90ms per blocking fetch: attempt=334 inside one 30s
+            // window, three windows per image, per image in the bulk (platformtraining). Floor
+            // the period at 1s and stand down while the pull lane's 429 cool-off is armed.
+            $poll_now = microtime(true);
+            if (isset($last_poll_at) && ($poll_now - $last_poll_at) < 1.0) {
+                usleep((int) ((1.0 - ($poll_now - $last_poll_at)) * 1000000));
             }
-            $wpc_lt56 = microtime(true);
+            $last_poll_at = microtime(true);
             if (function_exists('get_transient') && (int) get_transient('wpc_v2_pull_cooloff') > 0) {
                 error_log(sprintf('[WPC BGRetry] imageID=%d cooloff_active — standing down at attempt=%d', $imageID, $attempt));
                 break;
@@ -12339,6 +12488,7 @@ class wps_ic_ajax extends wps_ic
                 $expected_sizes_e = ['thumbnail','medium','medium_large','large','1536x1536','2048x2048','scaled','original'];
                 $expected_fmts_e  = ['jpeg', 'webp', 'avif'];
                 $marked = 0;
+                $given_up = [];
                 foreach ($expected_sizes_e as $sz_e) {
                     foreach ($expected_fmts_e as $fmt_e) {
                         $key_e = function_exists('wpc_v2_variant_key')
@@ -12348,7 +12498,7 @@ class wps_ic_ajax extends wps_ic
                             if (!empty($final_variants[$key_e]['size'])
                                 || !empty($final_variants[$key_e]['bg_no_improvement'])) continue;
                         }
-                        $final_variants[$key_e] = [
+                        $given_up[$key_e] = [
                             'bg_no_improvement'     => true,
                             'no_improvement_reason' => 'retry_exhausted',
                             'bg_upgraded'           => time(),
@@ -12359,7 +12509,9 @@ class wps_ic_ajax extends wps_ic
                     }
                 }
                 if ($marked > 0) {
-                    update_post_meta($imageID, 'ic_local_variants', $final_variants);
+                    // Through the owner's lock: this write used to replace the whole set read
+                    // up to 30 s earlier, dropping any variant a callback merged meanwhile.
+                    wps_ic_image_variants::record($imageID, $given_up, 'bg-retry-exhausted');
                 }
                 error_log(sprintf(
                     '[WPC BGRetry] imageID=%d giving_up_after_3_attempts attempts_total=%d accounted=%d/%d marked_no_improvement=%d',
@@ -12389,12 +12541,12 @@ class wps_ic_ajax extends wps_ic
 }
 
 if (!function_exists('wpc_v2_fire_image_bg_retry')) {
-    
-
-
-
-
-
+    /**
+     * Public wrapper: dispatch a background variant retry for one
+     * image via async loopback. Caller is the bulk heartbeat handler when it
+     * early-advances an image. Fire-and-forget; the retry worker runs in
+     * a separate FPM worker for up to 30s.
+     */
     function wpc_v2_fire_image_bg_retry($imageID)
     {
         if (!class_exists('wps_ic_ajax')) return false;

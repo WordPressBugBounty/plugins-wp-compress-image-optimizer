@@ -1,12 +1,4 @@
 <?php
-
-
-
-
-
-
-
-
 global $wps_ic;
 ?>
 <div class="wps-ic-lite-connect-form" style="display: none;">
@@ -107,7 +99,7 @@ global $wps_ic;
                             </div>
                             <div class="wpc-connect-header">
                                 <h2><?php echo esc_html__('Plugin Activation', WPS_IC_TEXTDOMAIN); ?></h2>
-                                <p><?php echo esc_html__('Enter your unique access key to get started.', WPS_IC_TEXTDOMAIN); ?></p>
+                                <p><?php echo esc_html__('Enter your email or your access key to get started.', WPS_IC_TEXTDOMAIN); ?></p>
                             </div>
 
                             <div class="wpc-connect-premium-box">
@@ -117,7 +109,8 @@ global $wps_ic;
                                 <p><?php echo esc_html__('Unlock premium features including advanced configuration, image optimization, and global CDN access.', WPS_IC_TEXTDOMAIN); ?></p>
                             </div>
 
-                            <span class="wps-ic-lite-input-field-error" style="display: none;"><?php echo esc_html__('Please enter your API Key.', WPS_IC_TEXTDOMAIN); ?></span>
+                            <span class="wps-ic-lite-input-field-error" style="display: none;"><?php echo esc_html__("That doesn't look like an email or a key.", WPS_IC_TEXTDOMAIN); ?></span>
+                            <span class="wps-ic-lite-claim-state" style="display: none;"></span>
 
                             <div class="wps-ic-lite-input-container">
                                 <div class="wps-ic-lite-input-icon">
@@ -132,12 +125,13 @@ global $wps_ic;
                                     </svg>
                                 </div>
                                 <div class="wps-ic-lite-input-field">
-                                    <input type="text" name="apikey" placeholder="<?php echo esc_attr__('e.g. wpc_1234567890abcdef', WPS_IC_TEXTDOMAIN); ?>"/>
+                                    <input type="text" name="apikey" autocomplete="email" value="<?php echo esc_attr((string) apply_filters('wpc_claim_prefill_email', wp_get_current_user()->user_email)); ?>" placeholder="<?php echo esc_attr__('Email or API key', WPS_IC_TEXTDOMAIN); ?>"/>
                                 </div>
                             </div>
 
                             <div class="wps-spacer"></div>
-                            <input type="submit" class="wps-ic-button wps-ic-submit-btn" name="submit" value="<?php echo esc_attr__('Activate Plugin', WPS_IC_TEXTDOMAIN); ?>"/>
+                            <input type="submit" class="wps-ic-button wps-ic-submit-btn" name="submit" value="<?php echo esc_attr__('Turn on', WPS_IC_TEXTDOMAIN); ?>"/>
+                            <p class="wps-ic-lite-claim-hint"><?php echo esc_html__("With an email we'll set everything up and send you a login link. Nothing to set up.", WPS_IC_TEXTDOMAIN); ?></p>
 
                             <div class="wpc-connect-lite-link">
                                 <a href="#" class="wps-use-lite">

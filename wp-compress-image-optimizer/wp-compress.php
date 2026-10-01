@@ -4,7 +4,7 @@
  * Plugin URI: https://www.wpcompress.com
  * Author: WP Compress
  * Author URI: https://www.wpcompress.com
- * Version: 7.24.04
+ * Version: 7.25.00
  * Description: Automatically compress and optimize images to shrink image file size, improve  times and boost SEO ranks - all without lifting a finger after setup.
  * Text Domain: wp-compress-image-optimizer
  * Domain Path: /languages
@@ -12,91 +12,91 @@
 
 
 if (!defined('WPC_PLUGIN_VERSION')) {
-    define('WPC_PLUGIN_VERSION', '7.24.04');
+    define('WPC_PLUGIN_VERSION', '7.25.00');
 }
 
 
-if (!function_exists('wpc_tier_override736')) {
-    function wpc_tier_override736($wpc_cap736 = true)
+if (!function_exists('wpc_tier_override_from_request')) {
+    function wpc_tier_override_from_request($allow_capability = true)
     {
         if (!isset($_GET['wpc_tier'])) {
             return '';
         }
-        $wpc_t736 = strtolower(preg_replace('/[^A-Za-z]/', '', (string) $_GET['wpc_tier']));
-        if (!in_array($wpc_t736, ['control', 'free', 'local', 'edge'], true)) {
+        $tier = strtolower(preg_replace('/[^A-Za-z]/', '', (string) $_GET['wpc_tier']));
+        if (!in_array($tier, ['control', 'free', 'local', 'edge'], true)) {
             return '';
         }
         if (function_exists('apply_filters') && !apply_filters('wpc_tier_override_enabled', true)) {
             return '';
         }
-        
-        
-        
-        
-        
-        
-        $wpc_auth736 = ($wpc_cap736 && function_exists('wp_get_current_user')
+        // v7.10.745 — current_user_can() delegates to wp_get_current_user(), which lives in
+        // pluggable.php and does NOT exist while plugin files are being included. Calling it at
+        // this scope is a FATAL, which is exactly what shipped: every valid ?wpc_tier= returned a
+        // 500 while an invalid one returned 200, because the invalid one bailed before this line.
+        // The key path needs no capability, so it still runs here at the earliest possible moment;
+        // the capability path is re-run on plugins_loaded, once pluggable exists.
+        $authorised = ($allow_capability && function_exists('wp_get_current_user')
             && function_exists('current_user_can') && current_user_can('manage_options'));
-        if (!$wpc_auth736 && isset($_GET['wpc_key'])
+        if (!$authorised && isset($_GET['wpc_key'])
             && class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'tierKey')) {
-            
-            
-            $wpc_tk743 = wps_ic_url_key::tierKey(false);
-            $wpc_auth736 = ($wpc_tk743 !== '' && hash_equals($wpc_tk743, (string) $_GET['wpc_key']));
+            // Lookup mode: never mint on an unauthenticated request, or the first anonymous
+            // caller could bring the secret into existence by supplying it.
+            $tier_key = wps_ic_url_key::tierKey(false);
+            $authorised = ($tier_key !== '' && hash_equals($tier_key, (string) $_GET['wpc_key']));
         }
-        if (!$wpc_auth736) {
+        if (!$authorised) {
             return '';
         }
         if (!defined('WPC_TIER_ACTIVE')) {
             define('WPC_TIER_ACTIVE', true);
         }
-        $wpc_tc739 = (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'tierCacheOn'))
+        $tier_cache_on = (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'tierCacheOn'))
             ? wps_ic_url_key::tierCacheOn() : false;
-        if (!$wpc_tc739 && !defined('DONOTCACHEPAGE')) {
+        if (!$tier_cache_on && !defined('DONOTCACHEPAGE')) {
             define('DONOTCACHEPAGE', true);
         }
-        if ($wpc_t736 === 'control') {
+        if ($tier === 'control') {
             $_GET['disableWPC'] = 'true';
-            return $wpc_t736;
+            return $tier;
         }
-        if ($wpc_t736 === 'free') {
+        if ($tier === 'free') {
             $_GET['crit'] = '0';
         }
-        $wpc_map736 = [
+        $tier_overrides = [
             'free'  => ['live-cdn' => '0', 'modern_image_delivery' => '0', 'used-css' => '0', 'picture_avif' => '0', 'generate_webp' => '0', 'generate_adaptive' => '0'],
             'local' => ['live-cdn' => '0', 'modern_image_delivery' => '1', 'used-css' => '1', 'picture_avif' => '1', 'generate_webp' => '1'],
             'edge'  => ['live-cdn' => '1', 'modern_image_delivery' => '1', 'used-css' => '1', 'picture_avif' => '1', 'generate_webp' => '1'],
         ];
-        $wpc_ov736 = $wpc_map736[$wpc_t736];
-        $wpc_opt736 = defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings';
-        add_filter('option_' . $wpc_opt736, function ($wpc_v736) use ($wpc_ov736) {
-            if (!is_array($wpc_v736)) {
-                return $wpc_v736;
+        $overrides = $tier_overrides[$tier];
+        $settings_option = defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings';
+        add_filter('option_' . $settings_option, function ($settings) use ($overrides) {
+            if (!is_array($settings)) {
+                return $settings;
             }
-            foreach ($wpc_ov736 as $wpc_k736 => $wpc_val736) {
-                $wpc_v736[$wpc_k736] = $wpc_val736;
+            foreach ($overrides as $key => $value) {
+                $settings[$key] = $value;
             }
-            return $wpc_v736;
+            return $settings;
         }, PHP_INT_MAX);
-        
-        
-        
-        
-        if ($wpc_t736 !== 'edge') {
-            
-            
+        // live-cdn=0 alone does not silence the zone: zone-keyed lanes (negotiated delivery,
+        // svg/raster zoneify, combine's serve flags) read their own gates, and cdn.* URLs leaked
+        // into the free/local arms. wps_ic_allow_live is the one lever every zone lane already
+        // honors (the suspension kill-chain), so the non-edge arms ride it for this request.
+        if ($tier !== 'edge') {
+            // BOTH filters: option_{name} fires only when the row EXISTS; a site that never set
+            // allow_live resolves through default_option_{name} instead. Either alone is a hole.
             add_filter('option_wps_ic_allow_live', function () { return '0'; }, PHP_INT_MAX);
             add_filter('default_option_wps_ic_allow_live', function () { return '0'; }, PHP_INT_MAX);
         }
-        return $wpc_t736;
+        return $tier;
     }
-    
-    
-    
-    
-    
-    if (wpc_tier_override736(false) === '' && function_exists('add_action')) {
-        add_action('plugins_loaded', 'wpc_tier_override736', 0);
+    // Key path first, at file scope, so the override lands before anything reads settings.
+    // Only if that did NOT arm do we ask again once pluggable.php exists — no latch needed, and
+    // the option filter can never be registered twice. NOTE: wp-compress.php's own disableWPC
+    // check runs at file scope, so the CONTROL arm needs the key; an admin without one still
+    // gets free/local/edge.
+    if (wpc_tier_override_from_request(false) === '' && function_exists('add_action')) {
+        add_action('plugins_loaded', 'wpc_tier_override_from_request', 0);
     }
 }
 
@@ -104,7 +104,7 @@ if (!function_exists('wpc_tier_override736')) {
 $wpc_disabled_fns = array_filter(array_map('trim', explode(',', (string) (function_exists('ini_get') ? ini_get('disable_functions') : ''))));
 $wpc_can_shim = function ($fn) use ($wpc_disabled_fns) {
     if (function_exists($fn)) return false;
-    if (PHP_VERSION_ID < 80000 && in_array($fn, $wpc_disabled_fns, true)) return false;  
+    if (PHP_VERSION_ID < 80000 && in_array($fn, $wpc_disabled_fns, true)) return false;  // <8 + disabled → redeclare = FATAL, skip
     return true;
 };
 if ($wpc_can_shim('getmypid'))           { function getmypid() { return 0; } }
@@ -116,29 +116,29 @@ if ($wpc_can_shim('opcache_get_status')) { function opcache_get_status($include_
 
 
 if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
-    
-    
-    
+    // Background renders yield to humans: re-check load at RECEIVE time (the fire-time
+    // governor reads a ~1min-lagging average); the +60s cron backstop re-fires what
+    // yields here, so a 503 loses nothing.
     if (function_exists('sys_getloadavg')) {
-        $wpc_l329 = @sys_getloadavg();
-        if (is_array($wpc_l329) && isset($wpc_l329[0])) {
-            $wpc_c329 = 0;
-            $wpc_ci329 = @is_readable('/proc/cpuinfo') ? (string) @file_get_contents('/proc/cpuinfo') : '';
-            if ($wpc_ci329 !== '' && preg_match_all('/^processor\s*:/m', $wpc_ci329, $wpc_pm329)) {
-                $wpc_c329 = max(1, count($wpc_pm329[0]));
+        $wpc_warm_load = @sys_getloadavg();
+        if (is_array($wpc_warm_load) && isset($wpc_warm_load[0])) {
+            $wpc_warm_cpus = 0;
+            $wpc_cpuinfo = @is_readable('/proc/cpuinfo') ? (string) @file_get_contents('/proc/cpuinfo') : '';
+            if ($wpc_cpuinfo !== '' && preg_match_all('/^processor\s*:/m', $wpc_cpuinfo, $wpc_cpuinfo_matches)) {
+                $wpc_warm_cpus = max(1, count($wpc_cpuinfo_matches[0]));
             } else {
-                $wpc_cg329 = @is_readable('/sys/fs/cgroup/cpu.max') ? trim((string) @file_get_contents('/sys/fs/cgroup/cpu.max')) : '';
-                if ($wpc_cg329 !== '' && preg_match('/^(\d+)\s+(\d+)$/', $wpc_cg329, $wpc_cm329) && (int) $wpc_cm329[2] > 0) {
-                    $wpc_c329 = max(1, (int) ceil((int) $wpc_cm329[1] / (int) $wpc_cm329[2]));
+                $wpc_cgroup_cpu_max = @is_readable('/sys/fs/cgroup/cpu.max') ? trim((string) @file_get_contents('/sys/fs/cgroup/cpu.max')) : '';
+                if ($wpc_cgroup_cpu_max !== '' && preg_match('/^(\d+)\s+(\d+)$/', $wpc_cgroup_cpu_max, $wpc_cgroup_max_parts) && (int) $wpc_cgroup_max_parts[2] > 0) {
+                    $wpc_warm_cpus = max(1, (int) ceil((int) $wpc_cgroup_max_parts[1] / (int) $wpc_cgroup_max_parts[2]));
                 } else {
-                    $wpc_q329 = @is_readable('/sys/fs/cgroup/cpu/cpu.cfs_quota_us') ? (int) trim((string) @file_get_contents('/sys/fs/cgroup/cpu/cpu.cfs_quota_us')) : 0;
-                    $wpc_p329 = @is_readable('/sys/fs/cgroup/cpu/cpu.cfs_period_us') ? (int) trim((string) @file_get_contents('/sys/fs/cgroup/cpu/cpu.cfs_period_us')) : 0;
-                    if ($wpc_q329 > 0 && $wpc_p329 > 0) {
-                        $wpc_c329 = max(1, (int) ceil($wpc_q329 / $wpc_p329));
+                    $wpc_cfs_quota = @is_readable('/sys/fs/cgroup/cpu/cpu.cfs_quota_us') ? (int) trim((string) @file_get_contents('/sys/fs/cgroup/cpu/cpu.cfs_quota_us')) : 0;
+                    $wpc_cfs_period = @is_readable('/sys/fs/cgroup/cpu/cpu.cfs_period_us') ? (int) trim((string) @file_get_contents('/sys/fs/cgroup/cpu/cpu.cfs_period_us')) : 0;
+                    if ($wpc_cfs_quota > 0 && $wpc_cfs_period > 0) {
+                        $wpc_warm_cpus = max(1, (int) ceil($wpc_cfs_quota / $wpc_cfs_period));
                     }
                 }
             }
-            if ($wpc_c329 > 0 && (float) $wpc_l329[0] > $wpc_c329 * 2.0) {
+            if ($wpc_warm_cpus > 0 && (float) $wpc_warm_load[0] > $wpc_warm_cpus * 2.0) {
                 @header('Retry-After: 30');
                 if (function_exists('http_response_code')) { http_response_code(503); }
                 exit;
@@ -203,15 +203,34 @@ if (!function_exists('wpc_heal_mixed_content')) {
             $hosts[] = (string) $_SERVER['HTTP_HOST'];
         }
         $hosts = array_unique(array_filter($hosts));
+        $healed = 0;
         foreach ($hosts as $host) {
             if (strpos($html, 'http://' . $host) !== false) {
-                $html = str_replace('http://' . $host, 'https://' . $host, $html);
+                $html = str_replace('http://' . $host, 'https://' . $host, $html, $n);
+                $healed += (int) $n;
             }
+        }
+        // An https page must not name its own host over http. When it does, the site's home/siteurl
+        // data (a TLS proxy WordPress does not know about) is the cause; sampled, because such a
+        // site hands every render the same urls.
+        if ($healed > 0 && function_exists('wpc_render_belt_note')) {
+            wpc_render_belt_note('mixed-content-healed', ['n' => $healed], true);
         }
         return $html;
     }
 }
 
+// THE LOADING BOUNDARY OF THIS FILE. Everything above declares a function behind
+// function_exists() (or the version constant behind defined()) and has no other effect;
+// everything below is request-time work — constants read off the live request, the cron/CLI
+// includes, and the include of wp-compress-core.php, which boots the whole plugin. A loader
+// that wants only the helpers declared above — wpc_heal_mixed_content() and
+// wpc_request_is_https() are the two the render stage table calls unguarded, so a suite that
+// renders a page through the real table has to have them — stops here.
+// Rule: nothing may be added above this line that does anything but declare a function.
+if (defined('WPC_DECLARATIONS_ONLY') && WPC_DECLARATIONS_ONLY) {
+    return;
+}
 
 if (!empty($_SERVER['REQUEST_URI'])) {
     $wpc_req_uri = (string) $_SERVER['REQUEST_URI'];
@@ -248,10 +267,10 @@ if (!empty($_POST['action'])) {
     unset($wpc_ajax_action);
 }
 
-
-
-
-
+// Registered UNCONDITIONALLY (behavior-free filter): our recurring events
+// reference this interval, and any context where the conditional modules
+// don't load (older v2 gating, mid-load fatal, deactivation leftovers)
+// spams "invalid_schedule" reschedule errors every cron pass (evoque.io).
 if (function_exists('add_filter')) {
     add_filter('cron_schedules', function ($schedules) {
         if (is_array($schedules) && !isset($schedules['wpc_v2_5min'])) {
@@ -266,7 +285,7 @@ if (!isset($_SERVER['HTTP_DISABLEWPC']) && empty($_GET['disableWPC'])){
 }
 
 if ((!isset($_SERVER['HTTP_DISABLEWPC']) && empty($_GET['disableWPC']) && ((defined('DOING_CRON') && DOING_CRON) || (defined('REST_REQUEST') && REST_REQUEST) || (defined('WP_CLI') && WP_CLI)))) {
-    
+    // Required for Scheduled Posts
     include __DIR__ . '/wp-compress-cron.php';
 }
 
@@ -276,7 +295,7 @@ if (defined('WP_CLI') && WP_CLI && !isset($_SERVER['HTTP_DISABLEWPC']) && empty(
 }
 
 if (!isset($_SERVER['HTTP_DISABLEWPC']) && empty($_GET['disableWPC']) && !(defined('DOING_CRON') && DOING_CRON) && !(defined('WP_CLI') && WP_CLI) && !(defined('REST_REQUEST') && REST_REQUEST)) {
-    
+    // CRON fix for WPvivid scheduled backups
     if (get_option('pause_wpcompress_plugin')) {
         add_action('admin_init', 'pause_wpcompress_plugin_deactivate_delete');
         require_once(ABSPATH . 'wp-includes/pluggable.php');

@@ -1,18 +1,10 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-policy.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
     exit;
 }
 
-if (!function_exists('wpc_policy23_defaults')) {
-    function wpc_policy23_defaults()
+if (!function_exists('wpc_policy_defaults')) {
+    function wpc_policy_defaults()
     {
         $s = function_exists('get_option') ? get_option(WPS_IC_SETTINGS, []) : [];
         $s = is_array($s) ? $s : [];
@@ -36,8 +28,8 @@ if (!function_exists('wpc_policy23_defaults')) {
     }
 }
 
-if (!function_exists('wpc_policy23_normalize')) {
-    function wpc_policy23_normalize($p)
+if (!function_exists('wpc_policy_normalize')) {
+    function wpc_policy_normalize($p)
     {
         if (!is_array($p)) {
             return null;
@@ -70,31 +62,31 @@ if (!function_exists('wpc_policy23_normalize')) {
     }
 }
 
-if (!function_exists('wpc_policy23_stored')) {
-    function wpc_policy23_stored()
+if (!function_exists('wpc_policy_stored')) {
+    function wpc_policy_stored()
     {
-        $o = function_exists('get_option') ? get_option('wpc_policy23', null) : null;
+        $o = function_exists('get_option') ? get_option(WPC_POLICY_OPTION, null) : null;
         return is_array($o) ? $o : null;
     }
 }
 
-if (!function_exists('wpc_policy23_local')) {
-    function wpc_policy23_local()
+if (!function_exists('wpc_policy_local')) {
+    function wpc_policy_local()
     {
-        $o = function_exists('get_option') ? get_option('wpc_policy23_local', []) : [];
+        $o = function_exists('get_option') ? get_option(WPC_POLICY_LOCAL_OPTION, []) : [];
         return is_array($o) ? $o : [];
     }
 }
 
-if (!function_exists('wpc_policy23')) {
-    function wpc_policy23()
+if (!function_exists('wpc_policy')) {
+    function wpc_policy()
     {
         static $memo = null;
         if ($memo !== null) {
             return $memo;
         }
-        $p = wpc_policy23_defaults();
-        $stored = wpc_policy23_stored();
+        $p = wpc_policy_defaults();
+        $stored = wpc_policy_stored();
         if (is_array($stored)) {
             foreach (['serve', 'land', 'scope', 'formats', 'budget', 'version'] as $k) {
                 if (array_key_exists($k, $stored)) {
@@ -103,68 +95,68 @@ if (!function_exists('wpc_policy23')) {
             }
             $p['source'] = 'orchestrator';
         }
-        $local = wpc_policy23_local();
+        $local = wpc_policy_local();
         if (isset($local['serve']) && $local['serve'] === 'origin') {
             $p['serve'] = 'origin';
         }
         if (isset($local['land']) && $local['land'] === 'on') {
             $p['land'] = 'on';
         }
-        $f = apply_filters('wpc_policy23', $p);
+        $f = apply_filters(WPC_POLICY_OPTION, $p);
         if ($f === null || $f === false) {
-            $f = wpc_policy23_defaults();
+            $f = wpc_policy_defaults();
         }
         $memo = is_array($f) ? $f : $p;
         return $memo;
     }
 }
 
-if (!function_exists('wpc_policy23_get')) {
-    function wpc_policy23_get($key, $default = null)
+if (!function_exists('wpc_policy_get')) {
+    function wpc_policy_get($key, $default = null)
     {
-        $p = wpc_policy23();
+        $p = wpc_policy();
         return array_key_exists($key, $p) ? $p[$key] : $default;
     }
 }
 
-if (!function_exists('wpc_policy23_serve')) {
-    function wpc_policy23_serve()
+if (!function_exists('wpc_policy_serve')) {
+    function wpc_policy_serve()
     {
-        return (string) wpc_policy23_get('serve', 'edge');
+        return (string) wpc_policy_get('serve', 'edge');
     }
 }
 
-if (!function_exists('wpc_policy23_land')) {
-    function wpc_policy23_land()
+if (!function_exists('wpc_policy_land')) {
+    function wpc_policy_land()
     {
-        return (string) wpc_policy23_get('land', 'on');
+        return (string) wpc_policy_get('land', 'on');
     }
 }
 
-if (!function_exists('wpc_policy23_formats')) {
-    function wpc_policy23_formats()
+if (!function_exists('wpc_policy_formats')) {
+    function wpc_policy_formats()
     {
-        return (string) wpc_policy23_get('formats', 'avif');
+        return (string) wpc_policy_get('formats', 'avif');
     }
 }
 
-if (!function_exists('wpc_policy23_scope')) {
-    function wpc_policy23_scope()
+if (!function_exists('wpc_policy_scope')) {
+    function wpc_policy_scope()
     {
-        return (string) wpc_policy23_get('scope', 'site');
+        return (string) wpc_policy_get('scope', 'site');
     }
 }
 
-if (!function_exists('wpc_policy23_version')) {
-    function wpc_policy23_version()
+if (!function_exists('wpc_policy_version')) {
+    function wpc_policy_version()
     {
-        $s = wpc_policy23_stored();
+        $s = wpc_policy_stored();
         return is_array($s) && isset($s['version']) ? (int) $s['version'] : 0;
     }
 }
 
-if (!function_exists('wpc_policy23_ingest')) {
-    function wpc_policy23_ingest($rbody)
+if (!function_exists('wpc_policy_ingest')) {
+    function wpc_policy_ingest($rbody)
     {
         if (!is_array($rbody)) {
             return false;
@@ -183,16 +175,16 @@ if (!function_exists('wpc_policy23_ingest')) {
         if ($raw === null) {
             return false;
         }
-        $new = wpc_policy23_normalize($raw);
+        $new = wpc_policy_normalize($raw);
         if (!is_array($new) || empty($new)) {
             return false;
         }
-        $old = wpc_policy23_stored();
+        $old = wpc_policy_stored();
         if (is_array($old) && isset($old['version']) && isset($new['version']) && (int) $new['version'] < (int) $old['version']) {
             return false;
         }
         $new['received_at'] = time();
-        update_option('wpc_policy23', $new, false);
+        update_option(WPC_POLICY_OPTION, $new, false);
         $changed = [];
         foreach (['serve', 'land', 'scope', 'formats'] as $k) {
             $was = is_array($old) && isset($old[$k]) ? $old[$k] : null;
@@ -201,31 +193,39 @@ if (!function_exists('wpc_policy23_ingest')) {
             }
         }
         if (!empty($changed)) {
-            wpc_policy23_transition($changed);
+            wpc_policy_transition($changed);
         }
         return true;
     }
 }
 
-if (!function_exists('wpc_policy23_transition')) {
-    function wpc_policy23_transition($changed)
+if (!function_exists('wpc_policy_transition')) {
+    function wpc_policy_transition($changed)
     {
         if (!is_array($changed) || empty($changed)) {
             return;
         }
         if (isset($changed['land']) && $changed['land'][1] === 'on' && $changed['land'][0] === 'off') {
-            wpc_policy23_materialize();
+            wpc_policy_materialize();
         }
-        if (isset($changed['serve']) && function_exists('wpc_crit_soft_purge_all')) {
-            wpc_crit_soft_purge_all();
+        if (isset($changed['serve']) && function_exists('wpc_crit_invalidate')) {
+            wpc_crit_invalidate('all', 'policy-serve', 'stale');
         }
         if (isset($changed['formats']) && function_exists('update_option')) {
             $s = get_option(WPS_IC_SETTINGS, []);
             $s = is_array($s) ? $s : [];
             $map = ['avif' => 'auto', 'webp' => 'webp', 'off' => 'off'];
-            if (isset($map[$changed['formats'][1]]) && class_exists('WPC_Delivery_Resolver') && defined('WPC_Delivery_Resolver::NEXTGEN_OPTION')) {
-                $s[WPC_Delivery_Resolver::NEXTGEN_OPTION] = $map[$changed['formats'][1]];
-                update_option(WPS_IC_SETTINGS, $s);
+            $rank = ['off' => 0, 'webp' => 1, 'avif' => 2];
+            $want = $changed['formats'][1];
+            if (isset($map[$want]) && class_exists('WPC_Delivery_Resolver') && defined('WPC_Delivery_Resolver::NEXTGEN_OPTION')) {
+                $owner = (string) WPC_Delivery_Resolver::effective_ceiling($s);
+                $owner_rank = isset($rank[$owner]) ? $rank[$owner] : 2;
+                if ($rank[$want] < $owner_rank) {
+                    $s[WPC_Delivery_Resolver::NEXTGEN_OPTION] = $map[$want];
+                    update_option(WPS_IC_SETTINGS, $s);
+                } elseif ($rank[$want] > $owner_rank && function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('policy-formats-kept', '', '', ['owner' => $owner, 'policy' => $want]);
+                }
             }
         }
         if (isset($changed['serve']) || isset($changed['scope'])) {
@@ -237,24 +237,15 @@ if (!function_exists('wpc_policy23_transition')) {
             }
         }
         if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log('policy-changed', '', '', ['changed' => $changed, 'version' => wpc_policy23_version()]);
+            wpc_cache_first_log('policy-changed', '', '', ['changed' => $changed, 'version' => wpc_policy_version()]);
         }
         do_action('wpc_policy23_changed', $changed);
     }
 }
 
-if (!function_exists('wpc_policy23_sign_query')) {
-    function wpc_policy23_sign_query($apikey, $query)
-    {
-        return [
-            'x-wpc-sig'       => hash_hmac('sha256', (string) $query, (string) $apikey),
-            'x-wpc-timestamp' => (string) time(),
-        ];
-    }
-}
 
-if (!function_exists('wpc_v2_variants_list23')) {
-    function wpc_v2_variants_list23($cursor = '', $limit = 200)
+if (!function_exists('wpc_v2_fetch_variants_list')) {
+    function wpc_v2_fetch_variants_list($cursor = '', $limit = 200)
     {
         $orch   = function_exists('wpc_v2_orchestrator_url') ? wpc_v2_orchestrator_url() : '';
         $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
@@ -262,9 +253,14 @@ if (!function_exists('wpc_v2_variants_list23')) {
             return ['ok' => false, 'reason' => 'not_connected'];
         }
         $query = 'apikey=' . rawurlencode($apikey) . '&cursor=' . rawurlencode((string) $cursor) . '&limit=' . (int) $limit;
+        // The service signs the DECODED values (`apikey=<k>&cursor=<c>&limit=<n>`, server.js
+        // /optimize-v2/variants/list). Observed: the plugin signed the url-encoded query, so the
+        // first page (empty cursor) verified and every later page, whose cursor is a store key
+        // with slashes (%2F on the wire), answered 401 hmac_signature_mismatch.
+        $signed = 'apikey=' . $apikey . '&cursor=' . (string) $cursor . '&limit=' . (int) $limit;
         $resp = wp_remote_get(rtrim($orch, '/') . '/optimize-v2/variants/list?' . $query, [
             'timeout' => 15,
-            'headers' => wpc_policy23_sign_query($apikey, $query),
+            'headers' => wpc_v2_service_sign($apikey, $signed),
         ]);
         if (is_wp_error($resp)) {
             return ['ok' => false, 'reason' => 'transport', 'detail' => $resp->get_error_message()];
@@ -283,8 +279,8 @@ if (!function_exists('wpc_v2_variants_list23')) {
     }
 }
 
-if (!function_exists('wpc_policy23_store_entry_to_manifest')) {
-    function wpc_policy23_store_entry_to_manifest($e)
+if (!function_exists('wpc_policy_store_entry_to_manifest')) {
+    function wpc_policy_store_entry_to_manifest($e)
     {
         if (!is_array($e) || empty($e['path']) || empty($e['url'])) {
             return null;
@@ -322,8 +318,8 @@ if (!function_exists('wpc_policy23_store_entry_to_manifest')) {
     }
 }
 
-if (!function_exists('wpc_policy23_materialize')) {
-    function wpc_policy23_materialize($cursor = '')
+if (!function_exists('wpc_policy_materialize')) {
+    function wpc_policy_materialize($cursor = '')
     {
         if (!apply_filters('wpc_policy23_materialize_on', true)) {
             return 0;
@@ -332,10 +328,10 @@ if (!function_exists('wpc_policy23_materialize')) {
             update_site_option('wpc_v2_pull_enabled', 1);
         }
         $landed = 0;
-        $list = wpc_v2_variants_list23($cursor, 200);
+        $list = wpc_v2_fetch_variants_list($cursor, 200);
         if (!empty($list['ok'])) {
             foreach ($list['entries'] as $e) {
-                $m = wpc_policy23_store_entry_to_manifest($e);
+                $m = wpc_policy_store_entry_to_manifest($e);
                 if ($m === null) {
                     continue;
                 }
@@ -344,9 +340,9 @@ if (!function_exists('wpc_policy23_materialize')) {
                 }
             }
             if ($list['next_cursor'] !== '') {
-                if (!(function_exists('wpc_pl_sched') && wpc_pl_sched(time() + 5, 'wpc_policy23_materialize', [$list['next_cursor']]))
+                if (!(function_exists('wpc_pl_sched') && wpc_pl_sched(time() + 5, WPC_POLICY_MATERIALIZE_HOOK, [$list['next_cursor']]))
                     && function_exists('wp_schedule_single_event')) {
-                    wp_schedule_single_event(time() + 5, 'wpc_policy23_materialize', [$list['next_cursor']]);
+                    wp_schedule_single_event(time() + 5, WPC_POLICY_MATERIALIZE_HOOK, [$list['next_cursor']]);
                 }
             }
             if (function_exists('wpc_cache_first_log')) {
@@ -367,12 +363,12 @@ if (!function_exists('wpc_policy23_materialize')) {
         }
         return $landed;
     }
-    add_action('wpc_policy23_materialize', 'wpc_policy23_materialize', 10, 1);
+    add_action(WPC_POLICY_MATERIALIZE_HOOK, 'wpc_policy_materialize', 10, 1);
 }
-if (!function_exists('wpc_policy23_tighten')) {
-    function wpc_policy23_tighten($key, $value)
+if (!function_exists('wpc_policy_tighten')) {
+    function wpc_policy_tighten($key, $value)
     {
-        $local = wpc_policy23_local();
+        $local = wpc_policy_local();
         if ($key === 'serve') {
             if ($value === 'origin') {
                 $local['serve'] = 'origin';
@@ -388,26 +384,26 @@ if (!function_exists('wpc_policy23_tighten')) {
         } else {
             return false;
         }
-        $before = wpc_policy23();
-        update_option('wpc_policy23_local', $local, false);
+        $before = wpc_policy();
+        update_option(WPC_POLICY_LOCAL_OPTION, $local, false);
         $after = $before;
         $after[$key] = $value;
-        $stored = wpc_policy23_stored();
+        $stored = wpc_policy_stored();
         if ($key === 'serve' && $value !== 'origin') {
-            $after['serve'] = is_array($stored) && isset($stored['serve']) ? $stored['serve'] : wpc_policy23_defaults()['serve'];
+            $after['serve'] = is_array($stored) && isset($stored['serve']) ? $stored['serve'] : wpc_policy_defaults()['serve'];
         }
         if ($key === 'land' && $value !== 'on') {
             $after['land'] = is_array($stored) && isset($stored['land']) ? $stored['land'] : 'on';
         }
         if ($after[$key] !== $before[$key]) {
-            wpc_policy23_transition([$key => [$before[$key], $after[$key]]]);
+            wpc_policy_transition([$key => [$before[$key], $after[$key]]]);
         }
         return true;
     }
 }
 
-if (!function_exists('wpc_policy23_resync')) {
-    function wpc_policy23_resync()
+if (!function_exists('wpc_policy_resync')) {
+    function wpc_policy_resync()
     {
         if (!function_exists('wpc_v2_get_zone_id') || !function_exists('wpc_v2_config_sync_lazy_enabled')) {
             return false;
@@ -420,28 +416,28 @@ if (!function_exists('wpc_policy23_resync')) {
         wpc_v2_config_sync_lazy_enabled($zone, $enabled);
         return true;
     }
-    add_action('wpc_policy23_resync', 'wpc_policy23_resync');
+    add_action(WPC_POLICY_RESYNC_HOOK, 'wpc_policy_resync');
 }
 
-if (!function_exists('wpc_policy23_schedule_resync')) {
-    function wpc_policy23_schedule_resync($delay = 5)
+if (!function_exists('wpc_policy_schedule_resync')) {
+    function wpc_policy_schedule_resync($delay = 5)
     {
-        if (function_exists('wp_next_scheduled') && wp_next_scheduled('wpc_policy23_resync')) {
+        if (function_exists('wp_next_scheduled') && wp_next_scheduled(WPC_POLICY_RESYNC_HOOK)) {
             return false;
         }
-        if (function_exists('wpc_pl_sched') && wpc_pl_sched(time() + (int) $delay, 'wpc_policy23_resync')) {
+        if (function_exists('wpc_pl_sched') && wpc_pl_sched(time() + (int) $delay, WPC_POLICY_RESYNC_HOOK)) {
             return true;
         }
         if (function_exists('wp_schedule_single_event')) {
-            wp_schedule_single_event(time() + (int) $delay, 'wpc_policy23_resync');
+            wp_schedule_single_event(time() + (int) $delay, WPC_POLICY_RESYNC_HOOK);
             return true;
         }
         return false;
     }
 }
 
-if (!function_exists('wpc_v2_attachment_paths23')) {
-    function wpc_v2_attachment_paths23($imageID)
+if (!function_exists('wpc_v2_attachment_paths')) {
+    function wpc_v2_attachment_paths($imageID)
     {
         $imageID = (int) $imageID;
         $paths = [];
@@ -470,8 +466,8 @@ if (!function_exists('wpc_v2_attachment_paths23')) {
     }
 }
 
-if (!function_exists('wpc_v2_attachment_stems22')) {
-    function wpc_v2_attachment_stems22($paths)
+if (!function_exists('wpc_v2_attachment_stems')) {
+    function wpc_v2_attachment_stems($paths)
     {
         $stems = [];
         foreach ((array) $paths as $p) {
@@ -487,8 +483,8 @@ if (!function_exists('wpc_v2_attachment_stems22')) {
         return array_keys($stems);
     }
 }
-if (!function_exists('wpc_v2_variant_forget23')) {
-    function wpc_v2_variant_forget23($imageID, $reason = 'delete', $paths = [])
+if (!function_exists('wpc_v2_forget_variants')) {
+    function wpc_v2_forget_variants($imageID, $reason = 'delete', $paths = [])
     {
         $imageID = (int) $imageID;
         if ($imageID <= 0) {
@@ -497,12 +493,12 @@ if (!function_exists('wpc_v2_variant_forget23')) {
         if (function_exists('get_transient') && get_transient('wpc_forget_done14_' . $imageID) === (string) $reason) {
             return true;
         }
-        $paths = is_array($paths) && !empty($paths) ? $paths : wpc_v2_attachment_paths23($imageID);
+        $paths = is_array($paths) && !empty($paths) ? $paths : wpc_v2_attachment_paths($imageID);
         $orch   = function_exists('wpc_v2_orchestrator_url') ? wpc_v2_orchestrator_url() : '';
         $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
         $store_ok = null;
         if ($orch !== '' && $apikey !== '' && !empty($paths) && function_exists('wpc_v2_manifest_sign_body')) {
-            $body_raw = wp_json_encode(['paths' => array_values($paths), 'stems' => wpc_v2_attachment_stems22($paths), 'image_ids' => [(int) $imageID], 'reason' => (string) $reason]);
+            $body_raw = wp_json_encode(['paths' => array_values($paths), 'stems' => wpc_v2_attachment_stems($paths), 'image_ids' => [(int) $imageID], 'reason' => (string) $reason]);
             $resp = wp_remote_post(rtrim($orch, '/') . '/optimize-v2/variants/delete?apikey=' . rawurlencode($apikey), [
                 'timeout' => 8,
                 'headers' => array_merge(['Content-Type' => 'application/json'], wpc_v2_manifest_sign_body($apikey, $body_raw)),
@@ -515,9 +511,9 @@ if (!function_exists('wpc_v2_variant_forget23')) {
             }
             if (!$store_ok && !get_transient('wpc_forget_retry23_' . $imageID)) {
                 set_transient('wpc_forget_retry23_' . $imageID, 1, 15 * MINUTE_IN_SECONDS);
-                if (!(function_exists('wpc_pl_sched') && wpc_pl_sched(time() + 300, 'wpc_v2_variant_forget23', [$imageID, (string) $reason, $paths]))
+                if (!(function_exists('wpc_pl_sched') && wpc_pl_sched(time() + 300, WPC_VARIANT_FORGET_HOOK, [$imageID, (string) $reason, $paths]))
                     && function_exists('wp_schedule_single_event')) {
-                    wp_schedule_single_event(time() + 300, 'wpc_v2_variant_forget23', [$imageID, (string) $reason, $paths]);
+                    wp_schedule_single_event(time() + 300, WPC_VARIANT_FORGET_HOOK, [$imageID, (string) $reason, $paths]);
                 }
             }
         }
@@ -526,10 +522,10 @@ if (!function_exists('wpc_v2_variant_forget23')) {
         }
         return (bool) $store_ok;
     }
-    add_action('wpc_v2_variant_forget23', 'wpc_v2_variant_forget23', 10, 3);
+    add_action(WPC_VARIANT_FORGET_HOOK, 'wpc_v2_forget_variants', 10, 3);
 }
-if (!function_exists('wpc_v2_variant_forget23_queue')) {
-    function wpc_v2_variant_forget23_queue($imageID, $reason)
+if (!function_exists('wpc_v2_forget_variants_queue')) {
+    function wpc_v2_forget_variants_queue($imageID, $reason)
     {
         $imageID = (int) $imageID;
         if ($imageID <= 0) {
@@ -544,52 +540,52 @@ if (!function_exists('wpc_v2_variant_forget23_queue')) {
         if (function_exists('set_transient')) {
             set_transient('wpc_forget_q23_' . $imageID, (string) $reason, 60);
         }
-        $paths = wpc_v2_attachment_paths23($imageID);
-        wpc_v2_variant_forget14_detach($imageID, (string) $reason, $paths);
-        if (function_exists('wpc_pl_sched') && wpc_pl_sched(time() + 5, 'wpc_v2_variant_forget23', [$imageID, (string) $reason, $paths])) {
+        $paths = wpc_v2_attachment_paths($imageID);
+        wpc_v2_variant_detach($imageID, (string) $reason, $paths);
+        if (function_exists('wpc_pl_sched') && wpc_pl_sched(time() + 5, WPC_VARIANT_FORGET_HOOK, [$imageID, (string) $reason, $paths])) {
             return true;
         }
         if (function_exists('wp_schedule_single_event')) {
-            wp_schedule_single_event(time() + 5, 'wpc_v2_variant_forget23', [$imageID, (string) $reason, $paths]);
+            wp_schedule_single_event(time() + 5, WPC_VARIANT_FORGET_HOOK, [$imageID, (string) $reason, $paths]);
             return true;
         }
         return false;
     }
-    function wpc_v2_variant_forget14_detach($imageID, $reason, $paths)
+    function wpc_v2_variant_detach($imageID, $reason, $paths)
     {
         if (!function_exists('add_action') || empty($paths)) {
             return false;
         }
         add_action('shutdown', function () use ($imageID, $reason, $paths) {
-            if (function_exists('wpc_finish_request39') && empty($GLOBALS['wpc_released39'])) {
-                wpc_finish_request39();
+            if (function_exists('wpc_finish_request') && empty($GLOBALS['wpc_response_released'])) {
+                wpc_finish_request();
             }
             @ignore_user_abort(true);
-            wpc_v2_variant_forget23($imageID, $reason, $paths);
+            wpc_v2_forget_variants($imageID, $reason, $paths);
         }, 99);
         return true;
     }
-    add_action('delete_attachment', function ($id) { wpc_v2_variant_forget23_queue($id, 'delete'); }, 5);
-    add_action('wpc_image_restored', function ($id) { wpc_v2_variant_forget23_queue($id, 'restore'); }, 5);
-    function wpc_v2_variant_forget23_meta($meta_id, $object_id, $meta_key, $meta_value)
+    add_action('delete_attachment', function ($id) { wpc_v2_forget_variants_queue($id, 'delete'); }, 5);
+    add_action('wpc_image_restored', function ($id) { wpc_v2_forget_variants_queue($id, 'restore'); }, 5);
+    function wpc_v2_forget_variants_meta($meta_id, $object_id, $meta_key, $meta_value)
     {
         if ($meta_key === 'ic_status' && $meta_value === 'restored') {
-            wpc_v2_variant_forget23_queue((int) $object_id, 'restore');
+            wpc_v2_forget_variants_queue((int) $object_id, 'restore');
         }
     }
-    add_action('updated_post_meta', 'wpc_v2_variant_forget23_meta', 10, 4);
-    add_action('added_post_meta', 'wpc_v2_variant_forget23_meta', 10, 4);
+    add_action('updated_post_meta', 'wpc_v2_forget_variants_meta', 10, 4);
+    add_action('added_post_meta', 'wpc_v2_forget_variants_meta', 10, 4);
 }
 
-if (!function_exists('wpc_policy23_ui')) {
-    function wpc_policy23_ui()
+if (!function_exists('wpc_policy_ui')) {
+    function wpc_policy_ui()
     {
         if (!function_exists('current_user_can') || !current_user_can('manage_wpc_settings')) {
             return;
         }
-        $p = wpc_policy23();
-        $stored = wpc_policy23_stored();
-        $orch_serve = is_array($stored) && isset($stored['serve']) ? $stored['serve'] : wpc_policy23_defaults()['serve'];
+        $p = wpc_policy();
+        $stored = wpc_policy_stored();
+        $orch_serve = is_array($stored) && isset($stored['serve']) ? $stored['serve'] : wpc_policy_defaults()['serve'];
         $orch_land  = is_array($stored) && isset($stored['land']) ? $stored['land'] : 'on';
         $modes = [
             'edge_land' => ['label' => __('CDN edge + copy on this server', WPS_IC_TEXTDOMAIN), 'chip' => 'Default', 'chipClass' => 'wpc-chip--success', 'tip' => __('Visitors get images from the CDN edge. Every optimized image is also kept on this server.', WPS_IC_TEXTDOMAIN), 'serve' => 'edge', 'land' => 'on', 'allowed' => ($orch_serve === 'edge')],
@@ -597,10 +593,10 @@ if (!function_exists('wpc_policy23_ui')) {
             'origin'    => ['label' => __('This server only', WPS_IC_TEXTDOMAIN), 'chip' => 'No CDN', 'chipClass' => 'wpc-chip--info', 'tip' => __('Visitors never contact the CDN. Optimized images are created by the service and served from this server.', WPS_IC_TEXTDOMAIN), 'serve' => 'origin', 'land' => 'on', 'allowed' => true],
         ];
         $current = $p['serve'] === 'origin' ? 'origin' : ($p['land'] === 'off' ? 'edge_only' : 'edge_land');
-        $nonce = wp_create_nonce('wpc_policy23');
-        $meta = sprintf(__('Plan setting: %s, %s. Version %d.', WPS_IC_TEXTDOMAIN), $orch_serve === 'edge' ? 'CDN edge' : 'this server', $orch_land === 'on' ? 'copy on disk' : 'no copy on disk', wpc_policy23_version());
+        $nonce = wp_create_nonce(WPC_POLICY_OPTION);
+        $meta = sprintf(__('Plan setting: %s, %s. Version %d.', WPS_IC_TEXTDOMAIN), $orch_serve === 'edge' ? 'CDN edge' : 'this server', $orch_land === 'on' ? 'copy on disk' : 'no copy on disk', wpc_policy_version());
         ?>
-        <div class="wpc-box-for-checkbox wpc-policy23" data-nonce="<?php echo esc_attr($nonce); ?>">
+        <div class="wpc-box-for-checkbox wpc-policy-box" data-nonce="<?php echo esc_attr($nonce); ?>">
             <div class="wpc-box-content">
                 <div class="wpc-checkbox-title-holder">
                     <div class="circle-check active"></div>
@@ -633,10 +629,10 @@ if (!function_exists('wpc_policy23_ui')) {
         </div>
         <script>
         (function(){
-            var box = document.querySelector('.wpc-policy23'); if (!box) return;
+            var box = document.querySelector('.wpc-policy-box'); if (!box) return;
             var hidden = document.getElementById('wpcPolicy23Mode'); if (!hidden) return;
             function send(key, value){
-                var fd = new FormData(); fd.append('action','wpc_policy23_tighten'); fd.append('nonce', box.getAttribute('data-nonce')); fd.append('key', key); fd.append('value', value);
+                var fd = new FormData(); fd.append('action','wpc_policy_tighten'); fd.append('nonce', box.getAttribute('data-nonce')); fd.append('key', key); fd.append('value', value);
                 return fetch(ajaxurl, {method:'POST', credentials:'same-origin', body: fd}).then(function(r){ return r.json(); }).then(function(j){ if (!j || !j.success) { alert('Could not save delivery setting'); } });
             }
             hidden.addEventListener('change', function(){
@@ -647,20 +643,20 @@ if (!function_exists('wpc_policy23_ui')) {
         </script>
         <?php
     }
-    add_action('wpc_policy23_ui', 'wpc_policy23_ui');
+    add_action('wpc_policy_ui', 'wpc_policy_ui');
 }
 
-if (!function_exists('wpc_policy23_tighten_ajax')) {
-    function wpc_policy23_tighten_ajax()
+if (!function_exists('wpc_policy_tighten_ajax')) {
+    function wpc_policy_tighten_ajax()
     {
-        if (!current_user_can('manage_wpc_settings') || !isset($_POST['nonce']) || !wp_verify_nonce((string) $_POST['nonce'], 'wpc_policy23')) {
+        if (!current_user_can('manage_wpc_settings') || !isset($_POST['nonce']) || !wp_verify_nonce((string) $_POST['nonce'], WPC_POLICY_OPTION)) {
             wp_send_json_error(['error' => 'forbidden'], 403);
         }
         $key = isset($_POST['key']) ? sanitize_key((string) $_POST['key']) : '';
         $value = isset($_POST['value']) ? sanitize_key((string) $_POST['value']) : '';
-        $stored = wpc_policy23_stored();
+        $stored = wpc_policy_stored();
         if ($key === 'serve' && $value === 'edge') {
-            $orch_serve = is_array($stored) && isset($stored['serve']) ? $stored['serve'] : wpc_policy23_defaults()['serve'];
+            $orch_serve = is_array($stored) && isset($stored['serve']) ? $stored['serve'] : wpc_policy_defaults()['serve'];
             if ($orch_serve !== 'edge') {
                 wp_send_json_error(['error' => 'plan_does_not_allow'], 403);
             }
@@ -671,37 +667,37 @@ if (!function_exists('wpc_policy23_tighten_ajax')) {
                 wp_send_json_error(['error' => 'plan_does_not_allow'], 403);
             }
         }
-        $ok = wpc_policy23_tighten($key, $value);
+        $ok = wpc_policy_tighten($key, $value);
         if ($ok) {
-            wp_send_json_success(['policy' => wpc_policy23()]);
+            wp_send_json_success(['policy' => wpc_policy()]);
         }
         wp_send_json_error(['error' => 'bad_key'], 400);
     }
-    add_action('wp_ajax_wpc_policy23_tighten', 'wpc_policy23_tighten_ajax');
+    add_action('wp_ajax_wpc_policy_tighten', 'wpc_policy_tighten_ajax');
 }
 
-if (!function_exists('wpc_twin_bytes29')) {
-    function wpc_twin_bytes29($delta)
+if (!function_exists('wpc_add_twin_bytes')) {
+    function wpc_add_twin_bytes($delta)
     {
-        $c = get_option('wpc_twin_bytes29', ['bytes' => 0, 'since' => time()]);
+        $c = get_option(WPC_TWIN_BYTES_OPTION, ['bytes' => 0, 'since' => time()]);
         $c = is_array($c) ? $c : ['bytes' => 0, 'since' => time()];
         $c['bytes'] = max(0, (int) $c['bytes'] + (int) $delta);
-        update_option('wpc_twin_bytes29', $c, false);
+        update_option(WPC_TWIN_BYTES_OPTION, $c, false);
         return (int) $c['bytes'];
     }
 }
-if (!function_exists('wpc_v2_health29')) {
-    function wpc_v2_health29()
+if (!function_exists('wpc_v2_health_snapshot')) {
+    function wpc_v2_health_snapshot()
     {
         $up = function_exists('wp_get_upload_dir') ? wp_get_upload_dir() : [];
         $base = !empty($up['basedir']) ? (string) $up['basedir'] : (defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR : '/');
         $free = @disk_free_space($base); $total = @disk_total_space($base);
         $load = function_exists('sys_getloadavg') ? @sys_getloadavg() : null;
-        $twin = get_option('wpc_twin_bytes29', ['bytes' => 0, 'since' => 0]);
+        $twin = get_option(WPC_TWIN_BYTES_OPTION, ['bytes' => 0, 'since' => 0]);
         return [
             'plugin_version'  => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
             'mode'            => function_exists('wpc_get_optimization_mode') ? wpc_get_optimization_mode() : '',
-            'policy'          => ['version' => function_exists('wpc_policy23_version') ? (int) wpc_policy23_version() : 0, 'serve' => function_exists('wpc_policy23_serve') ? wpc_policy23_serve() : '', 'land' => function_exists('wpc_policy23_land') ? wpc_policy23_land() : ''],
+            'policy'          => ['version' => function_exists('wpc_policy_version') ? (int) wpc_policy_version() : 0, 'serve' => function_exists('wpc_policy_serve') ? wpc_policy_serve() : '', 'land' => function_exists('wpc_policy_land') ? wpc_policy_land() : ''],
             'last_sync'       => get_option('wpc_v2_sync_last20', null),
             'queue'           => ['depth' => function_exists('wpc_rail_depth') ? (int) wpc_rail_depth() : -1, 'parked' => (int) get_option('wpc_rail_parked28', 0), 'purge_spool' => count((array) get_option('wpc_landed_purge_spool88', []))],
             'pressure'        => ['hot' => function_exists('wpc_under_pressure') ? (int) wpc_under_pressure() : -1, 'load1' => is_array($load) ? round((float) $load[0], 2) : -1, 'cores' => function_exists('wpc_box_cores') ? (int) wpc_box_cores() : -1],
@@ -720,13 +716,13 @@ if (!function_exists('wpc_v2_health29')) {
                 if (empty($v['ok'])) {
                     return new WP_REST_Response(['error' => 'hmac_fail'], 401);
                 }
-                return new WP_REST_Response(wpc_v2_health29(), 200);
+                return new WP_REST_Response(wpc_v2_health_snapshot(), 200);
             },
         ]);
     });
 }
-if (!function_exists('wpc_selfcheck29')) {
-    function wpc_selfcheck29()
+if (!function_exists('wpc_run_selfcheck_request')) {
+    function wpc_run_selfcheck_request()
     {
         if (!apply_filters('wpc_selfcheck', true) || !function_exists('home_url') || !function_exists('wp_remote_get')) {
             return null;
@@ -741,15 +737,34 @@ if (!function_exists('wpc_selfcheck29')) {
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log($ok ? 'selfcheck-ok' : 'selfcheck-fail', '', '', ['http' => $code, 'ms' => (int) round((microtime(true) - $t0) * 1000), 'fails' => $fails, 'v' => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '']);
         }
+        // Rule: a stand-down the self-check set is lifted by the next successful self-check; a
+        // human's safe mode never is. Until 7.24.55 a success only reset the fail counter, so the
+        // trip was permanent: sharvvi.com (2026-09-29) had every render shed after one slow
+        // post-update loopback on a healthy box (load 0.9 on 2 cores).
+        if ($ok && function_exists('wpc_safe_mode_source') && wpc_safe_mode_source() === 'selfcheck') {
+            $since = (int) get_option('wpc_safe_mode_at', 0);
+            update_option('wpc_safe_mode', 0);
+            delete_option('wpc_safe_mode_src');
+            delete_option('wpc_safe_mode_at');
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('selfcheck-standdown-cleared', '', '', ['since' => $since, 'legacy' => $since ? 0 : 1]);
+            }
+        }
         if ($fails >= 2 && apply_filters('wpc_selfcheck_standdown', true)) {
-            update_option('wpc_safe_mode', 1);
+            // Record the source only when this trip turns safe mode on: a human's safe mode that is
+            // already on must not be relabelled as the self-check's and then lifted by it.
+            if (!get_option('wpc_safe_mode', 0)) {
+                update_option('wpc_safe_mode', 1);
+                update_option('wpc_safe_mode_src', 'selfcheck', false);
+                update_option('wpc_safe_mode_at', time(), false);
+            }
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('selfcheck-standdown', '', '', ['fails' => $fails]);
             }
         }
         return $ok;
     }
-    function wpc_selfcheck29_arm()
+    function wpc_arm_selfcheck_request()
     {
         static $armed = false;
         if ($armed || !function_exists('add_action')) {
@@ -757,12 +772,37 @@ if (!function_exists('wpc_selfcheck29')) {
         }
         $armed = true;
         add_action('shutdown', function () {
-            if (function_exists('wpc_finish_request39') && empty($GLOBALS['wpc_released39'])) {
-                wpc_finish_request39();
+            if (function_exists('wpc_finish_request') && empty($GLOBALS['wpc_response_released'])) {
+                wpc_finish_request();
             }
             @ignore_user_abort(true);
-            wpc_selfcheck29();
+            wpc_run_selfcheck_request();
         }, 97);
         return true;
     }
+    /**
+     * While the self-check holds safe mode on, run it again at most once per 6 hours.
+     *
+     * Only a plugin update arms the self-check (wp-compress-core.php checkPluginVersion), so a
+     * trip taken right after an update would otherwise wait for the next release to be lifted:
+     * sharvvi.com (2026-09-29) stayed shed across versions. admin_init is used because it is the
+     * hook the update arm already runs on and it fires on every wp-admin and admin-ajax.php request
+     * (the heartbeat included), while a cron event would be scheduled through wpc_pl_sched, which
+     * safe mode itself refuses (wpc_bg_lane_allowed). The self-check calls no lane gate, so safe
+     * mode does not block it. A human's safe mode is never re-checked.
+     */
+    function wpc_selfcheck_rearm_while_tripped()
+    {
+        if (!function_exists('wpc_safe_mode_source') || wpc_safe_mode_source() !== 'selfcheck') {
+            return false;
+        }
+        $every = max(300, (int) apply_filters('wpc_selfcheck_rearm_secs', 6 * 3600));
+        if (time() - (int) get_option('wpc_selfcheck_rearm_at', 0) < $every) {
+            return false;
+        }
+        // Stamped before the check runs so concurrent admin requests do not each fire a 20 s loopback.
+        update_option('wpc_selfcheck_rearm_at', time(), false);
+        return wpc_arm_selfcheck_request();
+    }
+    add_action('admin_init', 'wpc_selfcheck_rearm_while_tripped', 2);
 }

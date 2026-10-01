@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: api/v2/_shared.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 include_once __DIR__ . '/../../addons/cache/wpc-fs.php';
 if (!defined('WPC_V2_DIRECT_ENTRY')) {
     http_response_code(403);
@@ -54,8 +46,14 @@ if (!defined('WP_CONTENT_URL') && function_exists('get_option')) {
     define('WP_CONTENT_URL', get_option('siteurl') . '/wp-content');
 }
 
+// At this point: $wpdb is global. get_option works. wp_upload_dir() works (WP_CONTENT_URL ensured above).
+// maybe_unserialize / sanitize_* helpers all available.
 
 
+// The signature, size, fetch-host and image checks are the REST callbacks' own (v2-inbound.php).
+require_once __DIR__ . '/../../addons/v2/v2-inbound.php';
+// The one writer of variant bytes (containment, extension allowlist, the larger-than-disk refusal).
+require_once __DIR__ . '/../../addons/v2/v2-store.php';
 
 
 function wpc_v2_read_apikey() {
@@ -87,7 +85,7 @@ function wpc_v2_read_apikey() {
 }
 
 
-
+//
 
 
 function wpc_v2_direct_safe_filename($filename) {
@@ -112,80 +110,8 @@ function wpc_v2_direct_safe_filename($filename) {
 }
 
 
-function wpc_v2_direct_safe_fetch_url($url) {
-    $url = (string) $url;
-    $p = @parse_url($url);
-    if (!is_array($p) || empty($p['scheme']) || empty($p['host'])) {
-        return false;
-    }
-    $scheme = strtolower($p['scheme']);
-    if ($scheme !== 'http' && $scheme !== 'https') {
-        return false;
-    }
-    $host = trim($p['host'], '[]');
-    $ips = [];
-    if (filter_var($host, FILTER_VALIDATE_IP)) {
-        $ips[] = $host;
-    } else {
-        $v4 = @gethostbynamel($host);
-        if (is_array($v4)) {
-            $ips = $v4;
-        }
-        if (function_exists('dns_get_record')) {
-            $v6 = @dns_get_record($host, DNS_AAAA);
-            if (is_array($v6)) {
-                foreach ($v6 as $rec) {
-                    if (!empty($rec['ipv6'])) {
-                        $ips[] = $rec['ipv6'];
-                    }
-                }
-            }
-        }
-    }
-    if (empty($ips)) {
-        return false;
-    }
-    foreach ($ips as $ip) {
-        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-            return false;
-        }
-    }
-    return true;
-}
 
 
-function wpc_v2_direct_verify_hmac($sig_header, $body_raw) {
-    if (!is_string($sig_header) || $sig_header === '') {
-        return ['ok' => false, 'reason' => 'missing_sig'];
-    }
-    if (!function_exists('hash_hmac')) {
-        return ['ok' => false, 'reason' => 'hash_hmac_unavailable'];
-    }
-    $parts = [];
-    foreach (explode(',', $sig_header) as $kv) {
-        $kv = trim($kv);
-        $eq = strpos($kv, '=');
-        if ($eq === false) continue;
-        $parts[substr($kv, 0, $eq)] = substr($kv, $eq + 1);
-    }
-    if (empty($parts['t']) || empty($parts['v1'])) {
-        return ['ok' => false, 'reason' => 'malformed_sig'];
-    }
-    $ts  = (int) $parts['t'];
-    $now = time();
-    if (abs($now - $ts) > 60) {
-        return ['ok' => false, 'reason' => 'replay_window_exceeded'];
-    }
-    $apikey = wpc_v2_read_apikey();
-    if ($apikey === '') {
-        return ['ok' => false, 'reason' => 'plugin_no_apikey'];
-    }
-    $expected = hash_hmac('sha256', $ts . '.' . hash('sha256', (string) $body_raw), $apikey);
-    if (!hash_equals($expected, (string) $parts['v1'])) {
-        return ['ok' => false, 'reason' => 'sig_mismatch'];
-    }
-    return ['ok' => true];
-}
 
 
 function wpc_v2_direct_respond($status, array $payload) {
@@ -195,7 +121,7 @@ function wpc_v2_direct_respond($status, array $payload) {
     echo json_encode($payload);
 
 
-    if (function_exists('wpc_finish_request39')) { wpc_finish_request39(); } elseif (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
+    if (function_exists('wpc_finish_request')) { wpc_finish_request(); } elseif (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
     exit;
 }
 
@@ -212,15 +138,15 @@ function wpc_v2_journal_dir() {
     return $cached;
 }
 
-
-
-
-
+/**
+ * Ensure the journal dir exists, is writable, and has its own .htaccess.
+ * Called from the inbound write path; cheap after first call (transient cache).
+ */
 function wpc_v2_journal_ensure_dir() {
     $dir = wpc_v2_journal_dir();
     if ($dir === '') return false;
-    
-    
+    // Lightweight check: if dir exists + we wrote .htaccess in a prior request,
+    // we're done. Re-check every 5 min via transient to recover from manual deletes.
     if (get_transient('wpc_v2_journal_dir_ok')) {
         return true;
     }
@@ -229,8 +155,8 @@ function wpc_v2_journal_ensure_dir() {
             return false;
         }
     }
-    
-    
+    // .htaccess deny — defense in depth (uploads dir already restrictive, but
+    // explicit is better than implicit).
     $htaccess = $dir . '/.htaccess';
     if (!is_file($htaccess)) {
         wpc_fs_put($htaccess, "Order Deny,Allow\nDeny from all\n<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n");
@@ -255,8 +181,8 @@ function wpc_v2_journal_write($imageID, $jobId, array $entries) {
     $jobId_s   = preg_replace('/[^a-zA-Z0-9_\-]/', '', substr((string) $jobId, 0, 16));
     if ($jobId_s === '') $jobId_s = 'nojob';
     $ms = (int) round(microtime(true) * 1000);
-    
-    
+    // Add a random suffix to absolutely guarantee uniqueness even if two
+    // callbacks for the same image+job arrive in the same millisecond.
     $rand = function_exists('random_int') ? random_int(1000, 9999) : mt_rand(1000, 9999);
     $name = $imageID_i . '-' . $jobId_s . '-' . $ms . '-' . $rand . '.jsonl';
     $final = $dir . '/' . $name;
@@ -283,10 +209,10 @@ function wpc_v2_journal_write($imageID, $jobId, array $entries) {
     return $final;
 }
 
-
-
-
-
+/**
+ * Count current journal files (excludes .tmp in-flight writes). Used by
+ * inbound handlers to decide whether to fire a drain loopback.
+ */
 function wpc_v2_journal_count() {
     $dir = wpc_v2_journal_dir();
     if (!is_dir($dir)) return 0;
@@ -318,7 +244,7 @@ function wpc_v2_journal_fire_loopback() {
         ]);
         return;
     }
-    
+    // Fallback raw curl (works in SHORTINIT context)
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
@@ -334,7 +260,7 @@ function wpc_v2_journal_fire_loopback() {
     }
 }
 
-
+// ─── Restored-image guard (matches REST endpoint behavior) ───────────────
 
 function wpc_v2_direct_callbacks_blocked($imageID) {
 
@@ -351,7 +277,12 @@ function wpc_v2_direct_callbacks_blocked($imageID) {
 }
 
 
-function wpc_v2_direct_persist_bytes($imageID, $filename, $raw) {
+/**
+ * Lands one variant through the store. `refused` is set when the store refused the bytes as no
+ * smaller than the file WordPress serves at that size: the caller journals a no-improvement entry
+ * (the store cannot record it under SHORTINIT) and writes nothing.
+ */
+function wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $size_label = '', $format = '', $src = 'direct_entry') {
     if (!function_exists('get_attached_file')) {
 
 
@@ -364,28 +295,26 @@ function wpc_v2_direct_persist_bytes($imageID, $filename, $raw) {
     $dest_dir = dirname($abs_parent);
     $dest     = $dest_dir . '/' . $filename;
 
-    
+    // Idempotency fast-path: same bytes already on disk → no-op.
     if (file_exists($dest) && filesize($dest) === strlen($raw) && hash_file('sha256', $dest) === hash('sha256', $raw)) {
         return ['ok' => true, 'idempotent' => true, 'path' => $dest, 'bytes_size' => strlen($raw), 'error' => null];
     }
 
-    $tmp = $dest . '.wpc_v2_tmp_' . substr(md5(microtime(true) . mt_rand()), 0, 8);
-    if (wpc_fs_put($tmp, $raw, LOCK_EX) === false) {
-        return ['ok' => false, 'error' => 'write_failed', 'path' => null, 'bytes_size' => 0, 'idempotent' => false];
+    $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => (int) $imageID, 'size' => (string) $size_label, 'fmt' => (string) $format, 'src' => (string) $src]]);
+    if (($put['error'] ?? '') === 'larger_than_disk') {
+        return ['ok' => false, 'refused' => 'larger_than_disk', 'error' => 'larger_than_disk', 'path' => null, 'bytes_size' => 0, 'idempotent' => false];
     }
-    if (!@rename($tmp, $dest)) {
-        @unlink($tmp);
-        return ['ok' => false, 'error' => 'rename_failed', 'path' => null, 'bytes_size' => 0, 'idempotent' => false];
+    if (empty($put['ok'])) {
+        return ['ok' => false, 'error' => (string) $put['error'], 'path' => null, 'bytes_size' => 0, 'idempotent' => false];
     }
-    @chmod($dest, 0644);
     return ['ok' => true, 'idempotent' => false, 'path' => $dest, 'bytes_size' => strlen($raw), 'error' => null];
 }
 
-
-
-
-
-
+/**
+ * Derive variant filename when encoder omits it (mirrors v2-callback.php's
+ * wpc_v2_derive_variant_filename). Loaded on demand because it needs post.php
+ * for wp_get_attachment_metadata.
+ */
 function wpc_v2_direct_derive_filename($imageID, $size_label, $format) {
     if (!function_exists('wp_get_attachment_metadata')) {
         require_once ABSPATH . WPINC . '/post.php';

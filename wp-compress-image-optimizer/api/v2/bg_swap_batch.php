@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: api/v2/bg_swap_batch.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 define('WPC_V2_DIRECT_ENTRY', true);
@@ -20,10 +12,10 @@ if (!is_string($body_raw) || $body_raw === '') {
 
 
 $sig_header = isset($_SERVER['HTTP_X_WPC_SIG']) ? (string) $_SERVER['HTTP_X_WPC_SIG'] : '';
-$hmac = wpc_v2_direct_verify_hmac($sig_header, $body_raw);
+// The inbound verifier the REST callbacks use: size, signature (cb_secret first), fetch host, inline bytes.
+$hmac = wpc_v2_inbound_verify('direct_bg_swap_batch', $sig_header, $body_raw, ['scope' => 'write', 'auth_status' => 401]);
 if (!$hmac['ok']) {
-    error_log('[wpc_v2_direct_batch] auth_rejected reason=' . $hmac['reason']);
-    wpc_v2_direct_respond(401, ['error' => 'auth', 'reason' => $hmac['reason']]);
+    wpc_v2_direct_respond($hmac['status'], ['error' => $hmac['status'] === 401 ? 'auth' : $hmac['reason'], 'reason' => $hmac['detail']]);
 }
 
 
@@ -51,7 +43,7 @@ $serverTime = isset($body['serverTime']) ? (int) $body['serverTime'] : 0;
 $clockSkewMs = $serverTime > 0 ? (int) round(($entry_t * 1000) - $serverTime) : null;
 $flushReason = isset($body['flush_reason']) ? preg_replace('/[^a-z_]/', '', (string) $body['flush_reason']) : '';
 
-
+// Wrapper-level fallback fields (JW pod batch shape)
 $wrap_size   = isset($body['sizeLabel']) ? preg_replace('/[^a-z0-9_\-]/i', '', (string) $body['sizeLabel']) : '';
 $wrap_orig   = isset($body['originalSize']) ? (int) $body['originalSize'] : 0;
 $wrap_fname  = isset($body['filename']) ? $body['filename'] : null;
@@ -107,7 +99,7 @@ foreach ($variants as $idx => $v) {
     }
     if ($fmt === 'jpg') $fmt = 'jpeg';
 
-    
+    // No-improvement: record without bytes write.
     if (!empty($v['noImprovement']) || (isset($v['bumped']) && (string) $v['bumped'] === 'source_already_optimal')) {
         $reason = !empty($v['noImprovement'])
             ? (isset($v['reason']) ? (string) $v['reason'] : 'no_improvement')
@@ -124,7 +116,7 @@ foreach ($variants as $idx => $v) {
         continue;
     }
 
-    
+    // Filename resolution
 
 
     $filename = '';
@@ -151,7 +143,7 @@ foreach ($variants as $idx => $v) {
         }
     }
 
-    
+    // Bytes
     $b64       = isset($v['bytesB64']) ? (string) $v['bytesB64'] : '';
     $fetch_url = isset($v['fetchUrl']) ? (string) $v['fetchUrl'] : '';
     $raw = null;
@@ -165,11 +157,6 @@ foreach ($variants as $idx => $v) {
     } elseif ($fetch_url !== '') {
 
 
-        if (!wpc_v2_direct_safe_fetch_url($fetch_url)) {
-            $results[] = ['ok' => false, 'kind' => 'rejected', 'error' => 'unsafe_fetch_url', 'sizeLabel' => $sz, 'format' => $fmt];
-            $rejected_count++;
-            continue;
-        }
         $ctx = stream_context_create(['http' => ['timeout' => 15, 'follow_location' => 0, 'max_redirects' => 0]]);
         $raw = @file_get_contents($fetch_url, false, $ctx);
         if ($raw === false || $raw === '') {
@@ -183,8 +170,21 @@ foreach ($variants as $idx => $v) {
         continue;
     }
 
-    
-    $persist = wpc_v2_direct_persist_bytes($imageID, $filename, $raw);
+    if (!wpc_v2_inbound_image_ok($raw, $fmt, $imageID, 'direct_bg_swap_batch')) {
+        $results[] = ['ok' => false, 'kind' => 'rejected', 'error' => 'invalid_image_bytes', 'sizeLabel' => $sz, 'format' => $fmt];
+        $rejected_count++;
+        continue;
+    }
+
+    // Atomic disk write
+    $persist = wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $sz, $fmt, 'direct_bg_swap_batch');
+    if (($persist['refused'] ?? '') === 'larger_than_disk') {
+        // No smaller than the file WordPress serves at this size: settled as no improvement, not written.
+        $journal_entries[] = ['type' => 'no_improvement', 'sizeLabel' => $sz, 'format' => $fmt, 'reason' => 'larger_than_disk', 'baselineKb' => 0.0];
+        $results[] = ['ok' => true, 'kind' => 'no_improvement', 'reason' => 'larger_than_disk', 'sizeLabel' => $sz, 'format' => $fmt];
+        $persisted_count++;
+        continue;
+    }
     if (!$persist['ok']) {
         $results[] = ['ok' => false, 'kind' => 'rejected', 'error' => $persist['error'], 'sizeLabel' => $sz, 'format' => $fmt];
         $rejected_count++;
@@ -201,7 +201,7 @@ foreach ($variants as $idx => $v) {
         continue;
     }
 
-    
+    // Build the journal entry (drain merges into ic_local_variants)
     $orig_size = isset($v['originalSize']) ? (int) $v['originalSize']
                 : (isset($v['orig_size']) ? (int) $v['orig_size'] : $wrap_orig);
     $kb        = isset($v['kb']) ? (float) $v['kb'] : 0.0;
@@ -226,7 +226,7 @@ foreach ($variants as $idx => $v) {
 
 $t_after_loop = microtime(true);
 
-
+// ─── Write journal entries (one file per batch) ───────────────────────────
 $journal_file = null;
 if (!empty($journal_entries)) {
     $journal_file = wpc_v2_journal_write($imageID, $jobId, [
@@ -247,8 +247,8 @@ if (!empty($journal_entries)) {
 
 $t_handler_end = microtime(true);
 
-
-
+// ─── Timing log (matches REST handler's format for grep correlation) ──────
+//
 
 
 error_log(sprintf(

@@ -1,12 +1,4 @@
 <?php
-
-
-
-
-
-
-
-
 global $current_screen;
 $mode = get_user_option( 'media_library_mode', get_current_user_id() ) ? get_user_option( 'media_library_mode', get_current_user_id() ) : 'grid';
 

@@ -11189,13 +11189,25 @@ label[for="wpc-cf-token"] {
   margin-bottom: 8px;
   color: #1e293b;
 }
-.wpc-cf-connect-form .wpc-cf-loader-error .wpc-cf-diag-list {
+.wpc-cf-connect-form .wpc-cf-loader-error .wpc-cf-diag-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+.wpc-cf-connect-form .wpc-cf-refresh-report {
+  padding: 10px;
+}
+.wpc-cf-connect-form .wpc-cf-refresh-report .wpc-cf-refresh-report-error {
+  color: #ef5a5a;
+  font-size: 13px;
+}
+.wpc-cf-connect-form .wpc-cf-diag-list {
   list-style: none;
   margin: 0 0 8px;
   padding: 0;
   text-align: left;
 }
-.wpc-cf-connect-form .wpc-cf-loader-error .wpc-cf-diag-list li {
+.wpc-cf-connect-form .wpc-cf-diag-list li {
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -11203,32 +11215,30 @@ label[for="wpc-cf-token"] {
   color: #374151;
   font-size: 13px;
 }
-.wpc-cf-connect-form .wpc-cf-loader-error .wpc-cf-diag-list .wpc-cf-diag-icon {
+.wpc-cf-connect-form .wpc-cf-diag-list .wpc-cf-diag-icon {
   flex-shrink: 0;
   width: 16px;
   text-align: center;
   font-family: 'proxima_bold', sans-serif;
 }
-.wpc-cf-connect-form .wpc-cf-loader-error .wpc-cf-diag-list .wpc-cf-diag-name {
+.wpc-cf-connect-form .wpc-cf-diag-list .wpc-cf-diag-name {
   flex-shrink: 0;
   font-family: 'proxima_semibold', sans-serif;
   min-width: 150px;
 }
-.wpc-cf-connect-form .wpc-cf-loader-error .wpc-cf-diag-list .wpc-cf-diag-detail {
+.wpc-cf-connect-form .wpc-cf-diag-list .wpc-cf-diag-detail {
   color: #64748b;
 }
-.wpc-cf-connect-form .wpc-cf-loader-error .wpc-cf-diag-list .wpc-cf-diag-ok .wpc-cf-diag-icon {
+.wpc-cf-connect-form .wpc-cf-diag-list .wpc-cf-diag-ok .wpc-cf-diag-icon {
   color: #22b73a;
 }
-.wpc-cf-connect-form .wpc-cf-loader-error .wpc-cf-diag-list .wpc-cf-diag-fail .wpc-cf-diag-icon {
+.wpc-cf-connect-form .wpc-cf-diag-list .wpc-cf-diag-fail .wpc-cf-diag-icon {
   color: #ef5a5a;
 }
-.wpc-cf-connect-form .wpc-cf-loader-error .wpc-cf-diag-list .wpc-cf-diag-pending .wpc-cf-diag-icon {
+.wpc-cf-connect-form .wpc-cf-diag-list .wpc-cf-diag-pending .wpc-cf-diag-icon {
   color: #fbae40;
 }
-.wpc-cf-connect-form .wpc-cf-loader-error .wpc-cf-diag-hint {
-  margin: 4px 0 0;
-  font-size: 12px;
+.wpc-cf-connect-form .wpc-cf-diag-list .wpc-cf-diag-skipped .wpc-cf-diag-icon {
   color: #64748b;
 }
 .wpc-cf-connect-form .circle-check {
@@ -12055,6 +12065,14 @@ label[for="wpc-cf-token"] {
 }
 .wpc-cfperm-row.is-missing .wpc-cfperm-fix {
   display: block;
+}
+.wpc-cfperm-does {
+  display: block;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #64748b;
+  margin-top: 4px;
 }
 .wpc-cfperm-side {
   display: flex;
@@ -17257,6 +17275,24 @@ label[for="wpc-cf-token"] {
 }
 .wpc-bulk-splash-card--restore .wpc-bulk-splash-meta-row svg.is-warning {
   color: #fbae40;
+}
+.wpc-inline-notice.is-warning {
+  color: #c77704;
+}
+.wpc-inline-notice.is-warning svg.is-warning {
+  color: #fbae40;
+}
+.wpc-inline-notice-link {
+  color: inherit;
+  text-decoration: underline;
+}
+.wpc-bulk-complete-missing {
+  display: flex;
+  justify-content: center;
+  margin: 4px 0 16px;
+}
+.wpc-bulk-complete-missing[hidden] {
+  display: none;
 }
 .wpc-bulk-splash-card .button-start-bulk-compress,
 .wpc-bulk-splash-card .button-start-bulk-restore {

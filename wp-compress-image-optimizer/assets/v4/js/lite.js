@@ -16,11 +16,72 @@ jQuery(document).ready((function($) {
         });
         return false;
     }));
-    $(".wpc-custom-btn.wpc-custom-btn-locked").on("click", (function(e) {
+    // A locked toggle is a feature the plan does not include. Clicking it asks for the one thing
+    // that unlocks it: an email, prefilled with the admin's own. wpcClaim comes from the settings
+    // template: { email, nonce, pending, ajaxurl }.
+    var claim = window.wpcClaim || {};
+    var claimTimer = null;
+    function claimEl(id) { return document.getElementById(id); }
+    function closeClaim() { var m = claimEl("wpc-claim-modal"); if (m) { m.hidden = true; } }
+    function claimSay(text, kind) { var s = claimEl("wpc-claim-state"); if (s) { s.textContent = text || ""; s.className = "wpc-claim-state" + (kind ? " is-" + kind : ""); s.hidden = !text; } }
+    function schedulePoll(delay) {
+        clearTimeout(claimTimer);
+        claimTimer = setTimeout(pollClaim, delay);
+    }
+    function pollClaim() {
+        $.ajax({ url: ajaxurl, type: "POST", data: { action: "wpc_claim_status", nonce: claim.nonce || wpc_ajaxVar.nonce } }).done(function(r) {
+            var d = (r && r.data) ? r.data : {};
+            if (d.state === "linked") { window.location.reload(); return; }
+            if (d.state === "pending") {
+                claimSay(d.msg, "pending");
+                var n = (window.__wpcClaimPolls = (window.__wpcClaimPolls || 0) + 1);
+                schedulePoll(n < 3 ? [2e4, 4e4, 8e4][n] : 3e5);
+                return;
+            }
+            if (d.state === "expired" || d.state === "declined") { claimSay(d.msg, "warn"); var b = claimEl("wpc-claim-send"); if (b) { b.textContent = "Send a new one"; b.disabled = false; } }
+        });
+    }
+    function openClaim(featureTitle) {
+        var m = claimEl("wpc-claim-modal");
+        if (!m) { return; }
+        var title = claimEl("wpc-claim-title");
+        if (title) { title.textContent = featureTitle ? "Turn on " + featureTitle : "Link this site"; }
+        var b = claimEl("wpc-claim-send");
+        if (b) { b.textContent = featureTitle ? "Turn on " + featureTitle : "Send link"; b.disabled = false; }
+        var i = claimEl("wpc-claim-email");
+        if (i && !i.value && claim.email) { i.value = claim.email; }
+        claimSay("");
+        if (claim.pending) { claimSay("Check " + claim.pending + " for a link from WP Compress.", "pending"); if (b) { b.textContent = "Send again"; } }
+        m.hidden = false;
+        if (i) { try { i.focus(); i.select(); } catch (z) {} }
+    }
+    function sendClaim() {
+        var i = claimEl("wpc-claim-email"), b = claimEl("wpc-claim-send");
+        var v = $.trim((i && i.value) || "");
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { claimSay("That doesn't look like an email.", "warn"); return; }
+        if (b) { b.disabled = true; b.textContent = "Setting up…"; }
+        claimSay("");
+        $.ajax({ url: ajaxurl, type: "POST", timeout: 60000, data: { action: "wpc_claim", value: v, nonce: claim.nonce || wpc_ajaxVar.nonce } }).done(function(r) {
+            var d = (r && r.data) ? r.data : {};
+            if (r && r.success && d.state === "linked") { claimSay(d.msg || "Done. Reloading…", "ok"); window.location.reload(); return; }
+            if (b) { b.disabled = false; b.textContent = d.state === "pending" ? "Send again" : "Turn on"; }
+            claimSay(d.msg || "We could not reach WP Compress. Try again in a moment.", d.state === "pending" ? "pending" : "warn");
+            if (d.state === "pending") { window.__wpcClaimPolls = 0; schedulePoll(2e4); }
+        }).fail(function() {
+            if (b) { b.disabled = false; b.textContent = "Turn on"; }
+            claimSay("We could not reach WP Compress. Try again in a moment.", "warn");
+        });
+    }
+    $(document).on("click", ".wpc-custom-btn.wpc-custom-btn-locked, .wpc-locked, a[href='#wpc-claim-resend'], .wpc-claim-open", function(e) {
         e.preventDefault();
-        lockedPopup();
+        var lbl = $(this).find("[data-wpc-feature-title]").first();
+        openClaim(lbl.length ? lbl.attr("data-wpc-feature-title") : ($(this).attr("data-wpc-feature-title") || ""));
         return false;
-    }));
+    });
+    $(document).on("click", "#wpc-claim-send", function(e) { e.preventDefault(); sendClaim(); });
+    $(document).on("click", "#wpc-claim-close, #wpc-claim-modal .wpc-claim-backdrop", function(e) { e.preventDefault(); closeClaim(); });
+    $(document).on("keydown", "#wpc-claim-email", function(e) { if (e.key === "Enter") { e.preventDefault(); sendClaim(); } });
+    if (claim.pending) { window.__wpcClaimPolls = 0; schedulePoll(2e4); }
     var initialStates = {};
     var pendingChanges = {};
     $(".wpc-box-for-checkbox-lite .wpc-ic-settings-v4-checkbox").each((function() {
@@ -37,7 +98,6 @@ jQuery(document).ready((function($) {
     $(".wpc-box-for-checkbox-lite").on("click", (function(e) {
         e.preventDefault();
         if ($(this).hasClass("wpc-locked")) {
-            lockedPopup();
             return false;
         }
         var parent = $(this);
@@ -68,11 +128,11 @@ jQuery(document).ready((function($) {
         $btn.addClass("wpc-saving").css("pointer-events", "none");
         $btn.html('<span class="wpc-save-pill-spinner"></span> ' + (wpc_ajaxVar.saving || "Saving..."));
         var hadError = false;
-        
-        
-        
-        
-        
+        // v7.21.149 — ONE request for the whole save. Firing wps_ic_ajax_checkbox per toggle
+        // raced: every one of those requests reads the whole settings row, changes its own key
+        // and writes the whole row back, so N parallel workers all start from the same pre-save
+        // row and the last write wins — toggle five things, one is saved. The advanced screen
+        // already moved to wps_ic_ajax_v2_checkbox_batch (one read/modify/write for all changes)
         var changes = changeKeys.map((function(settingName) {
             return {
                 name: settingName.replace(/^options\[/, "").replace(/\]/g, "").replace(/\[/g, ","),

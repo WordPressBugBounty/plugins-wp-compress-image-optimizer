@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/combine_js.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 include_once WPS_IC_DIR . 'traits/url_key.php';
 
@@ -32,9 +24,9 @@ class wps_ic_combine_js
     public $file_count;
     public $current_section;
 
-    
-
-
+    /**
+     * @var void
+     */
 
     public function __construct()
     {
@@ -53,7 +45,7 @@ class wps_ic_combine_js
         $this->all_excludes = self::$excludes->combineJSExcludes();
 
         if (!empty($this->settings['delay-js']) && $this->settings['delay-js'] == '1') {
-            
+            //If it shouldn't be delayed, it shouldn't be combined
             $this->all_excludes = array_merge($this->all_excludes, self::$excludes->delayJSExcludes());
         }
 
@@ -61,14 +53,14 @@ class wps_ic_combine_js
 	    $cf = get_option(WPS_IC_CF);
 	    $cfCname = get_option(WPS_IC_CF_CNAME);
 	    $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok())) ? $cfCname : get_option('ic_custom_cname');
-        if (!empty($custom_cname) && function_exists('wpc_cdn_cname_reachable117') && !wpc_cdn_cname_reachable117($custom_cname)) { $custom_cname = ''; }
+        if (!empty($custom_cname) && function_exists('wpc_cdn_cname_is_reachable') && !wpc_cdn_cname_is_reachable($custom_cname)) { $custom_cname = ''; }
         if (empty($custom_cname) || !$custom_cname) {
             $this->zone_name = get_option('ic_cdn_zone_name');
         } else {
             $this->zone_name = $custom_cname;
         }
 
-        
+        //Check if Hide my WP is active and get replaces
         $this->hmwpReplace = false;
         if (class_exists('HMWP_Classes_ObjController')) {
             $this->hmwpReplace = true;
@@ -92,46 +84,46 @@ class wps_ic_combine_js
     public function write_file_and_next()
     {
         if ($this->current_file != '') {
-            $wpc_name644 = 'wps_' . $this->current_section . '_' . $this->file_count . '.js';
-            wpc_fs_put($this->combined_dir . $wpc_name644, $this->current_file);
-            $this->wpc_written644[] = $wpc_name644;
+            $file_name = 'wps_' . $this->current_section . '_' . $this->file_count . '.js';
+            wpc_fs_put($this->combined_dir . $file_name, $this->current_file);
+            $this->wpc_written_files[] = $file_name;
         }
         $this->file_count++;
         $this->current_file = '';
     }
 
-    
-    public $wpc_written644 = [];
-    public function wpc_sweep_unwritten644()
+    // v7.10.644 — see combine_css: a rebuild that shrinks must clear its own leftovers.
+    public $wpc_written_files = [];
+    public function wpc_sweep_unwritten_combined_files()
     {
         try {
-            foreach ((array) @glob($this->combined_dir . 'wps_*.js') as $wpc_f644) {
-                if (!in_array(basename($wpc_f644), $this->wpc_written644, true)) {
-                    @unlink($wpc_f644);
+            foreach ((array) @glob($this->combined_dir . 'wps_*.js') as $file) {
+                if (!in_array(basename($file), $this->wpc_written_files, true)) {
+                    @unlink($file);
                 }
             }
         } catch (\Throwable $e) {
         }
     }
 
-    
-    
-    
-    
-    private function wpc_combine_stale644()
+    // v7.10.644 — the rebuild trigger used to be DELETION of the key dir, which left a
+    // 404 window for every cached page referencing the files. Now a stale signal: the
+    // 'all' purge stamps wpc_combine_stale_epoch, per-key purges drop a .wpc-stale
+    // marker; a stale dir falls through to the rebuild path, which OVERWRITES in place.
+    private function wpc_combine_is_stale()
     {
         try {
-            $wpc_key644 = rtrim(WPS_IC_COMBINE . $this->urlKey, '/');
-            if (@is_file($wpc_key644 . '/.wpc-stale')) {
+            $key_dir = rtrim(WPS_IC_COMBINE . $this->urlKey, '/');
+            if (@is_file($key_dir . '/.wpc-stale')) {
                 return true;
             }
-            $wpc_ep644 = (int) get_option('wpc_combine_stale_epoch', 0);
-            if ($wpc_ep644 > 0) {
-                $wpc_new644 = 0;
-                foreach ((array) @glob($this->combined_dir . '*.js') as $wpc_f644) {
-                    $wpc_new644 = max($wpc_new644, (int) @filemtime($wpc_f644));
+            $stale_epoch = (int) get_option('wpc_combine_stale_epoch', 0);
+            if ($stale_epoch > 0) {
+                $newest_mtime = 0;
+                foreach ((array) @glob($this->combined_dir . '*.js') as $file) {
+                    $newest_mtime = max($newest_mtime, (int) @filemtime($file));
                 }
-                return $wpc_new644 > 0 && $wpc_new644 < $wpc_ep644;
+                return $newest_mtime > 0 && $newest_mtime < $stale_epoch;
             }
         } catch (\Throwable $e) {
         }
@@ -140,7 +132,7 @@ class wps_ic_combine_js
 
     public function maybe_do_combine($html)
     {
-        if ($this->combine_exists() && empty($_GET['forceRecombine']) && !$this->wpc_combine_stale644()) {
+        if ($this->combine_exists() && empty($_GET['forceRecombine']) && !$this->wpc_combine_is_stale()) {
 
             $this->no_content_excludes = get_option('wps_no_content_excludes_js');
 
@@ -165,7 +157,7 @@ class wps_ic_combine_js
         $html = preg_replace_callback('/<\/head>(.*?)<\/body>/si', [$this, 'combine'], $html);
 
         $this->write_file_and_next();
-        $this->wpc_sweep_unwritten644();
+        $this->wpc_sweep_unwritten_combined_files();
 
         update_option('wps_no_content_excludes_js', $this->no_content_excludes);
         $html = $this->insert_combined_scripts($html);
@@ -187,7 +179,7 @@ class wps_ic_combine_js
 
         if (self::$excludes->strInArray($tag, $this->all_excludes) || current_user_can('manage_wpc_settings')) {
             return $tag;
-            
+            #return print_r(array($tag),true);
         }
 
 
@@ -195,7 +187,7 @@ class wps_ic_combine_js
         $tag_start = $tag_start[0];
         $is_src_set = preg_match('/src=["|\'](.*?)["|\']/si', $tag_start, $src);
 
-        
+        #return print_r(array($src),true);
 
         if ($is_src_set == 1) {
 
@@ -203,7 +195,7 @@ class wps_ic_combine_js
             $src = str_replace(["'", '"'], "", $src);
             $src = $src[0];
 
-            
+            #return print_r(array($src,$this->url_key_class->is_external($src)),true);
 
 
             if (!$this->combine_external && $this->url_key_class->is_external($src)) {
@@ -222,8 +214,8 @@ class wps_ic_combine_js
 
         } else if ($this->combine_inline_scripts) {
 
-            
-            
+            // TODO: Testing
+            //return $tag;
 
             $src = 'Inline Script';
             $content = $tag;
@@ -266,8 +258,8 @@ class wps_ic_combine_js
         $src = '';
 
         if (self::$excludes->strInArray($tag, $this->all_excludes) || current_user_can('manage_wpc_settings')) {
-            
-            
+            #return $tag;
+            #return print_r(array($tag),true);
         }
 
         if (self::$excludes->strInArray($tag, $this->no_content_excludes) || current_user_can('manage_wpc_settings')) {
@@ -280,7 +272,7 @@ class wps_ic_combine_js
         $tag_start = $tag_start[0];
         $is_src_set = preg_match('/src=["|\'](.*?)["|\']/si', $tag_start, $src);
 
-        
+        #return print_r(array($src),true);
 
         if ($is_src_set == 1) {
 
@@ -288,7 +280,7 @@ class wps_ic_combine_js
             $src = str_replace(["'", '"'], "", $src);
             $src = $src[0];
 
-            
+            #return print_r(array($src,$this->url_key_class->is_external($src)),true);
 
 
             if (!$this->combine_external && $this->url_key_class->is_external($src)) {
@@ -297,8 +289,8 @@ class wps_ic_combine_js
 
         } else if ($this->combine_inline_scripts) {
 
-            
-            
+            // TODO: Testing
+            //return $tag;
 
             $src = 'Inline Script';
             $content = $tag;
@@ -341,25 +333,25 @@ class wps_ic_combine_js
 
 
         $html = preg_replace('/<\/head>/', $header_links . '</head>', $html);
-        
-        
+        //$html = preg_replace( '/<head>/', '<head>' . $header_links, $html );
+        //footer
         $html = preg_replace('/<\/body>/', $footer_links . '</body>', $html);
 
         return $html;
     }
 
-    
-    
-    
-    public function wpc_looks_like_html_doc659($s)
+    // v7.10.659 — twin of combine_css::wpc_looks_like_html_doc (B1). A real script is never
+    // an HTML DOCUMENT; match document markers near the start only, so JS with `<` in a string
+    // or comparison is not misflagged.
+    public function wpc_looks_like_html_doc($s)
     {
         if (!is_string($s) || $s === '') {
             return false;
         }
-        
-        
-        
-        
+        // START-anchored: an error page BEGINS with the doctype or a document root tag; valid
+        // JS/CSS never does. Matching those markers anywhere in the first 512 bytes would
+        // misflag legitimate JS that carries `<body`/`<html` inside a string
+        // (document.write("<body ...">), innerHTML assignments) — a common, real false positive.
         $head = strtolower(ltrim($s));
         return strncmp($head, '<!doctype html', 14) === 0
             || strncmp($head, '<html', 5) === 0
@@ -381,22 +373,22 @@ class wps_ic_combine_js
             return false;
         }
 
-        
-        
-        
-        
-        
-        
+        // v7.10.659 (B1 js_stub twin) — this path had NO response-code check at all, so a source
+        // script fetched as a 404, or a server answering a missing .js with its HTML error
+        // template at 200 (soft-404), was concatenated straight into the combined JS bundle,
+        // where markup is a syntax error that breaks EVERY script on the page. Reject non-200
+        // and any HTML-document response; the caller then leaves that script un-combined
+        // (fail-open) rather than poisoning the bundle.
         if ((int) wp_remote_retrieve_response_code($data) !== 200) {
             return false;
         }
-        $wpc_body659 = wp_remote_retrieve_body($data);
-        $wpc_ct659 = strtolower((string) wp_remote_retrieve_header($data, 'content-type'));
-        if (strpos($wpc_ct659, 'text/html') !== false || $this->wpc_looks_like_html_doc659($wpc_body659)) {
+        $body = wp_remote_retrieve_body($data);
+        $content_type = strtolower((string) wp_remote_retrieve_header($data, 'content-type'));
+        if (strpos($content_type, 'text/html') !== false || $this->wpc_looks_like_html_doc($body)) {
             return false;
         }
 
-        return $wpc_body659;
+        return $body;
     }
 
     public function getLocalContent($url)
@@ -416,10 +408,10 @@ class wps_ic_combine_js
         }
 
 
-        
+        //$url = preg_replace('/\?.*/', '', $url);
 
-        
-        
+        //$path = wp_make_link_relative($url);
+        //$path = ltrim($path, '/');
 
 
         if (strpos($url, '?') !== false) {

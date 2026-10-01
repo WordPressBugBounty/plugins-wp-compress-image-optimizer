@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/js_delay_v3.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
 {
@@ -16,43 +8,47 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
     protected $manifest_inline = [];
     protected $manifest_names = [];
     protected $manifest_rc = [];
-    protected $companion_ids = [];  
-    protected $wpc_family_keep747 = [];  
+    protected $companion_ids = [];  // {handle}-js-before/-after/-extra of excluded-at-parse parents
+    protected $wpc_family_keep_ids = [];  // dependency-family members coupled to a kept lane
 
 
-    
-    
+    // JetFormBuilder's main.js by basename, its jet-plugins provider stayed delayed → ReferenceError
+    // cascade killed the whole form chain). Collisions must only ever widen the KEEP direction.
     protected $promoted_src_ids = [];
     protected $parse_time_src_ids = [];
 
-    
-    
-    
-    
+    // AUTO-100 per-vendor interaction-only cohort (A4: second release cohort for EVERY
+    // visitor) + external-src dedupe map (recaptcha ×6 class), reset per document.
+    // Lane patterns are SRC-ONLY force-delays — never userForceDelay, which content-
+    // matches inline scripts ahead of every consent keep (the dm class via a side door).
     protected $wpc_io_patterns = [];
     protected $wpc_src_force_delay = [];
-    
-    
+    // v7.10.393: lane entries checked WITHOUT the external-host guard — theme scripts
+    // (sticky) are first-party and usually served through our zone.
     protected $wpc_lane_force_delay = [];
     protected $wpc_seen_ext_srcs = [];
-    
-    
-    
+    // True when THIS page's delay.json is a current-schema measured gen (ceiling{}
+    // + render_critical emitted) — the gate for the aggressive interaction-only
+    // default. A stale template-cached gen carries neither and stays on the timer.
     protected $wpc_measured = false;
-    
-    
-    
+    // Owner opted into delaying the consent manager (force-delay-consent=1):
+    // the ordering invariant then also holds every tracking-class script and the
+    // pre-gesture embed tick, so the CMP always boots first in the replay.
     protected $wpc_consent_delayed = false;
-    protected $wpc_inline_pairs494 = [];
-    protected $wpc_nodefer_all512 = false;
-    protected $wpc_jq_parse_need803 = false;
+    protected $wpc_inline_pair_ids = [];
+    protected $wpc_nodefer_all_keeps = false;
+    // Script-module pages: vendor families of the executable type="module" tags on this
+    // page and the WP core dist handles they consume (see wpc_module_consumer).
+    protected $wpc_mod_vendors = [];
+    protected $wpc_mod_core = [];
+    protected $wpc_jquery_parse_needed = false;
 
     public function __construct()
     {
         parent::__construct();
 
-        
-        
+        // Dependency closure the parent computed conditionally (consent plugin active → jQuery/Woo
+        // chain must run at parse WITH the consent manager). Preserve exactly what it decided.
         $wpc_closure = [];
         foreach (['jquery.min.js', 'jquery.js', 'jquery-migrate', 'jquery-ui', 'jquery.blockUI',
                      'js-cookie', 'js.cookie', 'woocommerce.min.js', 'wc-cart-fragments',
@@ -62,25 +58,27 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             }
         }
 
-        
-        
+        // SEMANTIC-ONLY excludes: run-at-parse because running late changes their MEANING, not
+        // because of dependency ordering (v3's ordered replay solves ordering by construction).
         $this->excludes = array_values(array_unique(array_merge([
-            
+            // WPC's own parse-time config + guards
             'dist/optimizer',
             'wps-ic-lazy-image',
             'wps-ic-local-lazy',
-            'wpcJqDef47',
+            'wpcJqueryDeferMarker',
             'n489D_var',
             'ngf298gh738qwbdh0s87v_vars',
             'wpcRunningCritical',
             'wpc-ga-bot-shield',
-            'wpc-presc-reserve', 
-            'wpc-icon-belt', 
-            'wpcVitals', 
-                         
+            'wpc-presc-reserve', // A3 uniqueness guard: apply-time count, never delayed
+            'wpc-icon-belt', // icon-guard settle belt: must observe fonts as they load, not on gesture
+            'wpcVitals', // RUM collector — an observer released on gesture misses the load it
+                         // exists to measure, and a bounce view never beacons at all
+            'wpc-rum-beacon',
+            'wpc-dev-check',
 
-            
-            
+            // /elementor/optimize.js (served from the service CDN) owns the deferred-STYLESHEET
+            // activation (rel="wpc-stylesheet" -> stylesheet), crit-CSS cleanup, and delayed
 
 
             'optimizerwpc',
@@ -103,18 +101,18 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             'wpl_cookie_consent', 'wpl_viewed_cookie', 'CookieConsent', 'cookiebot',
             'tarteaucitron', 'onetrust', 'quantcast', 'usercentrics', 'consently',
             'didomi', 'trustarc', 'truste.com', 'sourcepoint', 'axeptio', 'klaro', 'securiti.ai',
-            
-            
-            
-            
-            
-            
+            // v7.10.493 — WORDPRESS CORE JS NAMESPACE. v2 keeps wp-includes/js/dist/{hooks,i18n} and
+            // wp-polyfill eager; v3 dropped them. Anything touching wp.* at load then runs BEFORE the
+            // namespace exists: on zinsenvergleich wp-i18n-js + its -after were captured as
+            // delayed-script-37/38 while Real Cookie Banner's own bundle loaded eagerly, so RCB could
+            // not initialise and the consent banner never rendered. Pair kept whole by keeping the
+            // dependency eager, not by delaying the dependant.
 
-            
-            
-            
-            
-            
+            // Real Cookie Banner (devowl) — was absent from EVERY consent keep-list. This list is
+            // case-sensitive, so the JS-global casing sits beside the path forms (captcha/Captcha
+            // convention). Not the cause of the zinsenvergleich banner (the engine held nothing
+            // there) — it closes the exposure wherever delay IS active, since a delayed CMP
+            // cannot prior-block trackers booting in the same replay wave.
             'real-cookie-banner', 'devowl', 'realCookieBanner',
 
             'form_embed', 'msgsndr', 'leadconnectorhq', 'hsforms', 'hbspt',
@@ -123,14 +121,14 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             'ameliaShortcodeData',
 
             'dark-mode', 'SR7.',
-            
-            
-            
-            
-            
+            // v7.21.12 — Bricks names its dark-mode lane "dl-mode" (bricks-dl-mode handle,
+            // bricks-dl-mode-js-after inline): the 'dark-mode' keep above never matched it, so
+            // the theme setter delayed behind gesture — ridgeway relit light-themed on every
+            // navigation and mobile stayed light until first touch. A theme-mode setter owns
+            // first paint; it can never wait on a gesture.
             'dl-mode',
 
-            
+            // Theme nav-inits that own first-paint layout.
             'wpbf',
             'page-builder-framework',
 
@@ -139,20 +137,20 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
 
         ], $wpc_closure)));
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        // v7.21.25 — v3's constructor REPLACES v2's excludes list instead of extending it
+        // (the literal above, merged only with $wpc_closure — v2's list never enters it), so
+        // v2's unconditional wp-core-namespace protection vanished on every v3 site. v3's
+        // ordered replay only fixes ordering WITHIN the delayed partition; an EAGER dependant
+        // (kept consent bundle, inline wp.* caller) still runs at parse against a delayed
+        // wp.hooks/wp.i18n — the .493 class, and this customer's: Elementor/WPForms/PixFort
+        // half-rendered. Their site runs Hide My WP (/wp-includes/ -> /lib/), zero
+        // 'wp-includes' occurrences in the served page, so the rename-proof tail forms ride
+        // alongside the path forms — v2's proven set exactly. Plain excludes lane only (same
+        // as 'dark-mode'/'wpbf' above); the SEPARATE wpc_keep_core_namespace filter (adds
+        // HANDLE forms, frozen off by the .497 incident) is untouched.
+        // v7.21.26 — its own switch, per the .497 law (an ordering-engine behaviour change
+        // ships with a per-site kill, BEFORE it breaks something). Default ON: this restores
+        // v2 behaviour, it does not invent new behaviour.
         if (apply_filters('wpc_core_ns_keep2126', true)) {
             $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [
                 'wp-includes/js/dist/hooks', 'wp-includes/js/dist/i18n',
@@ -161,53 +159,53 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             ])));
         }
 
-        
-        
-        
-        
+        // v7.10.497 — DEFAULT OFF. Keeping the core namespace eager is correct in isolation but the
+        // keep path also DEFERS. Since .512 a page carrying any inline -after/-before companion
+        // defers NO keeps, so the mixed-order hazard is gone; still needs a staging pass before
+        // enabling, because widening the keep set changes what the service measured against.
         if (apply_filters('wpc_keep_core_namespace', false)) {
             $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [
                 'wp-includes/js/dist/i18n', 'wp-includes/js/dist/hooks', 'wp-polyfill',
                 'wp-i18n', 'wp-hooks',
-                
-                
-                
-                
+                // Security plugins that rename /wp-includes/ (Hide My WP et al) serve the same
+                // files as /lib/js/dist/hooks.min.js — the wp-includes forms above then match
+                // NOTHING and the keep fails silently. Match the path tail, which survives any
+                // prefix rewrite.
                 'js/dist/i18n', 'js/dist/hooks',
             ])));
         }
 
 
-        
-        
+        // jQuery + captcha stay in the keep-eager excludes by default; opt in per site via
+        // force-delay-jquery / force-delay-captcha (wpc_force_delay_on), never fleet-wide.
 
 
-        
-        
-        
-        
-        foreach ((array) apply_filters('wpc_builtin_interaction_only', []) as $wpc_iop356) {
-            if (self::wpc_io_pattern_ok($wpc_iop356)) {
-                $this->wpc_io_patterns[] = strtolower((string) $wpc_iop356);
-                $this->wpc_src_force_delay[] = strtolower((string) $wpc_iop356);
+        // Vendor io lanes (option-sourced via the warm.php bridges). io patterns also
+        // enter the SRC-ONLY force list (capture door); lane 'delay' patterns are
+        // src-only force too. Neither ever touches userForceDelay: userForceDelay
+        // content-matches inline scripts before every consent keep (the dm class).
+        foreach ((array) apply_filters('wpc_builtin_interaction_only', []) as $io_pattern) {
+            if (self::wpc_io_pattern_ok($io_pattern)) {
+                $this->wpc_io_patterns[] = strtolower((string) $io_pattern);
+                $this->wpc_src_force_delay[] = strtolower((string) $io_pattern);
             }
         }
-        
-        
-        
-        foreach ((array) apply_filters('wpc_builtin_lane_delay', ['sticky-elements.js']) as $wpc_ldp356) {
-            if (self::wpc_io_pattern_ok($wpc_ldp356)) {
-                $this->wpc_src_force_delay[] = strtolower((string) $wpc_ldp356);
-                $this->wpc_lane_force_delay[] = strtolower((string) $wpc_ldp356);
+        // v7.10.387 — built-in lane-delay floor: scroll-behavior scripts whose function is
+        // interaction-gated by definition (sticky repositioning needs a scroll; the scroll
+        // releases the delay). Removes the tag at capture = out of the pre-LCP request graph.
+        foreach ((array) apply_filters('wpc_builtin_lane_delay', ['sticky-elements.js']) as $lane_pattern) {
+            if (self::wpc_io_pattern_ok($lane_pattern)) {
+                $this->wpc_src_force_delay[] = strtolower((string) $lane_pattern);
+                $this->wpc_lane_force_delay[] = strtolower((string) $lane_pattern);
             }
         }
         $this->wpc_io_patterns = array_slice(array_values(array_unique($this->wpc_io_patterns)), 0, 24);
         $this->wpc_src_force_delay = array_slice(array_values(array_unique($this->wpc_src_force_delay)), 0, 32);
 
-        
-        
-        
-        
+        // Consent stays eager BY DEFAULT (a delayed CMP can't prior-block trackers
+        // booting in the same replay wave — regulatory exposure on the customer's
+        // site, not a visual bug). This is an EXPLICIT per-site owner opt-in only:
+        // settings force-delay-consent=1 / WPC_FORCE_DELAY_CONSENT — never auto.
         if (apply_filters('wpc_force_delay_consent', self::wpc_force_delay_on('consent'))) {
             $this->wpc_consent_delayed = true;
             $this->excludes = array_values(array_diff((array) $this->excludes, [
@@ -217,11 +215,11 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 'tarteaucitron', 'onetrust', 'quantcast', 'usercentrics', 'consently',
                 'didomi', 'trustarc', 'truste.com', 'sourcepoint', 'axeptio', 'klaro', 'securiti.ai',
                 'real-cookie-banner', 'devowl', 'realCookieBanner',
-                
-                
-                
-                
-                
+                // ORDERING INVARIANT: consent-delayed => NO tracking-class script may
+                // run eager — the replay is document-ordered, so the head CMP boots
+                // first and its prior-blocking holds, same as the original page. An
+                // eager tracker would run BEFORE the delayed CMP: an order inversion
+                // the original page never had.
                 'sourcebuster', 'gtag', 'googletag',
             ]));
         }
@@ -240,50 +238,50 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         $this->wpc_release_io_form_keeps();
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    // The form/booking families we hard-keep by default (form_embed, GHL/
+    // LeadConnector, HubSpot, Calendly) — delaying their JS leaves the embed
+    // unsized/blank. delay-v3's interaction-only + human-signal warming
+    // loads them the instant a real person reaches for the form and leaves them
+    // deferred for a cold measurement pass, so when the SERVICE measures one as
+    // delay-interaction-only its built-in keep yields and it can go io. Consent
+    // families are deliberately NOT in this set (the dm law: never auto-delay
+    // consent), and a user's explicit UI keep is enforced separately via
+    // userExcludes — so this releases only OUR conservative default, never
+    // consent and never user intent. Idempotent; driven by wpc_io_patterns
+    // (which is service-sourced: option lanes + the delay.json manifest).
     protected function wpc_release_io_form_keeps()
     {
         if (empty($this->wpc_io_patterns)) {
             return;
         }
-        $wpc_ovr358 = ['form_embed', 'msgsndr', 'leadconnectorhq', 'hsforms', 'hbspt', 'calendly'];
-        $wpc_drop358 = [];
-        foreach ($wpc_ovr358 as $wpc_k358) {
-            if (!in_array($wpc_k358, (array) $this->excludes, true)) {
+        $form_keep_tokens = ['form_embed', 'msgsndr', 'leadconnectorhq', 'hsforms', 'hbspt', 'calendly'];
+        $dropped_keeps = [];
+        foreach ($form_keep_tokens as $keep_token) {
+            if (!in_array($keep_token, (array) $this->excludes, true)) {
                 continue;
             }
-            foreach ($this->wpc_io_patterns as $wpc_p358) {
-                if ($wpc_p358 !== '' && (strpos($wpc_p358, $wpc_k358) !== false || strpos($wpc_k358, $wpc_p358) !== false)) {
-                    $wpc_drop358[] = $wpc_k358;
+            foreach ($this->wpc_io_patterns as $io_pattern) {
+                if ($io_pattern !== '' && (strpos($io_pattern, $keep_token) !== false || strpos($keep_token, $io_pattern) !== false)) {
+                    $dropped_keeps[] = $keep_token;
                     break;
                 }
             }
         }
-        if (!empty($wpc_drop358)) {
-            $this->excludes = array_values(array_diff((array) $this->excludes, $wpc_drop358));
+        if (!empty($dropped_keeps)) {
+            $this->excludes = array_values(array_diff((array) $this->excludes, $dropped_keeps));
         }
     }
 
 
-    
-
-
-
+    /** Is $host one of OUR hosts — the site origin, a wpc CDN edge (b-cdn/zapwp), or the
+     *  customer's configured CDN zone (custom CNAME / zone name / verified CF CNAME)?
+     *  Scripts on our zone are rewritten LOCALS and must never be io-demoted or
+     *  force-delayed as external vendors. */
     protected function wpc_is_own_host($host)
     {
         $host = strtolower((string) $host);
         if ($host === '') {
-            return true; 
+            return true; // relative/protocol-relative to our own origin
         }
         $st = function ($h) { return strpos($h, 'www.') === 0 ? substr($h, 4) : $h; };
         $host = $st($host);
@@ -296,19 +294,19 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             if (function_exists('home_url')) {
                 $own[] = $st(strtolower((string) parse_url(home_url(), PHP_URL_HOST)));
             }
-            $wpc_hostof356 = function ($z) use ($st) {
+            $host_of = function ($z) use ($st) {
                 $z = strtolower(trim((string) $z));
                 if ($z === '') { return ''; }
-                $z = (string) strtok($z, '/'); 
+                $z = (string) strtok($z, '/'); // drop any path/key suffix (zoneName can carry /key:)
                 if (strpos($z, ':') !== false) { $z = (string) strtok($z, ':'); }
                 return $st($z);
             };
-            foreach (['ic_custom_cname', 'ic_cdn_zone_name'] as $wpc_zk356) {
-                $z = function_exists('get_option') ? $wpc_hostof356(get_option($wpc_zk356)) : '';
+            foreach (['ic_custom_cname', 'ic_cdn_zone_name'] as $option_name) {
+                $z = function_exists('get_option') ? $host_of(get_option($option_name)) : '';
                 if ($z !== '') { $own[] = $z; }
             }
             if (class_exists('wps_rewriteLogic') && property_exists('wps_rewriteLogic', 'zoneName')) {
-                $z = $wpc_hostof356(@wps_rewriteLogic::$zoneName);
+                $z = $host_of(@wps_rewriteLogic::$zoneName);
                 if ($z !== '') { $own[] = $z; }
             }
             $own = array_values(array_unique(array_filter($own)));
@@ -316,10 +314,10 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return in_array($host, $own, true);
     }
 
-    
-
-
-
+    /** A1 pattern sanity gate: match[] entries are applied via userForceDelay, which
+     *  BEATS every keep — a generic or consent-family pattern here is the receipted
+     *  bug factory (dm banner). Reject short/bare tokens and anything touching the
+     *  consent or jQuery families. */
     public static function wpc_io_pattern_ok($p, $formsSafe = false)
     {
         if (!is_string($p)) {
@@ -337,30 +335,30 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                      'usercentrics', 'onetrust', 'iubenda', 'osano', 'termly', 'tarteaucitron', 'quantcast',
                      'moove_gdpr', 'wpl_viewed', 'consently', 'wp-i18n', 'wp-polyfill', 'wp-hooks',
                      'wp-includes/', 'sourcebuster',
-                     
+                     // CMP families beyond the classic list — same sacred class
                      'didomi', 'trustarc', 'truste.com', 'sourcepoint', 'axeptio', 'klaro', 'securiti.ai',
-                     
+                     // form-embed / booking revealers: builtin keeps whose delay collapses forms
                      'form_embed', 'msgsndr', 'leadconnector', 'hsforms', 'hbspt', 'calendly',
                      'typeform', 'jotform',
-                     
+                     // WPC's own machinery + theme nav-init keeps
                      'optimize.js', 'optimizerwpc', 'wpbf', 'page-builder-framework', 'wpc-presc',
                      'revslider', 'sr7'] as $tok) {
             if (strpos($pl, $tok) !== false) {
-                
-                
-                
-                
-                
+                // v7.10.386 — CHAT lanes are not the form family: LeadConnector's forms ride
+                // msgsndr/form_embed (ban stays), its chat rides *.leadconnectorhq.com. The
+                // vendor-wide token also banned the chat, so the manifest's measured
+                // delay-interaction-only could never engage (chat booted ~5.6s = the LCP
+                // re-record). Allow ONLY chat-scoped subdomain patterns; bare stays banned.
                 if ($tok === 'leadconnector'
                     && preg_match('/^(widgets|beta|stcdn|services|images)\.leadconnectorhq\b/', $pl)
                     && apply_filters('wpc_chat_io_allowed', true)) {
                     continue;
                 }
-                
-                
-                
-                
-                
+                // v7.10.388 — the form-vendor bans obey MEASUREMENT, same recipe as the
+                // captcha-keep release: when the service observed has_form:false there is no
+                // visible form to protect, so a measured delay-io pattern for a form vendor
+                // may engage (HubSpot chat / Calendly badge = the .386 class, other vendors).
+                // Consent/jQuery/WPC-machinery stay sacred regardless.
                 if ($formsSafe
                     && in_array($tok, ['form_embed', 'msgsndr', 'leadconnector', 'hsforms', 'hbspt',
                         'calendly', 'typeform', 'jotform'], true)
@@ -373,8 +371,8 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return true;
     }
 
-    
-
+    /** v7.10.386 — expand a bare vendor io pattern into its chat-scoped hosts (the only
+     *  form the validator accepts for this family). Non-matching patterns pass through. */
     public static function wpc_io_pattern_expand($p)
     {
         $pl = strtolower(trim((string) $p));
@@ -385,7 +383,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return [$p];
     }
 
-    
+    /** Does this (local) script file reference jQuery? mtime-keyed verdict cache. */
     public static function wpc_src_needs_jquery($url)
     {
         if ($url === '' || ($cp = strrpos($url, 'wp-content/')) === false) {
@@ -414,36 +412,36 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return $need;
     }
 
-    
-
-
-
-
-
-    public static function wpc_is_jquery_id803($wpc_id803)
+    /**
+     * Is this script id one of the jQuery tags a parse-time inline companion depends on?
+     * WP emits the library as jquery-core-js (and the alias handle as jquery-js), with
+     * jquery-migrate-js riding the same lane; matching the id keeps this off every other
+     * handle that merely has "jquery" in its name (jquery-ui-*, jquery.validate, ...).
+     */
+    public static function wpc_is_jquery_script_id($script_id)
     {
-        $wpc_id803 = strtolower(trim((string) $wpc_id803));
-        if ($wpc_id803 === '') {
+        $script_id = strtolower(trim((string) $script_id));
+        if ($script_id === '') {
             return false;
         }
-        return $wpc_id803 === 'jquery-js'
-            || strpos($wpc_id803, 'jquery-core') === 0
-            || strpos($wpc_id803, 'jquery-migrate') === 0;
+        return $script_id === 'jquery-js'
+            || strpos($script_id, 'jquery-core') === 0
+            || strpos($script_id, 'jquery-migrate') === 0;
     }
 
-    public static function wpc_consent_satellites59()
+    public static function wpc_consent_satellites()
     {
         return (array) apply_filters('wpc_consent_satellites', ['burst.min.js', 'burst-goals', 'timeme', 'burst-js', 'burst-timeme']);
     }
 
-    public function wpc_consent_css_lazy59($html)
+    public function wpc_lazy_load_consent_css($html)
     {
         if (!$this->wpc_consent_delayed || !is_string($html) || $html === '' || !apply_filters('wpc_consent_css_lazy', true)) {
             return $html;
         }
-        
-        
-        
+        // The banner is off the wire until a gesture, so its sheets need not block first paint:
+        // load them non-blocking (media=print → all on load). Complianz ids: cmplz-general-css,
+        // cmplz-banner-*-css; other CMPs via the filter.
         $ids = (array) apply_filters('wpc_consent_css_ids', ['cmplz-']);
         $n = 0;
         $out = preg_replace_callback('/<link\b[^>]*\brel=(["\'])stylesheet\1[^>]*>/i', function ($m) use ($ids, &$n) {
@@ -482,17 +480,17 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if (is_array($s) && !empty($s['force-delay-' . $which]) && $s['force-delay-' . $which] == '1') {
             return true;
         }
-        
-        
-        
-        
+        // v7.22.60 — consent AUTO: the checkbox forces it on; unchecked means "decide by CMP".
+        // On only when the active consent plugin blocks server-side (rewrites trackers to
+        // text/plain in the HTML), so delaying its banner cannot change what runs before consent.
+        // Explicit off: filter wpc_consent_auto false / WPC_CONSENT_AUTO_OFF.
         if ($which === 'consent') {
-            return self::wpc_consent_auto60();
+            return self::wpc_consent_auto_enabled();
         }
         return false;
     }
 
-    public static function wpc_consent_auto60()
+    public static function wpc_consent_auto_enabled()
     {
         if (defined('WPC_CONSENT_AUTO_OFF') && WPC_CONSENT_AUTO_OFF) {
             return false;
@@ -504,8 +502,8 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if (function_exists('get_site_option')) {
             $active = array_merge($active, array_keys((array) get_site_option('active_sitewide_plugins', [])));
         }
-        
-        
+        // Server-side blockers only. Complianz verified on a live page (09-06: zero text/plain-typed
+        // scripts survive to the browser un-typed). Add others via the filter once verified.
         $servers = (array) apply_filters('wpc_consent_auto_plugins', ['complianz-gdpr/', 'complianz-gdpr-premium/']);
         foreach ($active as $p) {
             $p = strtolower((string) $p);
@@ -518,14 +516,14 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return false;
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
+    // THE measured-shape predicate — single source of truth for "this delay.json
+    // is a current-schema measured gen the aggressive flip can trust." Freshness
+    // signal = schema_epoch >= N (authoritative, additive; the service is moving
+    // the flip gate here per the Artifact Identity Contract 2026-07-22) OR the
+    // legacy ceiling{} PRESENCE proxy (NOT its score/reachable_100 — those are
+    // unreliable-pessimistic and are never consumed). render_critical is the
+    // safety keep list, required either way (a stale copy can carry render_critical
+    // WITHOUT ceiling — busyprosai — so render_critical alone is not sufficient).
     public static function wpc_delay_measured_shape($j)
     {
         if (!is_array($j)) {
@@ -544,17 +542,17 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return false;
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    public static function wpc_delay_manifest_file112()
+    // A measured delay.json whose mtime is NEWER than $since. FILE READS ONLY —
+    // never a render-path option write. Lets a fresh measured gen override a
+    // stale promotion kill-switch (manifest_off, set by a PROMOTED-script
+    // ReferenceError): that switch is orthogonal to the aggressive measured flip
+    // (which has its own boot-watchdog/demote safety), yet it gates the whole
+    // manifest read and is cleared only on the write-once delay.json write — so a
+    // stale switch froze the flip forever (busyprosai).
+    // v7.22.12 — ONE resolver for the page's delay.json: the exact key first, then the
+    // query-stripped key (a param variant IS the same page; keeps/delays are names-based,
+    // so a script absent from the variant is a no-op). Every manifest read routes here.
+    public static function wpc_delay_manifest_file()
     {
         try {
             if (!class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) {
@@ -586,7 +584,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             if (!class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) {
                 return false;
             }
-            $f = self::wpc_delay_manifest_file112();
+            $f = self::wpc_delay_manifest_file();
             if ($f === '' || !@is_readable($f) || (int) @filemtime($f) <= (int) $since) {
                 return false;
             }
@@ -597,11 +595,11 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return false;
     }
 
-    
-    
-    
-    
-    
+    // OUT-OF-THE-BOX MASTER: explicit '1' = on, explicit '0' = off (owner
+    // intent always wins) — but a NEVER-CONFIGURED master arms automatically
+    // on a MEASURED page (aggr_live), v3 engine only (never auto-arm legacy
+    // v2). Best scores day one: install → traffic → gen lands → the whole
+    // delay family + facade + flip arm in one render, no settings touched.
     public static function wpc_delay_master_on($s)
     {
         if (is_array($s) && isset($s['delay-js-v2'])) {
@@ -613,59 +611,59 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return self::wpc_aggr_live();
     }
 
-    
-    
-    
-    
-    
+    // Static mirror of the aggressive-default gate (measured current-schema gen
+    // + not demoted + telemetry alive + master filter) for OTHER passes that
+    // must co-arm with the flip — the iframe facade gate in cdn-rewrite reads
+    // this so funnel/player embeds go gesture-restored exactly when scripts do.
+    // Keep the predicate in lockstep with the process_html flip.
     public static function wpc_aggr_live()
     {
-        static $wpc_al364 = null;
-        if ($wpc_al364 !== null) {
-            return $wpc_al364;
+        static $aggr_live = null;
+        if ($aggr_live !== null) {
+            return $aggr_live;
         }
-        $wpc_al364 = false;
+        $aggr_live = false;
         try {
-            
-            
-            
-            
-            $wpc_moff364 = (int) get_option('wpc_delay_v3_manifest_off', 0);
-            if (($wpc_moff364 > 0 && !self::wpc_measured_delay_newer_than($wpc_moff364))
+            // manifest_off blocks only if it is NEWER than the on-disk measured
+            // gen (parity with the process_html flip) — a fresh gen supersedes a
+            // stale promotion kill-switch; the facade must arm exactly when the
+            // flip does.
+            $manifest_off_at = (int) get_option('wpc_delay_v3_manifest_off', 0);
+            if (($manifest_off_at > 0 && !self::wpc_measured_delay_newer_than($manifest_off_at))
                 || get_option('wpc_delay_aggr_off')
                 || !apply_filters('wpc_delay_v3_telemetry', true)
                 || !apply_filters('wpc_delay_v3_io_when_measured', true)
                 || !apply_filters('wpc_delay_v3_manifest', true)
                 || !class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) {
-                return $wpc_al364;
+                return $aggr_live;
             }
-            $wpc_mf364 = self::wpc_delay_manifest_file112();
-            if ($wpc_mf364 === '' || !@is_readable($wpc_mf364)) {
-                return $wpc_al364;
+            $manifest_file = self::wpc_delay_manifest_file();
+            if ($manifest_file === '' || !@is_readable($manifest_file)) {
+                return $aggr_live;
             }
-            $wpc_m364 = json_decode((string) @file_get_contents($wpc_mf364), true);
-            $wpc_al364 = self::wpc_delay_measured_shape($wpc_m364);
+            $manifest = json_decode((string) @file_get_contents($manifest_file), true);
+            $aggr_live = self::wpc_delay_measured_shape($manifest);
         } catch (\Throwable $e) {
-            $wpc_al364 = false;
+            $aggr_live = false;
         }
-        return $wpc_al364;
+        return $aggr_live;
     }
 
 
-    
-    
-    
-    
-    protected $wpc_form_tokens31 = null;
-    protected function wpc_form_family_tokens31()
+    // v7.21.31 — form-family tokens: substrings that identify a JetFormBuilder-ecosystem
+    // script by its id/src no matter how a security plugin rewrites the URL. 'jet-fb' catches
+    // the blocks-v2 field modules (jet-fb-blocks-v2-phone-field), 'jet-plugins' the shared
+    // Crocoblock loader that defines JetPlugins, 'intl-tel-input' the phone field's vendor.
+    protected $wpc_form_family_token_cache = null;
+    protected function wpc_form_family_tokens()
     {
-        if ($this->wpc_form_tokens31 === null) {
-            
-            
-            
-            
-            
-            
+        if ($this->wpc_form_family_token_cache === null) {
+            // v7.21.347 — Smash Balloon YouTube joins the family (columbus /videos-gallery/:
+            // sb-youtube's whole boot is one-shot phase machinery — YT iframe-api callback,
+            // per-feed playerAPIReady, sby_init — measured unhealable piecemeal under
+            // replay; player row never builds, clicks swap nothing; fine with disableWPC).
+            // Keep restores native document order = parity by construction (.57 law,
+            // same site: keep + dep closure; sync-jQuery arms below).
             $wpc_t = apply_filters('wpc_form_family_handles',
                 ['jet-form-builder', 'jetformbuilder', 'jet-fb', 'jet-plugins', 'intl-tel-input',
                  'jet-appointments', 'jet-ab-', 'jet-apb', 'sb-youtube', 'sby-scripts']);
@@ -674,15 +672,15 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 $wpc_ti = strtolower((string) $wpc_ti);
                 if ($wpc_ti !== '') { $wpc_o[] = $wpc_ti; }
             }
-            $this->wpc_form_tokens31 = $wpc_o;
+            $this->wpc_form_family_token_cache = $wpc_o;
         }
-        return $this->wpc_form_tokens31;
+        return $this->wpc_form_family_token_cache;
     }
 
-    
-    
-    
-    public static function wpc_loader_probe_verdict159($code)
+    // v7.21.159 — probe verdict law: only a definitive 4xx (rule-class refusal: 403 WAF,
+    // 404 cleaner, 410) stands the uploads loader down; 2xx certifies it. 3xx/5xx/0 are
+    // inconclusive (edge hiccup, maintenance) and must NEVER become a sticky verdict.
+    public static function wpc_loader_probe_verdict($code)
     {
         $code = (int) $code;
         if ($code >= 200 && $code < 300) {
@@ -694,22 +692,22 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return null;
     }
 
-    
-    
-    
-    
-    
-    protected $wpc_form_keepset31 = null;
-    protected function wpc_form_keepset31()
+    // Memoized handle-keyed keep-set: every wp_scripts handle whose NAME carries a family
+    // token, PLUS its full recursive dependency closure. Built from wp_scripts->registered,
+    // which is keyed on handles the URL rewrite never touches — so a form module's vendor
+    // provider (intl-tel-input, declared as a dep of the phone field) is kept atomically with
+    // it rather than being left in the delay lane to invert. Cap-bounded; fail-open to empty.
+    protected $wpc_form_keep_handles = null;
+    protected function wpc_form_keep_handles()
     {
-        if ($this->wpc_form_keepset31 !== null) {
-            return $this->wpc_form_keepset31;
+        if ($this->wpc_form_keep_handles !== null) {
+            return $this->wpc_form_keep_handles;
         }
         $set = [];
         $ws = (!empty($GLOBALS['wp_scripts']) && !empty($GLOBALS['wp_scripts']->registered))
             ? $GLOBALS['wp_scripts'] : null;
         if ($ws) {
-            $toks = $this->wpc_form_family_tokens31();
+            $toks = $this->wpc_form_family_tokens();
             foreach (array_keys($ws->registered) as $wpc_h) {
                 $wpc_hl = strtolower((string) $wpc_h);
                 $wpc_fam = false;
@@ -731,11 +729,11 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 }
             }
         }
-        $this->wpc_form_keepset31 = $set;
+        $this->wpc_form_keep_handles = $set;
         return $set;
     }
 
-    
+    // The user's Delay JS exclude list: the one list, `delay_js_v3` (wpc_delay_excludes_fold).
     protected function wpc_user_delay_excluded($x)
     {
         return is_object($this->userExcludes)
@@ -743,42 +741,42 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             && $this->userExcludes->excludedFromDelayV3((string) $x);
     }
 
-    
-    
-    
-    
-    
-    
-    
-    protected $wpc_user_excl_keepset55 = null;
-    protected function wpc_user_excl_keepset55()
+    // v7.21.55 — USER EXCLUDES CARRY THEIR DEP CLOSURE UNDER V3 (the .31 law generalized).
+    // A v2-era exclude kept a script eager while most of its dependencies were ALSO eager;
+    // v3's aggressive measured mode delays far more, so the same exclude now runs its script
+    // at parse BEFORE formerly-eager, now-delayed providers ("X is not defined" — the exact
+    // class James reported). Every wp_scripts handle whose src/handle matches a user v3
+    // exclude pulls its full recursive dependency closure into the eager set, so document
+    // order holds around the keep. Cap-bounded, memoized, fail-open; kill wpc_user_excl_closure.
+    protected $wpc_user_exclude_keep_handles = null;
+    protected function wpc_user_exclude_keep_handles()
     {
-        if ($this->wpc_user_excl_keepset55 !== null) {
-            return $this->wpc_user_excl_keepset55;
+        if ($this->wpc_user_exclude_keep_handles !== null) {
+            return $this->wpc_user_exclude_keep_handles;
         }
         $set = [];
         $ws = (!empty($GLOBALS['wp_scripts']) && !empty($GLOBALS['wp_scripts']->registered))
             ? $GLOBALS['wp_scripts'] : null;
         $pats = [];
         if (is_object($this->userExcludes) && method_exists($this->userExcludes, 'delayJSExcludesV3')) {
-            foreach ((array) $this->userExcludes->delayJSExcludesV3() as $wpc_p55) {
-                $wpc_p55 = strtolower(trim((string) $wpc_p55));
-                if ($wpc_p55 !== '' && strlen($wpc_p55) > 2) { $pats[] = $wpc_p55; }
+            foreach ((array) $this->userExcludes->delayJSExcludesV3() as $pattern) {
+                $pattern = strtolower(trim((string) $pattern));
+                if ($pattern !== '' && strlen($pattern) > 2) { $pats[] = $pattern; }
             }
         }
         if ($ws && !empty($pats) && apply_filters('wpc_user_excl_closure', true)) {
-            foreach ($ws->registered as $wpc_h55 => $wpc_r55) {
-                $wpc_hl55 = strtolower((string) $wpc_h55);
-                $wpc_s55 = !empty($wpc_r55->src) ? strtolower((string) $wpc_r55->src) : '';
-                $wpc_hit55 = false;
-                foreach ($pats as $wpc_pp55) {
-                    if (strpos($wpc_hl55, $wpc_pp55) !== false || ($wpc_s55 !== '' && strpos($wpc_s55, $wpc_pp55) !== false)) {
-                        $wpc_hit55 = true;
+            foreach ($ws->registered as $handle => $registration) {
+                $handle_lower = strtolower((string) $handle);
+                $src = !empty($registration->src) ? strtolower((string) $registration->src) : '';
+                $matched = false;
+                foreach ($pats as $exclude_pattern) {
+                    if (strpos($handle_lower, $exclude_pattern) !== false || ($src !== '' && strpos($src, $exclude_pattern) !== false)) {
+                        $matched = true;
                         break;
                     }
                 }
-                if (!$wpc_hit55) { continue; }
-                $stack = [$wpc_h55]; $seen = [$wpc_h55 => true]; $n = 0;
+                if (!$matched) { continue; }
+                $stack = [$handle]; $seen = [$handle => true]; $n = 0;
                 while (!empty($stack) && $n++ < 200) {
                     $cur = array_pop($stack);
                     if (empty($ws->registered[$cur])) { continue; }
@@ -791,46 +789,46 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 }
             }
         }
-        $this->wpc_user_excl_keepset55 = $set;
+        $this->wpc_user_exclude_keep_handles = $set;
         return $set;
     }
 
-    
-    
-    
-    
-    
-    
-    
-    protected $wpc_handle_map95 = null;
-    protected function wpc_handle_from_src95($src)
+    // v7.21.95 — src PATH -> wp_scripts handle, for tags a plugin printed without an id.
+    // Built once over the whole registry. Only .js sources are mapped, paths normalize to a
+    // leading slash (Amelia's v3RelativePath prints "wp-content/..." while wp_scripts holds
+    // "/wp-content/..."), and the query is dropped so a ?ver= mismatch cannot defeat it. The
+    // path is what survives our own CDN host rewrite. Last registration wins: two handles for
+    // one file share a lane by construction. Fail-open to '' — an unresolved src keeps the
+    // old skip, so this can only ever ADD keeps, never take one away.
+    protected $wpc_src_path_handles = null;
+    protected function wpc_handle_from_src($src)
     {
-        if ($this->wpc_handle_map95 === null) {
-            $this->wpc_handle_map95 = [];
+        if ($this->wpc_src_path_handles === null) {
+            $this->wpc_src_path_handles = [];
             $ws = (!empty($GLOBALS['wp_scripts']) && !empty($GLOBALS['wp_scripts']->registered))
                 ? $GLOBALS['wp_scripts'] : null;
             if ($ws && apply_filters('wpc_srcless_id_resolve', true)) {
-                foreach ($ws->registered as $wpc_h95 => $wpc_r95) {
-                    if (empty($wpc_r95->src) || !is_string($wpc_r95->src)) {
+                foreach ($ws->registered as $handle => $registration) {
+                    if (empty($registration->src) || !is_string($registration->src)) {
                         continue;
                     }
-                    $wpc_p95 = strtolower((string) parse_url($wpc_r95->src, PHP_URL_PATH));
-                    if ($wpc_p95 === '' || substr($wpc_p95, -3) !== '.js') {
+                    $path = strtolower((string) parse_url($registration->src, PHP_URL_PATH));
+                    if ($path === '' || substr($path, -3) !== '.js') {
                         continue;
                     }
-                    $this->wpc_handle_map95['/' . ltrim($wpc_p95, '/')] = strtolower((string) $wpc_h95);
+                    $this->wpc_src_path_handles['/' . ltrim($path, '/')] = strtolower((string) $handle);
                 }
             }
         }
-        if (empty($this->wpc_handle_map95)) {
+        if (empty($this->wpc_src_path_handles)) {
             return '';
         }
-        $wpc_sp95 = strtolower((string) parse_url(html_entity_decode((string) $src), PHP_URL_PATH));
-        if ($wpc_sp95 === '') {
+        $src_path = strtolower((string) parse_url(html_entity_decode((string) $src), PHP_URL_PATH));
+        if ($src_path === '') {
             return '';
         }
-        $wpc_sp95 = '/' . ltrim($wpc_sp95, '/');
-        return isset($this->wpc_handle_map95[$wpc_sp95]) ? $this->wpc_handle_map95[$wpc_sp95] : '';
+        $src_path = '/' . ltrim($src_path, '/');
+        return isset($this->wpc_src_path_handles[$src_path]) ? $this->wpc_src_path_handles[$src_path] : '';
     }
 
     protected function should_exclude_script($attributes, $content = '')
@@ -841,56 +839,59 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if ($wpc_type !== '' && strpos($wpc_type, 'javascript') === false) {
             return true;
         }
+        if ($this->wpc_module_consumer($attributes)) {
+            return true;
+        }
 
-        
-        
-        $wpc_kid55 = isset($attributes['id']) ? strtolower(preg_replace('/-js$/', '', (string) $attributes['id'])) : '';
-        if ($wpc_kid55 !== '') {
-            $wpc_ks55 = $this->wpc_user_excl_keepset55();
-            if (isset($wpc_ks55[$wpc_kid55])) {
+        // v7.21.55 — dependency providers of user-excluded scripts ride the same eager group
+        // (matched by handle-id, survives path rewriting like the .31 form keep).
+        $handle_id = isset($attributes['id']) ? strtolower(preg_replace('/-js$/', '', (string) $attributes['id'])) : '';
+        if ($handle_id !== '') {
+            $user_keep_handles = $this->wpc_user_exclude_keep_handles();
+            if (isset($user_keep_handles[$handle_id])) {
                 return true;
             }
         }
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        // v7.21.31 — FORM-FAMILY ATOMIC KEEP, matched by HANDLE (survives path rewriting).
+        // JetFormBuilder, its jet-plugins loader, and its field modules cross-depend through
+        // RUNTIME GLOBALS (JetPlugins, window.JetFormBuilderAbstract, window.intlTelInput) — not
+        // ES imports — so their execution order MUST equal document order. Under a security
+        // plugin that rewrites plugin URLs (Hide My WP: /wp-content/plugins/... ->
+        // /core/modules/<hash>/...), the src no longer carries the family name, so the src-only
+        // keep is defeated, the set is split into the delay registry, and a module runs before
+        // its provider — the whole form dies (acrystalglass.com /contact/, logged-out:
+        // "JetPlugins is not defined" at the captcha module, "Cannot destructure 'InputData' of
+        // window.JetFormBuilderAbstract" at jet-fb-blocks-v2-phone-field). Two matches, both
+        // keyed on identifiers the rewrite CANNOT touch: (1) the script id/handle carries the
+        // family token (jet-plugins-js, jet-form-builder-frontend-forms-js, jet-fb-blocks-v2-*);
+        // (2) the wp_scripts dependency CLOSURE of any family handle — so a module's vendor
+        // provider (intl-tel-input for the phone field) rides the same eager group instead of
+        // inverting against it. Keeping the whole closure eager makes document order hold. This
+        // is scoped to the family closure ONLY — NOT the general id-into-keep-haystack match the
+        // .497 incident froze. Killable per-site via wpc_form_family_id_keep.
         if (apply_filters('wpc_form_family_id_keep', true)) {
-            $wpc_fid31  = isset($attributes['id']) ? strtolower((string) $attributes['id']) : '';
-            $wpc_fsrc31 = isset($attributes['src']) ? strtolower(html_entity_decode((string) $attributes['src'])) : '';
-            if ($wpc_fid31 !== '' || $wpc_fsrc31 !== '') {
-                foreach ($this->wpc_form_family_tokens31() as $wpc_ff31) {
-                    if ($wpc_ff31 !== ''
-                        && (strpos($wpc_fid31, $wpc_ff31) !== false || strpos($wpc_fsrc31, $wpc_ff31) !== false)) {
+            $form_id  = isset($attributes['id']) ? strtolower((string) $attributes['id']) : '';
+            $form_src = isset($attributes['src']) ? strtolower(html_entity_decode((string) $attributes['src'])) : '';
+            if ($form_id !== '' || $form_src !== '') {
+                foreach ($this->wpc_form_family_tokens() as $family_token) {
+                    if ($family_token !== ''
+                        && (strpos($form_id, $family_token) !== false || strpos($form_src, $family_token) !== false)) {
                         return true;
                     }
                 }
             }
-            if ($wpc_fid31 !== '' && substr($wpc_fid31, -3) === '-js') {
-                $wpc_ks31 = $this->wpc_form_keepset31();
-                if (isset($wpc_ks31[substr($wpc_fid31, 0, -3)])) {
+            if ($form_id !== '' && substr($form_id, -3) === '-js') {
+                $form_keep_handles = $this->wpc_form_keep_handles();
+                if (isset($form_keep_handles[substr($form_id, 0, -3)])) {
                     return true;
                 }
             }
         }
 
-        
-        
-        
+        // A sync-kept theme script that references jQuery needs jQuery itself sync —
+        // an exempted nav-init throwing 'jQuery is not defined' at parse is dead forever.
+        // Wins over force-delay: correctness before preference.
         if ($this->wpc_sync_jquery && !empty($attributes['src'])
             && preg_match('#/jquery(?:\.min)?\.js(?:\?|$)|jquery-migrate#i', (string) $attributes['src'])) {
             return true;
@@ -899,21 +900,21 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             return true;
         }
 
-        
-        
-        
-        
-        
-        
+        // A jQuery QUEUE-STUB (third-party defer snippet: fake window.jQuery that queues calls
+        // until the real one lands) is a structural keep, never a delay candidate: replayed
+        // inside the delayed partition it re-fakes window.jQuery around the real jQuery and
+        // every later consumer breaks (fn={}, no expr). Its 'jQuery' content matched the
+        // force-delay keyword, which is why the excludes-list pin alone was not enough — this
+        // outranks force-delay, same law as the sync-jquery keep above.
         if ($content !== ''
             && (strpos($content, 'jqueryParams') !== false || strpos($content, 'customHeadScripts') !== false)
             && apply_filters('wpc_keep_jquery_stub', true)) {
             return true;
         }
 
-        
-        
-        
+        // v7.21.347 — the sby inline config (sbyOptions/sbyajaxurl) must ride eager with its
+        // kept provider: sb-youtube.min.js reads it at parse (id/src-less inline, so the
+        // family token above can never match it).
         if ($content !== ''
             && (strpos($content, 'sbyOptions') !== false || strpos($content, 'sbyajaxurl') !== false)
             && apply_filters('wpc_keep_sby_family', true)) {
@@ -944,55 +945,55 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             }
         }
 
-        
-        
-        
+        // Family lane-coupling keep: a dependency-chain member (registrar riding its scanner's
+        // lane, runtime riding its consumer's) is a LOAD-ORDER invariant, so it outranks even
+        // the lane force-delay below — a lane pattern must never split a webpack family.
         if (!empty($attributes['src']) && !empty($attributes['id'])
-            && isset($this->wpc_family_keep747[(string) $attributes['id']])) {
+            && isset($this->wpc_family_keep_ids[(string) $attributes['id']])) {
             return true;
         }
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        $wpc_gdk786 = apply_filters('wpc_global_define_keep', ['BreakdanceFrontend']);
-        if (!empty($wpc_gdk786) && is_array($wpc_gdk786)) {
-            foreach ($wpc_gdk786 as $wpc_gd786) {
-                if ($wpc_gd786 === '') { continue; }
-                if ((!empty($content) && strpos($content, (string) $wpc_gd786) !== false)
-                    || (!empty($attributes['src']) && stripos((string) $attributes['src'], (string) $wpc_gd786) !== false)) {
+        // v7.10.762 — LAYOUT-VAR WRITERS ARE NEVER DELAYED. A script that writes a CSS custom
+        // property consumed by stylesheet layout rules is a LAYOUT INPUT: Breakdance's header
+        // measurer sets --site-header-height, and .hero-section's margin-top is
+        // calc(var(--site-header-height) - 1px) — with the writer delayed, the var is unset at
+        // first paint, the calc is invalid, margin falls to 0, and the whole page shifts down
+        // 119px at gesture release (heritagepavingltd served-bytes receipt: no style attr on
+        // body server-side; the var only ever comes from JS). Same law as the .747 scanner
+        // coupling: outranks lane force-delay, honors nothing below it.
+        // v7.10.786 — A GLOBAL SOMEONE ELSE DESTRUCTURES IS A LOAD-ORDER INVARIANT. Heritage,
+        // post-purge: "Cannot destructure property 'BASE_BREAKPOINT_ID' of
+        // 'window.BreakdanceFrontend.data' as it is undefined" — breakdance-swiper runs at
+        // DOM-ready and reads a global whose definition sat in a delayed carrier. Keeping the
+        // DEFINER eager costs a few bytes; delaying it breaks every consumer that does not
+        // guard, and a destructure throws rather than degrading. Keyed on the global's NAME so
+        // it holds whichever carrier defines it (inline block or external file).
+        $global_define_keeps = apply_filters('wpc_global_define_keep', ['BreakdanceFrontend']);
+        if (!empty($global_define_keeps) && is_array($global_define_keeps)) {
+            foreach ($global_define_keeps as $global_name) {
+                if ($global_name === '') { continue; }
+                if ((!empty($content) && strpos($content, (string) $global_name) !== false)
+                    || (!empty($attributes['src']) && stripos((string) $attributes['src'], (string) $global_name) !== false)) {
                     return true;
                 }
             }
         }
 
-        $wpc_lvk762 = apply_filters('wpc_layout_var_keep', ['--site-header-height', '--topbar-height', 'breakdance-utils']);
-        if (!empty($wpc_lvk762) && is_array($wpc_lvk762)) {
-            foreach ($wpc_lvk762 as $wpc_lv762) {
-                if ($wpc_lv762 === '') { continue; }
-                if ((!empty($content) && strpos($content, (string) $wpc_lv762) !== false)
-                    || (!empty($attributes['src']) && stripos((string) $attributes['src'], (string) $wpc_lv762) !== false)) {
+        $layout_var_keeps = apply_filters('wpc_layout_var_keep', ['--site-header-height', '--topbar-height', 'breakdance-utils']);
+        if (!empty($layout_var_keeps) && is_array($layout_var_keeps)) {
+            foreach ($layout_var_keeps as $layout_var) {
+                if ($layout_var === '') { continue; }
+                if ((!empty($content) && strpos($content, (string) $layout_var) !== false)
+                    || (!empty($attributes['src']) && stripos((string) $attributes['src'], (string) $layout_var) !== false)) {
                     return true;
                 }
             }
         }
 
-        
-        
-        
-        
+        // v7.10.395: lane-listed scripts outrank STALE structural pins — a scroll-behavior
+        // script can never be a load-time dependency (its function needs the gesture that
+        // releases it), but a link-and-go-era prescription pin held sticky eager forever.
+        // Still honors per-tag opt-outs, the UI exclusion list and user keeps.
         if (!empty($attributes['src']) && !empty($this->wpc_lane_force_delay)
             && empty($attributes['data-nodefer'])
             && (empty($attributes['data-priority']) || $attributes['data-priority'] !== 'high')
@@ -1014,30 +1015,30 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             return true;
         }
 
-        
-        
-        
-        
-        
-        
-        
+        // Vendor lane patterns: SRC-only force-delay, deliberately BELOW every
+        // structural keep (sync-jquery, companion, promoted — a lane pattern must never
+        // break a dependency chain). Honors the per-tag opt-outs, the UI exclusion list,
+        // AND the settings/consent keep list ($this->excludes — carries gtag when
+        // gtag-lazy=0, consent families, etc.): an explicit user/preset keep always wins
+        // over a service auto-delay. External vendor hosts only (our zone = locals).
+        // Inline content is never matched against these (the dm class).
         if (!empty($attributes['src']) && !empty($this->wpc_src_force_delay)
             && empty($attributes['data-nodefer'])
             && (empty($attributes['data-priority']) || $attributes['data-priority'] !== 'high')
             && !$this->checkKeyword(strtolower((string) $attributes['src']
                 . (apply_filters('wpc_keep_match_id', false) && !empty($attributes['id']) ? ' ' . (string) $attributes['id'] : '')), $this->excludes)
             && !$this->wpc_user_delay_excluded((string) $attributes['src'])) {
-            $wpc_lfsrc356 = strtolower(html_entity_decode((string) $attributes['src']));
-            $wpc_lfh356 = strtolower((string) parse_url($wpc_lfsrc356, PHP_URL_HOST));
-            if ($wpc_lfh356 !== '' && !$this->wpc_is_own_host($wpc_lfh356)
-                && $this->checkKeyword($wpc_lfsrc356, $this->wpc_src_force_delay)) {
+            $lane_src = strtolower(html_entity_decode((string) $attributes['src']));
+            $lane_host = strtolower((string) parse_url($lane_src, PHP_URL_HOST));
+            if ($lane_host !== '' && !$this->wpc_is_own_host($lane_host)
+                && $this->checkKeyword($lane_src, $this->wpc_src_force_delay)) {
                 return false;
             }
-            
-            
-            
+            // v7.10.393: the external-host guard above made the .387 lane a NO-OP on every
+            // CDN-on site (sticky rides our zone = own host). Lane entries are first-party
+            // scroll-behavior scripts — the same excludes/user-keeps above still win.
             if (!empty($this->wpc_lane_force_delay)
-                && $this->checkKeyword($wpc_lfsrc356, $this->wpc_lane_force_delay)) {
+                && $this->checkKeyword($lane_src, $this->wpc_lane_force_delay)) {
                 return false;
             }
         }
@@ -1045,9 +1046,9 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             if (!empty($attributes['id']) && isset($this->companion_ids[(string) $attributes['id']])) {
                 return true;
             }
-            
-            
-            
+            // WP registers jQuery's inline companions under the ALIAS handle 'jquery'
+            // (id jquery-js-after) while the tag is jquery-core-js — the companion map
+            // keys off the tag id and misses them; delaying them breaks $.each bridges
             if (!empty($attributes['id'])
                 && preg_match('/^jquery(?:-core|-migrate)?-js-(?:before|after|extra)$/', (string) $attributes['id'])
                 && isset($this->parse_time_src_ids['jquery-core-js'])) {
@@ -1067,15 +1068,15 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 && isset($this->manifest_inline[substr(sha1($content), 0, 16)])) {
                 return true;
             }
-            
-            
-            
-            
-            
-            
-            
-            
-            
+            // v7.21.24 — ANTI-FOUC THEME SETTERS ARE NEVER DELAYED, matched by SIGNATURE not by
+            // name. .12 pinned Bricks' 'dl-mode' by handle, but ridgeway's real setter is Core
+            // Framework's core-framework-theme-loader-js-after (reads localStorage['cf-theme'],
+            // falls back to matchMedia, adds cf-theme-dark to <html>) — parked as delayed-script-1,
+            // so dark visitors flashed light on every nav while the palette sat paint-ready in the
+            // live vars-guard. The signature IS the class: a tiny inline that grabs the root
+            // element, reads a stored/OS preference, and writes class/dataset/attribute state.
+            // With the .23 state-rule guarantee, eager is paint-correct by the site's own
+            // construction. Sits below userForceDelay: an explicit owner delay still wins.
             if ($content !== '' && strlen($content) <= 3500
                 && apply_filters('wpc_theme_setter_eager', true)
                 && preg_match('/documentElement|querySelector\s*\(\s*["\']html["\']\s*\)|getElementsByTagName\s*\(\s*["\']html["\']/', $content)
@@ -1083,9 +1084,9 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 && preg_match('/classList|dataset\s*[.\[]|setAttribute\s*\(/', $content)) {
                 return true;
             }
-            
-            
-            
+            // Pure data-assignment inlines (var X = {...} / window.X = [...]) are inert:
+            // delaying them buys zero TBT and starves non-delayed consumers of their data
+            // (cross-handle deps the companion map can't pair — Divi sticky-elements class)
             if ($content !== '' && strlen($content) < 200000
                 && !preg_match('/\bfunction\b|=>|\bdocument\.|addEventListener|\bjQuery\b|\$\s*\(/i', $content)
                 && preg_match('/^\s*(?:\/\*.*?\*\/\s*)?(?:var|let|const|window\.)\s*[\w$.\[\]\'"]+\s*=\s*(?:\{|\[|"|\'|JSON\.parse|\d|[\w$.]+\s*\|\|)/s', $content)) {
@@ -1110,7 +1111,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if (isset($matches[0]) && strpos($matches[0], 'wpc-rootvar-early') !== false) {
             return $matches[0];
         }
-        
+        // Keyless Maps (key= empty/absent) can never initialize — 365KB of dead bytes.
         if (isset($matches[0]) && stripos($matches[0], 'maps.googleapis.com') !== false
             && apply_filters('wpc_kill_keyless_maps', true)) {
             $wpc_km = $this->parse_script_attributes($matches[0]);
@@ -1120,40 +1121,40 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 return '';
             }
         }
-        
-        
-        
-        
-        
-        
+        // Vendor dedupe (recaptcha ×6 class): an identical EXTERNAL src with no inline
+        // body and no data- attrs is a pure duplicate — one tag serves every consumer.
+        // Scoped to KNOWN vendor-family srcs only (io families + lane patterns): an
+        // unrestricted first-seen-wins would let an inert/commented earlier copy of an
+        // arbitrary script suppress the live one. Runs BEFORE capture so duplicates
+        // never reach the registry or the io stamp.
         if (isset($matches[0]) && apply_filters('wpc_delay_dedupe_vendor', true)
             && (!isset($matches[1]) || trim((string) $matches[1]) === '')
             && stripos($matches[0], 'data-') === false) {
-            $wpc_ddfams356 = $this->wpc_captcha_intent
+            $dedupe_families = $this->wpc_captcha_intent
                 ? ['recaptcha/api.js', 'gstatic.com/recaptcha', 'hcaptcha.com', 'turnstile', 'challenges.cloudflare.com']
                 : [];
             if (!empty($this->wpc_io_patterns)) {
-                $wpc_ddfams356 = array_merge($wpc_ddfams356, $this->wpc_io_patterns);
+                $dedupe_families = array_merge($dedupe_families, $this->wpc_io_patterns);
             }
             if (!empty($this->wpc_src_force_delay)) {
-                $wpc_ddfams356 = array_merge($wpc_ddfams356, $this->wpc_src_force_delay);
+                $dedupe_families = array_merge($dedupe_families, $this->wpc_src_force_delay);
             }
-            $wpc_dda356 = !empty($wpc_ddfams356) ? $this->parse_script_attributes($matches[0]) : [];
-            
-            
-            if (!empty($wpc_dda356['type']) && stripos((string) $wpc_dda356['type'], 'javascript') === false) {
-                $wpc_dda356 = [];
+            $dedupe_attrs = !empty($dedupe_families) ? $this->parse_script_attributes($matches[0]) : [];
+            // Consent-blocked copies (type="text/plain" etc.) are the consent manager's
+            // to activate — they neither seed the seen-map nor get dropped.
+            if (!empty($dedupe_attrs['type']) && stripos((string) $dedupe_attrs['type'], 'javascript') === false) {
+                $dedupe_attrs = [];
             }
-            if (!empty($wpc_dda356['src'])) {
-                $wpc_ddu356 = html_entity_decode((string) $wpc_dda356['src']);
-                $wpc_ddh356 = strtolower((string) parse_url($wpc_ddu356, PHP_URL_HOST));
-                if ($wpc_ddh356 !== '' && !$this->wpc_is_own_host($wpc_ddh356)
-                    && $this->checkKeyword($wpc_ddu356, $wpc_ddfams356)) {
-                    if (isset($this->wpc_seen_ext_srcs[$wpc_ddu356])) {
+            if (!empty($dedupe_attrs['src'])) {
+                $dedupe_src = html_entity_decode((string) $dedupe_attrs['src']);
+                $dedupe_host = strtolower((string) parse_url($dedupe_src, PHP_URL_HOST));
+                if ($dedupe_host !== '' && !$this->wpc_is_own_host($dedupe_host)
+                    && $this->checkKeyword($dedupe_src, $dedupe_families)) {
+                    if (isset($this->wpc_seen_ext_srcs[$dedupe_src])) {
                         return '';
                     }
                     if (count($this->wpc_seen_ext_srcs) < 50) {
-                        $this->wpc_seen_ext_srcs[$wpc_ddu356] = 1;
+                        $this->wpc_seen_ext_srcs[$dedupe_src] = 1;
                     }
                 }
             }
@@ -1162,17 +1163,17 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         $out = parent::process_script_tag($matches);
 
 
-        
-        
-        
-        $wpc_io_fams356 = [];
+        // io cohort stamp: captcha families (manifest intent, unchanged) + vendor match[]
+        // patterns. A2 guard is uniform: a jQuery-referencing src never demotes to the
+        // io injection path (plain async tags bypass the ordered S()/C() replay).
+        $io_families = [];
         if ($this->wpc_captcha_intent) {
-            $wpc_io_fams356 = ['recaptcha/api.js', 'gstatic.com/recaptcha', 'hcaptcha.com', 'turnstile', 'challenges.cloudflare.com'];
+            $io_families = ['recaptcha/api.js', 'gstatic.com/recaptcha', 'hcaptcha.com', 'turnstile', 'challenges.cloudflare.com'];
         }
         if (!empty($this->wpc_io_patterns)) {
-            $wpc_io_fams356 = array_merge($wpc_io_fams356, $this->wpc_io_patterns);
+            $io_families = array_merge($io_families, $this->wpc_io_patterns);
         }
-        if (!empty($wpc_io_fams356) && is_array($this->script_registry)) {
+        if (!empty($io_families) && is_array($this->script_registry)) {
             $wpc_n = count($this->script_registry);
             for ($wpc_i = $wpc_pre_n; $wpc_i < $wpc_n; $wpc_i++) {
                 $wpc_src = isset($this->script_registry[$wpc_i]['src']) ? (string) $this->script_registry[$wpc_i]['src'] : '';
@@ -1185,20 +1186,16 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 if ($wpc_src === '') {
                     continue;
                 }
-                foreach ($wpc_io_fams356 as $wpc_fam) {
+                foreach ($io_families as $wpc_fam) {
                     if (stripos($wpc_src, $wpc_fam) !== false) {
-                        
-                        
-                        
-                        $wpc_ioh356 = strtolower((string) parse_url($wpc_src, PHP_URL_HOST));
-                        $wpc_iohome356 = function_exists('home_url') ? strtolower((string) parse_url(home_url(), PHP_URL_HOST)) : '';
-                        $wpc_iost356 = function ($h) {
-                            return strpos($h, 'www.') === 0 ? substr($h, 4) : $h;
-                        };
-                        
-                        
-                        $wpc_ioext356 = $wpc_ioh356 !== '' && !$this->wpc_is_own_host($wpc_ioh356);
-                        if ($wpc_ioext356 && !self::wpc_src_needs_jquery($wpc_src)) {
+                        // io injection is plain-async (outside ordered replay): only
+                        // EXTERNAL-host leaf scripts may demote — a same-host src can
+                        // have delayed dependents; it stays in the ordered registry.
+                        $io_host = strtolower((string) parse_url($wpc_src, PHP_URL_HOST));
+                        // our hosts (origin, wpc edge, OR the configured CDN zone) serve
+                        // rewritten locals — never io-demotable
+                        $is_external = $io_host !== '' && !$this->wpc_is_own_host($io_host);
+                        if ($is_external && !self::wpc_src_needs_jquery($wpc_src)) {
                             $this->script_registry[$wpc_i]['io'] = 1;
                         }
                         break;
@@ -1209,34 +1206,202 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if ($out === $matches[0]) {
             $attrs = $this->parse_script_attributes($out);
             $type  = isset($attrs['type']) ? strtolower(trim((string) $attrs['type'])) : '';
-            $wpc_id494 = isset($attrs['id']) ? strtolower(trim((string) $attrs['id'])) : '';
-            
-            
-            
-            
-            
-            $wpc_paired494 = $wpc_id494 !== '' && !empty($this->wpc_inline_pairs494[$wpc_id494]);
-            if (!$wpc_paired494 && !empty($this->wpc_jq_parse_need803) && $wpc_id494 !== ''
-                && self::wpc_is_jquery_id803($wpc_id494)) {
-                $wpc_paired494 = true;
+            $script_id = isset($attrs['id']) ? strtolower(trim((string) $attrs['id'])) : '';
+            // v7.10.512 — .497 ANDed this with a filter defaulting FALSE, so the .494
+            // disqualification was always false and every paired external was deferred again
+            // while its inline -after companion ran at parse. The hazard .497 actually named
+            // was un-deferring only SOME keeps; wpc_nodefer_all512 answers that by un-deferring
+            // ALL of them whenever any pair exists, so the keep set never carries mixed order.
+            $paired = $script_id !== '' && !empty($this->wpc_inline_pair_ids[$script_id]);
+            if (!$paired && !empty($this->wpc_jquery_parse_needed) && $script_id !== ''
+                && self::wpc_is_jquery_script_id($script_id)) {
+                $paired = true;
             }
             if (!empty($attrs['src']) && !isset($attrs['defer']) && !isset($attrs['async'])
-                && !$wpc_paired494 && empty($this->wpc_nodefer_all512)
+                && !$paired && empty($this->wpc_nodefer_all_keeps)
                 && ($type === '' || strpos($type, 'javascript') !== false)) {
-                
-                
-                
-                
+                // Excluded-from-delay srcs run deferred: parse never blocks and document
+                // order preserves the jquery -> theme chain (defer executes in order).
+                // data-wpc-defer marks OURS so the split pass can strip without touching
+                // author-supplied defer.
                 return preg_replace('/<script\b/i', '<script defer data-wpc-defer="1"', $out, 1);
             }
         }
         return $out;
     }
 
-    
-    
-    
-    public static function wpc_builder_mutator41($src, $rc = [])
+    // The kept set's wp_scripts dependency closure: ids (handle + '-js') that are ON the page,
+    // NOT yet kept, and reachable from any kept handle's dependency graph. Pure computation —
+    // the caller stamps the three keep sets. Cap-bounded, kill wpc_keep_dep_closure.
+    /**
+     * The measured manifest's keep entries, as [list, entry] pairs: render_critical and
+     * atf_mutators, top level and per device (the v1 envelope), the first 20 of each list, an
+     * {key} object unwrapped to its string, anything shorter than 4 characters skipped.
+     * The one reading of those two lists: process_html builds its keep sets from it, and
+     * keeps_script_at_load() asks wpc_manifest_names_script().
+     */
+    public static function wpc_manifest_keep_entries($manifest)
+    {
+        $entries = [];
+        if (!is_array($manifest)) {
+            return $entries;
+        }
+        $sections = [$manifest];
+        foreach (['mobile', 'desktop'] as $device) {
+            if (!empty($manifest[$device]) && is_array($manifest[$device])) {
+                $sections[] = $manifest[$device];
+            }
+        }
+        foreach ($sections as $section) {
+            foreach (['render_critical', 'atf_mutators'] as $list) {
+                if (empty($section[$list]) || !is_array($section[$list])) {
+                    continue;
+                }
+                foreach (array_slice($section[$list], 0, 20) as $entry) {
+                    if (is_array($entry) && !empty($entry['key'])) {
+                        $entry = $entry['key'];
+                    }
+                    if (!is_string($entry) || strlen($entry) < 4) {
+                        continue;
+                    }
+                    $entries[] = [$list, $entry];
+                }
+            }
+        }
+        return $entries;
+    }
+
+    /**
+     * True when this page's measured manifest keeps a script with this src (by path, or by the
+     * v1 basename), so the delay will run it at load rather than hold it. An unreadable manifest
+     * answers true: the caller holds something only when it knows the script is delayed.
+     */
+    public static function wpc_manifest_names_script($src)
+    {
+        $manifestFile = self::wpc_delay_manifest_file();
+        if (!is_string($manifestFile) || $manifestFile === '') {
+            return false;
+        }
+        $manifest = json_decode((string) @file_get_contents($manifestFile), true);
+        if (!is_array($manifest)) {
+            return true;
+        }
+        $srcPath = (string) parse_url((string) $src, PHP_URL_PATH);
+        $srcBasename = strtolower(basename($srcPath));
+        foreach (self::wpc_manifest_keep_entries($manifest) as $keep) {
+            $entry = $keep[1];
+            if (strpos($entry, 'inline:') === 0) {
+                continue;
+            }
+            if (strpos($entry, '/') !== false) {
+                if ((string) parse_url($entry, PHP_URL_PATH) === $srcPath) {
+                    return true;
+                }
+            } elseif (strtolower($entry) === $srcBasename) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The builder runtime keeps (Bricks' swapper and its libs, Divi 5's script library) added to
+     * this render's keep list. One place, asked by process_html and by keeps_script_at_load().
+     * Idempotent: the list is merged uniquely.
+     */
+    protected function wpc_apply_builder_runtime_keeps($html, $noteReceipts = true)
+    {
+        // v7.21.56 — A LANE MUST CARRY ITS OWN REMOVER, theme edition: Bricks' native image
+        // lazy-load ships every img as a transparent SVG placeholder (src=data:image/svg+xml
+        // + data-src + .bricks-lazy-hidden) and ONLY bricks.min.js swaps the real image in.
+        // On unmeasured renders (post-save purge window, fresh installs) the delay lane
+        // captured that swapper into the gesture/timer registry — every image on the page
+        // stayed a blank placeholder until first touch (ridgeway receipt: cached render kept
+        // it `defer data-wpc-defer`, cache-bypassed render had it base64'd in the registry).
+        // Presence-guarded on the marker class Bricks' own JS removes; the keep lands in the
+        // excluded-src defer lane, matching the measured pages' shape exactly.
+        if (strpos($html, 'bricks-lazy-hidden') !== false
+            && apply_filters('wpc_bricks_swapper_keep', true)) {
+            $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [
+                'bricks.min.js',
+            ])));
+            // A builder runtime the delay would hold is kept eager because delaying it broke a
+            // page (keep lists, one per builder). Sampled: the page's scripts repeat every render.
+            if (strpos($html, 'bricks.min.js') !== false && $noteReceipts && function_exists('wpc_render_belt_note')) {
+                wpc_render_belt_note('delay-keep-rules', ['bricks_swapper' => 1], true);
+            }
+        }
+        // v7.22.35 — A KEPT RUNTIME KEEPS ITS OWN LIBS. bricks.min.js initialises every element
+        // in ONE DOMContentLoaded listener; a lib it needs (splide, swiper, photoswipe, leaflet
+        // — Bricks enqueues each only when the element is on the page) that is still in the
+        // delay registry is checked once by functionCanRun() and never again: the slider
+        // element on that page stays dead after the replay. Now that kept scripts' DCL
+        // listeners flush at the gesture (loader .35) the libs must be there by then: they
+        // ride with the runtime, same lane, same order.
+        if (in_array('bricks.min.js', (array) $this->excludes, true)
+            && apply_filters('wpc_bricks_libs_keep', true)) {
+            $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [
+                '/themes/bricks/assets/js/libs/',
+            ])));
+            if (strpos($html, '/themes/bricks/assets/js/libs/') !== false && $noteReceipts && function_exists('wpc_render_belt_note')) {
+                wpc_render_belt_note('delay-keep-rules', ['bricks_libs' => 1], true);
+            }
+        }
+
+        // v7.21.92 — A BUILDER'S RUNTIME IS NEVER DELAY CARGO (WP-3 F-2, Divi leg; Bricks
+        // shipped .56). Divi 5's script library ARRANGES the page — menu, animation,
+        // multi-view (responsive content swapping), frontend-scripts: delayed to ~4s they
+        // made falknerei "then it's fine" only after the loader fired (waterfall receipt:
+        // every script-library-* initiated by delay-v3-loader). They join the excluded-src
+        // defer lane: same order, parse-adjacent execution. Kill wpc_divi_runtime_keep.
+        if ((strpos($html, '/themes/Divi/') !== false || strpos($html, 'et_pb_') !== false)
+            && apply_filters('wpc_divi_runtime_keep', true)) {
+            $diviRuntime = [
+                'theme-scripts-library-base.js',
+                'theme-scripts-library-scroll-to-top.js',
+                'script-library-frontend-global-functions.js',
+                'script-library-frontend-scripts.js',
+                'script-library-ext-waypoint.js',
+                'script-library-menu.js',
+                'script-library-animation.js',
+                'script-library-multi-view.js',
+                'script-library-link.js',
+                'theme-scripts-library.js',
+            ];
+            $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, $diviRuntime)));
+            $diviKept = 0;
+            foreach ($diviRuntime as $diviFile) {
+                if (strpos($html, $diviFile) !== false) {
+                    $diviKept++;
+                }
+            }
+            if ($diviKept > 0 && $noteReceipts && function_exists('wpc_render_belt_note')) {
+                wpc_render_belt_note('delay-keep-rules', ['divi_runtime' => $diviKept], true);
+            }
+        }
+
+    }
+
+    /**
+     * Whether this render keeps a script at load rather than holding it in the delay registry,
+     * answered from the delay's own keep inputs: its keep list (defaults and the builder runtime
+     * keeps), the site's Delay JS exclusions, and the page's measured manifest. The facade asks
+     * it before it holds a builder video's source for the replay (Divi 4 on webdesign4u.com.au):
+     * a script this answers true for runs at load, and the source must stay.
+     */
+    public function keeps_script_at_load($src, $html)
+    {
+        $src = (string) $src;
+        if ($src === '') {
+            return true;
+        }
+        $this->wpc_apply_builder_runtime_keeps((string) $html, false);
+        return $this->checkKeyword($src, (array) $this->excludes)
+            || $this->wpc_user_delay_excluded($src)
+            || self::wpc_manifest_names_script($src);
+    }
+
+    public static function wpc_is_builder_mutator_script($src, $rc = [])
     {
         $src = strtolower((string) $src);
         if ($src === '') {
@@ -1254,61 +1419,227 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             || (bool) preg_match('#/wp-includes/js/dist/(?:a11y|i18n|hooks|dom-ready)(?:\.min)?\.js$#', $path);
     }
 
-    public static function wpc_embed_gate_js40()
+    public static function wpc_embed_gate_inline_js()
     {
-        return '!function(){try{if(window.wpcEmbFlush40)return;var F="undefined"!=typeof HTMLIFrameElement?Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype,"src"):null,S="undefined"!=typeof HTMLScriptElement?Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,"src"):null,C=document.createElement;'
+        return '!function(){try{if(window.wpcFlushHeavyEmbeds)return;var F="undefined"!=typeof HTMLIFrameElement?Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype,"src"):null,S="undefined"!=typeof HTMLScriptElement?Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,"src"):null,C=document.createElement;'
             . 'var H=function(){var c=window.wpcDelayV3Cfg||{},l=Array.isArray(c.heavyEmbeds)?c.heavyEmbeds.slice():[];return l.push("youtube.com/iframe_api","youtube.com/player_api","player.vimeo.com/api/player.js","fast.wistia.com/assets/external/","fast.wistia.net/assets/external/"),l};'
-            . 'var V=function(v){try{if(window.wpcDelayV3Cfg&&0==+window.wpcDelayV3Cfg.embedGate)return!1;if(window.__wpcEngaged||window.__wpcEmbRel40)return!1;var s=String(v||"");if(!s||0===s.indexOf("about:")||0===s.indexOf("data:")||0===s.indexOf("javascript:"))return!1;for(var l=H(),i=0;i<l.length;i++)if(-1!==s.indexOf(l[i]))return!0}catch(e){}return!1};'
-            . 'window.__wpcEmbQ40=window.__wpcEmbQ40||[];window.wpcEmbFlush40=function(){window.__wpcEmbRel40=1;var q=window.__wpcEmbQ40||[];window.__wpcEmbQ40=[];for(var j=0;j<q.length;j++)try{q[j][0].call(q[j][1],q[j][2])}catch(e){}try{window.wpcBgAll41&&window.wpcBgAll41()}catch(e){}};'
-            . 'var G=function(el,v,set){if(!V(v))return!1;window.__wpcEmbQ40.push([set,el,v]);try{el.setAttribute("data-wpc-emb40","1")}catch(e){}return!0};'
+            . 'var V=function(v){try{if(window.wpcDelayV3Cfg&&0==+window.wpcDelayV3Cfg.embedGate)return!1;if(window.__wpcEngaged||window.__wpcHeavyEmbedsReleased)return!1;var s=String(v||"");if(!s||0===s.indexOf("about:")||0===s.indexOf("data:")||0===s.indexOf("javascript:"))return!1;for(var l=H(),i=0;i<l.length;i++)if(-1!==s.indexOf(l[i]))return!0}catch(e){}return!1};'
+            . 'window.__wpcHeavyEmbedQueue=window.__wpcHeavyEmbedQueue||[];window.wpcFlushHeavyEmbeds=function(){window.__wpcHeavyEmbedsReleased=1;var q=window.__wpcHeavyEmbedQueue||[];window.__wpcHeavyEmbedQueue=[];for(var j=0;j<q.length;j++)try{q[j][0].call(q[j][1],q[j][2])}catch(e){}try{window.wpcRestoreAllParkedBackgrounds&&window.wpcRestoreAllParkedBackgrounds()}catch(e){}};'
+            . 'var G=function(el,v,set){if(!V(v))return!1;window.__wpcHeavyEmbedQueue.push([set,el,v]);try{el.setAttribute("data-wpc-embed-held","1")}catch(e){}return!0};'
             . 'var W=function(el,D){try{Object.defineProperty(el,"src",{configurable:!0,get:function(){return D.get.call(el)},set:function(v){G(el,v,(function(x){D.set.call(this,x)}))||D.set.call(el,v)}});var A=el.setAttribute;el.setAttribute=function(n,v){if("src"!==String(n).toLowerCase()||!G(el,v,(function(x){A.call(this,"src",x)})))return A.apply(el,arguments)}}catch(e){}};'
             . 'document.createElement=function(t){var el=C.apply(document,arguments),l=String(t).toLowerCase();if(S&&"script"===l)W(el,S);if(F&&"iframe"===l)W(el,F);return el}}catch(e){}}();';
     }
 
-    protected function wpc_keep_dep_closure56($wpc_excluded_ids, $wpc_seen_src_ids)
+    protected function wpc_keep_dependency_closure($wpc_excluded_ids, $wpc_seen_src_ids)
     {
-        $wpc_out56 = [];
+        $closure_ids = [];
         if (empty($wpc_excluded_ids) || !apply_filters('wpc_keep_dep_closure', true)
             || empty($GLOBALS['wp_scripts']) || empty($GLOBALS['wp_scripts']->registered)) {
-            return $wpc_out56;
+            return $closure_ids;
         }
-        $wpc_reg56 = $GLOBALS['wp_scripts']->registered;
-        $wpc_stack56 = array_keys((array) $wpc_excluded_ids);
-        $wpc_seen56 = [];
-        $wpc_n56 = 0;
-        while (!empty($wpc_stack56) && $wpc_n56 < 400) {
-            $wpc_n56++;
-            $wpc_kid56 = (string) array_pop($wpc_stack56);
-            $wpc_h56 = preg_replace('/-js$/', '', $wpc_kid56);
-            if ($wpc_h56 === '' || isset($wpc_seen56[$wpc_h56]) || !isset($wpc_reg56[$wpc_h56])) {
+        $registered = $GLOBALS['wp_scripts']->registered;
+        $stack = array_keys((array) $wpc_excluded_ids);
+        $seen = [];
+        $steps = 0;
+        while (!empty($stack) && $steps < 400) {
+            $steps++;
+            $kept_id = (string) array_pop($stack);
+            $handle = preg_replace('/-js$/', '', $kept_id);
+            if ($handle === '' || isset($seen[$handle]) || !isset($registered[$handle])) {
                 continue;
             }
-            $wpc_seen56[$wpc_h56] = true;
-            $wpc_deps56 = isset($wpc_reg56[$wpc_h56]->deps) ? (array) $wpc_reg56[$wpc_h56]->deps : [];
-            foreach ($wpc_deps56 as $wpc_d56) {
-                $wpc_d56 = (string) $wpc_d56;
-                if ($wpc_d56 === '') {
+            $seen[$handle] = true;
+            $deps = isset($registered[$handle]->deps) ? (array) $registered[$handle]->deps : [];
+            foreach ($deps as $dep) {
+                $dep = (string) $dep;
+                if ($dep === '') {
                     continue;
                 }
-                $wpc_did56 = $wpc_d56 . '-js';
-                
-                
-                $wpc_stack56[] = $wpc_did56;
-                if (isset($wpc_seen_src_ids[$wpc_did56]) && !isset($wpc_excluded_ids[$wpc_did56])
-                    && !isset($wpc_out56[$wpc_did56])) {
-                    $wpc_out56[$wpc_did56] = true;
+                $dep_id = $dep . '-js';
+                // Aliases (jquery -> jquery-core/jquery-migrate) have no tag of their own;
+                // re-entering the stack walks through them to the real carriers.
+                $stack[] = $dep_id;
+                if (isset($wpc_seen_src_ids[$dep_id]) && !isset($wpc_excluded_ids[$dep_id])
+                    && !isset($closure_ids[$dep_id])) {
+                    $closure_ids[$dep_id] = true;
                 }
             }
         }
-        return array_keys($wpc_out56);
+        return array_keys($closure_ids);
     }
 
-    
-    
-    
-    
-    
-    
+    // v7.23.15 — ONE LOADER TAG BUILDER. The uploads copy + retro-heal, the .159 self-probe,
+    // the zone swap under the suppression umbrella, the .155 onerror fallback and the inline
+    // branch all live here, not in the delay engine: Critical CSS needs the same loader file
+    // (it is the only restorer of parked sheets and the only armer of wpc-bgl255) on renders
+    // where the engine is off — see wpc_css_only_loader. Every caller gets the identical tag.
+    /**
+     * Where the delay registry sidecars live: the uploads dir and the root-relative URL of
+     * wpc-assets/delay/, or false when uploads is unusable on this install.
+     */
+    public static function wpc_registry_sidecar_paths()
+    {
+        if (!function_exists('wp_upload_dir')) {
+            return false;
+        }
+        $wpc_ud = wp_upload_dir(null, false);
+        if (!is_array($wpc_ud) || !empty($wpc_ud['error']) || empty($wpc_ud['basedir']) || empty($wpc_ud['baseurl'])) {
+            return false;
+        }
+        $wpc_path = (string) parse_url((string) $wpc_ud['baseurl'], PHP_URL_PATH);
+        return [
+            'dir' => rtrim((string) $wpc_ud['basedir'], '/') . '/wpc-assets/delay/',
+            'url' => rtrim($wpc_path, '/') . '/wpc-assets/delay/',
+        ];
+    }
+
+    /**
+     * Moves the parked inline script bodies out of the registry into one content-addressed JSON
+     * file under $dir and marks each moved entry ext=1. The document then carries the registry
+     * skeleton (ids, srcs, attributes, order) and the loader fetches the bodies after load, so
+     * a page never ships bytes it will not execute before a gesture.
+     *
+     * Returns ['url', 'file', 'n', 'bytes'] or null when the bodies stay inline: under $min bytes
+     * to move, no usable dir, or the file could not be written. Idempotent: the same bodies always
+     * name the same file, and an existing file is never rewritten.
+     */
+    public static function wpc_registry_sidecar(array &$registry, $dir, $url, $min = 2048)
+    {
+        $wpc_bodies = [];
+        $wpc_bytes = 0;
+        foreach ($registry as $wpc_e) {
+            if (!is_array($wpc_e) || empty($wpc_e['id']) || !isset($wpc_e['content']) || !is_string($wpc_e['content']) || $wpc_e['content'] === '') {
+                continue;
+            }
+            $wpc_bodies[(string) $wpc_e['id']] = $wpc_e['content'];
+            $wpc_bytes += strlen($wpc_e['content']);
+        }
+        if ($wpc_bytes < (int) $min || !is_string($dir) || $dir === '' || !is_string($url) || $url === '') {
+            return null;
+        }
+        $wpc_json = json_encode(['v' => 1, 'b' => $wpc_bodies]);
+        if (!is_string($wpc_json) || $wpc_json === '') {
+            return null;
+        }
+        $wpc_name = 'r-' . md5($wpc_json) . '.json';
+        if (!@is_dir($dir) && !@mkdir($dir, 0755, true)) {
+            return null;
+        }
+        if (!@file_exists($dir . $wpc_name)) {
+            if (!@is_writable($dir)) {
+                return null;
+            }
+            $wpc_tmp = $dir . $wpc_name . '.' . str_replace('.', '', uniqid('', true)) . '.tmp';
+            if (@file_put_contents($wpc_tmp, $wpc_json) !== strlen($wpc_json) || !@rename($wpc_tmp, $dir . $wpc_name)) {
+                @unlink($wpc_tmp);
+                return null;
+            }
+            if (!@file_exists($dir . 'index.html')) {
+                @file_put_contents($dir . 'index.html', '');
+            }
+        }
+        foreach ($registry as $wpc_k => $wpc_e) {
+            if (is_array($wpc_e) && !empty($wpc_e['id']) && isset($wpc_bodies[(string) $wpc_e['id']])) {
+                unset($registry[$wpc_k]['content']);
+                $registry[$wpc_k]['ext'] = 1;
+            }
+        }
+        return ['url' => $url . $wpc_name, 'file' => $wpc_name, 'n' => count($wpc_bodies), 'bytes' => $wpc_bytes];
+    }
+
+    /**
+     * Daily: drops sidecars no cached document can still name. The page cache holds a document
+     * for a day and an edge for two, so fourteen days is a generous ceiling; a directory that has
+     * grown past 5000 files is trimmed to two days instead.
+     */
+    public static function wpc_registry_sidecar_trim()
+    {
+        $wpc_p = self::wpc_registry_sidecar_paths();
+        if (!$wpc_p || !@is_dir($wpc_p['dir'])) {
+            return 0;
+        }
+        $wpc_files = (array) @glob($wpc_p['dir'] . 'r-*.json');
+        $wpc_days = count($wpc_files) > 5000 ? 2 : 14;
+        $wpc_cut = time() - $wpc_days * 86400;
+        $wpc_n = 0;
+        foreach ($wpc_files as $wpc_f) {
+            $wpc_m = @filemtime($wpc_f);
+            if ($wpc_m !== false && $wpc_m < $wpc_cut && @unlink($wpc_f)) {
+                $wpc_n++;
+            }
+        }
+        foreach ((array) @glob($wpc_p['dir'] . '*.tmp') as $wpc_f) {
+            @unlink($wpc_f);
+        }
+        if (function_exists('wpc_cache_first_log') && $wpc_n) {
+            wpc_cache_first_log('delay-sidecar-trim', '', '', ['removed' => $wpc_n, 'kept' => count($wpc_files) - $wpc_n, 'days' => $wpc_days]);
+        }
+        return $wpc_n;
+    }
+
+    /**
+     * Bring the uploads copy of the delay loader in line with the plugin's own file.
+     *
+     * Stale by content, not by size (v7.23.17): a same-size edit of the hand-spliced min (the .16
+     * kick change, 88,476 -> 88,476 bytes) never reached the copy, and the page kept serving the
+     * old loader from uploads for a year (immutable). Older copies do not stack (v7.23.17,
+     * staging: 4 MB of loaders, ~45 versions): the current one plus the three newest others are
+     * kept, ranked by the version in the filename; cached HTML that names a deleted copy falls
+     * through the onerror fallback to the plugin-dir file. Retro-heal (v7.22.09): cached HTML pins
+     * old versioned filenames, so every surviving copy gets the current bytes and cached pages
+     * heal on their next cold fetch. The filename keeps the version: the cache-dress checks and
+     * the doctor read it as the "rendered by an older plugin" signal.
+     */
+    private static function wpc_loader_copy_refresh($dir, $name, $source, $version)
+    {
+        if (!@file_exists($source)) {
+            return;
+        }
+        $sourceHash = @md5_file($source);
+        if (@file_exists($dir . $name) && @md5_file($dir . $name) !== $sourceHash) {
+            @unlink($dir . $name);
+        }
+        if (@file_exists($dir . $name)) {
+            return;
+        }
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        if (!is_dir($dir)) {
+            return;
+        }
+        $olderCopies = [];
+        foreach ((array) @glob($dir . 'delay-v3-loader-*.min.js') as $copy) {
+            if (preg_match('/^delay-v3-loader-(.+)\.min\.js$/', basename($copy), $m) && $m[1] !== (string) $version) {
+                $olderCopies[$m[1]] = $copy;
+            }
+        }
+        uksort($olderCopies, function ($a, $b) { return version_compare($b, $a); });
+        $removed = 0;
+        foreach (array_slice($olderCopies, max(0, (int) apply_filters('wpc_loader_keep', 3)), null, true) as $copy) {
+            if (@unlink($copy)) {
+                $removed++;
+            }
+        }
+        if ($removed && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('loader-gc', '', '', ['n' => $removed]);
+        }
+        @copy($source, $dir . $name);
+        $healed = 0;
+        foreach ((array) @glob($dir . 'delay-v3-loader-*.min.js') as $copy) {
+            if (basename($copy) !== $name && @md5_file($copy) !== $sourceHash && @copy($source, $copy)) {
+                $healed++;
+            }
+        }
+        if ($healed && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('loader-retroheal', '', '', ['n' => $healed]);
+        }
+        if (!@file_exists($dir . '.htaccess')) {
+            wpc_fs_put($dir . '.htaccess',
+                "<IfModule mod_headers.c>\n<FilesMatch \"\\.(js|css)$\">\nHeader set Cache-Control \"public, max-age=31536000, immutable\"\n</FilesMatch>\n</IfModule>\n<IfModule mod_expires.c>\nExpiresActive On\nExpiresByType application/javascript \"access plus 1 year\"\n</IfModule>\n");
+        }
+    }
+
     public static function wpc_loader_script_tag()
     {
         $wpc_loader_base = defined('WPS_IC_URI') ? WPS_IC_URI : plugins_url('/', dirname(__FILE__));
@@ -1319,147 +1650,110 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
 
         if (defined('WPS_IC_DIR') && function_exists('wp_upload_dir')) {
             try {
-                $wpc_ud107 = wp_upload_dir(null, false);
-                if (empty($wpc_ud107['error']) && !empty($wpc_ud107['basedir']) && !empty($wpc_ud107['baseurl'])) {
-                    $wpc_ver107  = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '1';
-                    $wpc_dir107  = rtrim($wpc_ud107['basedir'], '/') . '/wpc-assets/';
-                    $wpc_name107 = 'delay-v3-loader-' . $wpc_ver107 . '.min.js';
-                    $wpc_srcf107 = WPS_IC_DIR . 'assets/js/delay-v3-loader.min.js';
+                $uploadDir = wp_upload_dir(null, false);
+                if (empty($uploadDir['error']) && !empty($uploadDir['basedir']) && !empty($uploadDir['baseurl'])) {
+                    $pluginVersion  = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '1';
+                    $assetsDir  = rtrim($uploadDir['basedir'], '/') . '/wpc-assets/';
+                    $copyName = 'delay-v3-loader-' . $pluginVersion . '.min.js';
+                    $sourceFile = WPS_IC_DIR . 'assets/js/delay-v3-loader.min.js';
 
 
-                    
-                    
-                    
-                    
-                    $wpc_stale108 = @file_exists($wpc_dir107 . $wpc_name107) && @file_exists($wpc_srcf107)
-                        && @md5_file($wpc_dir107 . $wpc_name107) !== @md5_file($wpc_srcf107);
-                    if ($wpc_stale108) {
-                        @unlink($wpc_dir107 . $wpc_name107);
-                    }
-                    if (!@file_exists($wpc_dir107 . $wpc_name107) && @file_exists($wpc_srcf107)) {
-                        if (!is_dir($wpc_dir107)) {
-                            @mkdir($wpc_dir107, 0755, true);
+                    // The copy is rebuilt only when the plugin's loader changed (its version, mtime
+                    // or size) or the copy is gone; a render does one stat and one file_exists. The
+                    // content compare, the retro-heal of older copies and the GC run inside the
+                    // rebuild, once per change, instead of two md5_file() over ~88 KB per render.
+                    $wpc_loader_key = $pluginVersion . '|' . (int) @filemtime($sourceFile) . '|' . (int) @filesize($sourceFile);
+                    $loaderChanged = (function_exists('get_option') ? get_option('wpc_loader_copy_key') : '') !== $wpc_loader_key;
+                    if ($loaderChanged || !@file_exists($assetsDir . $copyName)) {
+                        self::wpc_loader_copy_refresh($assetsDir, $copyName, $sourceFile, $pluginVersion);
+                        $loaderCopied = @file_exists($assetsDir . $copyName);
+                        if ($loaderCopied && function_exists('update_option')) {
+                            update_option('wpc_loader_copy_key', $wpc_loader_key, true);
                         }
-                        if (is_dir($wpc_dir107)) {
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            $wpc_gcv = [];
-                            foreach ((array) @glob($wpc_dir107 . 'delay-v3-loader-*.min.js') as $wpc_old107) {
-                                if (preg_match('/^delay-v3-loader-(.+)\.min\.js$/', basename($wpc_old107), $wpc_gcm)
-                                    && $wpc_gcm[1] !== (string) $wpc_ver107) {
-                                    $wpc_gcv[$wpc_gcm[1]] = $wpc_old107;
-                                }
-                            }
-                            uksort($wpc_gcv, function ($a, $b) { return version_compare($b, $a); });
-                            $wpc_gcn = 0;
-                            foreach (array_slice($wpc_gcv, max(0, (int) apply_filters('wpc_loader_keep', 3)), null, true) as $wpc_old107) {
-                                if (@unlink($wpc_old107)) {
-                                    $wpc_gcn++;
-                                }
-                            }
-                            if ($wpc_gcn && function_exists('wpc_cache_first_log')) {
-                                wpc_cache_first_log('loader-gc', '', '', ['n' => $wpc_gcn]);
-                            }
-                            @copy($wpc_srcf107, $wpc_dir107 . $wpc_name107);
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            $wpc_rh109 = 0;
-                            foreach ((array) @glob($wpc_dir107 . 'delay-v3-loader-*.min.js') as $wpc_rf109) {
-                                if (basename($wpc_rf109) === $wpc_name107) {
-                                    continue;
-                                }
-                                if (@md5_file($wpc_rf109) !== @md5_file($wpc_srcf107)) {
-                                    if (@copy($wpc_srcf107, $wpc_rf109)) {
-                                        $wpc_rh109++;
-                                    }
-                                }
-                            }
-                            if ($wpc_rh109 && function_exists('wpc_cache_first_log')) {
-                                wpc_cache_first_log('loader-retroheal', '', '', ['n' => $wpc_rh109]);
-                            }
-                            if (!@file_exists($wpc_dir107 . '.htaccess')) {
-                                wpc_fs_put($wpc_dir107 . '.htaccess',
-                                    "<IfModule mod_headers.c>\n<FilesMatch \"\\.(js|css)$\">\nHeader set Cache-Control \"public, max-age=31536000, immutable\"\n</FilesMatch>\n</IfModule>\n<IfModule mod_expires.c>\nExpiresActive On\nExpiresByType application/javascript \"access plus 1 year\"\n</IfModule>\n");
+                        // The uploads copy is named by version while its bytes change without one,
+                        // so it is rebuilt when the plugin's loader changed or the copy vanished.
+                        // A failed copy retries on every render and the tag falls back to the
+                        // plugin URL: that line is sampled; a rebuild is written each time.
+                        if (function_exists('wpc_render_belt_note')) {
+                            if ($loaderCopied) {
+                                wpc_render_belt_note('loader-copy-refreshed', ['why' => $loaderChanged ? 'loader-changed' : 'copy-missing']);
+                            } else {
+                                wpc_render_belt_note('loader-copy-failed', ['why' => $loaderChanged ? 'loader-changed' : 'copy-missing'], true);
                             }
                         }
                     }
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    $wpc_uurl159 = rtrim($wpc_ud107['baseurl'], '/') . '/wpc-assets/' . $wpc_name107;
-                    if (@file_exists($wpc_dir107 . $wpc_name107) && @filesize($wpc_dir107 . $wpc_name107) > 0
+                    // v7.21.159 — SELF-PROBE: on hosts that refuse .js under uploads (WAF rule,
+                    // cleaner), the file exists for PHP yet 404s over HTTP; every cold load then
+                    // pays a dead request before the .155 onerror belt heals it (rosariospadaro).
+                    // One HEAD per plugin version, after output on shutdown, settles it: a 4xx
+                    // verdict stands the emitter down to the plugin-dir URL permanently for that
+                    // version. 5xx/timeouts are inconclusive (never a verdict — lock expiry
+                    // retries); version bump or Refresh Auto Mode re-probes. Fail-open: no
+                    // verdict = today's behavior, belt still rides every uploads tag.
+                    $copyUrl = rtrim($uploadDir['baseurl'], '/') . '/wpc-assets/' . $copyName;
+                    if (@file_exists($assetsDir . $copyName) && @filesize($assetsDir . $copyName) > 0
                         && function_exists('get_option') && function_exists('get_transient')) {
-                        $wpc_pv159 = get_option('wpc_loader_probe159');
-                        $wpc_fresh159 = is_array($wpc_pv159) && isset($wpc_pv159['ver'], $wpc_pv159['state'])
-                            && (string) $wpc_pv159['ver'] === (string) $wpc_ver107;
-                        if (!$wpc_fresh159 && function_exists('wp_remote_head') && function_exists('add_action')
+                        $probeVerdict = get_option('wpc_loader_probe159');
+                        $probeFresh = is_array($probeVerdict) && isset($probeVerdict['ver'], $probeVerdict['state'])
+                            && (string) $probeVerdict['ver'] === (string) $pluginVersion;
+                        if (!$probeFresh && function_exists('wp_remote_head') && function_exists('add_action')
                             && !get_transient('wpc_loader_probe_lock159')) {
                             set_transient('wpc_loader_probe_lock159', 1, 300);
-                            add_action('shutdown', function () use ($wpc_uurl159, $wpc_ver107) {
-                                $wpc_r159 = wp_remote_head($wpc_uurl159, array('timeout' => 5, 'redirection' => 2, 'sslverify' => false));
-                                if (is_wp_error($wpc_r159)) {
+                            add_action('shutdown', function () use ($copyUrl, $pluginVersion) {
+                                $probeResponse = wp_remote_head($copyUrl, array('timeout' => 5, 'redirection' => 2, 'sslverify' => false));
+                                if (is_wp_error($probeResponse)) {
                                     return;
                                 }
-                                $wpc_v159 = self::wpc_loader_probe_verdict159((int) wp_remote_retrieve_response_code($wpc_r159));
-                                if ($wpc_v159 !== null) {
-                                    update_option('wpc_loader_probe159', array('ver' => (string) $wpc_ver107, 'state' => $wpc_v159, 't' => time()), false);
-                                    if ($wpc_v159 === 'down' && function_exists('wpc_cache_first_log')) {
-                                        wpc_cache_first_log('loader-probe-down', '', $wpc_uurl159);
+                                $verdict = self::wpc_loader_probe_verdict((int) wp_remote_retrieve_response_code($probeResponse));
+                                if ($verdict !== null) {
+                                    update_option('wpc_loader_probe159', array('ver' => (string) $pluginVersion, 'state' => $verdict, 't' => time()), false);
+                                    if ($verdict === 'down' && function_exists('wpc_cache_first_log')) {
+                                        wpc_cache_first_log('loader-probe-down', '', $copyUrl);
                                     }
                                 }
                             });
                         }
-                        if ($wpc_fresh159 && (string) $wpc_pv159['state'] === 'down') {
-                            $wpc_uurl159 = '';
+                        if ($probeFresh && (string) $probeVerdict['state'] === 'down') {
+                            $copyUrl = '';
                         }
                     } else {
-                        $wpc_uurl159 = '';
+                        $copyUrl = '';
                     }
-                    if ($wpc_uurl159 !== '') {
-                        $wpc_loader_src = $wpc_uurl159;
-                        
-                        
-                        $wpc_set107 = get_option(WPS_IC_SETTINGS);
-                        
-                        
-                        
-                        
-                        
-                        
-                        $wpc_sup2114 = (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed());
-                        if (!$wpc_sup2114 && class_exists('wps_cdn_rewrite') && isset(wps_cdn_rewrite::$cdnEnabled)
+                    if ($copyUrl !== '') {
+                        $wpc_loader_src = $copyUrl;
+                        // Zone-serve for a real edge TTL (same host-swap the image lanes use);
+                        // origin URL stands whenever the zone isn't live
+                        $settings = get_option(WPS_IC_SETTINGS);
+                        // v7.21.14 — the loader swap must obey the SAME kill every image lane obeys.
+                        // Reading the raw option here made the loader the ONE emitter outside the
+                        // suppression umbrella: on a CF site held in cfwait (cname never verified),
+                        // images stayed origin while the loader alone rode the zone — and when the
+                        // zone's origin pulls are challenged, that lone request fails and every
+                        // delayed script on the page stays dead for visitors (abasingbakes).
+                        $zoneSuppressed = (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed());
+                        if (!$zoneSuppressed && class_exists('wps_cdn_rewrite') && isset(wps_cdn_rewrite::$cdnEnabled)
                             && (string) wps_cdn_rewrite::$cdnEnabled !== '1') {
-                            $wpc_sup2114 = true;
+                            $zoneSuppressed = true;
                         }
-                        if (!$wpc_sup2114 && is_array($wpc_set107) && !empty($wpc_set107['live-cdn']) && (string) $wpc_set107['live-cdn'] === '1') {
-                            
-                            
-                            
-                            
-                            
-                            $wpc_ch107 = function_exists('wpc_cdn_host600')
-                                ? (string) wpc_cdn_host600()
+                        // Scripts ride the page origin (v7.10.719); the loader moves to the CDN host
+                        // only when a site turns that off through wpc_scripts_same_origin.
+                        if (!$zoneSuppressed && apply_filters('wpc_scripts_same_origin', true)) {
+                            $zoneSuppressed = true;
+                        }
+                        if (!$zoneSuppressed && is_array($settings) && !empty($settings['live-cdn']) && (string) $settings['live-cdn'] === '1') {
+                            // v7.10.600 — resolve through the ONE helper. This site read only
+                            // ic_custom_cname then the zone, missing the Cloudflare-provisioned
+                            // cname that the three combine/enqueue resolvers check first — so on a
+                            // CF-connected site the loader alone landed on the raw zone host and
+                            // paid a second DNS+TCP+TLS (409ms measured) that no other node pays.
+                            $cdnHost = function_exists('wpc_cdn_host')
+                                ? (string) wpc_cdn_host()
                                 : trim((string) get_option('ic_custom_cname'));
-                            if ($wpc_ch107 === '') {
-                                $wpc_ch107 = trim((string) get_option('ic_cdn_zone_name'));
+                            if ($cdnHost === '') {
+                                $cdnHost = trim((string) get_option('ic_cdn_zone_name'));
                             }
-                            if ($wpc_ch107 !== '') {
-                                $wpc_loader_src = preg_replace('#^https?://[^/]+#', 'https://' . $wpc_ch107, $wpc_loader_src);
+                            if ($cdnHost !== '') {
+                                $wpc_loader_src = preg_replace('#^https?://[^/]+#', 'https://' . $cdnHost, $wpc_loader_src);
                             }
                         }
                     }
@@ -1470,30 +1764,30 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         }
 
 
-        $wpc_inl109 = '';
+        $inlineTag = '';
         if (defined('WPS_IC_DIR') && apply_filters('wpc_delay_loader_inline', true)) {
-            $wpc_lfile109 = WPS_IC_DIR . $wpc_loader_file;
-            if (@is_readable($wpc_lfile109) && (int) @filesize($wpc_lfile109) > 0 && (int) @filesize($wpc_lfile109) <= 28672) {
-                $wpc_lsrc109 = (string) @file_get_contents($wpc_lfile109);
-                if ($wpc_lsrc109 !== '' && stripos($wpc_lsrc109, '</script') === false) {
-                    $wpc_inl109 = '<script id="wpc-delay-v3-loader">' . $wpc_lsrc109 . '</script>';
+            $loaderPath = WPS_IC_DIR . $wpc_loader_file;
+            if (@is_readable($loaderPath) && (int) @filesize($loaderPath) > 0 && (int) @filesize($loaderPath) <= 28672) {
+                $loaderSource = (string) @file_get_contents($loaderPath);
+                if ($loaderSource !== '' && stripos($loaderSource, '</script') === false) {
+                    $inlineTag = '<script id="wpc-delay-v3-loader">' . $loaderSource . '</script>';
                 }
             }
         }
-        
-        
-        
-        
-        
-        $wpc_fb155 = $wpc_loader_base . $wpc_loader_file . '?v=' . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '1');
-        $wpc_on155 = '';
-        if ($wpc_loader_src !== $wpc_fb155) {
-            $wpc_on155 = ' data-wpc-lfb="' . esc_url($wpc_fb155) . '"'
+        // v7.21.155 — ROSARIOSPADARO: the published/CDN loader URL 404'd (uploads copy present
+        // at mint, gone at serve — sweeper/WAF class) and 35 placeholdered scripts sat dead:
+        // 2 of 13 portfolio images rendered. Disk-at-mint is not HTTP-at-serve; any external
+        // loader carries an onerror fallback to the plugin-dir copy, which ships in the zip
+        // and cannot be missing. One 404 must never hold a page's whole JS hostage.
+        $fallbackSrc = $wpc_loader_base . $wpc_loader_file . '?v=' . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '1');
+        $fallbackAttrs = '';
+        if ($wpc_loader_src !== $fallbackSrc) {
+            $fallbackAttrs = ' data-wpc-lfb="' . esc_url($fallbackSrc) . '"'
                 . ' onerror="if(!this.dataset.wpcLfbDone){this.dataset.wpcLfbDone=1;var s=document.createElement(\'script\');s.src=this.dataset.wpcLfb;s.async=true;s.id=\'wpc-delay-v3-loader\';document.head.appendChild(s);}"';
         }
-        return ($wpc_inl109 !== '')
-            ? $wpc_inl109
-            : '<script id="wpc-delay-v3-loader" src="' . esc_url($wpc_loader_src) . '" async' . $wpc_on155 . '></script>';
+        return ($inlineTag !== '')
+            ? $inlineTag
+            : '<script id="wpc-delay-v3-loader" src="' . esc_url($wpc_loader_src) . '" async' . $fallbackAttrs . '></script>';
     }
 
     public function process_html($html)
@@ -1501,232 +1795,188 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
             return $html;
         }
+        $this->wpc_mod_vendors = self::wpc_module_vendors($html);
+        $this->wpc_mod_core = empty($this->wpc_mod_vendors) ? [] : self::wpc_module_core($html);
 
         $this->wpc_sync_jquery = (bool) preg_match('/<script\b[^>]*\bsrc=["\'][^"\']*(?:wpbf|page-builder-framework|sb-youtube)[^"\']*\.js/i', $html);
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        if (strpos($html, 'bricks-lazy-hidden') !== false
-            && apply_filters('wpc_bricks_swapper_keep', true)) {
-            $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [
-                'bricks.min.js',
-            ])));
-        }
-        
-        
-        
-        
-        
-        
-        
-        if (in_array('bricks.min.js', (array) $this->excludes, true)
-            && apply_filters('wpc_bricks_libs_keep', true)) {
-            $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [
-                '/themes/bricks/assets/js/libs/',
-            ])));
-        }
+        $this->wpc_apply_builder_runtime_keeps($html);
 
-        
-        
-        
-        
-        
-        
-        if ((strpos($html, '/themes/Divi/') !== false || strpos($html, 'et_pb_') !== false)
-            && apply_filters('wpc_divi_runtime_keep', true)) {
-            $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [
-                'theme-scripts-library-base.js',
-                'theme-scripts-library-scroll-to-top.js',
-                'script-library-frontend-global-functions.js',
-                'script-library-frontend-scripts.js',
-                'script-library-ext-waypoint.js',
-                'script-library-menu.js',
-                'script-library-animation.js',
-                'script-library-multi-view.js',
-                'script-library-link.js',
-                'theme-scripts-library.js',
-            ])));
-        }
-
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        // v7.21.74 — A PARSE-TIME ROOT-VARIABLE SETTER IS A STYLESHEET IN SCRIPT'S CLOTHING.
+        // Hozjan/falknerei: the theme's custom.js computes --fluid from the viewport and
+        // writes it on <html> at parse; every fluid font-size is calc(min + range*var(--fluid))
+        // with @property initial-value 0. Delayed, the whole page renders at MINIMUM type
+        // scale until first gesture (h1 measured 35px vs 55.77px plugin-off). Any same-site
+        // theme/child script whose body writes a custom property at parse is render-path:
+        // it stays natural (excluded-src defer lane), and the .56 closure pulls its deps.
+        // Bodies are fetched once per src+ver and the verdict cached; fail-open on every edge.
+        // Kill wpc_rootvar_keep.
         if (apply_filters('wpc_rootvar_keep', true)
-            && preg_match_all('/<script\b[^>]*\bsrc=["\']([^"\']*\/themes\/[^"\']+\.js[^"\']*)["\'][^>]*>/i', $html, $wpc_rv74)) {
-            $wpc_rvmap74 = get_option('wpc_rootvar_setters74');
-            $wpc_rvmap74 = is_array($wpc_rvmap74) ? $wpc_rvmap74 : [];
-            $wpc_snips94 = get_option('wpc_rootvar_snips94');
-            $wpc_snips94 = is_array($wpc_snips94) ? $wpc_snips94 : [];
-            $wpc_snipdirty94 = false;
-            $wpc_hoist94 = [];
-            $wpc_rvdirty74 = false;
-            $wpc_rvfetched74 = 0;
-            foreach (array_slice(array_unique((array) $wpc_rv74[1]), 0, 12) as $wpc_rvsrc74) {
-                $wpc_rvk74 = md5((string) $wpc_rvsrc74);
-                $wpc_body94 = '';
-                if (!array_key_exists($wpc_rvk74, $wpc_rvmap74)) {
-                    if ($wpc_rvfetched74 >= 2) {
-                        continue; 
+            && preg_match_all('/<script\b[^>]*\bsrc=["\']([^"\']*\/themes\/[^"\']+\.js[^"\']*)["\'][^>]*>/i', $html, $theme_script_matches)) {
+            $rootvar_verdicts = get_option('wpc_rootvar_setters74');
+            $rootvar_verdicts = is_array($rootvar_verdicts) ? $rootvar_verdicts : [];
+            $rootvar_snippets = get_option('wpc_rootvar_snips94');
+            $rootvar_snippets = is_array($rootvar_snippets) ? $rootvar_snippets : [];
+            $snippets_changed = false;
+            $hoist_snippets = [];
+            $verdicts_changed = false;
+            $bodies_fetched = 0;
+            foreach (array_slice(array_unique((array) $theme_script_matches[1]), 0, 12) as $theme_src) {
+                $src_hash = md5((string) $theme_src);
+                $script_body = '';
+                if (!array_key_exists($src_hash, $rootvar_verdicts)) {
+                    if ($bodies_fetched >= 2) {
+                        continue; // at most two body fetches per render; the rest classify next request
                     }
-                    $wpc_rvfetched74++;
-                    $wpc_rvv74 = 0;
-                    if (count($wpc_rvmap74) < 48 && function_exists('wp_remote_get')) {
-                        $wpc_rvr74 = wp_remote_get(html_entity_decode((string) $wpc_rvsrc74), ['timeout' => 3, 'sslverify' => false]);
-                        if (function_exists('wpc_net_deferred39') && wpc_net_deferred39($wpc_rvr74, 'rv74:' . $wpc_rvk74, function () use ($wpc_rvsrc74) { wps_ic_js_delay_v3::wpc_rootvar_classify39($wpc_rvsrc74); })) {
+                    $bodies_fetched++;
+                    $is_setter = 0;
+                    if (count($rootvar_verdicts) < 48 && function_exists('wp_remote_get')) {
+                        $fetch_response = wp_remote_get(html_entity_decode((string) $theme_src), ['timeout' => 3, 'sslverify' => false]);
+                        if (function_exists('wpc_net_defer_on_render_guard') && wpc_net_defer_on_render_guard($fetch_response, 'rv74:' . $src_hash, function () use ($theme_src) { wps_ic_js_delay_v3::wpc_classify_root_var_setter($theme_src); })) {
                             continue;
                         }
-                        $wpc_rvb74 = (!is_wp_error($wpc_rvr74) && (int) wp_remote_retrieve_response_code($wpc_rvr74) === 200)
-                            ? substr((string) wp_remote_retrieve_body($wpc_rvr74), 0, 65536) : '';
-                        if ($wpc_rvb74 !== '' && preg_match('/\.style\.setProperty\(\s*["\']--/', $wpc_rvb74)) {
-                            $wpc_rvv74 = 1;
-                            $wpc_body94 = $wpc_rvb74;
+                        $fetched_body = (!is_wp_error($fetch_response) && (int) wp_remote_retrieve_response_code($fetch_response) === 200)
+                            ? substr((string) wp_remote_retrieve_body($fetch_response), 0, 65536) : '';
+                        if ($fetched_body !== '' && preg_match('/\.style\.setProperty\(\s*["\']--/', $fetched_body)) {
+                            $is_setter = 1;
+                            $script_body = $fetched_body;
                         }
                     }
-                    $wpc_rvmap74[$wpc_rvk74] = $wpc_rvv74;
-                    $wpc_rvdirty74 = true;
+                    $rootvar_verdicts[$src_hash] = $is_setter;
+                    $verdicts_changed = true;
                 }
-                if (!empty($wpc_rvmap74[$wpc_rvk74])) {
-                    $wpc_rvbn74 = basename((string) parse_url((string) $wpc_rvsrc74, PHP_URL_PATH));
-                    if ($wpc_rvbn74 !== '' && strlen($wpc_rvbn74) > 4) {
-                        $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [$wpc_rvbn74])));
-                        
-                        
-                        $wpc_rvn90 = (array) get_option('wpc_rootvar_names74', []);
-                        if (!in_array($wpc_rvbn74, $wpc_rvn90, true) && count($wpc_rvn90) < 24) {
-                            $wpc_rvn90[] = $wpc_rvbn74;
-                            update_option('wpc_rootvar_names74', $wpc_rvn90, false);
+                if (!empty($rootvar_verdicts[$src_hash])) {
+                    $setter_basename = basename((string) parse_url((string) $theme_src, PHP_URL_PATH));
+                    if ($setter_basename !== '' && strlen($setter_basename) > 4) {
+                        $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [$setter_basename])));
+                        if (function_exists('wpc_render_belt_note')) {
+                            wpc_render_belt_note('delay-keep-rules', ['rootvar' => 1], true);
+                        }
+                        // v7.21.90 — the first frame WAITS on a root-var setter: it must never
+                        // ride fetchpriority=low (falknerei 3G: 35px h1 for 6.5s ON vs 0.6s OFF).
+                        $setter_names = (array) get_option('wpc_rootvar_names74', []);
+                        if (!in_array($setter_basename, $setter_names, true) && count($setter_names) < 24) {
+                            $setter_names[] = $setter_basename;
+                            update_option('wpc_rootvar_names74', $setter_names, false);
                         }
                         if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_rv74_log')) {
                             set_transient('wpc_rv74_log', 1, 3600);
-                            wpc_cache_first_log('rootvar-keep', $wpc_rvbn74, '', []);
+                            wpc_cache_first_log('rootvar-keep', $setter_basename, '', []);
                         }
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        if (!array_key_exists($wpc_rvk74, $wpc_snips94)) {
-                            if ($wpc_body94 === '' && $wpc_rvfetched74 < 2 && function_exists('wp_remote_get')) {
-                                $wpc_rvfetched74++;
-                                $wpc_rvr94 = wp_remote_get(html_entity_decode((string) $wpc_rvsrc74), ['timeout' => 3, 'sslverify' => false]);
-                                if (function_exists('wpc_net_deferred39')) {
-                                    wpc_net_deferred39($wpc_rvr94, 'rv74:' . $wpc_rvk74, function () use ($wpc_rvsrc74) { wps_ic_js_delay_v3::wpc_rootvar_classify39($wpc_rvsrc74); });
+                        // v7.21.94 — FIRST-FRAME STATE NEVER WAITS ON A NETWORK SCRIPT. The
+                        // .74 keep puts the setter in the defer lane, but defer still executes
+                        // after the document arrives — on 3G falknerei painted at 1.8s and
+                        // custom.js set --fluid at 6.0s: 4.2s of minimum-scale type that
+                        // plugin-off never shows only because blocking CSS holds paint past
+                        // the setter. The setter's own self-contained IIFE is hoisted inline
+                        // at parse; the deferred original re-runs it idempotently.
+                        // Kill wpc_rootvar_early.
+                        if (!array_key_exists($src_hash, $rootvar_snippets)) {
+                            if ($script_body === '' && $bodies_fetched < 2 && function_exists('wp_remote_get')) {
+                                $bodies_fetched++;
+                                $snippet_response = wp_remote_get(html_entity_decode((string) $theme_src), ['timeout' => 3, 'sslverify' => false]);
+                                if (function_exists('wpc_net_defer_on_render_guard')) {
+                                    wpc_net_defer_on_render_guard($snippet_response, 'rv74:' . $src_hash, function () use ($theme_src) { wps_ic_js_delay_v3::wpc_classify_root_var_setter($theme_src); });
                                 }
-                                if (!is_wp_error($wpc_rvr94) && (int) wp_remote_retrieve_response_code($wpc_rvr94) === 200) {
-                                    $wpc_body94 = substr((string) wp_remote_retrieve_body($wpc_rvr94), 0, 65536);
+                                if (!is_wp_error($snippet_response) && (int) wp_remote_retrieve_response_code($snippet_response) === 200) {
+                                    $script_body = substr((string) wp_remote_retrieve_body($snippet_response), 0, 65536);
                                 }
                             }
-                            if ($wpc_body94 !== '' && count($wpc_snips94) < 24) {
-                                $wpc_snips94[$wpc_rvk74] = self::wpc_rootvar_extract94($wpc_body94);
-                                $wpc_snipdirty94 = true;
+                            if ($script_body !== '' && count($rootvar_snippets) < 24) {
+                                $rootvar_snippets[$src_hash] = self::wpc_extract_root_var_setter_iifes($script_body);
+                                $snippets_changed = true;
                             }
                         }
-                        if (!empty($wpc_snips94[$wpc_rvk74])) {
-                            $wpc_hoist94[] = (string) $wpc_snips94[$wpc_rvk74];
+                        if (!empty($rootvar_snippets[$src_hash])) {
+                            $hoist_snippets[] = (string) $rootvar_snippets[$src_hash];
                         }
                     }
                 }
             }
-            if ($wpc_rvdirty74) {
-                update_option('wpc_rootvar_setters74', $wpc_rvmap74, false);
+            if ($verdicts_changed) {
+                update_option('wpc_rootvar_setters74', $rootvar_verdicts, false);
             }
-            if ($wpc_snipdirty94) {
-                update_option('wpc_rootvar_snips94', $wpc_snips94, false);
+            if ($snippets_changed) {
+                update_option('wpc_rootvar_snips94', $rootvar_snippets, false);
             }
-            if (!empty($wpc_hoist94) && apply_filters('wpc_rootvar_early', true)
+            if (!empty($hoist_snippets) && apply_filters('wpc_rootvar_early', true)
                 && strpos($html, 'wpc-rootvar-early') === false) {
-                $wpc_early94 = '<script id="wpc-rootvar-early">try{' . implode("\n", array_slice($wpc_hoist94, 0, 2)) . '}catch(wpcE94){}</script>';
-                if (preg_match('/<head(\s[^>]*)?>/i', $html, $wpc_hm94, PREG_OFFSET_CAPTURE)) {
-                    $wpc_hp94 = (int) $wpc_hm94[0][1] + strlen($wpc_hm94[0][0]);
-                    $html = substr($html, 0, $wpc_hp94) . $wpc_early94 . substr($html, $wpc_hp94);
+                $early_tag = '<script id="wpc-rootvar-early">try{' . implode("\n", array_slice($hoist_snippets, 0, 2)) . '}catch(wpcE94){}</script>';
+                if (preg_match('/<head(\s[^>]*)?>/i', $html, $head_match, PREG_OFFSET_CAPTURE)) {
+                    $head_end = (int) $head_match[0][1] + strlen($head_match[0][0]);
+                    $html = substr($html, 0, $head_end) . $early_tag . substr($html, $head_end);
                 }
             }
         }
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        $this->wpc_inline_pairs494 = [];
-        if (preg_match_all('/<script\b(?![^>]*\bsrc=)[^>]*\bid=["\']([^"\']+?)-after["\']/i', $html, $wpc_ip494)) {
-            foreach ((array) $wpc_ip494[1] as $wpc_b494) {
-                $this->wpc_inline_pairs494[strtolower($wpc_b494)] = 1;
+        // v7.10.494 — INLINE COMPANIONS DISQUALIFY DEFER. An inline script cannot be deferred, so
+        // deferring the external it depends on inverts their order: wp-i18n-js deferred while
+        // wp-i18n-js-after runs at parse threw "wp is not defined" and killed Real Cookie Banner.
+        // v7.10.564 — ONLY -after companions disqualify, which is WP core's actual rule in
+        // filter_eligible_strategies: an -after companion CALLS its parent's API at parse, so the
+        // parent must not defer; a -before companion is a config setter that runs at parse and is
+        // read at DCL — order preserved by construction. Matching -before too stranded
+        // elementor-frontend-js in the blocking lane while its whole dependency chain deferred
+        // around it (staging receipt: webpack runtime deferred, frontend blocking = inversion).
+        $this->wpc_inline_pair_ids = [];
+        if (preg_match_all('/<script\b(?![^>]*\bsrc=)[^>]*\bid=["\']([^"\']+?)-after["\']/i', $html, $after_companions)) {
+            foreach ((array) $after_companions[1] as $parent_id) {
+                $this->wpc_inline_pair_ids[strtolower($parent_id)] = 1;
             }
         }
-        
-        
-        
-        
-        
-        
-        
-        $this->wpc_inline_pairs494 = self::wpc_alias_pairs2109($this->wpc_inline_pairs494);
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        $this->wpc_jq_parse_need803 = false;
+        // v7.21.09 — WP attaches inline companions to the ALIAS handle: the companion renders
+        // as jquery-js-after while the src tag is jquery-core-js, so the id-keyed map above
+        // missed every alias pairing and jquery-core deferred under a parse-time -after of our
+        // own making (wpc_check_cart_script rides the 'jquery' handle; its body never calls
+        // jQuery, so the .803 body-sniff stayed silent too) — every first view logged
+        // "jQuery is not defined". A src-less registered handle whose companion is paired
+        // marks each of its deps' tags paired.
+        $this->wpc_inline_pair_ids = self::wpc_expand_alias_pairs($this->wpc_inline_pair_ids);
+        // v7.10.803 — AN -after COMPANION NEEDS ITS LIBRARIES, NOT JUST ITS PARENT. The pairing
+        // above protects the companion's OWN external from deferring, which is WP core's rule.
+        // But the companion body also calls jQuery at parse, and jQuery carries no -after
+        // companion of its own, so nothing above disqualifies it: eloorac deferred
+        // jquery-core-js while jquery-ui-datepicker-js-after ran during parse and threw
+        // "jQuery is not defined". Read the companion BODIES and, only when one actually
+        // references jQuery, hold the jQuery tags in the eager lane. Narrow by construction —
+        // a page whose companions never touch jQuery still defers it, so this cannot become
+        // the .512 blanket that .564 retired for costing 310 ms.
+        $this->wpc_jquery_parse_needed = false;
         if (apply_filters('wpc_jquery_parse_companion_guard', true)
-            && preg_match_all('/<script\b(?![^>]*\bsrc=)[^>]*\bid=["\'][^"\']+?-after["\'][^>]*>(.*?)<\/script>/is', $html, $wpc_cb803)) {
-            foreach ((array) $wpc_cb803[1] as $wpc_body803) {
-                if (preg_match('/(?:^|[^A-Za-z0-9_$])(?:jQuery|\$)\s*[\(\.]/', (string) $wpc_body803)) {
-                    $this->wpc_jq_parse_need803 = true;
+            && preg_match_all('/<script\b(?![^>]*\bsrc=)[^>]*\bid=["\'][^"\']+?-after["\'][^>]*>(.*?)<\/script>/is', $html, $companion_bodies)) {
+            foreach ((array) $companion_bodies[1] as $companion_body) {
+                if (preg_match('/(?:^|[^A-Za-z0-9_$])(?:jQuery|\$)\s*[\(\.]/', (string) $companion_body)) {
+                    $this->wpc_jquery_parse_needed = true;
                     break;
                 }
             }
         }
-        
-        
-        
-        
-        
-        
-        $this->wpc_nodefer_all512 = (bool) apply_filters('wpc_nodefer_all_keeps', false)
+        // v7.10.564 — the .512 blanket and its .526 narrowing are both retired: the blanket
+        // handed back 310 ms of render-blocking jQuery on every paired page, and .526's
+        // narrowing missed the third state (a paired external that IS a keep, left blocking
+        // amid deferred dependencies). The document-position split pass at the end of this
+        // method now enforces the same invariant exactly, with the blanket as its worst case.
+        // Support hatch only: force the full blanket per-site without a build.
+        $this->wpc_nodefer_all_keeps = (bool) apply_filters('wpc_nodefer_all_keeps', false)
             && apply_filters('wpc_keep_defer_pair_safe', true);
 
 
-        
-        
-        
-        $wpc_moff607 = (int) get_option('wpc_delay_v3_manifest_off', 0);
-        $wpc_manifest_on = ($wpc_moff607 <= 0 || self::wpc_measured_delay_newer_than($wpc_moff607))
+        // manifest_off (promoted-script ReferenceError kill-switch) no longer
+        // freezes the measured read when a NEWER measured gen is on disk — the
+        // aggressive path is governed by its own boot-watchdog, not this switch.
+        $manifest_off_at = (int) get_option('wpc_delay_v3_manifest_off', 0);
+        $wpc_manifest_on = ($manifest_off_at <= 0 || self::wpc_measured_delay_newer_than($manifest_off_at))
             && apply_filters('wpc_delay_v3_manifest', true);
         if ($wpc_manifest_on && class_exists('wps_ic_url_key') && defined('WPS_IC_CRITICAL')) {
             try {
                 $wpc_mk = (new wps_ic_url_key())->setup('');
-                $wpc_mf = self::wpc_delay_manifest_file112();
+                $wpc_mf = self::wpc_delay_manifest_file();
                 if ($wpc_mf && @is_readable($wpc_mf)) {
                     $wpc_m = json_decode((string) @file_get_contents($wpc_mf), true);
                     if (is_array($wpc_m)) {
-                        
-                        
-                        
+                        // Measured gate: schema_epoch>=N (authoritative) OR ceiling{}
+                        // presence (legacy proxy), AND a render_critical KEY (the ATF
+                        // keep list; empty array counts = "no script is ATF-critical").
                         $this->wpc_measured = self::wpc_delay_measured_shape($wpc_m);
 
 
@@ -1748,77 +1998,57 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                         }
 
 
-                        
-                        
-                        
-                        
+                        // AUTO-100 §2: per-key third_parties[] — match[] verbatim (A1: host
+                        // is informational), delay-interaction-only lane only. Option lanes
+                        // load first (constructor); the manifest fills gaps — same io field,
+                        // idempotent. keep-eager NEVER auto-wires here (dm dependency law).
                         if (!empty($wpc_m['third_parties']) && is_array($wpc_m['third_parties'])
                             && apply_filters('wpc_manifest_third_parties', true)) {
-                            
-                            
-                            $wpc_formsSafe388 = array_key_exists('has_form', $wpc_m) && $wpc_m['has_form'] === false;
-                            foreach (array_slice($wpc_m['third_parties'], 0, 12) as $wpc_tp356) {
-                                if (!is_array($wpc_tp356)
-                                    || strtolower((string) ($wpc_tp356['recommended'] ?? '')) !== 'delay-interaction-only') {
+                            // v7.10.388 — measured has_form:false = no visible form to protect;
+                            // form-vendor bans yield to measured delay-io (captcha-release twin).
+                            $forms_safe = array_key_exists('has_form', $wpc_m) && $wpc_m['has_form'] === false;
+                            foreach (array_slice($wpc_m['third_parties'], 0, 12) as $third_party) {
+                                if (!is_array($third_party)
+                                    || strtolower((string) ($third_party['recommended'] ?? '')) !== 'delay-interaction-only') {
                                     continue;
                                 }
-                                foreach (array_slice((array) ($wpc_tp356['match'] ?? []), 0, 6) as $wpc_tm356) {
-                                    
-                                    
-                                    foreach (self::wpc_io_pattern_expand($wpc_tm356) as $wpc_tmx386) {
-                                        if (!self::wpc_io_pattern_ok($wpc_tmx386, $wpc_formsSafe388)) {
+                                foreach (array_slice((array) ($third_party['match'] ?? []), 0, 6) as $match_pattern) {
+                                    // v7.10.386 — bare chat-vendor patterns expand to their
+                                    // chat-scoped hosts (the only form the validator accepts).
+                                    foreach (self::wpc_io_pattern_expand($match_pattern) as $expanded_pattern) {
+                                        if (!self::wpc_io_pattern_ok($expanded_pattern, $forms_safe)) {
                                             continue;
                                         }
-                                        $this->wpc_io_patterns[] = strtolower((string) $wpc_tmx386);
-                                        $this->wpc_src_force_delay[] = strtolower((string) $wpc_tmx386); 
+                                        $this->wpc_io_patterns[] = strtolower((string) $expanded_pattern);
+                                        $this->wpc_src_force_delay[] = strtolower((string) $expanded_pattern); // capture door, SRC-only
                                     }
                                 }
                             }
                             $this->wpc_io_patterns = array_slice(array_values(array_unique($this->wpc_io_patterns)), 0, 24);
                             $this->wpc_src_force_delay = array_slice(array_values(array_unique($this->wpc_src_force_delay)), 0, 32);
-                            
-                            
+                            // A form vendor the service just measured as delay-interaction-only
+                            // releases its built-in keep so it can actually be delayed + io-stamped.
                             $this->wpc_release_io_form_keeps();
                         }
-                        
-                        $wpc_secs = [$wpc_m];
-                        foreach (['mobile', 'desktop'] as $wpc_d) {
-                            if (!empty($wpc_m[$wpc_d]) && is_array($wpc_m[$wpc_d])) {
-                                $wpc_secs[] = $wpc_m[$wpc_d];
+                        foreach (self::wpc_manifest_keep_entries($wpc_m) as $wpc_keep) {
+                            list($wpc_k, $wpc_s) = $wpc_keep;
+                            if ($wpc_k === 'render_critical') {
+                                $this->manifest_rc[strtolower(basename((string) strtok($wpc_s, '?')))] = true;
                             }
-                        }
-                        foreach ($wpc_secs as $wpc_sec) {
-                            foreach (['render_critical', 'atf_mutators'] as $wpc_k) {
-                                if (empty($wpc_sec[$wpc_k]) || !is_array($wpc_sec[$wpc_k])) {
-                                    continue;
+                            if (strpos($wpc_s, 'inline:') === 0) {
+                                $wpc_h = substr($wpc_s, 7, 16);
+                                if (strlen($wpc_h) === 16) {
+                                    $this->manifest_inline[$wpc_h] = true;
                                 }
-                                foreach (array_slice($wpc_sec[$wpc_k], 0, 20) as $wpc_s) {
-
-                                    if (is_array($wpc_s) && !empty($wpc_s['key'])) {
-                                        $wpc_s = $wpc_s['key'];
-                                    }
-                                    if (!is_string($wpc_s) || strlen($wpc_s) < 4) {
-                                        continue;
-                                    }
-                                    if ($wpc_k === 'render_critical') {
-                                        $this->manifest_rc[strtolower(basename((string) strtok($wpc_s, '?')))] = true;
-                                    }
-                                    if (strpos($wpc_s, 'inline:') === 0) {
-                                        $wpc_h = substr($wpc_s, 7, 16);
-                                        if (strlen($wpc_h) === 16) {
-                                            $this->manifest_inline[$wpc_h] = true;
-                                        }
-                                    } elseif (strpos($wpc_s, '/') !== false) {
-                                        $wpc_p = parse_url($wpc_s, PHP_URL_PATH);
-                                        if (is_string($wpc_p) && strlen($wpc_p) >= 6) {
-                                            $this->manifest_paths[$wpc_p] = true;
-                                        }
-                                    } else {
-                                        
-                                        
-                                        $this->manifest_names[$wpc_s] = true;
-                                    }
+                            } elseif (strpos($wpc_s, '/') !== false) {
+                                $wpc_p = parse_url($wpc_s, PHP_URL_PATH);
+                                if (is_string($wpc_p) && strlen($wpc_p) >= 6) {
+                                    $this->manifest_paths[$wpc_p] = true;
                                 }
+                            } else {
+                                // v1 flat shape: a src BASENAME or an inline ID attribute.
+                                // Either match errs toward NOT delaying — the safe direction.
+                                $this->manifest_names[$wpc_s] = true;
                             }
                         }
                     }
@@ -1835,33 +2065,33 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
 
 
             if (!empty($this->manifest_names)) {
-                $wpc_bn_map65 = [];
-                foreach ($wpc_ptags[0] as $wpc_bt65) {
-                    $wpc_ba65 = $this->parse_script_attributes($wpc_bt65);
-                    if (empty($wpc_ba65['src'])) { continue; }
-                    $wpc_bu65 = html_entity_decode((string) $wpc_ba65['src']);
-                    $wpc_bi65 = strrpos($wpc_bu65, '/a:');
-                    if ($wpc_bi65 !== false) {
-                        $wpc_be65 = substr($wpc_bu65, $wpc_bi65 + 3);
-                        if (preg_match('#^https?://#i', $wpc_be65)) {
-                            $wpc_bp65 = parse_url($wpc_be65, PHP_URL_PATH);
+                $basename_paths = [];
+                foreach ($wpc_ptags[0] as $script_tag) {
+                    $tag_attrs = $this->parse_script_attributes($script_tag);
+                    if (empty($tag_attrs['src'])) { continue; }
+                    $tag_src = html_entity_decode((string) $tag_attrs['src']);
+                    $embed_pos = strrpos($tag_src, '/a:');
+                    if ($embed_pos !== false) {
+                        $embedded_url = substr($tag_src, $embed_pos + 3);
+                        if (preg_match('#^https?://#i', $embedded_url)) {
+                            $src_path = parse_url($embedded_url, PHP_URL_PATH);
                         } else {
-                            $wpc_bp65 = strtok($wpc_be65, '?');
-                            if (is_string($wpc_bp65) && $wpc_bp65 !== '' && $wpc_bp65[0] !== '/') { $wpc_bp65 = '/' . $wpc_bp65; }
+                            $src_path = strtok($embedded_url, '?');
+                            if (is_string($src_path) && $src_path !== '' && $src_path[0] !== '/') { $src_path = '/' . $src_path; }
                         }
                     } else {
-                        $wpc_bp65 = parse_url($wpc_bu65, PHP_URL_PATH);
+                        $src_path = parse_url($tag_src, PHP_URL_PATH);
                     }
-                    if (!is_string($wpc_bp65) || $wpc_bp65 === '') { continue; }
-                    $wpc_bb65 = strtolower(basename($wpc_bp65));
-                    if ($wpc_bb65 === '') { continue; }
-                    if (!isset($wpc_bn_map65[$wpc_bb65])) { $wpc_bn_map65[$wpc_bb65] = []; }
-                    $wpc_bn_map65[$wpc_bb65][$wpc_bp65] = true;
+                    if (!is_string($src_path) || $src_path === '') { continue; }
+                    $src_basename = strtolower(basename($src_path));
+                    if ($src_basename === '') { continue; }
+                    if (!isset($basename_paths[$src_basename])) { $basename_paths[$src_basename] = []; }
+                    $basename_paths[$src_basename][$src_path] = true;
                 }
-                foreach (array_keys($this->manifest_names) as $wpc_bn65) {
-                    $wpc_bk65 = strtolower((string) $wpc_bn65);
-                    if (isset($wpc_bn_map65[$wpc_bk65]) && count($wpc_bn_map65[$wpc_bk65]) === 1) {
-                        $this->manifest_paths[array_key_first($wpc_bn_map65[$wpc_bk65])] = true;
+                foreach (array_keys($this->manifest_names) as $manifest_name) {
+                    $name_key = strtolower((string) $manifest_name);
+                    if (isset($basename_paths[$name_key]) && count($basename_paths[$name_key]) === 1) {
+                        $this->manifest_paths[array_key_first($basename_paths[$name_key])] = true;
                     }
                 }
             }
@@ -1993,10 +2223,10 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                     if ($wpc_deps === null) {
                         continue;
                     }
-                    
-                    
-                    
-                    if ($this->wpc_consent_delayed && $this->checkKeyword(strtolower((isset($wpc_page_srcs[$wpc_cid]) ? (string) $wpc_page_srcs[$wpc_cid] : '') . ' ' . $wpc_cid), self::wpc_consent_satellites59())) {
+                    // v7.22.59 — consent delayed => its satellites go with it. Burst (Really Simple's
+                    // analytics, consent-gated by the same CMP) was a manifest keep: 566ms long task,
+                    // the whole TBT on welliathome, while the banner it waits on was off the wire.
+                    if ($this->wpc_consent_delayed && $this->checkKeyword(strtolower((isset($wpc_page_srcs[$wpc_cid]) ? (string) $wpc_page_srcs[$wpc_cid] : '') . ' ' . $wpc_cid), self::wpc_consent_satellites())) {
                         if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_cs59_' . md5($wpc_cid))) {
                             set_transient('wpc_cs59_' . md5($wpc_cid), 1, 3600);
                             wpc_cache_first_log('consent-satellite-delayed', $wpc_cid, '', []);
@@ -2006,7 +2236,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                     if ($wpc_is_form($wpc_cid)) {
                         continue;
                     }
-                    if (self::wpc_builder_mutator41(isset($wpc_page_srcs[$wpc_cid]) ? (string) $wpc_page_srcs[$wpc_cid] : '', $this->manifest_rc)
+                    if (self::wpc_is_builder_mutator_script(isset($wpc_page_srcs[$wpc_cid]) ? (string) $wpc_page_srcs[$wpc_cid] : '', $this->manifest_rc)
                         && !apply_filters('wpc_keep_builder_mutators', false, $wpc_cid)) {
                         if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_bm41_' . md5($wpc_cid))) {
                             set_transient('wpc_bm41_' . md5($wpc_cid), 1, 3600);
@@ -2027,7 +2257,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                             $wpc_missing[] = $wpc_did;
                         }
                     }
-                    
+                    // A promoted script that references jQuery pulls the core (+migrate) to parse with it.
                     if ($wpc_ok && isset($wpc_page_ids['jquery-core-js'])
                         && !isset($wpc_parse_ids['jquery-core-js']) && !isset($this->promoted_src_ids['jquery-core-js'])
                         && !in_array('jquery-core-js', $wpc_missing, true)
@@ -2055,7 +2285,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 }
             }
         }
-        
+        // Persist promoted basenames (bounded, only-on-change) — the telemetry self-tuner matches
 
 
         if (!empty($this->promoted_src_ids)) {
@@ -2074,182 +2304,182 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         }
 
 
-        
-        
-        
-        $wpc_pins356 = get_option('wpc_presc_pins');
-        if (is_array($wpc_pins356) && !empty($wpc_pins356) && apply_filters('wpc_presc_lane_pin', true)) {
+        // AUTO-100 §4 lane-pin (A2 chain law): resolve stored pin intents against this
+        // page's registered scripts. jQuery anywhere in the chain — or a chain we cannot
+        // walk — DEGRADES to report-customer; never silently re-eager the biggest script.
+        $lane_pins = get_option('wpc_presc_pins');
+        if (is_array($lane_pins) && !empty($lane_pins) && apply_filters('wpc_presc_lane_pin', true)) {
             try {
-                $wpc_pdirty356 = false;
-                $wpc_pws356 = !empty($GLOBALS['wp_scripts']) && !empty($GLOBALS['wp_scripts']->registered)
+                $pins_changed = false;
+                $script_registry = !empty($GLOBALS['wp_scripts']) && !empty($GLOBALS['wp_scripts']->registered)
                     ? $GLOBALS['wp_scripts'] : null;
-                $wpc_psrc356 = [];
-                if (preg_match_all('/<script\b[^>]*\bsrc=[^>]*>/i', $html, $wpc_ppt356)) {
-                    foreach ($wpc_ppt356[0] as $wpc_ppe356) {
-                        $wpc_ppa356 = $this->parse_script_attributes($wpc_ppe356);
-                        if (!empty($wpc_ppa356['id']) && !empty($wpc_ppa356['src'])) {
-                            $wpc_psrc356[(string) $wpc_ppa356['id']] = html_entity_decode((string) $wpc_ppa356['src']);
+                $src_by_id = [];
+                if (preg_match_all('/<script\b[^>]*\bsrc=[^>]*>/i', $html, $pin_tags)) {
+                    foreach ($pin_tags[0] as $pin_tag) {
+                        $pin_tag_attrs = $this->parse_script_attributes($pin_tag);
+                        if (!empty($pin_tag_attrs['id']) && !empty($pin_tag_attrs['src'])) {
+                            $src_by_id[(string) $pin_tag_attrs['id']] = html_entity_decode((string) $pin_tag_attrs['src']);
                         }
                     }
                 }
-                foreach ($wpc_pins356 as $wpc_pnid356 => $wpc_pin356) {
-                    if (!is_array($wpc_pin356)) {
+                foreach ($lane_pins as $pin_id => $pin) {
+                    if (!is_array($pin)) {
                         continue;
                     }
-                    
-                    
-                    if (($wpc_pin356['state'] ?? '') === 'resolved') {
-                        foreach ((array) ($wpc_pin356['ids'] ?? []) as $wpc_rpid356) {
-                            if (isset($wpc_psrc356[$wpc_rpid356])) {
-                                $this->promoted_src_ids[(string) $wpc_rpid356] = true;
+                    // Resolved pins RE-APPLY on every render (promoted_src_ids resets per
+                    // document) — the stored handle-id list makes that a read-only pass.
+                    if (($pin['state'] ?? '') === 'resolved') {
+                        foreach ((array) ($pin['ids'] ?? []) as $resolved_id) {
+                            if (isset($src_by_id[$resolved_id])) {
+                                $this->promoted_src_ids[(string) $resolved_id] = true;
                             }
                         }
                         continue;
                     }
-                    if (($wpc_pin356['state'] ?? '') !== 'pending') {
+                    if (($pin['state'] ?? '') !== 'pending') {
                         continue;
                     }
-                    $wpc_tid356 = '';
-                    foreach ((array) ($wpc_pin356['cand'] ?? []) as $wpc_pc356) {
-                        $wpc_pc356 = strtolower(trim((string) $wpc_pc356));
-                        if (strlen($wpc_pc356) < 4) {
+                    $target_id = '';
+                    foreach ((array) ($pin['cand'] ?? []) as $candidate) {
+                        $candidate = strtolower(trim((string) $candidate));
+                        if (strlen($candidate) < 4) {
                             continue;
                         }
-                        foreach ($wpc_psrc356 as $wpc_pi356 => $wpc_pu356) {
-                            if (substr((string) $wpc_pi356, -3) === '-js' && stripos($wpc_pu356, $wpc_pc356) !== false) {
-                                $wpc_tid356 = (string) $wpc_pi356;
+                        foreach ($src_by_id as $page_script_id => $page_script_src) {
+                            if (substr((string) $page_script_id, -3) === '-js' && stripos($page_script_src, $candidate) !== false) {
+                                $target_id = (string) $page_script_id;
                                 break 2;
                             }
                         }
                     }
-                    if ($wpc_tid356 === '') {
-                        continue; 
+                    if ($target_id === '') {
+                        continue; // revealer not on this template — intent stays pending
                     }
-                    $wpc_ph356 = substr($wpc_tid356, 0, -3);
-                    $wpc_chain356 = null;
-                    if ($wpc_pws356 && !empty($wpc_pws356->registered[$wpc_ph356])) {
-                        $wpc_chain356 = [];
-                        $wpc_pst356 = [$wpc_ph356];
-                        $wpc_psn356 = [$wpc_ph356 => true];
-                        $wpc_pn356 = 0;
-                        while (!empty($wpc_pst356) && $wpc_pn356++ < 200) {
-                            $wpc_pcur356 = array_pop($wpc_pst356);
-                            if (empty($wpc_pws356->registered[$wpc_pcur356])) {
+                    $target_handle = substr($target_id, 0, -3);
+                    $dep_chain = null;
+                    if ($script_registry && !empty($script_registry->registered[$target_handle])) {
+                        $dep_chain = [];
+                        $walk_stack = [$target_handle];
+                        $walk_seen = [$target_handle => true];
+                        $walk_steps = 0;
+                        while (!empty($walk_stack) && $walk_steps++ < 200) {
+                            $walk_handle = array_pop($walk_stack);
+                            if (empty($script_registry->registered[$walk_handle])) {
                                 continue;
                             }
-                            foreach ((array) $wpc_pws356->registered[$wpc_pcur356]->deps as $wpc_pd356) {
-                                if (isset($wpc_psn356[$wpc_pd356])) {
+                            foreach ((array) $script_registry->registered[$walk_handle]->deps as $walk_dep) {
+                                if (isset($walk_seen[$walk_dep])) {
                                     continue;
                                 }
-                                $wpc_psn356[$wpc_pd356] = true;
-                                $wpc_chain356[] = $wpc_pd356;
-                                $wpc_pst356[] = $wpc_pd356;
+                                $walk_seen[$walk_dep] = true;
+                                $dep_chain[] = $walk_dep;
+                                $walk_stack[] = $walk_dep;
                             }
                         }
                     }
-                    
-                    
-                    
-                    $wpc_jq356 = $wpc_chain356 === null
-                        || in_array('jquery', $wpc_chain356, true) || in_array('jquery-core', $wpc_chain356, true)
-                        || self::wpc_src_needs_jquery((string) ($wpc_psrc356[$wpc_tid356] ?? ''));
-                    $wpc_reason356 = $wpc_chain356 === null ? 'chain-unknown' : 'jquery-chain';
-                    $wpc_bytes356 = 0;
-                    if (!$wpc_jq356) {
-                        $wpc_pinsrcs356 = [(string) ($wpc_psrc356[$wpc_tid356] ?? '')];
-                        foreach ($wpc_chain356 as $wpc_pch356) {
-                            if (isset($wpc_psrc356[$wpc_pch356 . '-js'])) {
-                                $wpc_pinsrcs356[] = (string) $wpc_psrc356[$wpc_pch356 . '-js'];
+                    // A2 in full: jQuery anywhere in the chain (target src OR any chain
+                    // member's src), an unwalkable chain, or a chain heavier than the win
+                    // — all DEGRADE to report-customer.
+                    $degrade = $dep_chain === null
+                        || in_array('jquery', $dep_chain, true) || in_array('jquery-core', $dep_chain, true)
+                        || self::wpc_src_needs_jquery((string) ($src_by_id[$target_id] ?? ''));
+                    $degrade_reason = $dep_chain === null ? 'chain-unknown' : 'jquery-chain';
+                    $chain_bytes = 0;
+                    if (!$degrade) {
+                        $chain_srcs = [(string) ($src_by_id[$target_id] ?? '')];
+                        foreach ($dep_chain as $chain_handle) {
+                            if (isset($src_by_id[$chain_handle . '-js'])) {
+                                $chain_srcs[] = (string) $src_by_id[$chain_handle . '-js'];
                             }
                         }
-                        foreach ($wpc_pinsrcs356 as $wpc_psu356) {
-                            if ($wpc_psu356 === '') {
+                        foreach ($chain_srcs as $chain_src) {
+                            if ($chain_src === '') {
                                 continue;
                             }
-                            if (self::wpc_src_needs_jquery($wpc_psu356)) {
-                                $wpc_jq356 = true;
-                                $wpc_reason356 = 'jquery-chain';
+                            if (self::wpc_src_needs_jquery($chain_src)) {
+                                $degrade = true;
+                                $degrade_reason = 'jquery-chain';
                                 break;
                             }
-                            if (($wpc_pcp356 = strrpos($wpc_psu356, 'wp-content/')) !== false) {
-                                $wpc_prel356 = (string) preg_replace('/[?#].*$/', '', substr($wpc_psu356, $wpc_pcp356));
-                                if (strpos($wpc_prel356, '..') === false) {
-                                    $wpc_bytes356 += (int) @filesize(trailingslashit(ABSPATH) . $wpc_prel356);
+                            if (($content_pos = strrpos($chain_src, 'wp-content/')) !== false) {
+                                $relative_path = (string) preg_replace('/[?#].*$/', '', substr($chain_src, $content_pos));
+                                if (strpos($relative_path, '..') === false) {
+                                    $chain_bytes += (int) @filesize(trailingslashit(ABSPATH) . $relative_path);
                                 }
                             }
                         }
-                        if (!$wpc_jq356 && $wpc_bytes356 > (int) apply_filters('wpc_lane_pin_weight_cap', 262144)) {
-                            $wpc_jq356 = true;
-                            $wpc_reason356 = 'heavier-than-win';
+                        if (!$degrade && $chain_bytes > (int) apply_filters('wpc_lane_pin_weight_cap', 262144)) {
+                            $degrade = true;
+                            $degrade_reason = 'heavier-than-win';
                         }
                     }
-                    if ($wpc_jq356) {
-                        $wpc_pins356[$wpc_pnid356]['state'] = 'degraded';
+                    if ($degrade) {
+                        $lane_pins[$pin_id]['state'] = 'degraded';
                         if (function_exists('wpc_presc_journal_put')) {
-                            wpc_presc_journal_put((string) $wpc_pnid356, ['status' => 'report', 'fix' => 'lane-pin',
-                                'class' => (string) ($wpc_pin356['cl'] ?? ''), 'skipped' => $wpc_reason356]);
+                            wpc_presc_journal_put((string) $pin_id, ['status' => 'report', 'fix' => 'lane-pin',
+                                'class' => (string) ($pin['cl'] ?? ''), 'skipped' => $degrade_reason]);
                         }
                     } else {
-                        $wpc_pcap356 = (int) apply_filters('wpc_delay_v3_promotion_cap', 24);
-                        if ((count($this->promoted_src_ids) + 1 + count($wpc_chain356)) > $wpc_pcap356) {
-                            continue; 
+                        $promotion_cap = (int) apply_filters('wpc_delay_v3_promotion_cap', 24);
+                        if ((count($this->promoted_src_ids) + 1 + count($dep_chain)) > $promotion_cap) {
+                            continue; // cap-full — intent stays pending for a later render
                         }
-                        $wpc_pinids356 = [$wpc_tid356];
-                        $this->promoted_src_ids[$wpc_tid356] = true;
-                        foreach ($wpc_chain356 as $wpc_pch356) {
-                            if (isset($wpc_psrc356[$wpc_pch356 . '-js'])) {
-                                $this->promoted_src_ids[$wpc_pch356 . '-js'] = true;
-                                $wpc_pinids356[] = $wpc_pch356 . '-js';
+                        $pinned_ids = [$target_id];
+                        $this->promoted_src_ids[$target_id] = true;
+                        foreach ($dep_chain as $chain_handle) {
+                            if (isset($src_by_id[$chain_handle . '-js'])) {
+                                $this->promoted_src_ids[$chain_handle . '-js'] = true;
+                                $pinned_ids[] = $chain_handle . '-js';
                             }
                         }
-                        $wpc_pins356[$wpc_pnid356]['state'] = 'resolved';
-                        $wpc_pins356[$wpc_pnid356]['ids'] = $wpc_pinids356;
+                        $lane_pins[$pin_id]['state'] = 'resolved';
+                        $lane_pins[$pin_id]['ids'] = $pinned_ids;
                         if (function_exists('wpc_presc_journal_put')) {
-                            wpc_presc_journal_put((string) $wpc_pnid356, ['status' => 'applied', 'fix' => 'lane-pin',
-                                'class' => (string) ($wpc_pin356['cl'] ?? '')]);
+                            wpc_presc_journal_put((string) $pin_id, ['status' => 'applied', 'fix' => 'lane-pin',
+                                'class' => (string) ($pin['cl'] ?? '')]);
                         }
                     }
-                    $wpc_pdirty356 = true;
+                    $pins_changed = true;
                 }
-                if ($wpc_pdirty356) {
-                    update_option('wpc_presc_pins', $wpc_pins356, false);
+                if ($pins_changed) {
+                    update_option('wpc_presc_pins', $lane_pins, false);
                 }
             } catch (\Throwable $e) {
             }
         }
 
         $this->companion_ids = [];
-        $this->wpc_family_keep747 = [];
+        $this->wpc_family_keep_ids = [];
         $wpc_excluded_ids = [];
         $wpc_runtime_tags = [];
-        $wpc_seen_src_ids747 = [];
+        $seen_src_ids = [];
         if (preg_match_all('/<script\b[^>]*\bsrc=[^>]*>/i', $html, $wpc_srctags)) {
             foreach ($wpc_srctags[0] as $wpc_t) {
                 $wpc_a = $this->parse_script_attributes($wpc_t);
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                
+                // v7.21.95 — AN ID-LESS PARENT ORPHANS ITS COMPANIONS. This scan is the only
+                // thing that pins a kept script's -js-before/-extra/-after inlines into the same
+                // eager lane, and it keyed entirely on the tag's id — so a plugin that replaces
+                // its own tag in script_loader_tag and drops the id gets its parent kept and its
+                // companions left delayable. Amelia is exactly that shape: it prints
+                // "<script type='module' crossorigin src='.../v3/public/assets/public.js'>" with
+                // no id at all, the type rule in should_exclude_script keeps the module eager
+                // (correctly — a module cannot be replayed in classic order), and modules are
+                // spec-DEFERRED, so it executes before DOMContentLoaded while
+                // amelia_booking_script_index-js-extra sits in the delay registry waiting for a
+                // gesture: the Vue app boots with wpAmeliaSettings undefined and the booking
+                // container stays empty forever. wp_scripts still holds the handle->src map at
+                // this point, so resolve the handle off the src PATH and carry on with a
+                // synthetic id. Kill wpc_srcless_id_resolve.
                 if (empty($wpc_a['id']) && !empty($wpc_a['src'])) {
-                    $wpc_hid95 = $this->wpc_handle_from_src95((string) $wpc_a['src']);
-                    if ($wpc_hid95 !== '') {
-                        $wpc_a['id'] = $wpc_hid95 . '-js';
+                    $resolved_handle = $this->wpc_handle_from_src((string) $wpc_a['src']);
+                    if ($resolved_handle !== '') {
+                        $wpc_a['id'] = $resolved_handle . '-js';
                     }
                 }
                 if (empty($wpc_a['id'])) {
                     continue;
                 }
-                $wpc_seen_src_ids747[(string) $wpc_a['id']] = true;
+                $seen_src_ids[(string) $wpc_a['id']] = true;
                 if (preg_match('/^(.+)-webpack(?:-pro)?-runtime-js$/', (string) $wpc_a['id'], $wpc_fm)) {
                     $wpc_runtime_tags[(string) $wpc_a['id']] = $wpc_fm[1];
                 }
@@ -2263,73 +2493,73 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             }
         }
 
-        
-        
-        
-        
-        
-        
-        
-        
+        // A KEPT INLINE COMPANION PINS ITS OWN LIBRARY. The map above runs one way only — parent
+        // kept, therefore companions kept — but the reverse is just as fatal and it is what
+        // eloorac hit the moment .805 stopped deferring jQuery: jquery-ui-datepicker-js-after was
+        // kept and ran inside jQuery's ready, while jquery-ui-datepicker-js itself was delayed, so
+        // jQuery.datepicker was undefined ("Cannot read properties of undefined (reading
+        // 'setDefaults')"). An -after companion calls its parent's API by definition, so a companion
+        // and its library must share a lane. Decided by the real should_exclude_script over the
+        // companion's own attributes and body, not by a name pattern.
         if (apply_filters('wpc_companion_pins_library', true)
-            && preg_match_all('/<script\b(?![^>]*\bsrc=)([^>]*\bid=["\']([^"\']+?)-after["\'][^>]*)>(.*?)<\/script>/is', $html, $wpc_ic805, PREG_SET_ORDER)) {
-            foreach ($wpc_ic805 as $wpc_cm805) {
-                $wpc_pid805 = (string) $wpc_cm805[2];
-                if ($wpc_pid805 === '' || isset($wpc_excluded_ids[$wpc_pid805])
-                    || !isset($wpc_seen_src_ids747[$wpc_pid805])) {
+            && preg_match_all('/<script\b(?![^>]*\bsrc=)([^>]*\bid=["\']([^"\']+?)-after["\'][^>]*)>(.*?)<\/script>/is', $html, $kept_companions, PREG_SET_ORDER)) {
+            foreach ($kept_companions as $companion_match) {
+                $companion_parent_id = (string) $companion_match[2];
+                if ($companion_parent_id === '' || isset($wpc_excluded_ids[$companion_parent_id])
+                    || !isset($seen_src_ids[$companion_parent_id])) {
                     continue;
                 }
-                $wpc_ca805 = $this->parse_script_attributes('<script ' . $wpc_cm805[1] . '>');
-                if (!$this->should_exclude_script($wpc_ca805, (string) $wpc_cm805[3])) {
+                $companion_attrs = $this->parse_script_attributes('<script ' . $companion_match[1] . '>');
+                if (!$this->should_exclude_script($companion_attrs, (string) $companion_match[3])) {
                     continue;
                 }
-                $this->companion_ids[$wpc_pid805]     = true;
-                $this->wpc_family_keep747[$wpc_pid805] = true;
-                $wpc_excluded_ids[$wpc_pid805]        = true;
+                $this->companion_ids[$companion_parent_id]     = true;
+                $this->wpc_family_keep_ids[$companion_parent_id] = true;
+                $wpc_excluded_ids[$companion_parent_id]        = true;
             }
         }
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        // elementor-frontend-js is the DOCUMENT SCANNER: at its init it instantiates every
+        // elementor document on the page with whatever document classes are registered AT THAT
+        // MOMENT. elementor-pro-frontend-js is the class REGISTRAR (popup among them). Scanner
+        // kept + registrar delayed = every popup instantiated as a base document with no
+        // getModal, permanently — the registrar arriving later re-instantiates nothing. So the
+        // pro family rides the scanner's lane; the runtime loop below then carries
+        // elementor-pro-webpack-runtime-js with it.
+        // v7.22.28 — WIDGET RUNTIME DEPS RIDE WITH THE SCANNER. Elementor widgets declare
+        // `imagesloaded`/`masonry` per WIDGET (get_script_depends), not on the frontend handle,
+        // so the dep closure never carries them: Pro's Loop masonry (`initMasonry`) ran at
+        // element_ready with `imagesloaded.min.js` still in the delayed lane — `imagesLoaded is
+        // not defined` on columbus (audit check 7), masonry never laid out. Both are ~5KB
+        // WP-core libs; they stay in the kept lane whenever elementor-frontend-js does.
         if (isset($wpc_excluded_ids['elementor-frontend-js'])
             && apply_filters('wpc_delay_elementor_family_lane', true)) {
-            foreach (['elementor-pro-frontend-js', 'pro-elements-handlers-js', 'imagesloaded-js', 'masonry-js'] as $wpc_pid747) {
-                if (!isset($wpc_seen_src_ids747[$wpc_pid747]) || isset($wpc_excluded_ids[$wpc_pid747])) {
+            foreach (['elementor-pro-frontend-js', 'pro-elements-handlers-js', 'imagesloaded-js', 'masonry-js'] as $family_id) {
+                if (!isset($seen_src_ids[$family_id]) || isset($wpc_excluded_ids[$family_id])) {
                     continue;
                 }
-                $this->companion_ids[$wpc_pid747]     = true;
-                $this->wpc_family_keep747[$wpc_pid747] = true;
-                $wpc_excluded_ids[$wpc_pid747]        = true;
-                $wpc_ph747 = preg_replace('/-js$/', '', $wpc_pid747);
+                $this->companion_ids[$family_id]     = true;
+                $this->wpc_family_keep_ids[$family_id] = true;
+                $wpc_excluded_ids[$family_id]        = true;
+                $family_handle = preg_replace('/-js$/', '', $family_id);
                 foreach (['-js-before', '-js-after', '-js-extra'] as $wpc_suf) {
-                    $this->companion_ids[$wpc_ph747 . $wpc_suf] = true;
+                    $this->companion_ids[$family_handle . $wpc_suf] = true;
                 }
             }
         }
-        
-        
-        
-        
+        // The other half of the same law: never keep a CONSUMER while delaying its DEPENDENCY.
+        // pro-elements-handlers calls $menu.smartmenus() and .sticky() at widget init (DCL);
+        // with the libs delayed, every RELOAD (cached = fast init) throws "smartmenus is not a
+        // function" before the gesture releases them — staging receipt, reload-only, homepage.
         if (isset($wpc_excluded_ids['pro-elements-handlers-js'])
             && apply_filters('wpc_delay_elementor_family_lane', true)) {
-            foreach (['smartmenus-js', 'e-sticky-js'] as $wpc_lid753) {
-                if (!isset($wpc_seen_src_ids747[$wpc_lid753]) || isset($wpc_excluded_ids[$wpc_lid753])) {
+            foreach (['smartmenus-js', 'e-sticky-js'] as $library_id) {
+                if (!isset($seen_src_ids[$library_id]) || isset($wpc_excluded_ids[$library_id])) {
                     continue;
                 }
-                $this->companion_ids[$wpc_lid753]      = true;
-                $this->wpc_family_keep747[$wpc_lid753] = true;
-                $wpc_excluded_ids[$wpc_lid753]         = true;
+                $this->companion_ids[$library_id]      = true;
+                $this->wpc_family_keep_ids[$library_id] = true;
+                $wpc_excluded_ids[$library_id]         = true;
             }
         }
 
@@ -2338,7 +2568,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             foreach (array_keys($wpc_excluded_ids) as $wpc_eid) {
                 if (strpos($wpc_eid, $wpc_fam . '-') === 0 && $wpc_eid !== $wpc_rid) {
                     $this->companion_ids[$wpc_rid]     = true;
-                    $this->wpc_family_keep747[$wpc_rid] = true;
+                    $this->wpc_family_keep_ids[$wpc_rid] = true;
                     $wpc_excluded_ids[$wpc_rid]        = true;
                     $wpc_rh = preg_replace('/-js$/', '', $wpc_rid);
                     foreach (['-js-before', '-js-after', '-js-extra'] as $wpc_suf) {
@@ -2350,62 +2580,62 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         }
 
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        foreach ($this->wpc_keep_dep_closure56($wpc_excluded_ids, $wpc_seen_src_ids747) as $wpc_did56) {
-            $this->companion_ids[$wpc_did56]      = true;
-            $this->wpc_family_keep747[$wpc_did56] = true;
-            $wpc_excluded_ids[$wpc_did56]         = true;
-            $wpc_dh56 = preg_replace('/-js$/', '', $wpc_did56);
-            foreach (['-js-before', '-js-after', '-js-extra'] as $wpc_suf56) {
-                $this->companion_ids[$wpc_dh56 . $wpc_suf56] = true;
+        // v7.21.56 — NEVER KEEP A CONSUMER WHILE DELAYING ITS DEPENDENCY, generalized from the
+        // .747/.753 hardcoded families to the whole keep set: every kept handle pulls its
+        // recursive wp_scripts dependency closure into the keep. columbuschiropractors:
+        // uael-nav-menu-js (the mega-menu initializer) was kept by the measured manifest while
+        // jquery sat in the delay registry — "jQuery is not defined" at parse, the nav module
+        // never registered, and the open submenu rendered as overlapping text FOREVER (replayed
+        // jQuery re-runs nothing). WordPress already knows the dependency edge (uael-nav-menu
+        // depends on jquery); the walk resolves alias handles (jquery -> jquery-core) because
+        // every dep re-enters the stack whether or not its own tag is on the page.
+        foreach ($this->wpc_keep_dependency_closure($wpc_excluded_ids, $seen_src_ids) as $closure_dep_id) {
+            $this->companion_ids[$closure_dep_id]      = true;
+            $this->wpc_family_keep_ids[$closure_dep_id] = true;
+            $wpc_excluded_ids[$closure_dep_id]         = true;
+            $closure_dep_handle = preg_replace('/-js$/', '', $closure_dep_id);
+            foreach (['-js-before', '-js-after', '-js-extra'] as $closure_suffix) {
+                $this->companion_ids[$closure_dep_handle . $closure_suffix] = true;
             }
         }
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        // v7.22.14 — A KEEP CARRIES ITS PLUGIN'S PROVIDERS, handle-prefix edition. The .56
+        // closure follows wp_scripts deps; a plugin that registers its provider as a SIBLING
+        // handle (italianliquors: vidbgpro-js kept by the manifest, vidbgpro-vimeo-js =
+        // player.vimeo.com/api/player.js delayed, no dep edge between them) throws
+        // "Vimeo is not defined" from the kept script's jQuery-ready companion, the manifest
+        // self-heal reverts the lane, and the page flips between measured and unmeasured on
+        // every load. WordPress handle naming IS the family edge: every kept handle H also
+        // keeps the page's H-<segment> handles. Core/library prefixes are excluded so a kept
+        // jquery or elementor never sweeps their whole families. Over-keeping costs an eager
+        // request; under-keeping costs a broken page. Cap-bounded, filter-killable.
         if (apply_filters('wpc_keep_prefix_family', true)) {
-            $wpc_pfDeny114 = ['jquery', 'jquery-core', 'jquery-migrate', 'jquery-ui', 'wp', 'wp-util', 'wp-i18n', 'wp-hooks',
+            $prefix_deny = ['jquery', 'jquery-core', 'jquery-migrate', 'jquery-ui', 'wp', 'wp-util', 'wp-i18n', 'wp-hooks',
                 'underscore', 'backbone', 'lodash', 'react', 'react-dom', 'elementor', 'elementor-pro', 'wc', 'woocommerce',
                 'google', 'gtm', 'gtag', 'swiper', 'bootstrap', 'font', 'fonts'];
-            $wpc_pfN114 = 0; $wpc_pfLog114 = [];
-            foreach (array_keys((array) $wpc_excluded_ids) as $wpc_kid114) {
-                $wpc_kh114 = preg_replace('/-js$/', '', (string) $wpc_kid114);
-                if ($wpc_kh114 === '' || strlen($wpc_kh114) < 4 || in_array($wpc_kh114, $wpc_pfDeny114, true)) {
+            $prefix_kept_count = 0; $prefix_log = [];
+            foreach (array_keys((array) $wpc_excluded_ids) as $kept_id) {
+                $kept_handle = preg_replace('/-js$/', '', (string) $kept_id);
+                if ($kept_handle === '' || strlen($kept_handle) < 4 || in_array($kept_handle, $prefix_deny, true)) {
                     continue;
                 }
-                foreach (array_keys((array) $wpc_seen_src_ids747) as $wpc_sid114) {
-                    $wpc_sh114 = preg_replace('/-js$/', '', (string) $wpc_sid114);
-                    if (isset($wpc_excluded_ids[$wpc_sid114]) || strpos($wpc_sh114, $wpc_kh114 . '-') !== 0) {
+                foreach (array_keys((array) $seen_src_ids) as $sibling_id) {
+                    $sibling_handle = preg_replace('/-js$/', '', (string) $sibling_id);
+                    if (isset($wpc_excluded_ids[$sibling_id]) || strpos($sibling_handle, $kept_handle . '-') !== 0) {
                         continue;
                     }
-                    if ($wpc_pfN114++ >= 20) { break 2; }
-                    $this->companion_ids[$wpc_sid114]      = true;
-                    $this->wpc_family_keep747[$wpc_sid114] = true;
-                    $wpc_excluded_ids[$wpc_sid114]         = true;
-                    foreach (['-js-before', '-js-after', '-js-extra'] as $wpc_suf114) {
-                        $this->companion_ids[$wpc_sh114 . $wpc_suf114] = true;
+                    if ($prefix_kept_count++ >= 20) { break 2; }
+                    $this->companion_ids[$sibling_id]      = true;
+                    $this->wpc_family_keep_ids[$sibling_id] = true;
+                    $wpc_excluded_ids[$sibling_id]         = true;
+                    foreach (['-js-before', '-js-after', '-js-extra'] as $sibling_suffix) {
+                        $this->companion_ids[$sibling_handle . $sibling_suffix] = true;
                     }
-                    if (count($wpc_pfLog114) < 6) { $wpc_pfLog114[] = $wpc_kh114 . '>' . $wpc_sh114; }
+                    if (count($prefix_log) < 6) { $prefix_log[] = $kept_handle . '>' . $sibling_handle; }
                 }
             }
-            if ($wpc_pfN114 && function_exists('wpc_cache_first_log')) {
-                wpc_cache_first_log('keep-prefix-family', '', '', ['n' => $wpc_pfN114, 'pairs' => implode(',', $wpc_pfLog114)]);
+            if ($prefix_kept_count && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('keep-prefix-family', '', '', ['n' => $prefix_kept_count, 'pairs' => implode(',', $prefix_log)]);
             }
         }
 
@@ -2418,11 +2648,11 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         $pattern = '/<script\b[^>]*>(.*?)<\/script>/si';
         $html = preg_replace_callback($pattern, array($this, 'process_script_tag'), $html);
 
-        
+        // Integrations (Elementor entrance animations — same as v2)
         $html = $this->elementor_integration($html);
 
-        
-        
+        // Loader config: timeout 0 = interaction-only (default); report = telemetry endpoint
+        // (bounded + deduped server-side; disable per-site via the filter).
 
 
         $wpc_to = isset(self::$settings['delay-js-v3-timeout']) ? (int) self::$settings['delay-js-v3-timeout'] : 60;
@@ -2435,58 +2665,62 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             && apply_filters('wpc_maximum_mobile', wps_rewriteLogic::wpc_maximum_mobile_on())) {
             $wpc_to = 0;
         }
-        
-        
-        
-        
-        
-        
-        
-        $wpc_aggr360 = 0;
+        // Aggressive default: a MEASURED page (current-schema gen, keep list
+        // authoritative) goes interaction-only — the trace runs ~zero JS, humans
+        // get warmed/gesture boot. The boot watchdog demotes the site here
+        // (wpc_delay_aggr_off) when boots break; a no-crit page self-clamps to
+        // 4s client-side; wpc_delay_v3_timeout still has the last word. Gated
+        // on the telemetry channel being alive — aggressive without its
+        // rollback belt is not a trade we make on the owner's behalf.
+        $aggressive = 0;
         if ($wpc_to > 0 && $this->wpc_measured
             && !get_option('wpc_delay_aggr_off')
             && apply_filters('wpc_delay_v3_telemetry', true)
             && apply_filters('wpc_delay_v3_io_when_measured', true)) {
             $wpc_to = 0;
-            $wpc_aggr360 = 1;
+            $aggressive = 1;
         }
         $wpc_cfg = [
             'timeout' => (int) apply_filters('wpc_delay_v3_timeout', $wpc_to),
-            
-            
-            
-            
-            'ef364' => apply_filters('wpc_delay_v3_ef364', true) ? 1 : 0,
-            
-            
-            
-            'aggr' => $wpc_aggr360,
+            // v7.22.02 — one-shot owner + dispatch door (the .364 machinery). elementorHeal=0
+            // reverts the loader to inert heals fleet-wide without a re-ship: the belts
+            // then skip both diff-fire and door dispatches entirely (never the old
+            // blanket re-fires — those are gone for good).
+            'elementorHeal' => apply_filters('wpc_delay_v3_ef364', true) ? 1 : 0,
+            // Marks the AGGRESSIVE-DEFAULT flip specifically (not maximum-mobile,
+            // not user io): the boot watchdog arms ONLY on aggr pages, so demote
+            // strikes always come from pages the demote actually fixes.
+            'aggr' => $aggressive,
 
 
             'report'  => apply_filters('wpc_delay_v3_telemetry', true) && function_exists('admin_url') ? admin_url('admin-ajax.php') : '',
+            // This page's report stamp: the report handler refuses a report that does not carry the
+            // stamp minted for its path, because the Origin header it trusted before is set by any
+            // client (a forged one switched site-wide levers). See wpc_delay_report_stamp().
+            'rs' => function_exists('wpc_delay_report_stamp') ? wpc_delay_report_stamp(wpc_delay_report_page_path()) : '',
 
 
-            
-            
+            // Google Maps iframe swapped at the 3s tick, then executed 445KB/286ms main-thread from
+            // INSIDE that iframe — invisible to script-registry capture since it's a separate
 
 
-            
-            
-            
-            
-            
-            
-            
-            
+            // HEAVY = restored only at boot (post-gesture under io) via frames(true)
+            // — the correct direction for consent-delayed too (a .360-.362 bug
+            // ZEROED this list under consent-delayed, which demoted embeds to the
+            // NON-heavy immediate tick restore — backwards; fixed). Funnel/player
+            // iframes (GHL widgets ~3MB of reCAPTCHA+forms JS per frame, receipted
+            // on busyprosai) join Maps: separate documents that script delay can't
+            // touch — the facade + this list is their only lever. The IO restore
+            // in the loader still loads any frame a real visitor scrolls toward.
             'heavyEmbeds' => array_values(apply_filters('wpc_delay_heavy_embeds', [
                 'google.com/maps', 'maps.google.', 'maps.googleapis.',
                 'leadconnectorhq.com', 'msgsndr.com', 'filesafe.space',
                 '/widget/booking/', '/widget/form/', '/widget/quiz/', '/widget/survey/',
                 'player.vimeo.com', 'youtube.com/embed/', 'youtube-nocookie.com/embed/',
                 'fast.wistia.',
-                
-                
-                
+                // v7.21.58 — Bunny Stream embeds: 1.28MB (plyr-vr 625KB + hls 311KB + its own
+                // jQuery) and ~500ms main-thread per ctfx PSI, all from inside the frame where
+                // script delay can't reach — exactly the youtube/vimeo class.
                 'iframe.mediadelivery.net',
                 'youtube.com/iframe_api', 'youtube.com/player_api', 'player.vimeo.com/api/player.js',
                 'fast.wistia.com/assets/external/', 'fast.wistia.net/assets/external/',
@@ -2494,192 +2728,336 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             'embedGate' => (int) apply_filters('wpc_delay_embed_gate', 1),
 
 
-            
-            
-            
-            
-            
+            // v7.10.504 — REACHABILITY FIX. .497 defaulted the atomic cascade OFF, but the flag was
+            // only ever READ in the loader and never written into this config, so there was no way to
+            // turn it back on. wpcompress.com measured TBT 0ms with it active and TBT 5,900ms with it
+            // off (one 6,184ms task; Script Evaluation only 207ms against Other 7,130ms — style
+            // recalculation, which is exactly what restoring ~44 sheets one at a time produces).
         ] + self::wpc_css_cfg();
 
-        
-        
-        
-        $wpc_zoned804 = false;
-        if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_zone_delayed_js804')
+        // Delayed lane rides the CDN (post-interaction — never in the render chain). The render-lane
+        // standdown (wpc_scripts_same_origin) does not govern here; the loader carries origin
+        // failover for every zoned src, so a dead zone costs one retry, never a lost chain.
+        $any_zoned = false;
+        if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_zone_delayed_js_url')
             && is_array($this->script_registry)) {
-            foreach ($this->script_registry as $wpc_k804 => $wpc_e804) {
-                if (empty($wpc_e804['src']) || !is_string($wpc_e804['src'])) {
+            foreach ($this->script_registry as $registry_index => $registry_entry) {
+                if (empty($registry_entry['src']) || !is_string($registry_entry['src'])) {
                     continue;
                 }
-                
-                
-                
-                
-                if (strtolower((string) (isset($wpc_e804['type']) ? $wpc_e804['type'] : '')) === 'module'
-                    || !empty($wpc_e804['attributes']['integrity'])) {
+                // Modules and SRI-pinned tags stay on the origin: a cross-origin module needs CORS
+                // headers, and a cross-origin integrity check needs crossorigin — either one fails
+                // the load, and a failed load here would flip the whole session origin-first for a
+                // reason that is not a zone outage.
+                if (strtolower((string) (isset($registry_entry['type']) ? $registry_entry['type'] : '')) === 'module'
+                    || !empty($registry_entry['attributes']['integrity'])) {
                     continue;
                 }
-                $wpc_enc804 = !empty($wpc_e804['encoded']);
-                $wpc_u804 = $wpc_enc804 ? base64_decode($wpc_e804['src'], true) : $wpc_e804['src'];
-                if (!is_string($wpc_u804) || $wpc_u804 === '') {
+                $src_encoded = !empty($registry_entry['encoded']);
+                $delayed_src = $src_encoded ? base64_decode($registry_entry['src'], true) : $registry_entry['src'];
+                if (!is_string($delayed_src) || $delayed_src === '') {
                     continue;
                 }
-                $wpc_z804 = wps_rewriteLogic::wpc_zone_delayed_js804($wpc_u804);
-                if (is_string($wpc_z804) && $wpc_z804 !== '' && $wpc_z804 !== $wpc_u804) {
-                    $this->script_registry[$wpc_k804]['src'] = $wpc_enc804 ? base64_encode($wpc_z804) : $wpc_z804;
-                    $wpc_zoned804 = true;
+                $zoned_src = wps_rewriteLogic::wpc_zone_delayed_js_url($delayed_src);
+                if (is_string($zoned_src) && $zoned_src !== '' && $zoned_src !== $delayed_src) {
+                    $this->script_registry[$registry_index]['src'] = $src_encoded ? base64_encode($zoned_src) : $zoned_src;
+                    $any_zoned = true;
                 }
             }
         }
-        if ($wpc_zoned804 && class_exists('wps_rewriteLogic') && !empty(wps_rewriteLogic::$zoneName)
+        if ($any_zoned && class_exists('wps_rewriteLogic') && !empty(wps_rewriteLogic::$zoneName)
             && is_string(wps_rewriteLogic::$zoneName)) {
             $wpc_cfg['cdnHost'] = wps_rewriteLogic::$zoneName;
         }
 
-        
-        
+        // Registry keeps the v2 name (wpcScriptRegistry) — the adopted loader and its debug tooling
+        // (window.ScriptDelayDebug) consume it; v2 and v3 are mutually exclusive on a page.
         $delay_script = '';
         if (!empty(get_option('wps_ic_delay_v2_debug'))) {
             $delay_script .= '<script>var DEBUG = true;</script>';
         }
-        $delay_script .= '<script id="wpc-delay-v3-registry">var wpcScriptRegistry=' . json_encode($this->script_registry)
+        // The bodies of parked inline scripts ride a sidecar file, not the document: the page
+        // carries the registry skeleton and wpcDelayV3Cfg.registryUrl, and the loader merges the
+        // bodies in after load. ?wpc_registry_inline=1 is the loader's own fallback request and
+        // always gets them inline.
+        $wpc_registry = $this->script_registry;
+        $wpc_side = null;
+        if (empty($_GET['wpc_registry_inline']) && apply_filters('wpc_delay_registry_sidecar', true)) {
+            $wpc_sp = self::wpc_registry_sidecar_paths();
+            if ($wpc_sp) {
+                $wpc_side = self::wpc_registry_sidecar($wpc_registry, $wpc_sp['dir'], $wpc_sp['url']);
+            }
+        }
+        if (is_array($wpc_side)) {
+            $wpc_cfg['registryUrl'] = $wpc_side['url'];
+            $wpc_cfg['registryN'] = (int) $wpc_side['n'];
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('delay-registry-sidecar', '', isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '', ['n' => $wpc_side['n'], 'bytes' => $wpc_side['bytes'], 'file' => $wpc_side['file']]);
+            }
+        }
+        $delay_script .= '<script id="wpc-delay-v3-registry">var wpcScriptRegistry=' . json_encode($wpc_registry)
             . ';var wpcDelayV3Cfg=' . json_encode($wpc_cfg) . ';'
 
 
             . 'if(!document.getElementById("wpc-critical-css")){wpcDelayV3Cfg.timeout=Math.min(+wpcDelayV3Cfg.timeout||60,4);}'
             . '</script>';
         if (!empty($wpc_cfg['embedGate'])) {
-            $delay_script .= '<script id="wpc-embed-gate40">' . self::wpc_embed_gate_js40() . '</script>';
+            $delay_script .= '<script id="wpc-embed-gate">' . self::wpc_embed_gate_inline_js() . '</script>';
         }
 
 
         $delay_script .= self::wpc_loader_script_tag();
 
-        
-        
+        // Same anchor the v2 engine uses (printed by enqueues.class.php when delay is on); fall
+        // back to </body> so the registry can never be emitted without its loader.
         if (strpos($html, '<script type="wpc-delay-placeholder"></script>') !== false) {
             $html = str_replace('<script type="wpc-delay-placeholder"></script>', $delay_script, $html);
         } else {
-            $html = wpc_body_inject809($html, $delay_script);
+            $html = wpc_inject_before_body_close($html, $delay_script);
         }
 
-        $html = $this->wpc_defer_sweep527($html);
-        $html = self::wpc_split_enforce564($html);
-        $html = $this->wpc_consent_css_lazy59($html);
+        $html = $this->wpc_defer_remaining_blocking_scripts($html);
+        $html = self::wpc_enforce_defer_split_point($html);
+        $html = $this->wpc_module_hoist($html);
+        $html = $this->wpc_lazy_load_consent_css($html);
 
         return $html;
     }
 
-    
+    /**
+     * Vendor families of the executable script modules on the page, keyed by the id
+     * prefix before '/' (or the id minus -js/-js-module); an id-less module is '*'.
+     * A script module is spec-deferred and cannot declare classic dependencies, so the
+     * classics it consumes (WP core dist, its own family) must never be delayed, and the
+     * module itself must run after them (wpc_module_hoist). Filter wpc_module_consumers.
+     */
+    public static function wpc_module_vendors($html)
+    {
+        $wpc_out = [];
+        if (!is_string($html) || $html === '' || !apply_filters('wpc_module_consumers', true)
+            || (stripos($html, 'type="module"') === false && stripos($html, "type='module'") === false)) {
+            return $wpc_out;
+        }
+        if (!preg_match_all('/<script\b[^>]*\btype=["\']module["\'][^>]*>/i', $html, $wpc_m)) {
+            return $wpc_out;
+        }
+        foreach ($wpc_m[0] as $wpc_t) {
+            if (!preg_match('/\bsrc=["\']([^"\']+)["\']/i', $wpc_t, $wpc_s) || stripos($wpc_s[1], 'data:') === 0) {
+                continue;
+            }
+            $wpc_id = preg_match('/\bid=["\']([^"\']+)["\']/i', $wpc_t, $wpc_i) ? strtolower(trim($wpc_i[1])) : '';
+            $wpc_v = '';
+            if ($wpc_id !== '') {
+                $wpc_v = strpos($wpc_id, '/') !== false ? substr($wpc_id, 0, strpos($wpc_id, '/'))
+                    : (string) preg_replace('/-js(?:-module)?$/', '', $wpc_id);
+            }
+            $wpc_out[$wpc_v !== '' ? $wpc_v : '*'] = true;
+        }
+        return $wpc_out;
+    }
 
+    /** Handles of the WP core dist scripts (/wp-includes/js/dist/, vendor/ included) on the page. */
+    public static function wpc_module_core($html)
+    {
+        $wpc_out = [];
+        if (is_string($html) && preg_match_all('/<script\b[^>]*\bsrc=["\'][^"\']*\/wp-includes\/js\/dist\/[^>]*>/i', $html, $wpc_m)) {
+            foreach ($wpc_m[0] as $wpc_t) {
+                if (preg_match('/\bid=["\']([^"\']+)-js["\']/i', $wpc_t, $wpc_i)
+                    && preg_match('/\bsrc=["\'][^"\']*\/wp-includes\/js\/dist\/(?:vendor\/)?[^\/?"\']+\.js(?:\?[^"\']*)?["\']/i', $wpc_t)) {
+                    $wpc_out[strtolower(trim($wpc_i[1]))] = true;
+                }
+            }
+        }
+        return $wpc_out;
+    }
 
+    /**
+     * True for a classic script a module on this page consumes: a WP core dist file, the
+     * -after/-before/-extra companion of a core handle, or a script whose id carries a
+     * module family prefix. These stay eager on module pages.
+     */
+    protected function wpc_module_consumer($attributes)
+    {
+        if (empty($this->wpc_mod_vendors) || !is_array($this->wpc_mod_vendors) || !is_array($attributes)) {
+            return false;
+        }
+        $wpc_src = isset($attributes['src']) ? strtolower(html_entity_decode((string) $attributes['src'])) : '';
+        if ($wpc_src !== '' && strpos($wpc_src, 'data:') !== 0
+            && preg_match('#/wp-includes/js/dist/(?:vendor/)?[^/?]+\.js(?:\?|$)#', $wpc_src)) {
+            return true;
+        }
+        $wpc_id = isset($attributes['id']) ? strtolower(trim((string) $attributes['id'])) : '';
+        if ($wpc_id === '') {
+            return false;
+        }
+        if (!empty($this->wpc_mod_core) && is_array($this->wpc_mod_core)
+            && preg_match('/^(.+)-js(?:-after|-before|-extra)$/', $wpc_id, $wpc_c) && isset($this->wpc_mod_core[$wpc_c[1]])) {
+            return true;
+        }
+        foreach (array_keys($this->wpc_mod_vendors) as $wpc_v) {
+            if ($wpc_v !== '*' && strlen($wpc_v) >= 3 && strpos($wpc_id, $wpc_v) === 0) {
+                return true;
+            }
+        }
+        return false;
+    }
 
+    /**
+     * Moves the executable type="module" src tags to the end of <body>. Deferred classics
+     * and modules share one in-order execution list, so the module then runs after every
+     * classic it consumes, as it did with the plugin off; nothing is forced blocking.
+     * Journal module-hoist. Filter wpc_module_hoist.
+     */
+    private function wpc_module_hoist($html)
+    {
+        if (empty($this->wpc_mod_vendors) || !is_string($html) || $html === '' || !apply_filters('wpc_module_hoist', true)) {
+            return $html;
+        }
+        if (!preg_match_all('/<script\b(?:[^>]*\btype=["\']module["\'][^>]*\bsrc=|[^>]*\bsrc=[^>]*\btype=["\']module["\'])[^>]*>\s*<\/script>/i', $html, $wpc_m, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $wpc_end = strripos($html, '</body>');
+        if ($wpc_end === false) {
+            return $html;
+        }
+        $wpc_tags = [];
+        for ($wpc_i = count($wpc_m[0]) - 1; $wpc_i >= 0; $wpc_i--) {
+            $wpc_off = (int) $wpc_m[0][$wpc_i][1];
+            if ($wpc_off > $wpc_end) {
+                continue;
+            }
+            $wpc_tags[] = $wpc_m[0][$wpc_i][0];
+            $html = substr($html, 0, $wpc_off) . substr($html, $wpc_off + strlen($wpc_m[0][$wpc_i][0]));
+        }
+        if (empty($wpc_tags)) {
+            return $html;
+        }
+        $wpc_end = strripos($html, '</body>');
+        $html = substr($html, 0, $wpc_end) . implode('', array_reverse($wpc_tags)) . substr($html, $wpc_end);
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('module-hoist', '', '', ['n' => count($wpc_tags), 'vendors' => implode(',', array_keys($this->wpc_mod_vendors))]);
+        }
+        return $html;
+    }
 
-
-
-
-
-
-
-
-    private function wpc_defer_sweep527($html)
+    /**
+     * FINAL DEFER SWEEP (v7.10.527).
+     *
+     * A render-blocking external in the head stops paint until it is fetched AND executed —
+     * PSI measured jQuery at 1,200 ms duration on a page whose whole LCP delay was 2,060 ms.
+     * The per-tag defer injection above should already have handled it and demonstrably does
+     * not always, so this pass asserts the OUTCOME against the finished document rather than
+     * trusting the injection that produced it.
+     *
+     * It is self-guarding: it re-derives safety from the page rather than trusting engine
+     * state. A script is deferred only when nothing on the page can need it at parse.
+     */
+    private function wpc_defer_remaining_blocking_scripts($html)
     {
         if (!is_string($html) || $html === '' || !apply_filters('wpc_defer_sweep', true)) {
             return $html;
         }
-        
-        
-        
-        $wpc_pairs527 = [];
-        if (preg_match_all('/<script\b(?![^>]*\bsrc=)[^>]*\bid=["\']([^"\']+?)-after["\']/i', $html, $wpc_p527)) {
-            foreach ((array) $wpc_p527[1] as $wpc_b527) {
-                $wpc_pairs527[strtolower($wpc_b527)] = 1;
+        // Inline companions: an -after companion calls its parent's API at parse, so the parent
+        // cannot defer. -before companions are config setters and do NOT disqualify (.564) —
+        // WP core's actual rule in filter_eligible_strategies.
+        $pairedIds = [];
+        if (preg_match_all('/<script\b(?![^>]*\bsrc=)[^>]*\bid=["\']([^"\']+?)-after["\']/i', $html, $afterMatches)) {
+            foreach ((array) $afterMatches[1] as $parentId) {
+                $pairedIds[strtolower($parentId)] = 1;
             }
         }
-        
-        
-        $wpc_exec527 = '';
-        if (preg_match_all('/<script\b(?![^>]*\bsrc=)([^>]*)>(.*?)<\/script>/is', $html, $wpc_i527, PREG_SET_ORDER)) {
-            foreach ($wpc_i527 as $wpc_m527) {
-                if (preg_match('/type=["\']([^"\']+)["\']/i', $wpc_m527[1], $wpc_t527)
-                    && stripos($wpc_t527[1], 'javascript') === false) {
+        // Bodies of inline scripts that will actually RUN (a type-swapped tag is a delay
+        // placeholder and executes later, so it cannot need anything at parse).
+        $executableInline = '';
+        if (preg_match_all('/<script\b(?![^>]*\bsrc=)([^>]*)>(.*?)<\/script>/is', $html, $inlineMatches, PREG_SET_ORDER)) {
+            foreach ($inlineMatches as $inlineMatch) {
+                if (preg_match('/type=["\']([^"\']+)["\']/i', $inlineMatch[1], $inlineType)
+                    && stripos($inlineType[1], 'javascript') === false) {
                     continue;
                 }
-                $wpc_exec527 .= "\n" . $wpc_m527[2];
+                $executableInline .= "\n" . $inlineMatch[2];
             }
         }
-        return preg_replace_callback('/<script\b[^>]*\bsrc=[^>]*>/i', function ($wpc_mm527) use ($wpc_pairs527, $wpc_exec527) {
-            $wpc_tag527 = $wpc_mm527[0];
-            if (preg_match('/\bdefer\b/i', $wpc_tag527) || preg_match('/\basync\b/i', $wpc_tag527)) {
-                return $wpc_tag527;
+        $sweptDeferred = 0;
+        $swept = preg_replace_callback('/<script\b[^>]*\bsrc=[^>]*>/i', function ($tagMatch) use ($pairedIds, $executableInline, &$sweptDeferred) {
+            $tag = $tagMatch[0];
+            if (preg_match('/\bdefer\b/i', $tag) || preg_match('/\basync\b/i', $tag)) {
+                return $tag;
             }
-            if (preg_match('/type=["\']([^"\']+)["\']/i', $wpc_tag527, $wpc_ty527)
-                && stripos($wpc_ty527[1], 'javascript') === false) {
-                return $wpc_tag527;
+            if (preg_match('/type=["\']([^"\']+)["\']/i', $tag, $tagType)
+                && stripos($tagType[1], 'javascript') === false) {
+                return $tag;
             }
-            $wpc_sid527 = preg_match('/\bid=["\']([^"\']+)["\']/i', $wpc_tag527, $wpc_id527)
-                ? strtolower($wpc_id527[1]) : '';
-            if ($wpc_sid527 !== '' && !empty($wpc_pairs527[$wpc_sid527])) {
-                return $wpc_tag527;
+            $scriptId = preg_match('/\bid=["\']([^"\']+)["\']/i', $tag, $idMatch)
+                ? strtolower($idMatch[1]) : '';
+            if ($scriptId !== '' && !empty($pairedIds[$scriptId])) {
+                return $tag;
             }
-            
-            
-            
-            if (preg_match('/jquery/i', $wpc_tag527)
-                && preg_match('/\bjQuery\b|\$\(/', $wpc_exec527)) {
-                return $wpc_tag527;
+            // jQuery is the one global an executable inline can plausibly touch at parse.
+            // Verified on the live page: 39 inline scripts type-swapped, 15 executable, ZERO
+            // referencing jQuery — but re-check per page, never assume.
+            if (preg_match('/jquery/i', $tag)
+                && preg_match('/\bjQuery\b|\$\(/', $executableInline)) {
+                return $tag;
             }
-            return preg_replace('/<script\b/i', '<script defer data-wpc-defer="1"', $wpc_tag527, 1);
+            $sweptDeferred++;
+            return preg_replace('/<script\b/i', '<script defer data-wpc-defer="1"', $tag, 1);
         }, $html);
+        // An external script still render-blocking after the per-tag defer injection is deferred
+        // here. Never sampled: each is a tag the injection missed.
+        if ($sweptDeferred > 0 && is_string($swept) && function_exists('wpc_render_belt_note')) {
+            wpc_render_belt_note('defer-sweep-deferred', ['n' => $sweptDeferred]);
+        }
+        return $swept;
     }
 
-    
-
-
-
-
-
-
-
-
-
-
-    
-    
-    
-    
-    protected static function wpc_alias_pairs2109($wpc_pairs2109)
+    /**
+     * ONE-LANE-PER-CHAIN ENFORCEMENT (v7.10.564).
+     *
+     * A keep with an -after companion cannot defer, so it executes at parse — and WP prints
+     * dependencies BEFORE dependents, so its whole dependency closure sits earlier in the
+     * document. Any of those we deferred would execute AFTER their dependent: inversion.
+     * Document position is a conservative superset of the dependency graph, so stripping our
+     * defers at-or-before the LAST forced-blocking keep is provably inversion-free with no
+     * registry knowledge. Marker-scoped: author-supplied defer is never touched. Degenerate
+     * worst case (forced-blocking keep is the last keep) equals the old .512 blanket exactly.
+     */
+    // Expand a companion-pair map ({tag-id-minus-after} => 1) through wp_scripts alias handles:
+    // a registered handle with no src renders no tag, so a companion attached to it belongs to
+    // the tags its dependencies render. Bounded to 3 passes for nested aliases; fail-open when
+    // wp_scripts is absent (static replay contexts) — the map is simply not widened.
+    protected static function wpc_expand_alias_pairs($pairs)
     {
-        if (empty($wpc_pairs2109) || !apply_filters('wpc_defer_alias_pairs', true)
+        if (empty($pairs) || !apply_filters('wpc_defer_alias_pairs', true)
             || empty($GLOBALS['wp_scripts']) || !is_object($GLOBALS['wp_scripts'])
             || empty($GLOBALS['wp_scripts']->registered) || !is_array($GLOBALS['wp_scripts']->registered)) {
-            return $wpc_pairs2109;
+            return $pairs;
         }
-        for ($wpc_p2109 = 0; $wpc_p2109 < 3; $wpc_p2109++) {
-            $wpc_grew2109 = false;
-            foreach ($GLOBALS['wp_scripts']->registered as $wpc_h2109 => $wpc_r2109) {
-                if (!is_object($wpc_r2109) || !empty($wpc_r2109->src) || empty($wpc_r2109->deps)) {
+        for ($pass = 0; $pass < 3; $pass++) {
+            $grew = false;
+            foreach ($GLOBALS['wp_scripts']->registered as $handle => $registration) {
+                if (!is_object($registration) || !empty($registration->src) || empty($registration->deps)) {
                     continue;
                 }
-                if (empty($wpc_pairs2109[strtolower((string) $wpc_h2109) . '-js'])) {
+                if (empty($pairs[strtolower((string) $handle) . '-js'])) {
                     continue;
                 }
-                foreach ((array) $wpc_r2109->deps as $wpc_d2109) {
-                    $wpc_k2109 = strtolower((string) $wpc_d2109) . '-js';
-                    if (empty($wpc_pairs2109[$wpc_k2109])) {
-                        $wpc_pairs2109[$wpc_k2109] = 1;
-                        $wpc_grew2109 = true;
+                foreach ((array) $registration->deps as $dep) {
+                    $dep_key = strtolower((string) $dep) . '-js';
+                    if (empty($pairs[$dep_key])) {
+                        $pairs[$dep_key] = 1;
+                        $grew = true;
                     }
                 }
             }
-            if (!$wpc_grew2109) {
+            if (!$grew) {
                 break;
             }
         }
-        return $wpc_pairs2109;
+        return $pairs;
     }
 
-    private static function wpc_split_enforce564($html)
+    private static function wpc_enforce_defer_split_point($html)
     {
         if (!is_string($html) || $html === '' || !apply_filters('wpc_defer_split', true)) {
             return $html;
@@ -2688,66 +3066,74 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             return $html;
         }
         try {
-            $wpc_after564 = [];
-            if (preg_match_all('/<script\b(?![^>]*\bsrc=)[^>]*\bid=["\']([^"\']+?)-after["\']/i', $html, $wpc_a564)) {
-                foreach ((array) $wpc_a564[1] as $wpc_id564) {
-                    $wpc_after564[strtolower($wpc_id564)] = 1;
+            $after_parents = [];
+            if (preg_match_all('/<script\b(?![^>]*\bsrc=)[^>]*\bid=["\']([^"\']+?)-after["\']/i', $html, $after_matches)) {
+                foreach ((array) $after_matches[1] as $parent_id) {
+                    $after_parents[strtolower($parent_id)] = 1;
                 }
             }
-            if (empty($wpc_after564)) {
+            if (empty($after_parents)) {
                 return $html;
             }
-            $wpc_after564 = self::wpc_alias_pairs2109($wpc_after564);
-            $wpc_split564 = -1;
-            if (preg_match_all('/<script\b[^>]*\bsrc=[^>]*>/i', $html, $wpc_m564, PREG_OFFSET_CAPTURE)) {
-                foreach ($wpc_m564[0] as $wpc_h564) {
-                    $wpc_tag564 = $wpc_h564[0];
-                    if (preg_match('/\b(?:defer|async)\b/i', $wpc_tag564)) {
+            $after_parents = self::wpc_expand_alias_pairs($after_parents);
+            $split_offset = -1;
+            if (preg_match_all('/<script\b[^>]*\bsrc=[^>]*>/i', $html, $tag_matches, PREG_OFFSET_CAPTURE)) {
+                foreach ($tag_matches[0] as $tag_match) {
+                    $tag = $tag_match[0];
+                    if (preg_match('/\b(?:defer|async)\b/i', $tag)) {
                         continue;
                     }
-                    if (preg_match('/type=["\']([^"\']+)["\']/i', $wpc_tag564, $wpc_ty564)
-                        && stripos($wpc_ty564[1], 'javascript') === false) {
+                    if (preg_match('/type=["\']([^"\']+)["\']/i', $tag, $type_match)
+                        && stripos($type_match[1], 'javascript') === false) {
                         continue;
                     }
-                    if (!preg_match('/\bid=["\']([^"\']+)["\']/i', $wpc_tag564, $wpc_i564)
-                        || empty($wpc_after564[strtolower($wpc_i564[1])])) {
+                    if (!preg_match('/\bid=["\']([^"\']+)["\']/i', $tag, $id_match)
+                        || empty($after_parents[strtolower($id_match[1])])) {
                         continue;
                     }
-                    $wpc_split564 = max($wpc_split564, $wpc_h564[1] + strlen($wpc_tag564));
+                    $split_offset = max($split_offset, $tag_match[1] + strlen($tag));
                 }
             }
-            if ($wpc_split564 < 0) {
+            if ($split_offset < 0) {
                 return $html;
             }
-            
-            
-            
-            
-            
-            
-            
-            $wpc_head564 = preg_replace_callback('/<script\b[^>]*>/i', function ($wpc_t564) {
-                if (strpos($wpc_t564[0], ' defer data-wpc-defer="1"') === false
-                    || stripos($wpc_t564[0], 'data-wp-strategy="defer"') !== false
-                    || stripos($wpc_t564[0], "data-wp-strategy='defer'") !== false) {
-                    return $wpc_t564[0];
+            // v7.21.58 — CORE'S OWN DEFER PROOF IS NARROWER THAN OUR SPLIT. The head-slice
+            // strip exists because SOME parse-time inline below may call a keep's API — but a
+            // tag carrying data-wp-strategy="defer" passed WP core's filter_eligible_strategies
+            // (every dependent in the queue deferrable, no incompatible -after), and plugin-off
+            // WordPress serves it DEFERRED. Un-deferring it makes the page MORE blocking than
+            // baseline (ctfx: js-cookie + blockUI re-blocked 410-890ms of every first paint).
+            // Spare exactly those tags; everything else in the head slice still strips.
+            $head_slice = preg_replace_callback('/<script\b[^>]*>/i', function ($open_tag) {
+                if (strpos($open_tag[0], ' defer data-wpc-defer="1"') === false
+                    || stripos($open_tag[0], 'data-wp-strategy="defer"') !== false
+                    || stripos($open_tag[0], "data-wp-strategy='defer'") !== false) {
+                    return $open_tag[0];
                 }
-                return str_replace(' defer data-wpc-defer="1"', '', $wpc_t564[0]);
-            }, substr($html, 0, $wpc_split564));
-            if (!is_string($wpc_head564)) {
-                $wpc_head564 = str_replace(' defer data-wpc-defer="1"', '', substr($html, 0, $wpc_split564));
+                return str_replace(' defer data-wpc-defer="1"', '', $open_tag[0]);
+            }, substr($html, 0, $split_offset));
+            if (!is_string($head_slice)) {
+                $head_slice = str_replace(' defer data-wpc-defer="1"', '', substr($html, 0, $split_offset));
             }
-            return $wpc_head564 . substr($html, $wpc_split564);
+            // Our defers before the last blocking keep with an -after companion would run after
+            // their dependant, so they are taken back. Sampled: most pages print such a keep
+            // (jQuery with an inline -after), so this acts on nearly every render the same way.
+            $undeferred = substr_count(substr($html, 0, $split_offset), ' defer data-wpc-defer="1"')
+                - substr_count($head_slice, ' defer data-wpc-defer="1"');
+            if ($undeferred > 0 && function_exists('wpc_render_belt_note')) {
+                wpc_render_belt_note('defer-split-undeferred', ['n' => $undeferred], true);
+            }
+            return $head_slice . substr($html, $split_offset);
         } catch (\Throwable $e) {
             return $html;
         }
     }
 
-    
-    
-    
-    
-    public static function wpc_rootvar_classify39($src)
+    // v7.21.94 — extract self-contained top-level setter IIFEs from a script body.
+    // Only blocks of the exact shape `(function ... { ... })(...)` that write a custom
+    // property and reference nothing external (no jQuery/$, no DOM writes, no network)
+    // qualify; anything else returns '' and the page simply keeps the .74 defer keep.
+    public static function wpc_classify_root_var_setter($src)
     {
         try {
             if (!function_exists('wp_remote_get') || !function_exists('get_option')) {
@@ -2773,7 +3159,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 $sn = get_option('wpc_rootvar_snips94');
                 $sn = is_array($sn) ? $sn : [];
                 if (!array_key_exists($k, $sn) && count($sn) < 24) {
-                    $sn[$k] = self::wpc_rootvar_extract94($b);
+                    $sn[$k] = self::wpc_extract_root_var_setter_iifes($b);
                     update_option('wpc_rootvar_snips94', $sn, false);
                 }
             }
@@ -2781,68 +3167,68 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         }
     }
 
-    protected static function wpc_rootvar_extract94($wpc_body94)
+    protected static function wpc_extract_root_var_setter_iifes($body)
     {
         try {
-            $wpc_out94 = [];
-            $wpc_off94 = 0;
-            while (count($wpc_out94) < 2 && preg_match('/\(\s*function\b/', $wpc_body94, $wpc_m94, PREG_OFFSET_CAPTURE, $wpc_off94)) {
-                $wpc_st94 = (int) $wpc_m94[0][1];
-                $wpc_off94 = $wpc_st94 + 1;
-                $wpc_depth94 = 0;
-                $wpc_end94 = -1;
-                $wpc_len94 = min(strlen($wpc_body94), $wpc_st94 + 4096);
-                for ($wpc_i94 = $wpc_st94; $wpc_i94 < $wpc_len94; $wpc_i94++) {
-                    $wpc_c94 = $wpc_body94[$wpc_i94];
-                    if ($wpc_c94 === '(') {
-                        $wpc_depth94++;
-                    } elseif ($wpc_c94 === ')') {
-                        $wpc_depth94--;
-                        if ($wpc_depth94 === 0) {
-                            $wpc_end94 = $wpc_i94;
+            $blocks = [];
+            $offset = 0;
+            while (count($blocks) < 2 && preg_match('/\(\s*function\b/', $body, $match, PREG_OFFSET_CAPTURE, $offset)) {
+                $start = (int) $match[0][1];
+                $offset = $start + 1;
+                $depth = 0;
+                $end = -1;
+                $scan_limit = min(strlen($body), $start + 4096);
+                for ($i = $start; $i < $scan_limit; $i++) {
+                    $char = $body[$i];
+                    if ($char === '(') {
+                        $depth++;
+                    } elseif ($char === ')') {
+                        $depth--;
+                        if ($depth === 0) {
+                            $end = $i;
                             break;
                         }
                     }
                 }
-                if ($wpc_end94 < 0) {
+                if ($end < 0) {
                     continue;
                 }
-                $wpc_tail94 = substr($wpc_body94, $wpc_end94 + 1, 24);
-                if (!preg_match('/^\s*\(\s*[\w.]*\s*\)\s*;?/', $wpc_tail94, $wpc_t94)) {
+                $tail = substr($body, $end + 1, 24);
+                if (!preg_match('/^\s*\(\s*[\w.]*\s*\)\s*;?/', $tail, $call_match)) {
                     continue;
                 }
-                $wpc_blk94 = substr($wpc_body94, $wpc_st94, ($wpc_end94 + 1 + strlen($wpc_t94[0])) - $wpc_st94);
-                if (!preg_match('/\.style\.setProperty\(\s*["\']--/', $wpc_blk94)) {
+                $block = substr($body, $start, ($end + 1 + strlen($call_match[0])) - $start);
+                if (!preg_match('/\.style\.setProperty\(\s*["\']--/', $block)) {
                     continue;
                 }
-                if (preg_match('/jQuery|\$\s*\(|document\.write|<\/script|fetch\s*\(|XMLHttpRequest|localStorage|innerHTML|appendChild|createElement/i', $wpc_blk94)) {
+                if (preg_match('/jQuery|\$\s*\(|document\.write|<\/script|fetch\s*\(|XMLHttpRequest|localStorage|innerHTML|appendChild|createElement/i', $block)) {
                     continue;
                 }
-                if (substr_count($wpc_blk94, '{') !== substr_count($wpc_blk94, '}')
-                    || substr_count($wpc_blk94, '{') === 0) {
+                if (substr_count($block, '{') !== substr_count($block, '}')
+                    || substr_count($block, '{') === 0) {
                     continue;
                 }
-                $wpc_out94[] = $wpc_blk94;
-                $wpc_off94 = $wpc_end94 + 1;
+                $blocks[] = $block;
+                $offset = $end + 1;
             }
-            $wpc_joined94 = implode("\n", $wpc_out94);
-            return strlen($wpc_joined94) <= 6144 ? $wpc_joined94 : '';
+            $joined = implode("\n", $blocks);
+            return strlen($joined) <= 6144 ? $joined : '';
         } catch (\Throwable $e) {
             return '';
         }
     }
 
-    
-    
-    
+    // v7.23.15 — the CSS lane's loader config, shared by process_html (delay on) and
+    // wpc_css_only_loader (delay off): cascade mode, engagement signals, ATF reveal, the
+    // late-CSS timers and the conceal classes. One definition, identical bytes on both lanes.
     public static function wpc_css_cfg()
     {
         return [
             'atomicCascade' => (int) apply_filters('wpc_atomic_cascade', 1),
 
-            
-            
-            
+            // v7.10.639 — renamed: the signals are engagement evidence (gesture, hover,
+            // referrer, prior completed visit), not humanity detection. Old filter still
+            // honored; the loader reads the old KEY too (cached pages emit it for a while).
             'engagementSignals' => apply_filters('wpc_delay_engagement_signals', apply_filters('wpc_delay_human_signals', true)) ? 1 : 0,
 
 
@@ -2851,12 +3237,12 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
 
             'lateCssBackstop' => (int) apply_filters('wpc_delay_latecss_backstop', 30000),
 
-            
-            
-            
-            
-            
-            
+            // v7.10.714 — the no-gesture late-CSS lane (loadEventEnd + this delay) must start
+            // its fetches well past the point where the page has finished painting: an edge-warm
+            // font completing near the LCP candidate window re-enters the simulated dependency
+            // chain even though it changes no pixels above the fold (data: subsets + metric
+            // fallbacks carry ATF text either way). 2500ms clears that window at any cache
+            // temperature; every gesture path is untouched and still flips immediately.
             'lateCssTimer' => (int) apply_filters('wpc_delay_latecss_timer', 2500),
             'lateCssLcp' => (int) apply_filters('wpc_delay_latecss_lcp', 2000),
             'lateCssCap' => (int) apply_filters('wpc_delay_latecss_cap', 7000),
@@ -2874,14 +3260,14 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         ];
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
+    // v7.23.15 — CRITICAL CSS OWNS ITS RESTORER. When a render carries a crit block AND parked
+    // forms but the v3 pass did not run (delay off, per-page JS off, v3 forced off), emit the
+    // same loader with an EMPTY registry and cssOnly=1. The loader's JS lane stands down on
+    // that flag (no traps, no replay, the site's own scripts run natively — the 7.22.53 rule);
+    // its CSS lane restores the parked sheets, keeps #wpc-critical-css until CSS is live and
+    // arms html.wpc-bgl255 on the first gesture, exactly as on a delay page. Same anchor as
+    // process_html (placeholder, else body-end). No report key: no beacons without a replay.
+    // Kill: wpc_css_only_loader.
     public static function wpc_css_only_loader($html)
     {
         try {
@@ -2889,13 +3275,13 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 return $html;
             }
             if (strpos($html, 'wpc-delay-v3-loader') !== false) {
-                return $html; 
+                return $html; // the v3 pass emitted its own
             }
             if (!preg_match('/<style[^>]*id=["\']wpc-critical-css["\'][^>]*>\s*(?!<\/style)\S/i', $html)) {
-                return $html; 
+                return $html; // no crit on this render, so nothing of ours parked a sheet
             }
             if (!preg_match('/<(?:link|style)\b[^>]*\b(?:rel|type)=["\']wpc-(?:late-|mobile-)?stylesheet["\']/i', $html)) {
-                return $html; 
+                return $html; // crit present, nothing parked (drift / blind / passthrough / excludes)
             }
             $wpc_cfg = ['cssOnly' => 1] + self::wpc_css_cfg();
             $wpc_tag = '<script id="wpc-delay-v3-registry">var wpcScriptRegistry=[];var wpcDelayV3Cfg=' . json_encode($wpc_cfg) . ';</script>'
@@ -2903,8 +3289,8 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             if (strpos($html, '<script type="wpc-delay-placeholder"></script>') !== false) {
                 return str_replace('<script type="wpc-delay-placeholder"></script>', $wpc_tag, $html);
             }
-            if (function_exists('wpc_body_inject809')) {
-                return wpc_body_inject809($html, $wpc_tag);
+            if (function_exists('wpc_inject_before_body_close')) {
+                return wpc_inject_before_body_close($html, $wpc_tag);
             }
             return $html;
         } catch (\Throwable $e) {

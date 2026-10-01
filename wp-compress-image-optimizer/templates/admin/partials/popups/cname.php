@@ -4,14 +4,6 @@
         <div style="padding-bottom:30px;">
             <div class="wps-ic-mu-popup-select-sites">
                 <img src="<?php
-
-
-
-
-
-
-
-
                 echo WPS_IC_URI; ?>assets/images/projected-alert.svg" style="width:160px;"/>
             </div>
             <h3><?php echo esc_html__('You need to insert your CNAME!', WPS_IC_TEXTDOMAIN); ?></h3>
@@ -36,22 +28,22 @@
                     </div>
                   <?php
                   $zone_name = get_option('ic_cdn_zone_name');
-                  
-                  
-                  
-                  $wpc_cf501     = get_option(WPS_IC_CF);
-                  $wpc_cf_on501  = is_array($wpc_cf501) && !empty($wpc_cf501['token']) && !empty($wpc_cf501['zone']);
-                  $wpc_target501 = $wpc_cf_on501
+                  // v7.10.501 — instruct for the ACTIVE path. This printed the Bunny pull zone
+                  // unconditionally, so CF-linked sites were told to point at the wrong host — how
+                  // cdn.<domain> ended up CNAME'd at the pull zone with no certificate for it.
+                  $cf_settings     = get_option(WPS_IC_CF);
+                  $cf_linked  = is_array($cf_settings) && !empty($cf_settings['token']) && !empty($cf_settings['zone']);
+                  $cname_target = $cf_linked
                       ? (string) apply_filters('wpc_cf_cname_target', 'cdn-mc.zapwp.net')
                       : $zone_name;
                   ?>
                     <ul>
                         <li><?php echo __('<b>1. Create a subdomain</b> or domain that you wish to use. It can take up to 24h to propagate globally.', WPS_IC_TEXTDOMAIN); ?></li>
-                        <li><?php echo $wpc_cf_on501
+                        <li><?php echo $cf_linked
                                 ? __('<b>2. Nothing to do in DNS</b> — Cloudflare is connected, so the record is created and proxied for you, pointing at', WPS_IC_TEXTDOMAIN)
                                 : __('<b>2. Edit the DNS records</b> for the domain to create a new CNAME pointed at', WPS_IC_TEXTDOMAIN); ?>
                             <strong class="wpc-copy-on-click" title="<?php echo esc_attr__('Click to copy', WPS_IC_TEXTDOMAIN); ?>"><?php
-                              echo esc_html($wpc_target501); ?></strong>
+                              echo esc_html($cname_target); ?></strong>
                         </li>
                         <li><?php echo __('<b>3. Enter the URL</b> you\'ve pointed to below:', WPS_IC_TEXTDOMAIN); ?></li>
                     </ul>
@@ -63,11 +55,11 @@
                     </div>
                     <form method="post" action="#" class="wpc-form-inline">
                       <?php
-                      
+                      // Show the hostname we MANAGE — CF's when CF owns the CDN, else the zone one.
                       $custom_cname = get_option('ic_custom_cname');
-                      if ($wpc_cf_on501) {
-                          $wpc_cfc501 = trim((string) get_option(WPS_IC_CF_CNAME));
-                          if ($wpc_cfc501 !== '') { $custom_cname = $wpc_cfc501; }
+                      if ($cf_linked) {
+                          $cf_cname = trim((string) get_option(WPS_IC_CF_CNAME));
+                          if ($cf_cname !== '') { $custom_cname = $cf_cname; }
                       }
                       ?>
                         <input type="text" name="custom-cdn" placeholder="<?php echo esc_attr__('Example: cdn.mysite.com', WPS_IC_TEXTDOMAIN); ?>" value="<?php
@@ -96,22 +88,22 @@
                     </div>
                   <?php
                   $zone_name = get_option('ic_cdn_zone_name');
-                  
-                  
-                  
-                  $wpc_cf501     = get_option(WPS_IC_CF);
-                  $wpc_cf_on501  = is_array($wpc_cf501) && !empty($wpc_cf501['token']) && !empty($wpc_cf501['zone']);
-                  $wpc_target501 = $wpc_cf_on501
+                  // v7.10.501 — instruct for the ACTIVE path. This printed the Bunny pull zone
+                  // unconditionally, so CF-linked sites were told to point at the wrong host — how
+                  // cdn.<domain> ended up CNAME'd at the pull zone with no certificate for it.
+                  $cf_settings     = get_option(WPS_IC_CF);
+                  $cf_linked  = is_array($cf_settings) && !empty($cf_settings['token']) && !empty($cf_settings['zone']);
+                  $cname_target = $cf_linked
                       ? (string) apply_filters('wpc_cf_cname_target', 'cdn-mc.zapwp.net')
                       : $zone_name;
                   ?>
                     <ul>
                         <li><?php echo __('<b>1. Create a subdomain</b> or domain that you wish to use. It can take up to 24h to propagate globally.', WPS_IC_TEXTDOMAIN); ?></li>
-                        <li><?php echo $wpc_cf_on501
+                        <li><?php echo $cf_linked
                                 ? __('<b>2. Nothing to do in DNS</b> — Cloudflare is connected, so the record is created and proxied for you, pointing at', WPS_IC_TEXTDOMAIN)
                                 : __('<b>2. Edit the DNS records</b> for the domain to create a new CNAME pointed at', WPS_IC_TEXTDOMAIN); ?>
                             <strong class="wpc-copy-on-click" title="<?php echo esc_attr__('Click to copy', WPS_IC_TEXTDOMAIN); ?>"><?php
-                              echo esc_html($wpc_target501); ?></strong>
+                              echo esc_html($cname_target); ?></strong>
                         </li>
                         <li><?php echo __('<b>3. Enter the URL</b> you\'ve pointed to below:', WPS_IC_TEXTDOMAIN); ?></li>
                     </ul>
@@ -120,11 +112,11 @@
                     </div>
                     <form method="post" action="#" class="wpc-form-inline">
                       <?php
-                      
+                      // Show the hostname we MANAGE — CF's when CF owns the CDN, else the zone one.
                       $custom_cname = get_option('ic_custom_cname');
-                      if ($wpc_cf_on501) {
-                          $wpc_cfc501 = trim((string) get_option(WPS_IC_CF_CNAME));
-                          if ($wpc_cfc501 !== '') { $custom_cname = $wpc_cfc501; }
+                      if ($cf_linked) {
+                          $cf_cname = trim((string) get_option(WPS_IC_CF_CNAME));
+                          if ($cf_cname !== '') { $custom_cname = $cf_cname; }
                       }
                       ?>
                         <input type="text" name="custom-cdn" placeholder="<?php echo esc_attr__('Example: cdn.mysite.com', WPS_IC_TEXTDOMAIN); ?>" value="<?php

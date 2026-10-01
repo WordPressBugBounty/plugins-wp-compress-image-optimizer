@@ -1,14 +1,6 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: integrations/rocket.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 class wps_ic_rocket extends wps_ic_integrations
@@ -36,7 +28,7 @@ class wps_ic_rocket extends wps_ic_integrations
 
   public function do_checks()
   {
-    
+    // Logic to check for conflicts
     $rocket_settings = get_option('wp_rocket_settings');
     $updated = false;
 

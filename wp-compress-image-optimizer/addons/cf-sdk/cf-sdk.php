@@ -1,25 +1,17 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/cf-sdk/cf-sdk.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!function_exists('wpc_cf_permission_rows')) {
-    
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * v7.10.504 — THE single source of truth for the CF token permission table. It previously lived as
+     * an inline array inside advanced_settings_v4.php, so the connect-result panel could not name a
+     * missing permission and fell back to "usually an API-token permission or a zone setting" — a guess
+     * printed over an answer the same handler had already stored in wpc_cf_privileges.
+     *
+     * tier:  'req'     -> blocks. Nothing CF-related works without it.
+     *        'risk'    -> proceed, but a SETTING can misbehave; say which.
+     *        'feature' -> proceed, a named feature is simply unavailable.
+     *
+     * Keys must match checkPrivileges()'s $permissionTests keys exactly.
+     */
     function wpc_cf_permission_rows()
     {
         $t = defined('WPS_IC_TEXTDOMAIN') ? WPS_IC_TEXTDOMAIN : 'default';
@@ -84,12 +76,44 @@ if (!function_exists('wpc_cf_permission_rows')) {
     }
 }
 
+if (!function_exists('wpc_cf_permission_row_lines')) {
+    /**
+     * The two lines every permission row shows under its name, granted or missing: what the
+     * permission lets WP Compress do, and what fails without it. The panel's server render and
+     * the connect-error list in tabs.js both print these strings, so a row reads the same in both.
+     */
+    function wpc_cf_permission_row_lines($row)
+    {
+        $t = defined('WPS_IC_TEXTDOMAIN') ? WPS_IC_TEXTDOMAIN : 'default';
+        return [
+            'allows'  => sprintf(__('Allows: %s', $t), (string) ($row['why'] ?? '')),
+            'missing' => sprintf(__('If missing: %s', $t), (string) ($row['impact'] ?? '')),
+        ];
+    }
+}
+
+if (!function_exists('wpc_cf_store_privileges')) {
+    /**
+     * The one writer of wpc_cf_privileges: {t, privs, token}. token is the identity checkPrivileges()
+     * read ({id, status, t}), kept beside the permission result so the panel names the token it
+     * checked; it never holds the token value.
+     */
+    function wpc_cf_store_privileges($privs)
+    {
+        $token = (is_array($privs) && isset($privs['token']) && is_array($privs['token'])) ? $privs['token'] : null;
+        if (is_array($privs)) {
+            unset($privs['token']);
+        }
+        update_option('wpc_cf_privileges', ['t' => time(), 'privs' => $privs, 'token' => $token], false);
+    }
+}
+
 if (!function_exists('wpc_cf_permission_verdict')) {
-    
-
-
-
-
+    /**
+     * Classify a stored $tests map against the row table. Returns
+     * ['checked'=>bool,'missing'=>[rows],'req_missing'=>[rows],'soft_missing'=>[rows],'can_proceed'=>bool].
+     * can_proceed is TRUE when every 'req' row is granted — the rest are adaptable.
+     */
     function wpc_cf_permission_verdict($tests)
     {
         $tests = is_array($tests) ? $tests : [];
@@ -113,14 +137,19 @@ if (!function_exists('wpc_cf_permission_verdict')) {
 
 
 
-
-
+// Rule identifiers for WP Compress plugin
 const WPC_BYPASS_RULE_REF = 'wpc-bypass-cache';
 const WPC_STATIC_RULE_REF = 'wpc-static-assets';
 const WPC_HOMEPAGE_RULE_REF = 'wpc-homepage-html';
 const WPC_FULLHTML_RULE_REF = 'wpc-full-html';
-const WPC_CONFIG_INJECT_RULE_REF = 'wpc-config-inject'; 
+const WPC_CONFIG_INJECT_RULE_REF = 'wpc-config-inject'; // CF Piece 2 (signed x-wpc-config), scaffold
 const WPC_ROBOTS_RULE_REF = 'wpc-robots-sitemap';
+
+// The rule definitions live in their owner; the SDK is loaded alone by cron and by several
+// admin paths, so it brings the owner with it.
+if (!class_exists('wps_ic_cf_rules') && defined('WPS_IC_DIR')) {
+    require_once WPS_IC_DIR . 'classes/cf_rules.class.php';
+}
 
 
 class WPC_CloudflareAPI
@@ -128,16 +157,16 @@ class WPC_CloudflareAPI
     private $apiToken;
     private $apiBase = 'https://api.cloudflare.com/client/v4/';
 
-    
-
-
-
-
+    /**
+     * Constructor to initialize the API token
+     *
+     * @param string $apiToken Your Cloudflare API token
+     */
     public function __construct($apiToken = '')
     {
 
         if (empty($apiToken)) {
-            
+            // Nothing
             return false;
         }
 
@@ -159,36 +188,37 @@ class WPC_CloudflareAPI
         $siteUrl = site_url();
         $zoneName = str_replace(array('http://', 'https://', '/'), '', $siteUrl);
 
-        $body = $requests->GET(WPS_IC_KEYSURL, ['action' => 'updateCFConfig', 'token' => $token, 'zone' => $zoneInput, 'zoneName' => $zoneName, 'siteUrl' => $siteUrl, 'apikey' => $apikey, 'time' => microtime(true), 'staticAssets' => $staticAssetsEnabled, 'htmlCache' => $htmlCacheMode], ['timeout' => (int) apply_filters('wpc_cf_keys_timeout', 15)]);
+        // Rule: a refusal is not an answer. keys d9b24cde (hub ask 044) answers an empty token with
+        // {success:false, data:{code:'cf-token-missing', cfName}}; the old `!empty($body)` read
+        // that as the config answer. keys() returns data only on success and logs
+        // `keys-call-failed {action, why}` for every other outcome; both callers (the CF panel
+        // save and the upgrade pass) read only error fields of the result, so false keeps them as
+        // they were.
+        $keys = $requests->keys('updateCFConfig', ['token' => $token, 'zone' => $zoneInput, 'zoneName' => $zoneName, 'siteUrl' => $siteUrl, 'apikey' => $apikey, 'time' => microtime(true), 'staticAssets' => $staticAssetsEnabled, 'htmlCache' => $htmlCacheMode], (int) apply_filters('wpc_cf_keys_timeout', 15));
 
-        if (!empty($body)) {
-            $data = (array)$body->data;
-            return $data;
-        }
-
-        return false;
+        return $keys['ok'] ? (array) $keys['data'] : false;
     }
 
 
-    
-
-
-
-
+    /**
+     * Check Rocket Loader Status
+     *
+     * @return array|WP_Error List of zones or WP_Error
+     */
     public function checkRocketLoader($zoneId)
     {
         $rlResp = $this->getRequest("zones/$zoneId/settings/rocket_loader");
 
         if (is_wp_error($rlResp)) {
-            
+            // Store per-zone error but keep going for other zones
             $results[$zoneId] = new WP_Error('cloudflare_api_error', "Failed to fetch Rocket Loader " . $rlResp->get_error_message());
 
             return 'failed to fetch rocket loader';
         }
 
-        
+        // Cloudflare returns: { result: { id, value, editable, modified_on, ... } }
         if (!empty($rlResp['result']) && isset($rlResp['result']['value'])) {
-            $results[$zoneId] = ['value' => $rlResp['result']['value'],       
+            $results[$zoneId] = ['value' => $rlResp['result']['value'],       // 'on' | 'off'
                 'modified_on' => $rlResp['result']['modified_on'] ?? null, 'editable' => $rlResp['result']['editable'] ?? null,];
 
             return $results;
@@ -210,31 +240,31 @@ class WPC_CloudflareAPI
         return $this->processResponse($response);
     }
 
-    
-
-
-
-
+    /**
+     * Get standard headers for the API requests
+     *
+     * @return array
+     */
     private function getHeaders()
     {
         return ['Authorization' => 'Bearer ' . $this->apiToken, 'Content-Type' => 'application/json',];
     }
 
-    
-
-
-
-
-
+    /**
+     * Process the API response
+     *
+     * @param array|WP_Error $response API response
+     * @return array|WP_Error Parsed response or WP_Error
+     */
     private function processResponse($response)
     {
         if (is_wp_error($response)) {
             return $response;
         }
 
-        
-        
-        
+        // v7.10.667 — check rate limiting FIRST, before the body parse / non-json guard: a 429 can
+        // arrive as an HTML challenge/edge page, which the non-json guard would otherwise mislabel as
+        // a generic api_error and defeat the .665 retry-guards.
         if ((int) wp_remote_retrieve_response_code($response) === 429) {
             return new WP_Error('cloudflare_rate_limited', 'rate limited (http 429)', ['retry_after' => wp_remote_retrieve_header($response, 'retry-after')]);
         }
@@ -242,18 +272,18 @@ class WPC_CloudflareAPI
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
 
-        
-        
+        // Non-JSON body (challenge page / proxy 5xx) must surface as an error — callers
+        // treat an empty result as "rule missing" and would create duplicate rules
         if (!is_array($data)) {
             return new WP_Error('cloudflare_api_error', 'non-json response (http ' . (int) wp_remote_retrieve_response_code($response) . ')');
         }
 
         if (!empty($data['errors'])) {
             $error_messages = array_map(function ($error) {
-                return $error['message']; 
+                return $error['message']; // Extract error messages
             }, $data['errors']);
 
-            $error_message = implode(', ', $error_messages); 
+            $error_message = implode(', ', $error_messages); // Combine multiple messages if needed
 
             return new WP_Error('cloudflare_api_error', $error_message, $data['errors']);
         }
@@ -277,7 +307,7 @@ class WPC_CloudflareAPI
         if (is_wp_error($result)) {
             $code = (string) $result->get_error_code();
             $msg  = (string) $result->get_error_message();
-            
+            // (1) transport-level: we NEVER heard back (timeout / DNS / connection refused).
             if ($code === 'http_request_failed'
                 || stripos($msg, 'timed out') !== false || stripos($msg, 'timeout') !== false
                 || stripos($msg, 'could not resolve') !== false || stripos($msg, 'failed to connect') !== false
@@ -285,7 +315,7 @@ class WPC_CloudflareAPI
                 return ['ok' => false, 'mode' => 'unreachable',
                     'detail' => 'Could not reach Cloudflare (' . ($msg !== '' ? $msg : 'no response') . '). This is usually transient — try Reconnect again.'];
             }
-            
+            // (2) CF answered with an error body: inspect the preserved CF error codes.
             $data  = $result->get_error_data();
             $codes = [];
             if (is_array($data)) {
@@ -318,22 +348,22 @@ class WPC_CloudflareAPI
             'detail' => 'Could not complete — no Cloudflare response captured (likely a token or connection issue). Try Reconnect again.'];
     }
 
-    
-
-
-
-
+    /**
+     * Retrieve the list of zones
+     *
+     * @return array|WP_Error List of zones or WP_Error
+     */
     public function listZones($page = 1)
     {
         return $this->getRequest('zones', ['per_page' => 50, 'page' => $page]);
     }
 
-    
-
-
-
-
-
+    /**
+     * Purge all cache for a specific zone
+     *
+     * @param string $zoneId Cloudflare Zone ID
+     * @return array|WP_Error The API response or WP_Error
+     */
     public function purgeCache($zoneId)
     {
         $wpc_r = $this->postRequest("zones/$zoneId/purge_cache", ['purge_everything' => true,]);
@@ -345,11 +375,11 @@ class WPC_CloudflareAPI
     public function purgeCacheAsync($zoneId)
     {
         $url = $this->apiBase . "zones/$zoneId/purge_cache";
-        
-        
-        
-        
-        
+        // v7.10.667 — BLOCKING by default (real API result → purge ledger, CF doctor and the
+        // escalation decision stay honest). The purge already runs post-response (shutdown +
+        // fastcgi_finish_request), so blocking does NOT slow the frontend/admin — it only holds the
+        // FPM worker for the bounded, coalesced round-trip. Opt into true fire-and-forget for extreme
+        // purge volumes via wpc_cf_purge_blocking=false (which trades observability for zero hold).
         $wpc_blk = (bool) apply_filters('wpc_cf_purge_blocking', true);
         $response = wp_remote_post($url, [
             'headers'  => $this->getHeaders(),
@@ -368,9 +398,9 @@ class WPC_CloudflareAPI
         if (empty($files) || !is_array($files)) return null;
         $url = $this->apiBase . "zones/$zoneId/purge_cache";
 
-        
-        
-        $wpc_blk = (bool) apply_filters('wpc_cf_purge_blocking', true); 
+        // 30-slice here silently DROPPED entries 31-100 of every chunk — purges reported success
+        // while most of the list never reached CF.
+        $wpc_blk = (bool) apply_filters('wpc_cf_purge_blocking', true); // v7.10.667 — BLOCKING default (real result → ledger/doctor/escalation honest); fire-and-forget is opt-in
         $response = wp_remote_post($url, [
             'headers'  => $this->getHeaders(),
             'body'     => json_encode(['files' => array_values(array_slice($files, 0, 100))]),
@@ -389,11 +419,11 @@ class WPC_CloudflareAPI
         if (empty($tags)) return null;
         $response = wp_remote_post($this->apiBase . "zones/$zoneId/purge_cache", [
             'headers' => $this->getHeaders(),
-            'body'    => json_encode(['tags' => array_slice($tags, 0, 100)]), 
+            'body'    => json_encode(['tags' => array_slice($tags, 0, 100)]), // v7.10.665 25->100 (CF max)
             'timeout' => (int) apply_filters('wpc_cf_async_purge_timeout', 3),
         ]);
-        
-        
+        // Tag purge STAYS blocking: its success flag drives the host-escalation decision in
+        // purgeEdgeHtmlUrls / cfPurgeAllHtml. One ~3s call, post-response — bounded.
         $wpc_r = $this->processResponse($response);
         $this->wpc_ledger('tags', 'tag', count($tags), $wpc_r, implode(' ', array_slice($tags, 0, 3)));
         return $wpc_r;
@@ -404,10 +434,10 @@ class WPC_CloudflareAPI
     {
         $prefixes = array_values(array_unique(array_filter(array_map('strval', (array) $prefixes), 'strlen')));
         if (empty($prefixes)) return null;
-        $wpc_blk = (bool) apply_filters('wpc_cf_purge_blocking', true); 
+        $wpc_blk = (bool) apply_filters('wpc_cf_purge_blocking', true); // v7.10.667 — BLOCKING default (real result → ledger/doctor/escalation honest); fire-and-forget is opt-in
         $response = wp_remote_post($this->apiBase . "zones/$zoneId/purge_cache", [
             'headers'  => $this->getHeaders(),
-            'body'     => json_encode(['prefixes' => array_slice($prefixes, 0, 30)]), 
+            'body'     => json_encode(['prefixes' => array_slice($prefixes, 0, 30)]), // v7.10.667 CF prefix cap = 30/request
             'timeout'  => $wpc_blk ? (int) apply_filters('wpc_cf_async_purge_timeout', 3) : 1,
             'blocking' => $wpc_blk,
         ]);
@@ -426,16 +456,16 @@ class WPC_CloudflareAPI
         return $wpc_r;
     }
 
-    
-    
-    
+    // Single recorder for all six. Sits in the SDK because that is the one point every
+    // purge must pass through — instrumenting call sites misses whichever one nobody
+    // remembers, which is exactly how the doubled purges went unseen locally.
     private function wpc_ledger($method, $scope, $count, $response, $sample)
     {
         if (!function_exists('wpc_purge_ledger_add')) {
             return;
         }
-        
-        
+        // v7.10.667 — a fire-and-forget dispatch (opt-in) never sees the real result; mark it ':async'
+        // so the ledger never records a CONFIRMED success it could not observe.
         if (is_array($response) && !empty($response['fire_and_forget'])) { $method .= ':async'; }
         $wpc_ok = !is_wp_error($response) && is_array($response) && !empty($response['success']);
         wpc_purge_ledger_add($method, $scope, $count, $wpc_ok, $sample);
@@ -482,30 +512,37 @@ class WPC_CloudflareAPI
         if ($cfCname === '' || !function_exists('wp_remote_get')) {
             return false;
         }
-        
+        // Probe a stable uploads path + a cache-buster so a stale edge bucket can't mask resolution.
         $probe = 'https://' . $cfCname . '/wp-content/uploads/wpc-cname-verify.png?cb=' . (function_exists('wp_rand') ? wp_rand() : 1);
-        
-        
-        
-        
-        
-        $wpc_hdr2114 = [];
-        $wpc_tok2114 = function_exists('get_option') ? trim((string) get_option('wpc_cf_bypass_tok2114', '')) : '';
-        if ($wpc_tok2114 === '') {
-            $wpc_tok2114 = (string) $this->getCdnBypassToken();
+        // v7.21.14 — THE VERIFIER IS A BOT BY CF'S DEFINITION: a tokenless datacenter-IP
+        // fetch through the customer's own orange-clouded proxy is exactly what their bot
+        // detection challenges, so a site could be fully provisioned and still never verify
+        // (verified never flips -> cfwait suppresses every lane forever, green toggles lying).
+        // The probe now rides the sanctioned door: x-origin-auth, exempted by the skip rule.
+        $probeHeaders = [];
+        $bypassToken = function_exists('get_option') ? trim((string) get_option('wpc_cf_bypass_tok2114', '')) : '';
+        if ($bypassToken === '') {
+            $bypassToken = (string) $this->getCdnBypassToken();
         }
-        if ($wpc_tok2114 !== '' && apply_filters('wpc_cf_verify_rides_token', true)) {
-            $wpc_hdr2114['x-origin-auth'] = $wpc_tok2114;
+        if ($bypassToken !== '' && apply_filters('wpc_cf_verify_rides_token', true)) {
+            $probeHeaders['x-origin-auth'] = $bypassToken;
         }
-        $wpc_chal2114 = null;
+        $challengeWitness = null;
+        $probe_code = 0;
+        // The CDN (cdn-mc) sets X-Redirect-Reason on every response since 2026-09-28
+        // (shed_overloaded, never404_*, circuit_open_no_stale, ...), and it names why an answer was
+        // not the asset; before it the record held only code and content type.
+        $probe_rr = '';
         for ($i = 0; $i < max(1, (int) $tries); $i++) {
-            $r = wp_remote_get($probe, ['timeout' => max(2, (int) $timeout), 'sslverify' => false, 'redirection' => 0, 'headers' => $wpc_hdr2114]);
+            $r = wp_remote_get($probe, ['timeout' => max(2, (int) $timeout), 'sslverify' => false, 'redirection' => 0, 'headers' => $probeHeaders]);
             if (!is_wp_error($r)) {
                 $code    = (int) wp_remote_retrieve_response_code($r);
+                $probe_code = $code;
+                $probe_rr = substr((string) wp_remote_retrieve_header($r, 'x-redirect-reason'), 0, 64);
                 $body    = (string) wp_remote_retrieve_body($r);
                 $cfRay   = wp_remote_retrieve_header($r, 'cf-ray');
                 $ctype   = (string) wp_remote_retrieve_header($r, 'content-type');
-                $wpc_mit2114 = (string) wp_remote_retrieve_header($r, 'cf-mitigated');
+                $cfMitigated = (string) wp_remote_retrieve_header($r, 'cf-mitigated');
                 $through_cf = !empty($cfRay);
                 $site_not_found = (stripos($body, 'Site not found') !== false) || (stripos($body, '"hasApikey":false') !== false);
 
@@ -515,30 +552,36 @@ class WPC_CloudflareAPI
                     if (function_exists('delete_option')) {
                         delete_option('wpc_cf_verify_challenged2114');
                     }
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('cname-selfprobe', '', '', ['host' => $cfCname, 'ok' => 1, 'code' => $probe_code, 'rr' => $probe_rr]);
+                    }
                     return true;
                 }
-                if ($through_cf && ($wpc_mit2114 === 'challenge' || $code === 403)) {
-                    $wpc_chal2114 = ['t' => time(), 'code' => $code, 'mitigated' => $wpc_mit2114, 'tokened' => ($wpc_hdr2114 !== [])];
+                if ($through_cf && ($cfMitigated === 'challenge' || $code === 403)) {
+                    $challengeWitness = ['t' => time(), 'code' => $code, 'mitigated' => $cfMitigated, 'tokened' => ($probeHeaders !== [])];
                 }
             }
             if ($i + 1 < $tries) {
                 wpc_diag_sleep(2, 'cf-cname-verify');
             }
         }
-        
-        
-        if ($wpc_chal2114 !== null && function_exists('update_option')) {
-            update_option('wpc_cf_verify_challenged2114', $wpc_chal2114, false);
+        // A challenged verification is a NAMED state, never a silent one — the admin notice
+        // reads this witness. Only written on definitive challenge evidence, cleared on success.
+        if ($challengeWitness !== null && function_exists('update_option')) {
+            update_option('wpc_cf_verify_challenged2114', $challengeWitness, false);
+        }
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('cname-selfprobe', '', '', ['host' => $cfCname, 'ok' => 0, 'code' => $probe_code, 'rr' => $probe_rr]);
         }
         return false;
     }
 
-    
-
-
-
-
-
+    /**
+     * Fetch the CDN bypass token from WPC API.
+     * Auto-generated server-side if it doesn't exist yet.
+     *
+     * @return string|false The 64-char hex token, or false on failure
+     */
     public function getCdnBypassToken() {
         $options = get_option(WPS_IC_OPTIONS);
         if (empty($options['api_key'])) {
@@ -562,8 +605,8 @@ class WPC_CloudflareAPI
             return false;
         }
 
-        
-        
+        // v7.21.14 — cache so the cname reverify probe can ride the token without a keys
+        // round-trip on every attempt. Refreshed on every successful fetch and on rotate.
         if (function_exists('update_option')) {
             update_option('wpc_cf_bypass_tok2114', (string) $body['data']['token'], false);
         }
@@ -571,85 +614,11 @@ class WPC_CloudflareAPI
     }
 
 
-    
-    
-    
-    
-    
-    public function addBrowserTtlRules($zoneId)
-    {
-        if (empty($zoneId) || !apply_filters('wpc_cf_browser_ttl', true)) {
-            return false;
-        }
-        if (get_transient('wpc_cf_bttl_done_' . $zoneId)) {
-            return true;
-        }
-        
-        
-        
-        $wpc_rules772 = [
-            [
-                'action'            => 'set_cache_settings',
-                'description'       => 'WPC Browser TTL Media [DO NOT EDIT]',
-                'enabled'           => true,
-                'expression'        => 'http.request.uri.path.extension in {"jpg" "jpeg" "png" "gif" "svg" "webp" "avif" "ico" "woff" "woff2" "ttf" "otf"}',
-                'action_parameters' => ['browser_ttl' => ['mode' => 'override_origin', 'default' => 31536000]],
-            ],
-            [
-                'action'            => 'set_cache_settings',
-                'description'       => 'WPC Browser TTL Static [DO NOT EDIT]',
-                'enabled'           => true,
-                'expression'        => 'http.request.uri.path.extension in {"css" "js"}',
-                'action_parameters' => ['browser_ttl' => ['mode' => 'override_origin', 'default' => 604800]],
-            ],
-        ];
-        $wpc_have772 = [];
-        $existing = $this->getRequest("zones/$zoneId/rulesets/phases/http_request_cache_settings/entrypoint");
-        if (!is_wp_error($existing) && !empty($existing['result']['rules'])) {
-            foreach ($existing['result']['rules'] as $rule) {
-                if (!empty($rule['description'])) {
-                    $wpc_have772[$rule['description']] = 1;
-                }
-            }
-        }
-        $ruleset = $this->getRequest("zones/$zoneId/rulesets");
-        $rulesetId = '';
-        if (!is_wp_error($ruleset) && !empty($ruleset['result'])) {
-            foreach ($ruleset['result'] as $rs) {
-                if (isset($rs['phase']) && $rs['phase'] === 'http_request_cache_settings' && isset($rs['kind']) && $rs['kind'] === 'zone') {
-                    $rulesetId = $rs['id'];
-                    break;
-                }
-            }
-        }
-        $wpc_ok772 = true;
-        foreach ($wpc_rules772 as $wpc_r772) {
-            if (isset($wpc_have772[$wpc_r772['description']])) {
-                continue;
-            }
-            if ($rulesetId !== '') {
-                $result = $this->postRequest("zones/$zoneId/rulesets/$rulesetId/rules", $wpc_r772);
-            } else {
-                $result = $this->postRequest("zones/$zoneId/rulesets", ['name' => 'WPC Cache Rules', 'kind' => 'zone', 'phase' => 'http_request_cache_settings', 'rules' => [$wpc_r772]]);
-                if (!is_wp_error($result) && !empty($result['result']['id'])) {
-                    $rulesetId = $result['result']['id'];
-                }
-            }
-            if (is_wp_error($result) || empty($result['success'])) {
-                $wpc_ok772 = false;
-            }
-        }
-        if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log($wpc_ok772 ? 'cf-browser-ttl' : 'cf-browser-ttl-failed', '', '', [
-                'zone' => substr((string) $zoneId, 0, 12),
-            ]);
-        }
-        if ($wpc_ok772) {
-            set_transient('wpc_cf_bttl_done_' . $zoneId, 1, 12 * HOUR_IN_SECONDS);
-        }
-        return $wpc_ok772;
-    }
-
+    // The crit renderer runs real-browser UAs by design, so CF bot products can only admit it
+    // by SOURCE NETWORK. All crit-push pods egress from one ASN (Datacamp); pod IPs churn on
+    // redeploys, so the rule keys on the ASN, never an IP list. Skip is scoped to
+    // bot-protection products, NOT the full WAF. Known limit: free-plan plain Bot Fight Mode
+    // honors no exceptions — that zone needs BFM toggled off by hand.
     public function addRendererAllowRule($zoneId)
     {
         if (empty($zoneId) || !apply_filters('wpc_cf_renderer_allow', true)) {
@@ -658,22 +627,22 @@ class WPC_CloudflareAPI
         if (get_transient('wpc_cf_rr_done_' . $zoneId)) {
             return true;
         }
-        $wpc_asn760 = (int) apply_filters('wpc_crit_renderer_asn', 60068);
-        $wpc_desc760 = 'WPC Renderer Allow [DO NOT EDIT]';
+        $rendererAsn = (int) apply_filters('wpc_crit_renderer_asn', 60068);
+        $ruleDescription = 'WPC Renderer Allow [DO NOT EDIT]';
         $wafRules = $this->getRequest("zones/$zoneId/rulesets/phases/http_request_firewall_custom/entrypoint");
         if (!is_wp_error($wafRules) && !empty($wafRules['result']['rules'])) {
             foreach ($wafRules['result']['rules'] as $rule) {
-                if (!empty($rule['description']) && $rule['description'] === $wpc_desc760) {
+                if (!empty($rule['description']) && $rule['description'] === $ruleDescription) {
                     set_transient('wpc_cf_rr_done_' . $zoneId, 1, 12 * HOUR_IN_SECONDS);
                     return true;
                 }
             }
         }
-        $wpc_rule760 = [
+        $allowRule = [
             'action'            => 'skip',
-            'description'       => $wpc_desc760,
+            'description'       => $ruleDescription,
             'enabled'           => true,
-            'expression'        => 'ip.src.asnum eq ' . $wpc_asn760,
+            'expression'        => 'ip.src.asnum eq ' . $rendererAsn,
             'action_parameters' => [
                 'phases'   => ['http_request_sbfm', 'http_request_firewall_managed'],
                 'products' => ['bic', 'securityLevel', 'uaBlock', 'hot'],
@@ -690,72 +659,72 @@ class WPC_CloudflareAPI
             }
         }
         if ($rulesetId !== '') {
-            $result = $this->postRequest("zones/$zoneId/rulesets/$rulesetId/rules", $wpc_rule760);
+            $result = $this->postRequest("zones/$zoneId/rulesets/$rulesetId/rules", $allowRule);
         } else {
-            $result = $this->postRequest("zones/$zoneId/rulesets", ['name' => 'WPC Firewall Rules', 'kind' => 'zone', 'phase' => 'http_request_firewall_custom', 'rules' => [$wpc_rule760]]);
+            $result = $this->postRequest("zones/$zoneId/rulesets", ['name' => 'WPC Firewall Rules', 'kind' => 'zone', 'phase' => 'http_request_firewall_custom', 'rules' => [$allowRule]]);
         }
-        $wpc_ok760 = !is_wp_error($result) && !empty($result['success']);
-        if (!$wpc_ok760) {
-            
-            
-            
+        $ruleWritten = !is_wp_error($result) && !empty($result['success']);
+        if (!$ruleWritten) {
+            // Some plans reject the sbfm phase / scoped products — the ASN Access allow is the
+            // older API with the broadest token acceptance. Admits the whole ASN but only as
+            // an ALLOW, never a WAF skip.
             $result = $this->postRequest("zones/$zoneId/firewall/access_rules/rules", [
                 'mode'          => 'whitelist',
-                'configuration' => ['target' => 'asn', 'value' => 'AS' . $wpc_asn760],
-                'notes'         => $wpc_desc760,
+                'configuration' => ['target' => 'asn', 'value' => 'AS' . $rendererAsn],
+                'notes'         => $ruleDescription,
             ]);
-            $wpc_ok760 = !is_wp_error($result) && !empty($result['success']);
+            $ruleWritten = !is_wp_error($result) && !empty($result['success']);
         }
         if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log($wpc_ok760 ? 'cf-renderer-allow' : 'cf-renderer-allow-failed', '', '', [
+            wpc_cache_first_log($ruleWritten ? 'cf-renderer-allow' : 'cf-renderer-allow-failed', '', '', [
                 'zone' => substr((string) $zoneId, 0, 12),
-                'asn'  => $wpc_asn760,
-                'note' => $wpc_ok760 ? '' : 'both writes refused; if free-plan Bot Fight Mode is ON it honors no exceptions',
+                'asn'  => $rendererAsn,
+                'note' => $ruleWritten ? '' : 'both writes refused; if free-plan Bot Fight Mode is ON it honors no exceptions',
             ]);
         }
-        if ($wpc_ok760) {
+        if ($ruleWritten) {
             set_transient('wpc_cf_rr_done_' . $zoneId, 1, 12 * HOUR_IN_SECONDS);
         }
-        return $wpc_ok760 ? true : $result;
+        return $ruleWritten ? true : $result;
     }
 
-    
-    
-    
-    
-    
-    
+    // v7.21.17 — NEVER CHALLENGE THE ASSET HOST. A challenge page can only be solved by a
+    // top-level navigation; fonts and CSS-referenced SVGs are fetched in CORS-anonymous mode
+    // (no cookies, so no cf_clearance rides along), so ANY challenge on the cdn.* cname is a
+    // guaranteed-broken asset for every visitor — 403 with no ACAO, the abasingbakes fonts.
+    // The host serves only pull-zone statics; exempting it from challenge phases is strictly
+    // correct. Same shape doctrine as the bypass rule: phases + ruleset:current + FIRST.
     public function addCdnHostExemptRule($zoneId) {
         if (!apply_filters('wpc_cf_cdn_host_exempt', true)) {
             return false;
         }
-        $wpc_host2117 = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
-        if ($wpc_host2117 === '' || strpos($wpc_host2117, '"') !== false) {
-            return false; 
+        $cdnHost = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
+        if ($cdnHost === '' || strpos($cdnHost, '"') !== false) {
+            return false; // only CF-integration cnames sit behind the customer's Cloudflare
         }
-        $wpc_desc2117 = 'Optimizer CDN Host Exempt [DO NOT EDIT]';
-        $wpc_expr2117 = 'http.host eq "' . $wpc_host2117 . '"';
-        $wpc_phases2117 = ['http_request_firewall_managed', 'http_ratelimit', 'http_request_sbfm'];
+        $ruleDescription = 'Optimizer CDN Host Exempt [DO NOT EDIT]';
+        $ruleExpression = 'http.host eq "' . $cdnHost . '"';
+        $skipPhases = ['http_request_firewall_managed', 'http_ratelimit', 'http_request_sbfm'];
 
-        $wpc_first2117 = '';
+        $firstRuleId = '';
         $wafRules = $this->getRequest("zones/$zoneId/rulesets/phases/http_request_firewall_custom/entrypoint");
         if (!is_wp_error($wafRules) && !empty($wafRules['result']['rules'])) {
-            $wpc_first2117 = !empty($wafRules['result']['rules'][0]['id']) ? (string) $wafRules['result']['rules'][0]['id'] : '';
+            $firstRuleId = !empty($wafRules['result']['rules'][0]['id']) ? (string) $wafRules['result']['rules'][0]['id'] : '';
             foreach ($wafRules['result']['rules'] as $rule) {
-                if (!empty($rule['description']) && $rule['description'] === $wpc_desc2117) {
-                    return true; 
+                if (!empty($rule['description']) && $rule['description'] === $ruleDescription) {
+                    return true; // presence-checked; the host never rotates, so no re-shape needed
                 }
             }
         }
 
-        $wpc_rule2117 = [
+        $exemptRule = [
             'action'            => 'skip',
-            'description'       => $wpc_desc2117,
+            'description'       => $ruleDescription,
             'enabled'           => true,
-            'expression'        => $wpc_expr2117,
+            'expression'        => $ruleExpression,
             'action_parameters' => [
                 'products' => ['uaBlock', 'bic', 'hot', 'securityLevel', 'rateLimit', 'waf'],
-                'phases'   => $wpc_phases2117,
+                'phases'   => $skipPhases,
                 'ruleset'  => 'current',
             ],
         ];
@@ -769,193 +738,116 @@ class WPC_CloudflareAPI
                 }
             }
         }
-        $wpc_shapes2117 = [
-            $wpc_rule2117['action_parameters'],
-            ['products' => $wpc_rule2117['action_parameters']['products'],
-             'phases'   => array_values(array_diff($wpc_phases2117, ['http_request_sbfm'])),
+        $paramShapes = [
+            $exemptRule['action_parameters'],
+            ['products' => $exemptRule['action_parameters']['products'],
+             'phases'   => array_values(array_diff($skipPhases, ['http_request_sbfm'])),
              'ruleset'  => 'current'],
-            ['products' => $wpc_rule2117['action_parameters']['products'], 'ruleset' => 'current'],
+            ['products' => $exemptRule['action_parameters']['products'], 'ruleset' => 'current'],
         ];
         $result = false;
-        foreach ($wpc_shapes2117 as $wpc_ap2117) {
-            $wpc_rule2117['action_parameters'] = $wpc_ap2117;
+        foreach ($paramShapes as $actionParams) {
+            $exemptRule['action_parameters'] = $actionParams;
             if ($rulesetId !== '') {
-                if ($wpc_first2117 !== '') {
+                if ($firstRuleId !== '') {
                     $result = $this->postRequest("zones/$zoneId/rulesets/$rulesetId/rules",
-                        $wpc_rule2117 + ['position' => ['before' => $wpc_first2117]]);
+                        $exemptRule + ['position' => ['before' => $firstRuleId]]);
                     if (!is_wp_error($result) && !empty($result['success'])) {
                         break;
                     }
                 }
-                $result = $this->postRequest("zones/$zoneId/rulesets/$rulesetId/rules", $wpc_rule2117);
+                $result = $this->postRequest("zones/$zoneId/rulesets/$rulesetId/rules", $exemptRule);
             } else {
-                $result = $this->postRequest("zones/$zoneId/rulesets", ['name' => 'WPC Firewall Rules', 'kind' => 'zone', 'phase' => 'http_request_firewall_custom', 'rules' => [$wpc_rule2117]]);
+                $result = $this->postRequest("zones/$zoneId/rulesets", ['name' => 'WPC Firewall Rules', 'kind' => 'zone', 'phase' => 'http_request_firewall_custom', 'rules' => [$exemptRule]]);
             }
             if (!is_wp_error($result) && !empty($result['success'])) {
                 break;
             }
         }
         if (is_wp_error($result)) {
-            self::wpc_rule_log71('addCdnHostExemptRule', $result);
+            self::wpc_log_cf_rule_error('addCdnHostExemptRule', $result);
             return $result;
         }
         return $result;
     }
 
+    /**
+     * Provisions the WAF skip rule through its owner, wps_ic_cf_rules::converge_skip(), which also
+     * runs the two companion rules (renderer ASN allow, CDN host exempt) first, as this method did.
+     * Kept for the callers that act on the skip rule alone (rotation's missing-rule path, the
+     * upgrade one-shot, the agency portal's Refresh). Answers true, the refused write's answer or
+     * WP_Error for classifyResult(), or false when the rule is missing and no bypass token could be
+     * fetched.
+     */
     public function addCdnBypassRule($zoneId) {
-        try {
-            $this->addRendererAllowRule($zoneId);
-        } catch (\Throwable $e) {
+        $skip = wps_ic_cf_rules::converge_skip($this, $zoneId);
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('cf-skip-rule', '', '', ['outcome' => $skip['outcome'], 'twins' => (int) ($skip['twins'] ?? 0)]);
         }
-        try {
-            $this->addBrowserTtlRules($zoneId);
-        } catch (\Throwable $e) {
+        if (is_wp_error($skip['result'])) {
+            self::wpc_log_cf_rule_error('addCdnBypassRule', $skip['result']);
         }
-        try {
-            $this->addCdnHostExemptRule($zoneId);
-        } catch (\Throwable $e) {
-        }
-        $token = $this->getCdnBypassToken();
-        if (!$token) {
-            error_log('[WPC] addCdnBypassRule: failed to get bypass token');
-            return false;
-        }
-
-        $expression = 'any(http.request.headers["x-origin-auth"][*] == "' . $token . '")';
-
-
-        
-
-
-        
-        
-        
-        
-        
-        
-        $wpc_phases2107 = ['http_request_firewall_managed', 'http_ratelimit', 'http_request_sbfm'];
-
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        $wpc_first2112 = '';
-
-        
-        $wafRules = $this->getRequest("zones/$zoneId/rulesets/phases/http_request_firewall_custom/entrypoint");
-        if (!is_wp_error($wafRules) && !empty($wafRules['result']['rules'])) {
-            $wpc_first2112 = !empty($wafRules['result']['rules'][0]['id']) ? (string) $wafRules['result']['rules'][0]['id'] : '';
-            foreach ($wafRules['result']['rules'] as $wpc_ri2112 => $rule) {
-                if (!empty($rule['description']) && $rule['description'] === 'Optimizer Bypass [DO NOT EDIT]') {
-                    $wpc_stale2112 = empty($rule['action_parameters']['phases'])
-                        || empty($rule['action_parameters']['ruleset'])
-                        || $wpc_ri2112 !== 0;
-                    if ($wpc_stale2112 && apply_filters('wpc_cf_bypass_phase_upgrade', true)) {
-                        $wpc_loc2107 = $this->wpc_find_bypass_rule740($zoneId);
-                        if ($wpc_loc2107['rule'] !== '' && $wpc_loc2107['expression'] !== '') {
-                            if ($wpc_ri2112 !== 0 && !empty($wpc_loc2107['ruleset'])) {
-                                
-                                $wpc_del2112 = $this->deleteRequest('zones/' . $zoneId . '/rulesets/' . $wpc_loc2107['ruleset'] . '/rules/' . $wpc_loc2107['rule']);
-                                if (!is_wp_error($wpc_del2112) && !empty($wpc_del2112['success'])) {
-                                    $expression = $wpc_loc2107['expression'];
-                                    break; 
-                                }
-                            }
-                            $wpc_loc2107['shape']['action_parameters'] = isset($wpc_loc2107['shape']['action_parameters'])
-                                ? $wpc_loc2107['shape']['action_parameters'] : [];
-                            $wpc_loc2107['shape']['action_parameters']['phases'] = $wpc_phases2107;
-                            $wpc_loc2107['shape']['action_parameters']['ruleset'] = 'current';
-                            $wpc_up2107 = $this->wpc_write_bypass_expression740($zoneId, $wpc_loc2107, $wpc_loc2107['expression']);
-                            if ((is_wp_error($wpc_up2107) || empty($wpc_up2107['success']))) {
-                                $wpc_loc2107['shape']['action_parameters']['phases'] = array_values(array_diff($wpc_phases2107, ['http_request_sbfm']));
-                                $this->wpc_write_bypass_expression740($zoneId, $wpc_loc2107, $wpc_loc2107['expression']);
-                            }
-                            return true;
-                        }
-                    }
-                    return true;
-                }
-            }
-        }
-        $legacy = $this->getRequest('zones/' . $zoneId . '/firewall/rules');
-        if (!is_wp_error($legacy) && !empty($legacy['result'])) {
-            foreach ($legacy['result'] as $rule) {
-                if (!empty($rule['description']) && $rule['description'] === 'Optimizer Bypass [DO NOT EDIT]') {
-                    return true;
-                }
-            }
-        }
-
-        $wpc_skip_rule = [
-            'action'            => 'skip',
-            'description'       => 'Optimizer Bypass [DO NOT EDIT]',
-            'enabled'           => true,
-            'expression'        => $expression,
-            'action_parameters' => [
-                'products' => ['zoneLockdown', 'uaBlock', 'bic', 'hot', 'securityLevel', 'rateLimit', 'waf'],
-                'phases'   => $wpc_phases2107,
-                'ruleset'  => 'current',
-            ],
-        ];
-
-        
-        $ruleset = $this->getRequest("zones/$zoneId/rulesets");
-        $rulesetId = '';
-        if (!is_wp_error($ruleset) && !empty($ruleset['result'])) {
-            foreach ($ruleset['result'] as $rs) {
-                if (isset($rs['phase']) && $rs['phase'] === 'http_request_firewall_custom' && isset($rs['kind']) && $rs['kind'] === 'zone') {
-                    $rulesetId = $rs['id'];
-                    break;
-                }
-            }
-        }
-        $wpc_shapes2107 = [
-            $wpc_skip_rule['action_parameters'],
-            ['products' => $wpc_skip_rule['action_parameters']['products'],
-             'phases'   => array_values(array_diff($wpc_phases2107, ['http_request_sbfm'])),
-             'ruleset'  => 'current'],
-            ['products' => $wpc_skip_rule['action_parameters']['products'], 'ruleset' => 'current'],
-            ['products' => $wpc_skip_rule['action_parameters']['products']],
-        ];
-        $result = false;
-        foreach ($wpc_shapes2107 as $wpc_ap2107) {
-            $wpc_skip_rule['action_parameters'] = $wpc_ap2107;
-            if ($rulesetId !== '') {
-                
-                
-                
-                if ($wpc_first2112 !== '') {
-                    $result = $this->postRequest("zones/$zoneId/rulesets/$rulesetId/rules",
-                        $wpc_skip_rule + ['position' => ['before' => $wpc_first2112]]);
-                    if (!is_wp_error($result) && !empty($result['success'])) {
-                        break;
-                    }
-                }
-                $result = $this->postRequest("zones/$zoneId/rulesets/$rulesetId/rules", $wpc_skip_rule);
-            } else {
-                $result = $this->postRequest("zones/$zoneId/rulesets", ['name' => 'WPC Firewall Rules', 'kind' => 'zone', 'phase' => 'http_request_firewall_custom', 'rules' => [$wpc_skip_rule]]);
-            }
-            if (!is_wp_error($result) && !empty($result['success'])) {
-                break;
-            }
-        }
-
-        if (is_wp_error($result)) {
-            self::wpc_rule_log71('addCdnBypassRule', $result);
-            return $result; 
-        }
-
-        return $result;
+        return $skip['result'];
     }
 
-    public function wpc_find_bypass_rule740($zoneId)
+    // ── the WAF custom-rules phase, for the skip rule's owner (wps_ic_cf_rules) ──────────────────
+
+    /**
+     * The zone's http_request_firewall_custom entrypoint as ['ruleset' => id, 'rules' => [...]].
+     * A zone that has no entrypoint yet answers ['ruleset' => '', 'rules' => []]; any other failure
+     * is the WP_Error, so a failed read is never taken for "rule missing" (the duplicate-rule class).
+     */
+    public function getFirewallCustomEntrypoint($zoneId)
     {
-        $wpc_out740 = ['ruleset' => '', 'rule' => '', 'expression' => '', 'legacy' => false, 'shape' => []];
+        $answer = $this->getRequest("zones/$zoneId/rulesets/phases/http_request_firewall_custom/entrypoint");
+        if (is_wp_error($answer)) {
+            $codes = array_map(function ($e) { return is_array($e) ? (int) ($e['code'] ?? 0) : 0; }, (array) $answer->get_error_data());
+            if (in_array(10003, $codes, true) || stripos($answer->get_error_message(), 'could not find entrypoint') !== false) {
+                return ['ruleset' => '', 'rules' => []];
+            }
+            return $answer;
+        }
+        return ['ruleset' => (string) ($answer['result']['id'] ?? ''),
+            'rules' => isset($answer['result']['rules']) && is_array($answer['result']['rules']) ? $answer['result']['rules'] : []];
+    }
+
+    /** POST one rule into the entrypoint; with no entrypoint yet, create it holding the rule. */
+    public function postFirewallCustomRule($zoneId, $rulesetId, array $rule)
+    {
+        if ($rulesetId === '') {
+            return $this->postRequest("zones/$zoneId/rulesets", ['name' => 'WPC Firewall Rules', 'kind' => 'zone', 'phase' => 'http_request_firewall_custom', 'rules' => [$rule]]);
+        }
+        return $this->postRequest("zones/$zoneId/rulesets/$rulesetId/rules", $rule);
+    }
+
+    public function patchFirewallCustomRule($zoneId, $rulesetId, $ruleId, array $rule)
+    {
+        return $this->patchRequest("zones/$zoneId/rulesets/$rulesetId/rules/$ruleId", $rule);
+    }
+
+    public function deleteFirewallCustomRule($zoneId, $rulesetId, $ruleId)
+    {
+        return $this->deleteRequest("zones/$zoneId/rulesets/$rulesetId/rules/$ruleId");
+    }
+
+    /** True when the skip rule exists under the deprecated firewall/rules API (never rewritten there). */
+    public function hasLegacyBypassRule($zoneId)
+    {
+        $legacy = $this->getRequest('zones/' . $zoneId . '/firewall/rules');
+        if (is_wp_error($legacy) || empty($legacy['result'])) {
+            return false;
+        }
+        foreach ($legacy['result'] as $rule) {
+            if (!empty($rule['description']) && $rule['description'] === wps_ic_cf_rules::SKIP_DESCRIPTION) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function wpc_find_bypass_rule($zoneId)
+    {
+        $found = ['ruleset' => '', 'rule' => '', 'expression' => '', 'legacy' => false, 'shape' => []];
         $ruleset = $this->getRequest("zones/$zoneId/rulesets");
         if (!is_wp_error($ruleset) && !empty($ruleset['result'])) {
             foreach ($ruleset['result'] as $rs) {
@@ -967,11 +859,11 @@ class WPC_CloudflareAPI
                 if (!is_wp_error($detail) && !empty($detail['result']['rules'])) {
                     foreach ($detail['result']['rules'] as $rule) {
                         if (!empty($rule['description']) && $rule['description'] === 'Optimizer Bypass [DO NOT EDIT]' && !empty($rule['id'])) {
-                            $wpc_out740['ruleset']    = (string) $rs['id'];
-                            $wpc_out740['rule']       = (string) $rule['id'];
-                            $wpc_out740['expression'] = isset($rule['expression']) ? (string) $rule['expression'] : '';
-                            $wpc_out740['shape']      = $rule;
-                            return $wpc_out740;
+                            $found['ruleset']    = (string) $rs['id'];
+                            $found['rule']       = (string) $rule['id'];
+                            $found['expression'] = isset($rule['expression']) ? (string) $rule['expression'] : '';
+                            $found['shape']      = $rule;
+                            return $found;
                         }
                     }
                 }
@@ -982,25 +874,25 @@ class WPC_CloudflareAPI
         if (!is_wp_error($legacy) && !empty($legacy['result'])) {
             foreach ($legacy['result'] as $rule) {
                 if (!empty($rule['description']) && $rule['description'] === 'Optimizer Bypass [DO NOT EDIT]') {
-                    $wpc_out740['legacy'] = true;
+                    $found['legacy'] = true;
                     break;
                 }
             }
         }
-        return $wpc_out740;
+        return $found;
     }
 
-    
-
-
-
-
-
-
-
-
-
-    public function rotateCdnBypassToken($zoneId, $wpc_tighten740 = true)
+    /**
+     * Rotate the origin-auth bypass token and re-key the WAF Skip rule.
+     *
+     * The edge pods cache the token for up to 15 minutes, so a straight swap to the new value
+     * 403s every in-flight origin fetch until their cache turns over. The rule is therefore
+     * widened to old-OR-new first and tightened to new-only on a scheduled follow-up.
+     *
+     * @param string $zoneId Cloudflare Zone ID
+     * @return array|string|false Status array, 'rate-limited', 'legacy-rule', or false
+     */
+    public function rotateCdnBypassToken($zoneId, $tighten = true)
     {
         $options = get_option(WPS_IC_OPTIONS);
         if (empty($options['api_key'])) {
@@ -1012,106 +904,106 @@ class WPC_CloudflareAPI
             return false;
         }
 
-        
-        
-        $wpc_loc740 = $this->wpc_find_bypass_rule740($zoneId);
-        if ($wpc_loc740['rule'] === '') {
-            if ($wpc_loc740['legacy']) {
+        // The DEPLOYED rule is the truth for what is currently accepted at the edge — a token
+        // stored on this site can have drifted from it (manual edit, restore, failed rotation).
+        $deployedRule = $this->wpc_find_bypass_rule($zoneId);
+        if ($deployedRule['rule'] === '') {
+            if ($deployedRule['legacy']) {
                 error_log('[WPC] rotateCdnBypassToken: rule exists only under the deprecated firewall/rules API — not rotating');
                 return 'legacy-rule';
             }
             return $this->addCdnBypassRule($zoneId);
         }
 
-        $wpc_r740 = wp_remote_get(
+        $keysResponse = wp_remote_get(
             WPS_IC_KEYSURL . '?action=rotate_cf_bypass_token&apikey=' . urlencode((string) $options['api_key']),
             ['timeout' => (int) apply_filters('wpc_cf_keys_timeout', 20), 'sslverify' => false]
         );
-        if (is_wp_error($wpc_r740)) {
-            error_log('[WPC] rotateCdnBypassToken: keys request error: ' . $wpc_r740->get_error_message());
+        if (is_wp_error($keysResponse)) {
+            error_log('[WPC] rotateCdnBypassToken: keys request error: ' . $keysResponse->get_error_message());
             return false;
         }
-        if ((int) wp_remote_retrieve_response_code($wpc_r740) === 429) {
+        if ((int) wp_remote_retrieve_response_code($keysResponse) === 429) {
             error_log('[WPC] rotateCdnBypassToken: rate limited (1/apikey/hour)');
             return 'rate-limited';
         }
-        $wpc_b740 = json_decode(wp_remote_retrieve_body($wpc_r740), true);
-        if (empty($wpc_b740['success']) || empty($wpc_b740['data']['token'])) {
-            error_log('[WPC] rotateCdnBypassToken: unexpected response: ' . wp_remote_retrieve_body($wpc_r740));
+        $keysBody = json_decode(wp_remote_retrieve_body($keysResponse), true);
+        if (empty($keysBody['success']) || empty($keysBody['data']['token'])) {
+            error_log('[WPC] rotateCdnBypassToken: unexpected response: ' . wp_remote_retrieve_body($keysResponse));
             return false;
         }
-        $wpc_new740  = (string) $wpc_b740['data']['token'];
+        $newToken  = (string) $keysBody['data']['token'];
         if (function_exists('update_option')) {
-            update_option('wpc_cf_bypass_tok2114', $wpc_new740, false);
+            update_option('wpc_cf_bypass_tok2114', $newToken, false);
         }
-        $wpc_expr740 = !empty($wpc_b740['data']['expression'])
-            ? (string) $wpc_b740['data']['expression']
-            : 'any(http.request.headers["x-origin-auth"][*] == "' . $wpc_new740 . '")';
+        $newExpression = !empty($keysBody['data']['expression'])
+            ? (string) $keysBody['data']['expression']
+            : 'any(http.request.headers["x-origin-auth"][*] == "' . $newToken . '")';
 
-        $wpc_union740 = $wpc_expr740;
-        if ($wpc_loc740['expression'] !== ''
-            && strpos($wpc_loc740['expression'], $wpc_new740) === false) {
-            $wpc_union740 = '(' . $wpc_expr740 . ') or (' . $wpc_loc740['expression'] . ')';
+        $unionExpression = $newExpression;
+        if ($deployedRule['expression'] !== ''
+            && strpos($deployedRule['expression'], $newToken) === false) {
+            $unionExpression = '(' . $newExpression . ') or (' . $deployedRule['expression'] . ')';
         }
 
-        $wpc_patch740 = $this->wpc_write_bypass_expression740($zoneId, $wpc_loc740, $wpc_union740);
-        if ($wpc_patch740 === false || is_wp_error($wpc_patch740)) {
+        $patchResult = $this->wpc_write_bypass_expression($zoneId, $deployedRule, $unionExpression);
+        if ($patchResult === false || is_wp_error($patchResult)) {
             error_log('[WPC] rotateCdnBypassToken: WAF re-key failed — the OLD token is still live, so the lane is not broken');
             return false;
         }
 
-        if ($wpc_tighten740 && function_exists('wp_schedule_single_event')) {
-            $wpc_delay740 = (int) apply_filters('wpc_cf_bypass_tighten_delay', 20 * MINUTE_IN_SECONDS);
-            wp_schedule_single_event(time() + $wpc_delay740, 'wpc_cf_bypass_tighten', [(string) $zoneId, $wpc_expr740]);
+        if ($tighten && function_exists('wp_schedule_single_event')) {
+            $tightenDelay = (int) apply_filters('wpc_cf_bypass_tighten_delay', 20 * MINUTE_IN_SECONDS);
+            wp_schedule_single_event(time() + $tightenDelay, 'wpc_cf_bypass_tighten', [(string) $zoneId, $newExpression]);
         }
 
-        return ['rotated' => true, 'union' => $wpc_union740, 'expression' => $wpc_expr740,
-                'bunnydb_synced' => !empty($wpc_b740['data']['bunnydb_synced'])];
+        return ['rotated' => true, 'union' => $unionExpression, 'expression' => $newExpression,
+                'bunnydb_synced' => !empty($keysBody['data']['bunnydb_synced'])];
     }
 
-    public function wpc_write_bypass_expression740($zoneId, $wpc_loc740, $wpc_expression740)
+    public function wpc_write_bypass_expression($zoneId, $deployedRule, $expression)
     {
-        if (empty($wpc_loc740['ruleset']) || empty($wpc_loc740['rule']) || $wpc_expression740 === '') {
+        if (empty($deployedRule['ruleset']) || empty($deployedRule['rule']) || $expression === '') {
             return false;
         }
-        $wpc_body740 = [
+        $ruleBody = [
             'action'      => 'skip',
             'description' => 'Optimizer Bypass [DO NOT EDIT]',
             'enabled'     => true,
-            'expression'  => $wpc_expression740,
+            'expression'  => $expression,
         ];
-        $wpc_body740['action_parameters'] = (!empty($wpc_loc740['shape']['action_parameters']))
-            ? $wpc_loc740['shape']['action_parameters']
+        $ruleBody['action_parameters'] = (!empty($deployedRule['shape']['action_parameters']))
+            ? $deployedRule['shape']['action_parameters']
             : ['products' => ['zoneLockdown', 'uaBlock', 'bic', 'hot', 'securityLevel', 'rateLimit', 'waf']];
         return $this->patchRequest(
-            'zones/' . $zoneId . '/rulesets/' . $wpc_loc740['ruleset'] . '/rules/' . $wpc_loc740['rule'],
-            $wpc_body740
+            'zones/' . $zoneId . '/rulesets/' . $deployedRule['ruleset'] . '/rules/' . $deployedRule['rule'],
+            $ruleBody
         );
     }
 
-    
-
-
-
-    public function tightenCdnBypassRule($zoneId, $wpc_expression740)
+    /**
+     * Scheduled follow-up: drop the superseded token once the edge pods have turned over.
+     * Re-reads the deployed rule, so a rotation that happened in between is not clobbered.
+     */
+    public function tightenCdnBypassRule($zoneId, $expression)
     {
-        $wpc_loc740 = $this->wpc_find_bypass_rule740($zoneId);
-        if ($wpc_loc740['rule'] === '' || $wpc_loc740['expression'] === $wpc_expression740) {
+        $deployedRule = $this->wpc_find_bypass_rule($zoneId);
+        if ($deployedRule['rule'] === '' || $deployedRule['expression'] === $expression) {
             return false;
         }
-        if (strpos($wpc_loc740['expression'], $wpc_expression740) === false) {
+        if (strpos($deployedRule['expression'], $expression) === false) {
             error_log('[WPC] tightenCdnBypassRule: deployed rule no longer contains the token we minted — a newer rotation won, standing down');
             return false;
         }
-        return $this->wpc_write_bypass_expression740($zoneId, $wpc_loc740, $wpc_expression740);
+        return $this->wpc_write_bypass_expression($zoneId, $deployedRule, $expression);
     }
 
-    
-
-
-
-
-
+    /**
+     * Remove the CDN bypass WAF rule on CF disconnect.
+     *
+     * @param string $zoneId Cloudflare Zone ID
+     * @return array|false Result from CF API or false on failure
+     */
     public function removeCdnBypassRule($zoneId) {
         $removed = false;
 
@@ -1189,10 +1081,10 @@ class WPC_CloudflareAPI
         $url = 'zones/' . $zoneId . '/firewall/access_rules/rules';
         $allRules = [];
         $page = 1;
-        $perPage = 50; 
+        $perPage = 50; // Max allowed is 50
 
         do {
-            
+            // Fetch the current page
             $response = $this->getRequest($url . "?page=$page&per_page=$perPage");
 
             if (is_wp_error($response)) {
@@ -1204,7 +1096,7 @@ class WPC_CloudflareAPI
             }
 
             $page++;
-        } while (!empty($response['result'])); 
+        } while (!empty($response['result'])); // Continue until no more results
 
         if (!empty($allRules)) {
             foreach ($allRules as $rule) {
@@ -1231,7 +1123,7 @@ class WPC_CloudflareAPI
     {
         $url = 'zones/' . $zoneId . '/firewall/rules';
 
-        
+        // Fetch existing firewall rules
         $response = $this->getRequest($url);
 
         if (is_wp_error($response)) {
@@ -1267,7 +1159,7 @@ class WPC_CloudflareAPI
         $body = ["mode" => 'whitelist', "configuration" => ["target" => "ip", "value" => $ip,], "notes" => 'WP Compress API Endpoint'];
 
         $response = $this->postRequest($url, $body);
-        
+        // Check if the request was successful
         if (is_wp_error($response)) {
 
             if ($response->get_error_message() == 'firewallaccessrules.api.duplicate_of_existing') {
@@ -1285,7 +1177,7 @@ class WPC_CloudflareAPI
     {
         $url = 'zones/' . $zoneId . '/firewall/access_rules/rules';
 
-        
+        // Fetch existing access rules
         $response = $this->getRequest($url);
 
         if (is_wp_error($response)) {
@@ -1302,7 +1194,7 @@ class WPC_CloudflareAPI
 
                     $ruleId = $rule['id'];
                     $r = 'found ip ' . $ip . "\r\n";
-                    
+                    #$r = $this->deleteRequest('zones/' . $zoneId . '/firewall/access_rules/rules/' . $ruleId);
                     return $r;
                 }
             }
@@ -1311,16 +1203,16 @@ class WPC_CloudflareAPI
 
     public function expandIPv6($ip)
     {
-        
+        // Split the IPv6 address into segments
         $segments = explode(':', $ip);
 
-        
+        // Handle the "::" shorthand
         if (strpos($ip, '::') !== false) {
-            $missingSegments = 8 - count($segments) + 1; 
+            $missingSegments = 8 - count($segments) + 1; // Calculate missing segments
             $expandedSegments = [];
             foreach ($segments as $segment) {
                 if ($segment === '') {
-                    
+                    // Insert missing zero segments
                     for ($i = 0; $i < $missingSegments; $i++) {
                         $expandedSegments[] = '0000';
                     }
@@ -1331,12 +1223,12 @@ class WPC_CloudflareAPI
             $segments = $expandedSegments;
         }
 
-        
+        // Pad each segment to ensure 4 digits
         foreach ($segments as &$segment) {
             $segment = str_pad($segment, 4, '0', STR_PAD_LEFT);
         }
 
-        
+        // Join the segments into the fully expanded IPv6 address
         return implode(':', $segments);
     }
 
@@ -1366,14 +1258,14 @@ class WPC_CloudflareAPI
         $results = [];
         $results['debug'] = [];
 
-        
+        // Log input parameters
         $results['debug']['input'] = ['zoneId' => $zoneId, 'staticAssetsEnabled' => $staticAssetsEnabled, 'htmlCacheMode' => $htmlCacheMode];
 
-        
+        // Determine if any caching is enabled
         $anyCacheEnabled = $staticAssetsEnabled || ($htmlCacheMode !== 'off');
         $results['debug']['anyCacheEnabled'] = $anyCacheEnabled;
 
-        
+        // BYPASS rule - add/update if any cache is enabled, remove current domain if all off
         if ($anyCacheEnabled) {
             $results['debug']['bypass_action'] = 'ensuring current domain is in rule';
             $bypassResult = $this->addCacheRule($zoneId, $this->getBypassRule(), ['index' => 1]);
@@ -1386,7 +1278,7 @@ class WPC_CloudflareAPI
             $results['bypass'] = $this->deleteCacheRuleByRef($zoneId, WPC_BYPASS_RULE_REF);
         }
 
-        
+        // STATIC ASSETS rule
         if ($staticAssetsEnabled) {
             $results['debug']['static_action'] = 'ensuring current domain is in rule';
             $staticResult = $this->addCacheRule($zoneId, $this->getStaticAssetsRule());
@@ -1399,7 +1291,7 @@ class WPC_CloudflareAPI
             $results['static'] = $this->deleteCacheRuleByRef($zoneId, WPC_STATIC_RULE_REF);
         }
 
-        
+        // HOMEPAGE HTML rule
         if ($htmlCacheMode === 'home' || $htmlCacheMode === 'all') {
             $results['debug']['homepage_action'] = 'ensuring current domain is in rule';
             $homepageResult = $this->addCacheRule($zoneId, $this->getHomepageHTMLRule());
@@ -1414,7 +1306,7 @@ class WPC_CloudflareAPI
             $results['homepage'] = $this->deleteCacheRuleByRef($zoneId, WPC_HOMEPAGE_RULE_REF);
         }
 
-        
+        // FULL HTML rule
         if ($htmlCacheMode === 'all') {
             $results['debug']['fullhtml_action'] = 'ensuring current domain is in rule';
             $fullhtmlResult = $this->addCacheRule($zoneId, $this->getFullHTMLRule());
@@ -1441,7 +1333,7 @@ class WPC_CloudflareAPI
     {
         $ruleRef = $rule['ref'];
 
-        
+        // Check if rule already exists
         $existingRule = $this->findCacheRuleByRef($zoneId, $ruleRef);
 
         if ($existingRule) {
@@ -1450,22 +1342,30 @@ class WPC_CloudflareAPI
             return $this->addDomainsToRule($zoneId, $ruleRef, $currentDomains);
         }
 
-        
+        // Rule doesn't exist - create it (original logic below)
         $rulesetId = $this->getCacheRulesRulesetId($zoneId);
 
-        
+        // If no ruleset exists, create one with this rule
         if (is_wp_error($rulesetId)) {
             return $this->postRequest("zones/$zoneId/rulesets", ['name' => 'Cache Rules', 'kind' => 'zone', 'phase' => 'http_request_cache_settings', 'rules' => [$rule]]);
         }
 
-        
+        // Add position to request body if specified
         $body = $rule;
         if ($position !== null) {
             $body['position'] = $position;
         }
 
-        
+        // Add rule to existing ruleset (SAFE - doesn't replace other rules)
         return $this->postRequest("zones/$zoneId/rulesets/$rulesetId/rules", $body);
+    }
+
+    /** PATCH one deployed cache rule by id; the owner (wps_ic_cf_rules) is the only caller. */
+    public function patchCacheRule($zoneId, $ruleId, array $rule)
+    {
+        $rulesetId = $this->getCacheRulesRulesetId($zoneId);
+        if (is_wp_error($rulesetId)) { return $rulesetId; }
+        return $this->patchRequest("zones/$zoneId/rulesets/$rulesetId/rules/$ruleId", $rule);
     }
 
 
@@ -1517,25 +1417,25 @@ class WPC_CloudflareAPI
         return $out;
     }
 
-    
-
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * Can this zone key by device AT ALL, independent of what we currently deploy (v7.10.571)?
+     *
+     * htmlRuleKeyState() reads the LIVE rules, and combined mode deliberately strips cache_key —
+     * so it reports "no device key" on every combined site, the floor then keeps them combined,
+     * and the capability could never be observed. Circular: .568 made the toggle unreachable on
+     * every site rather than only unsafe ones.
+     *
+     * Break it with a probe that touches no traffic: add a rule that is DISABLED and whose
+     * expression cannot match anything, carrying cache_by_device_type. If Cloudflare accepts and
+     * echoes the field back, the zone supports it. Delete it either way — including on every
+     * failure path, so a rejected probe cannot leave litter in the customer's ruleset.
+     */
     public function probeDeviceKeySupport($zoneId)
     {
         $ref = 'wpc-devkey-probe';
         $out = ['supported' => false, 'detail' => ''];
         try {
-            
+            // Never matches: a host that cannot exist. Disabled as well, belt and braces.
             $rule = [
                 'ref'         => $ref,
                 'action'      => 'set_cache_settings',
@@ -1573,19 +1473,19 @@ class WPC_CloudflareAPI
             $out['detail'] = 'threw: ' . substr($e->getMessage(), 0, 90);
             return $out;
         } finally {
-            
+            // Always clean up, on every path above including the returns.
             try { $this->deleteCacheRuleByRef($zoneId, $ref); } catch (\Throwable $e) {}
         }
     }
 
-    
-
-
-
-
-
-
-
+    /**
+     * Is tiered caching actually ON right now (v7.10.570)?
+     *
+     * Read, never assume: the crown records whether an eviction was proven WITH tiers active, and
+     * that claim is only worth anything if the state is observed at the moment of the proof.
+     * Returns true only on an explicit 'on'; any error, absent field, or unreadable response
+     * returns false, so an unknown zone can never mint a '+tiered' crown it did not earn.
+     */
     public function getTieredCacheState($zoneId)
     {
         try {
@@ -1612,21 +1512,30 @@ class WPC_CloudflareAPI
         return $out;
     }
 
-    
-
-
-
-
-
-
-
-
-
-    public function htmlRuleKeyState($zoneId)
+    /**
+     * Ground truth for whether THIS zone can key HTML per device (v7.10.568).
+     *
+     * cache_key.cache_by_device_type is an Enterprise-only Cache Rules feature. Without it the
+     * edge stores ONE copy of a URL for every device — which is fine while we emit
+     * device-universal HTML, and a correctness break the moment we do not: the first device to
+     * warm a URL decides what every other device sees. Read the deployed rules rather than
+     * assuming the patch we sent was accepted; CF silently keeps the old shape on a rejected
+     * field. Returns per-rule state plus a single `devkey` verdict for callers to gate on.
+     */
+    public function htmlRuleKeyState($zoneId, $deployedRules = null)
     {
+        // The caller may pass the ruleset it already holds (converge passes the readback or the
+        // ruleset its last write answered with); otherwise read it once for both refs.
+        if (!is_array($deployedRules)) {
+            $deployedRules = $this->listCacheRules($zoneId);
+            if (is_wp_error($deployedRules)) { $deployedRules = []; }
+        }
         $out = ['rules' => [], 'devkey' => false, 'anykey' => false, 'found' => 0];
         foreach ([WPC_HOMEPAGE_RULE_REF => 'homepage', WPC_FULLHTML_RULE_REF => 'fullhtml'] as $ref => $label) {
-            $rule = $this->findCacheRuleByRef($zoneId, $ref);
+            $rule = null;
+            foreach ($deployedRules as $deployedRule) {
+                if (isset($deployedRule['ref']) && $deployedRule['ref'] === $ref) { $rule = $deployedRule; break; }
+            }
             if (!is_array($rule)) {
                 $out['rules'][$label] = ['present' => false];
                 continue;
@@ -1646,7 +1555,7 @@ class WPC_CloudflareAPI
             if (!empty($ap['cache_key'])) { $out['anykey'] = true; }
             if ($dev) { $out['devkey'] = true; }
         }
-        
+        // Every HTML rule we own must carry it — one device-blind rule is enough to break it.
         if ($out['found'] > 0) {
             $all = true;
             foreach ($out['rules'] as $r) {
@@ -1657,6 +1566,68 @@ class WPC_CloudflareAPI
             $out['devkey'] = false;
         }
         return $out;
+    }
+
+    /**
+     * Stamp what Cloudflare actually accepted for the HTML rules' cache key. cache_by_device_type
+     * is Enterprise-only: a zone without it answers success and keeps the old shape, so the render
+     * must read this stamp, never "we sent the patch" (v7.10.568). src='readback' is the evidence
+     * the v7.10.682 floor allowlists. $deployedRules: a ruleset Cloudflare answered after the last
+     * write (or the readback when nothing was written); null reads the zone.
+     */
+    public function recordHtmlKeyState($zoneId, $combined, $deployedRules = null)
+    {
+        try {
+            $state = $this->htmlRuleKeyState($zoneId, $deployedRules);
+            update_option('wpc_cf_devkey_verified', ['t' => time(), 'devkey' => !empty($state['devkey']) ? 1 : 0, 'src' => 'readback',
+                'found' => (int) ($state['found'] ?? 0), 'want' => $combined ? 'combined' : 'split'], false);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('cf-devkey-readback', '', '', ['devkey' => !empty($state['devkey']) ? 1 : 0, 'found' => (int) ($state['found'] ?? 0), 'want' => $combined ? 'combined' : 'split']);
+            }
+            return $state;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Tiered caching is earned, never assumed: only a purge selftest that re-verified eviction
+     * with tiers active (method contains 'tiered', < 8 days old) keeps it on. Everyone else turns
+     * it off. Called after every converge and after every keys answer, because keys' refreshCF
+     * switches it on for the whole zone (perkzilla 2026-09-24: on after a Refresh that timed out).
+     */
+    /**
+     * Cloudflare's cache variants for the zone ("Vary for Images"): GET zones/{zone}/cache/variants.
+     * The value maps a requested file extension to the MIME types the origin may answer it with
+     * (developers.cloudflare.com/api/resources/cache/subresources/variants/methods/edit/).
+     */
+    public function getCacheVariants($zoneId)
+    {
+        return $this->getRequest("zones/$zoneId/cache/variants");
+    }
+
+    /** PATCH zones/{zone}/cache/variants with {"value": $value}; the answer carries the stored value. */
+    public function patchCacheVariants($zoneId, array $value)
+    {
+        return $this->patchRequest("zones/$zoneId/cache/variants", ['value' => $value]);
+    }
+
+    public function applyTieredVerdict($zoneId)
+    {
+        $verified = get_option('wpc_cf_purge_verified');
+        $earned = is_array($verified) && strpos((string) ($verified['method'] ?? ''), 'tiered') !== false
+            && !empty($verified['t']) && (time() - (int) $verified['t']) < 8 * DAY_IN_SECONDS;
+        if ($earned) { return 'earned'; }
+        $answers = $this->disableTieredCache($zoneId);
+        // Rule: tiered caching stays off until a purge probe proves it is purged with the page.
+        // keys' setupCF/refreshCF switch it on, and this writes off without reading first, so every
+        // write is logged with Cloudflare's answer per setting.
+        if (function_exists('wpc_belt_receipt')) {
+            wpc_belt_receipt('cf-tiered-off', ['zone' => substr((string) $zoneId, 0, 12),
+                'smart' => substr((string) ($answers['smart_topology_off'] ?? ''), 0, 60), 'argo' => substr((string) ($answers['tiered_caching_off'] ?? ''), 0, 60),
+                'regional' => substr((string) ($answers['regional_tiered_off'] ?? ''), 0, 60)], false, '');
+        }
+        return 'off';
     }
 
     public function findCacheRuleByRef($zoneId, $ref)
@@ -1682,7 +1653,7 @@ class WPC_CloudflareAPI
         $rulesetId = $this->getCacheRulesRulesetId($zoneId);
 
         if (is_wp_error($rulesetId)) {
-            
+            // If no ruleset exists yet, return empty array
             if ($rulesetId->get_error_code() === 'no_ruleset') {
                 return [];
             }
@@ -1699,16 +1670,16 @@ class WPC_CloudflareAPI
         return $response['result']['rules'] ?? [];
     }
 
-    
-
-
-
-
+    /**
+     * Get current site's domain variations (www and non-www)
+     *
+     * @return array Array of domain variations for current site
+     */
     private function getCurrentDomainVariations()
     {
         $domain = $this->getDomain();
 
-        
+        // Handle both www and non-www versions
         if (strpos($domain, 'www.') === 0) {
             $base_domain = substr($domain, 4);
             return [$domain, $base_domain];
@@ -1723,7 +1694,7 @@ class WPC_CloudflareAPI
     {
         $current_host = parse_url(get_site_url(), PHP_URL_HOST);
 
-        
+        // Remove www. if present
         if (strpos($current_host, 'www.') === 0) {
             $current_host = substr($current_host, 4);
         }
@@ -1734,22 +1705,22 @@ class WPC_CloudflareAPI
 
     private function addDomainsToRule($zoneId, $ruleRef, $newDomains)
     {
-        
+        // Get existing rule
         $rule = $this->findCacheRuleByRef($zoneId, $ruleRef);
         if (!$rule) {
             return new WP_Error('rule_not_found', "Rule with ref '$ruleRef' not found");
         }
 
-        
+        // Extract current domains
         $currentDomains = $this->extractDomainsFromExpression($rule['expression']);
 
-        
+        // Merge and deduplicate
         $allDomains = array_unique(array_merge($currentDomains, $newDomains));
 
-        
+        // Update expression
         $rule['expression'] = $this->updateDomainsInExpression($rule['expression'], $allDomains);
 
-        
+        // Update the rule
         $rulesetId = $this->getCacheRulesRulesetId($zoneId);
         if (is_wp_error($rulesetId)) {
             return $rulesetId;
@@ -1761,10 +1732,10 @@ class WPC_CloudflareAPI
 
     private function extractDomainsFromExpression($expression)
     {
-        
+        // Match pattern: http.host in {"domain1" "domain2" ...}
         if (preg_match('/http\.host in \{([^}]+)\}/', $expression, $matches)) {
             $domainString = $matches[1];
-            
+            // Extract quoted strings
             preg_match_all('/"([^"]+)"/', $domainString, $domainMatches);
             return $domainMatches[1];
         }
@@ -1774,20 +1745,17 @@ class WPC_CloudflareAPI
 
     private function updateDomainsInExpression($expression, $domains)
     {
-        
+        // Build new domain list string
         $domainList = array_map(function ($domain) {
             return '"' . $domain . '"';
         }, $domains);
         $domainString = implode(' ', $domainList);
 
-        
+        // Replace the http.host in {...} part
         return preg_replace('/http\.host in \{[^}]+\}/', 'http.host in {' . $domainString . '}', $expression);
     }
 
-    private function getBypassRule()
-    {
-        return ['ref' => WPC_BYPASS_RULE_REF, 'action' => 'set_cache_settings', 'description' => '[DO NOT EDIT] Bypass cache for admin/login/commerce', 'enabled' => true, 'expression' => '(http.request.method ne "GET" and http.request.method ne "HEAD") or (starts_with(http.request.uri.path, "/wp-admin") or http.request.uri.path contains "/wp-login.php" or http.request.uri.path contains "/wp-cron.php" or http.request.uri.path contains "/xmlrpc.php" or starts_with(http.request.uri.path, "/wp-json/") or http.request.uri.path contains "/admin-ajax.php" or http.request.uri.path contains "/cart/" or http.request.uri.path contains "/checkout/" or http.request.uri.path contains "/wc-api/" or http.request.uri.path contains "/my-account") or (http.cookie contains "wordpress_logged_in_" or http.cookie contains "wordpress_sec_" or http.cookie contains "wp-postpass_" or http.cookie contains "woocommerce_cart_hash" or http.cookie contains "woocommerce_items_in_cart" or http.cookie contains "wp_woocommerce_session_" or http.cookie contains "wp_woocs_session_" or http.cookie contains "edd_") or (lower(http.request.uri.query) contains "nocache=" or lower(http.request.uri.query) contains "no-cache=" or lower(http.request.uri.query) contains "wc-ajax=" or lower(http.request.uri.query) contains "add-to-cart=" or lower(http.request.uri.query) contains "edd_action=" or lower(http.request.uri.query) contains "preview=" or lower(http.request.uri.query) contains "currency=" or lower(http.request.uri.query) contains "wc-api=")', 'action_parameters' => ['cache' => false]];
-    }
+    private function getBypassRule()        { return wps_ic_cf_rules::bypass_rule(); }
 
 
     public function deleteCacheRuleByRef($zoneId, $ref)
@@ -1799,28 +1767,28 @@ class WPC_CloudflareAPI
 
     private function removeDomainsFromRule($zoneId, $ruleRef, $domainsToRemove)
     {
-        
+        // Get existing rule
         $rule = $this->findCacheRuleByRef($zoneId, $ruleRef);
         if (!$rule) {
-            
+            // Rule doesn't exist, nothing to remove
             return ['success' => true, 'message' => 'Rule not found, nothing to remove'];
         }
 
-        
+        // Extract current domains
         $currentDomains = $this->extractDomainsFromExpression($rule['expression']);
 
-        
+        // Remove specified domains
         $remainingDomains = array_diff($currentDomains, $domainsToRemove);
 
-        
+        // If no domains left, delete the entire rule
         if (empty($remainingDomains)) {
             return $this->deleteCacheRule($zoneId, $rule['id']);
         }
 
-        
+        // Update expression with remaining domains
         $rule['expression'] = $this->updateDomainsInExpression($rule['expression'], $remainingDomains);
 
-        
+        // Update the rule
         $rulesetId = $this->getCacheRulesRulesetId($zoneId);
         if (is_wp_error($rulesetId)) {
             return $rulesetId;
@@ -1850,7 +1818,7 @@ class WPC_CloudflareAPI
             return $response;
         }
 
-        
+        // Find the http_request_cache_settings phase ruleset
         if (!empty($response['result'])) {
             foreach ($response['result'] as $ruleset) {
                 if ($ruleset['phase'] === 'http_request_cache_settings') {
@@ -1862,291 +1830,12 @@ class WPC_CloudflareAPI
         return new WP_Error('no_ruleset', 'No cache rules ruleset found');
     }
 
-    private function getStaticAssetsRule()
-    {
+    private function getStaticAssetsRule()  { return wps_ic_cf_rules::static_assets_rule(); }
 
 
-        return ['ref' => WPC_STATIC_RULE_REF, 'action' => 'set_cache_settings', 'description' => '[DO NOT EDIT] Static assets cache', 'enabled' => true, 'expression' => '(http.request.method in {"GET" "HEAD"}) and lower(http.request.uri.path.extension) in {"css" "js" "mjs" "json" "map" "jpg" "jpeg" "png" "gif" "webp" "avif" "svg" "ico" "ttf" "otf" "woff" "woff2" "eot" "mp4" "webm" "ogg"} and not starts_with(http.request.uri.path, "/cdn-cgi/")', 'action_parameters' => ['cache' => true, 'edge_ttl' => ['mode' => 'respect_origin'], 'browser_ttl' => ['mode' => 'override_origin', 'default' => (int) apply_filters('wpc_cf_static_browser_ttl', 31536000)], 'cache_key' => ['ignore_query_strings_order' => true]]];
-    }
+    private function getHomepageHTMLRule()  { return wps_ic_cf_rules::homepage_html_rule(); }
 
-
-    private function getRobotsSitemapRule()
-    {
-        
-        
-        
-        return ['ref' => WPC_ROBOTS_RULE_REF, 'action' => 'set_cache_settings',
-            'description' => '[DO NOT EDIT] Robots + sitemap edge cache', 'enabled' => true,
-            'expression' => '(http.request.method in {"GET" "HEAD"}) and (http.request.uri.path eq "/robots.txt"'
-                . ' or ends_with(http.request.uri.path, "sitemap.xml") or ends_with(http.request.uri.path, "sitemap_index.xml"))',
-            'action_parameters' => [
-                'cache'       => true,
-                'edge_ttl'    => ['mode' => 'override_origin', 'default' => (int) apply_filters('wpc_cf_robots_edge_ttl', 3600)],
-                'browser_ttl' => ['mode' => 'respect_origin'],
-            ]];
-    }
-
-    public function patchStaticAssetsRespectOrigin($zoneId)
-    {
-        if (empty($zoneId)) {
-            return new WP_Error('no_zone', 'No zone id');
-        }
-        if (apply_filters('wpc_cf_robots_rule', true) && !$this->findCacheRuleByRef($zoneId, WPC_ROBOTS_RULE_REF)) {
-            $this->logCacheRuleResult('create-robots', $zoneId, $this->addCacheRule($zoneId, $this->getRobotsSitemapRule()));
-        }
-        $rule = $this->findCacheRuleByRef($zoneId, WPC_STATIC_RULE_REF);
-        if (!$rule) {
-            
-            $created = $this->addCacheRule($zoneId, $this->getStaticAssetsRule());
-            $this->logCacheRuleResult('create', $zoneId, $created);
-            return $created;
-        }
-        if (!isset($rule['action_parameters']) || !is_array($rule['action_parameters'])) {
-            $rule['action_parameters'] = [];
-        }
-        
-        
-        
-        $rule['action_parameters']['cache']       = true;
-        
-        
-        
-        $rule['action_parameters']['edge_ttl']    = ['mode' => 'respect_origin'];
-        $rule['action_parameters']['browser_ttl'] = ['mode' => 'override_origin', 'default' => (int) apply_filters('wpc_cf_static_browser_ttl', 31536000)];
-        $rulesetId = $this->getCacheRulesRulesetId($zoneId);
-        if (is_wp_error($rulesetId)) {
-            return $rulesetId;
-        }
-        $resp = $this->patchRequest("zones/$zoneId/rulesets/$rulesetId/rules/{$rule['id']}", $rule);
-
-
-        $this->logCacheRuleResult('patch', $zoneId, $resp);
-        return $resp;
-    }
-
-    
-    private function logCacheRuleResult($op, $zoneId, $resp)
-    {
-        $msg = '';
-        if (is_wp_error($resp)) {
-            $msg = $resp->get_error_message();
-        } elseif (is_array($resp) && array_key_exists('success', $resp) && !$resp['success']) {
-            $msg = (string) wp_json_encode($resp['errors'] ?? $resp);
-        }
-        if ($msg !== '') {
-            error_log('[WPC CF] static-rule ' . $op . ' failed (zone ' . $zoneId . '): ' . $msg);
-            if (function_exists('wpc_auto_journal')) {
-                wpc_auto_journal('cf-static-rule-' . $op . '-failed', ['zone' => $zoneId, 'err' => substr($msg, 0, 300)]);
-            }
-        }
-    }
-
-
-    public function patchHtmlRulesRespectOrigin($zoneId, $combinedOverride = null, $createMissing = false)
-    {
-        if (empty($zoneId) || !apply_filters('wpc_cf_html_respect_origin', true)) {
-            return null;
-        }
-
-
-        
-        
-        
-        
-        
-        
-        $wpc_combined57 = is_bool($combinedOverride)
-            ? $combinedOverride
-            : (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_deploy_combined')
-                ? wps_rewriteLogic::wpc_deploy_combined()
-                : (class_exists('wps_rewriteLogic')
-                    && method_exists('wps_rewriteLogic', 'wpc_combined_crit_on')
-                    && wps_rewriteLogic::wpc_combined_crit_on()));
-
-
-        
-        
-
-
-        
-
-
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        $wpc_edge_target = ['mode' => 'respect_origin'];
-        $out = [];
-        foreach ([WPC_HOMEPAGE_RULE_REF, WPC_FULLHTML_RULE_REF] as $ref) {
-            $rule = $this->findCacheRuleByRef($zoneId, $ref);
-            if (!$rule && $createMissing && apply_filters('wpc_cf_html_ensure_rules', true)) {
-
-
-                $mk = ($ref === WPC_HOMEPAGE_RULE_REF) ? $this->getHomepageHTMLRule() : $this->getFullHTMLRule();
-                $crt = $this->addCacheRule($zoneId, $mk);
-                $this->logCacheRuleResult('create-html-' . $ref, $zoneId, $crt);
-                $rule = $this->findCacheRuleByRef($zoneId, $ref);
-            }
-            if (!$rule) {
-                continue;
-            }
-            $ap = (isset($rule['action_parameters']) && is_array($rule['action_parameters']))
-                ? $rule['action_parameters'] : [];
-            $edgeMode    = isset($ap['edge_ttl']['mode']) ? $ap['edge_ttl']['mode'] : '';
-            $hasDevKey  = !empty($ap['cache_key']['cache_by_device_type']);
-
-
-            $hasAnyKey  = !empty($ap['cache_key']);
-            $wpc_key_ok100 = $wpc_combined57 ? !$hasAnyKey : $hasDevKey;
-            
-            
-            
-            
-            
-            
-            $wpc_expr_stale197 = stripos((string) ($rule['expression'] ?? ''), 'tk_ai') !== false
-                || stripos((string) ($rule['expression'] ?? ''), 'add-to-cart') === false
-                || stripos((string) ($rule['expression'] ?? ''), 'starts_with(http.request.uri.path, "/my-account")') !== false;
-            
-            
-            
-            if (!$wpc_expr_stale197
-                && $edgeMode === $wpc_edge_target['mode'] && $wpc_key_ok100
-                && isset($ap['browser_ttl']['mode']) && $ap['browser_ttl']['mode'] === 'respect_origin') {
-                continue;
-            }
-            if ($wpc_expr_stale197) {
-                $wpc_tpl197 = ($ref === WPC_HOMEPAGE_RULE_REF) ? $this->getHomepageHTMLRule() : $this->getFullHTMLRule();
-                $rule['expression'] = $wpc_tpl197['expression'];
-            }
-            $rule['action_parameters'] = $ap;
-            $rule['action_parameters']['cache']       = true;
-            $rule['action_parameters']['edge_ttl']    = $wpc_edge_target;
-            $rule['action_parameters']['browser_ttl'] = ['mode' => 'respect_origin'];
-            $rule['action_parameters']['serve_stale'] = ['disable_stale_while_updating' => false];
-            if ($wpc_combined57) {
-                unset($rule['action_parameters']['cache_key']);
-            } else {
-                $rule['action_parameters']['cache_key'] = ['cache_by_device_type' => true];
-            }
-            $rulesetId = $this->getCacheRulesRulesetId($zoneId);
-            if (is_wp_error($rulesetId)) {
-                return $rulesetId;
-            }
-            $resp = $this->patchRequest("zones/$zoneId/rulesets/$rulesetId/rules/{$rule['id']}", $rule);
-            $this->logCacheRuleResult('patch-html-' . $ref, $zoneId, $resp);
-            $out[$ref] = $resp;
-        }
-
-
-        
-        
-        
-        
-        
-        try {
-            $wpc_ks568 = $this->htmlRuleKeyState($zoneId);
-            $out['key_state'] = $wpc_ks568;
-            if (function_exists('update_option')) {
-                update_option('wpc_cf_devkey_verified', [
-                    't'      => time(),
-                    'devkey' => !empty($wpc_ks568['devkey']) ? 1 : 0,
-                    
-                    
-                    
-                    
-                    'src'    => 'readback',
-                    'found'  => (int) ($wpc_ks568['found'] ?? 0),
-                    'want'   => $wpc_combined57 ? 'combined' : 'split',
-                ], false);
-            }
-            if (function_exists('wpc_cache_first_log')) {
-                wpc_cache_first_log('cf-devkey-readback', '', '', [
-                    'devkey' => !empty($wpc_ks568['devkey']) ? 1 : 0,
-                    'found'  => (int) ($wpc_ks568['found'] ?? 0),
-                    'want'   => $wpc_combined57 ? 'combined' : 'split',
-                ]);
-            }
-        } catch (\Throwable $e) {
-        }
-
-        
-        
-
-        
-        $wpc_bp197 = $this->findCacheRuleByRef($zoneId, WPC_BYPASS_RULE_REF);
-        if ($wpc_bp197 && (stripos((string) ($wpc_bp197['expression'] ?? ''), 'tk_ai') !== false || stripos((string) ($wpc_bp197['expression'] ?? ''), 'currency=') === false || stripos((string) ($wpc_bp197['expression'] ?? ''), 'starts_with(http.request.uri.path, "/my-account")') !== false) && !empty($wpc_bp197['id'])) {
-            $wpc_bt197 = $this->getBypassRule();
-            $wpc_bp197['expression'] = $wpc_bt197['expression'];
-            $wpc_brs197 = $this->getCacheRulesRulesetId($zoneId);
-            if (!is_wp_error($wpc_brs197)) {
-                $wpc_bresp197 = $this->patchRequest("zones/$zoneId/rulesets/$wpc_brs197/rules/{$wpc_bp197['id']}", $wpc_bp197);
-                $this->logCacheRuleResult('patch-bypass-tkai', $zoneId, $wpc_bresp197);
-                $out[WPC_BYPASS_RULE_REF] = $wpc_bresp197;
-            }
-        }
-
-        
-        
-        
-        
-        $wpc_pvt197 = function_exists('get_option') ? get_option('wpc_cf_purge_verified') : false;
-        $wpc_tiered_earned197 = is_array($wpc_pvt197)
-            && strpos((string) ($wpc_pvt197['method'] ?? ''), 'tiered') !== false
-            && !empty($wpc_pvt197['t']) && (time() - (int) $wpc_pvt197['t']) < 8 * DAY_IN_SECONDS;
-        if (!$wpc_tiered_earned197 && method_exists($this, 'disableTieredCache')) {
-            $out['tiered_off'] = $this->disableTieredCache($zoneId);
-        }
-        return $out;
-    }
-
-    private function getHomepageHTMLRule()
-    {
-        $domain = parse_url(get_site_url(), PHP_URL_HOST);
-
-        
-        if (strpos($domain, 'www.') === 0) {
-            $base_domain = substr($domain, 4);
-            $host_list = '"' . $domain . '" "' . $base_domain . '"';
-        } else {
-            $www_domain = 'www.' . $domain;
-            $host_list = '"' . $domain . '" "' . $www_domain . '"';
-        }
-
-        $expression = '(http.host in {' . $host_list . '}) and (http.request.method in {"GET" "HEAD"}) and http.request.uri.path eq "/" and not (lower(http.request.uri.query) contains "nocache=" or lower(http.request.uri.query) contains "no-cache=" or lower(http.request.uri.query) contains "wc-ajax=" or lower(http.request.uri.query) contains "add-to-cart=" or lower(http.request.uri.query) contains "edd_action=" or lower(http.request.uri.query) contains "preview=" or lower(http.request.uri.query) contains "currency=" or lower(http.request.uri.query) contains "wc-api=") and not starts_with(http.request.uri.path, "/cdn-cgi/") and not (http.cookie contains "wordpress_logged_in_" or http.cookie contains "wordpress_sec_" or http.cookie contains "wp-postpass_" or http.cookie contains "woocommerce_cart_hash" or http.cookie contains "woocommerce_items_in_cart" or http.cookie contains "wp_woocommerce_session_" or http.cookie contains "wp_woocs_session_" or http.cookie contains "edd_")';
-
-
-        
-        
-        return ['ref' => WPC_HOMEPAGE_RULE_REF, 'action' => 'set_cache_settings', 'description' => '[DO NOT EDIT] Homepage HTML cache', 'enabled' => true, 'expression' => $expression, 'action_parameters' => ['cache' => true, 'edge_ttl' => ['mode' => 'respect_origin'], 'browser_ttl' => ['mode' => 'respect_origin'], 'serve_stale' => ['disable_stale_while_updating' => false], 'cache_key' => ['cache_by_device_type' => true, 'ignore_query_strings_order' => true]]];
-    }
-
-    private function getFullHTMLRule()
-    {
-        $domain = parse_url(get_site_url(), PHP_URL_HOST);
-
-        
-        if (strpos($domain, 'www.') === 0) {
-            $base_domain = substr($domain, 4);
-            $host_list = '"' . $domain . '" "' . $base_domain . '"';
-        } else {
-            $www_domain = 'www.' . $domain;
-            $host_list = '"' . $domain . '" "' . $www_domain . '"';
-        }
-
-        $expression = '(http.host in {' . $host_list . '}) and (http.request.method in {"GET" "HEAD"}) and not starts_with(http.request.uri.path, "/cdn-cgi/") and not starts_with(http.request.uri.path, "/wp-admin") and not (http.request.uri.path contains "/wp-login.php") and not starts_with(http.request.uri.path, "/wp-json/") and (http.request.uri.path.extension eq "" or lower(http.request.uri.path.extension) in {"html" "htm" "xhtml"}) and not (lower(http.request.uri.query) contains "nocache=" or lower(http.request.uri.query) contains "no-cache=" or lower(http.request.uri.query) contains "wc-ajax=" or lower(http.request.uri.query) contains "add-to-cart=" or lower(http.request.uri.query) contains "edd_action=" or lower(http.request.uri.query) contains "preview=" or lower(http.request.uri.query) contains "currency=" or lower(http.request.uri.query) contains "wc-api=") and not (http.request.uri.path contains "/cart/" or http.request.uri.path contains "/checkout/" or http.request.uri.path contains "/wc-api/" or http.request.uri.path contains "/my-account" or http.request.uri.path contains "/admin-ajax.php" or http.request.uri.path contains "/wp-cron.php" or http.request.uri.path contains "/xmlrpc.php") and not (http.cookie contains "wordpress_logged_in_" or http.cookie contains "wordpress_sec_" or http.cookie contains "wp-postpass_" or http.cookie contains "woocommerce_cart_hash" or http.cookie contains "woocommerce_items_in_cart" or http.cookie contains "wp_woocommerce_session_" or http.cookie contains "wp_woocs_session_" or http.cookie contains "edd_")';
-
-
-        
-        return ['ref' => WPC_FULLHTML_RULE_REF, 'action' => 'set_cache_settings', 'description' => '[DO NOT EDIT] Full HTML cache', 'enabled' => true, 'expression' => $expression, 'action_parameters' => ['cache' => true, 'edge_ttl' => ['mode' => 'respect_origin'], 'browser_ttl' => ['mode' => 'respect_origin'], 'serve_stale' => ['disable_stale_while_updating' => false], 'cache_key' => ['cache_by_device_type' => true, 'ignore_query_strings_order' => true]]];
-    }
+    private function getFullHTMLRule()      { return wps_ic_cf_rules::full_html_rule(); }
 
 
     public function setTieredCache($zoneId, $enabled)
@@ -2156,39 +1845,39 @@ class WPC_CloudflareAPI
         return $this->patchRequest("zones/$zoneId/argo/tiered_caching", ['value' => $value]);
     }
 
-    
-
-
-
-
-
+    /**
+     * Remove all WP Compress cache rules from a zone
+     *
+     * @param string $zoneId Cloudflare Zone ID
+     * @return array Results of the operation
+     */
     public function removeCacheRules($zoneId)
     {
         $results = [];
 
-        
+        // Get current status of all rules
         $status = $this->checkWPCCacheRulesStatus($zoneId);
 
         if (is_wp_error($status)) {
             return $status;
         }
 
-        
+        // Remove bypass rule if it exists
         if ($status['bypass']) {
             $results['bypass'] = $this->deleteCacheRuleByRef($zoneId, WPC_BYPASS_RULE_REF);
         }
 
-        
+        // Remove static assets rule if it exists
         if ($status['static']) {
             $results['static'] = $this->deleteCacheRuleByRef($zoneId, WPC_STATIC_RULE_REF);
         }
 
-        
+        // Remove homepage HTML rule if it exists
         if ($status['homepage']) {
             $results['homepage'] = $this->deleteCacheRuleByRef($zoneId, WPC_HOMEPAGE_RULE_REF);
         }
 
-        
+        // Remove full HTML rule if it exists
         if ($status['fullhtml']) {
             $results['fullhtml'] = $this->deleteCacheRuleByRef($zoneId, WPC_FULLHTML_RULE_REF);
         }
@@ -2219,28 +1908,28 @@ class WPC_CloudflareAPI
 
         $target = 'cdn-mc.zapwp.net';
 
-        
+        // Check SSL/TLS setting first
         $sslCheck = $this->checkAndSetSSL($zoneId);
         if (is_wp_error($sslCheck)) {
             return $sslCheck;
         }
 
-        
+        // Check if record already exists in CF
         $existingRecord = $this->findDNSRecord($zoneId, $cdn_subdomain, 'CNAME');
 
         if ($existingRecord) {
-            
-            $result = $this->updateDNSRecord($zoneId, $existingRecord['id'], ['type' => 'CNAME', 'name' => $cdn_subdomain, 'content' => $target, 'ttl' => 1, 
+            // Update existing record
+            $result = $this->updateDNSRecord($zoneId, $existingRecord['id'], ['type' => 'CNAME', 'name' => $cdn_subdomain, 'content' => $target, 'ttl' => 1, // Automatic
                 'proxied' => true]);
         } else {
-            
-            $result = $this->addDNSRecord($zoneId, ['type' => 'CNAME', 'name' => $cdn_subdomain, 'content' => $target, 'ttl' => 1, 
+            // Create new record
+            $result = $this->addDNSRecord($zoneId, ['type' => 'CNAME', 'name' => $cdn_subdomain, 'content' => $target, 'ttl' => 1, // Automatic
                 'proxied' => true]);
         }
 
-        
+        // If successful, save the CNAME to CF settings
         if (!is_wp_error($result) && !empty($result['success'])) {
-			update_option(WPS_IC_CF_CNAME, $cdn_subdomain);
+			wpc_cf_cname_persist($cdn_subdomain, 'cf-dns-record');
         }
 
         return $result;
@@ -2251,7 +1940,7 @@ class WPC_CloudflareAPI
     {
 		$cfCname = get_option(WPS_IC_CF_CNAME);
 
-        
+        // Return custom CNAME if set
         if (!empty($cfCname)) {
             return $cfCname;
         }
@@ -2259,66 +1948,66 @@ class WPC_CloudflareAPI
         $current_host = $this->getDomain();
         $root_domain = $this->getRootDomain();
 
-        
-        
+        // Check if current host is a subdomain of the root domain
+        // e.g., staging.wpcompress.com is a subdomain of wpcompress.com
         if ($current_host !== $root_domain && strpos($current_host, '.' . $root_domain) !== false) {
-            
+            // Extract subdomain part (everything before .rootdomain)
             $subdomain = str_replace('.' . $root_domain, '', $current_host);
             $cdn_subdomain = 'cdn-' . $subdomain . '.' . $root_domain;
         } else {
-            
+            // No subdomain (or host equals root domain), use cdn.domain.tld
             $cdn_subdomain = 'cdn.' . $root_domain;
         }
 
         return $cdn_subdomain;
     }
 
-    
-
-
-
-
+    /**
+     * Get the root domain from Cloudflare zone settings
+     *
+     * @return string Root domain from Cloudflare zone (e.g., 'example.com' or 'example.co.uk')
+     */
     private function getRootDomain()
     {
         $cf = get_option(WPS_IC_CF);
-        return $cf['zoneName']; 
+        return $cf['zoneName']; // Always set, always accurate
     }
 
-    
-
-
-
-
-
+    /**
+     * Check SSL/TLS mode and set to Full if needed
+     *
+     * @param string $zoneId Cloudflare Zone ID
+     * @return true|WP_Error True if SSL is correct or was successfully set, WP_Error on failure
+     */
     private function checkAndSetSSL($zoneId)
     {
-        
+        // Get current SSL/TLS setting
         $response = $this->getRequest("zones/$zoneId/settings/ssl");
 
         if (is_wp_error($response)) {
             return new WP_Error('cloudflare_ssl_check_error', 'Failed to check SSL/TLS setting: ' . $response->get_error_message());
         }
 
-        
+        // Check if we got a valid response
         if (empty($response['result']) || !isset($response['result']['value'])) {
             return new WP_Error('cloudflare_ssl_check_error', 'Unexpected response while checking SSL/TLS setting');
         }
 
         $currentSslMode = $response['result']['value'];
 
-        
+        // If already set to 'full' or 'strict', we're good
         if (in_array($currentSslMode, ['full', 'strict'])) {
             return true;
         }
 
-        
+        // Try to set to 'full'
         $setResponse = $this->patchRequest("zones/$zoneId/settings/ssl", ['value' => 'full']);
 
         if (is_wp_error($setResponse)) {
             return new WP_Error('cloudflare_ssl_set_error', 'Failed to set SSL/TLS to Full: ' . $setResponse->get_error_message());
         }
 
-        
+        // Verify it was set successfully
         if (empty($setResponse['success'])) {
             return new WP_Error('cloudflare_ssl_set_error', 'Failed to set SSL/TLS to Full. Please set SSL/TLS encryption mode to "Full" in your Cloudflare dashboard under SSL/TLS settings.');
         }
@@ -2367,7 +2056,7 @@ class WPC_CloudflareAPI
 
     public function addDNSRecord($zoneId, $record)
     {
-        
+        // Validate required fields
         $required = ['type', 'name', 'content'];
         foreach ($required as $field) {
             if (empty($record[$field])) {
@@ -2375,14 +2064,14 @@ class WPC_CloudflareAPI
             }
         }
 
-        
+        // Valid DNS record types
         $validTypes = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'CAA', 'PTR'];
         if (!in_array(strtoupper($record['type']), $validTypes)) {
             return new WP_Error('invalid_type', 'Invalid DNS record type');
         }
 
-        
-        $defaults = ['ttl' => 1, 
+        // Set defaults
+        $defaults = ['ttl' => 1, // 1 = automatic
             'proxied' => false];
 
         $record = array_merge($defaults, $record);
@@ -2390,12 +2079,12 @@ class WPC_CloudflareAPI
         return $this->postRequest("zones/$zoneId/dns_records", $record);
     }
 
-    
-
-
-
-
-
+    /**
+     * Remove CDN CNAME record
+     *
+     * @param string $zoneId Cloudflare Zone ID
+     * @return array|WP_Error|null The API response or WP_Error
+     */
     public function removeCfCname($zoneId)
     {
         $cfCname = get_option(WPS_IC_CF_CNAME);
@@ -2407,37 +2096,37 @@ class WPC_CloudflareAPI
         }
 
 
-        return null; 
+        return null; // Record doesn't exist, nothing to remove
     }
 
 
     public function getZoneAnalytics($from, $to)
     {
-        
+        // Get zone ID from settings
         $cf = get_option(WPS_IC_CF);
         if (!$cf || empty($cf['zone'])) {
             return new WP_Error('missing_zone', 'Cloudflare zone ID not found in settings');
         }
         $zoneId = $cf['zone'];
 
-        
+        // Get current hostname and CDN CNAME
         $hostname = $this->getDomain();
         $cdnCname = $this->getCfCname();
 
-        
+        // Generate array of dates to query
         $fromDate = new DateTime($from, new DateTimeZone('UTC'));
         $toDate = new DateTime($to, new DateTimeZone('UTC'));
-        $toDate->setTime(23, 59, 59); 
+        $toDate->setTime(23, 59, 59); // End of day
 
         $combined = [];
 
-        
+        // Query each day individually (API limit is 24 hours per query)
         $currentDate = clone $fromDate;
         while ($currentDate <= $toDate) {
             $dayStart = $currentDate->format('Y-m-d') . 'T00:00:00Z';
             $dayEnd = $currentDate->format('Y-m-d') . 'T23:59:59Z';
 
-            
+            // Fetch for non-www, www, and CDN CNAME
             $nonWwwStats = $this->fetchHostnameStatsForDay($zoneId, $dayStart, $dayEnd, $hostname);
             $wwwStats = $this->fetchHostnameStatsForDay($zoneId, $dayStart, $dayEnd, 'www.' . $hostname);
             $cdnStats = $this->fetchHostnameStatsForDay($zoneId, $dayStart, $dayEnd, $cdnCname);
@@ -2455,11 +2144,11 @@ class WPC_CloudflareAPI
                 return $cdnStats;
             }
 
-            
+            // Combine stats for this day
             $date = $currentDate->format('Y-m-d');
             $combined[$date] = ['bytes' => 0, 'requests' => 0];
 
-            
+            // Add non-www stats
             if (!empty($nonWwwStats)) {
                 foreach ($nonWwwStats as $stat) {
                     $combined[$date]['bytes'] += $stat['sum']['edgeResponseBytes'] ?? 0;
@@ -2467,7 +2156,7 @@ class WPC_CloudflareAPI
                 }
             }
 
-            
+            // Add www stats
             if (!empty($wwwStats)) {
                 foreach ($wwwStats as $stat) {
                     $combined[$date]['bytes'] += $stat['sum']['edgeResponseBytes'] ?? 0;
@@ -2475,7 +2164,7 @@ class WPC_CloudflareAPI
                 }
             }
 
-            
+            // Add CDN CNAME stats
             if (!empty($cdnStats)) {
                 foreach ($cdnStats as $stat) {
                     $combined[$date]['bytes'] += $stat['sum']['edgeResponseBytes'] ?? 0;
@@ -2483,7 +2172,7 @@ class WPC_CloudflareAPI
                 }
             }
 
-            
+            // Move to next day
             $currentDate->modify('+1 day');
         }
 
@@ -2529,7 +2218,7 @@ GQL;
             return $response;
         }
 
-        
+        // Check for GraphQL errors
         if (isset($response['errors']) && !empty($response['errors'])) {
             $errorMessages = array_map(function ($error) {
                 return $error['message'] ?? 'Unknown GraphQL error';
@@ -2538,17 +2227,17 @@ GQL;
             return new WP_Error('cloudflare_graphql_error', implode(', ', $errorMessages), $response['errors']);
         }
 
-        
+        // Extract the data
         $series = $response['data']['viewer']['zones'][0]['httpRequestsAdaptiveGroups'] ?? [];
 
         return $series;
     }
 
 
-    
-    
-    
-    public function wpc_cf_inspect2119($zoneId, $cdnHost = '')
+    // v7.21.19 — CF INSPECTOR: everything support needs to name a challenge source, read
+    // with the site's own stored token, rendered by the debug panel. Read-only by design.
+    // "Which layer 403'd this font?" stops requiring dashboard access anybody may lack.
+    public function wpc_cf_inspect_security_layers($zoneId, $cdnHost = '')
     {
         $out = ['rules' => null, 'bot' => null, 'seclevel' => null, 'events' => null, 'errors' => []];
 
@@ -2613,13 +2302,13 @@ GQL;
         return $this->processResponse($response);
     }
 
-    
-
-
-
-
-
-    public static function wpc_rule_log71($lane, $err)
+    /**
+     * Check if API token has required privileges by testing actual API calls
+     *
+     * @param string $zoneId Cloudflare Zone ID to test permissions against
+     * @return true|WP_Error True if all privileges work, WP_Error with missing privileges if not
+     */
+    public static function wpc_log_cf_rule_error($lane, $err)
     {
         $msg = is_wp_error($err) ? (string) $err->get_error_message() : (string) $err;
         $cls = self::classifyResult($err);
@@ -2627,11 +2316,11 @@ GQL;
         $line = '[WPC] ' . $lane . ': ' . ($perm
             ? 'the Cloudflare token lacks Zone → Zone WAF → Edit, so the optional security-bypass rule is skipped (add the permission in Cloudflare and reconnect). CF said: '
             : 'CF API error: ') . $msg;
-        if (function_exists('wpc_admin_held69') && function_exists('wpc_admin_hold69')) {
-            if (wpc_admin_held69('wpc_cf_rule_log71_' . $lane)) {
+        if (function_exists('wpc_is_admin_lane_held') && function_exists('wpc_hold_admin_lane')) {
+            if (wpc_is_admin_lane_held('wpc_cf_rule_log71_' . $lane)) {
                 return;
             }
-            wpc_admin_hold69('wpc_cf_rule_log71_' . $lane, DAY_IN_SECONDS);
+            wpc_hold_admin_lane('wpc_cf_rule_log71_' . $lane, DAY_IN_SECONDS);
         }
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('cf-rule-' . ($perm ? 'unauthorized' : 'error'), '', '', ['lane' => $lane, 'msg' => substr($msg, 0, 120)]);
@@ -2641,7 +2330,7 @@ GQL;
 
     public function checkPrivileges($zoneId = null)
     {
-        
+        // If no zone ID provided, try to get from settings
         if (!$zoneId) {
             $cf = get_option(WPS_IC_CF);
             $zoneId = $cf['zone'] ?? null;
@@ -2655,12 +2344,12 @@ GQL;
         $permissionTests = [];
 
 
-        
-        
-        
-        
-        
-        
+        // v7.10.503 — POSITIVE PROOF ONLY. Every row scored "granted" as !isPermissionError(): the
+        // ABSENCE of one of three codes [9109,10000,1095]. A deleted token returns 6003 with an
+        // error_chain of 6111, and a 401 challenge page hits processResponse()'s non-json branch,
+        // which builds a WP_Error with NO error data — so get_error_data() is null, is_array() fails,
+        // and the row scored GRANTED. Receipted: key deleted, panel showed 4x "Granted" while
+        // claiming "verified just now via live Cloudflare API checks".
         $cfOk = function ($response) {
             if (is_wp_error($response) || !is_array($response)) {
                 return false;
@@ -2668,7 +2357,7 @@ GQL;
             return !isset($response['success']) || $response['success'] === true;
         };
 
-        
+        // An invalid/deleted token is not a permission problem — it makes every verdict unknowable.
         $authFail = function ($response) {
             if (!is_wp_error($response)) {
                 return false;
@@ -2685,15 +2374,15 @@ GQL;
                     }
                 }
             }
-            
-            
-            
+            // 9109 ("unauthorized to access requested resource") and 1095 are PERMISSION denials,
+            // deliberately excluded: a token merely missing one scope must read as that permission
+            // missing, never as an invalid token. Only genuine credential rejections belong here.
             foreach ([6003, 6103, 6111, 9103, 9106, 10000] as $a) {
                 if (in_array($a, $codes, true)) {
                     return true;
                 }
             }
-            
+            // The non-json branch carries no error data at all; a 401 challenge lands there.
             return !$codes && strpos((string) $response->get_error_message(), 'non-json') !== false;
         };
 
@@ -2712,7 +2401,7 @@ GQL;
             return false;
         };
 
-        
+        // Test 1: Zone Read
         $zonesResponse = $this->getRequest('zones', ['per_page' => 1]);
         if ($authFail($zonesResponse)) {
             return new WP_Error('cloudflare_invalid_token',
@@ -2726,7 +2415,7 @@ GQL;
             $permissionTests['Zone Read'] = 'OK';
         }
 
-        
+        // Test 2: Zone Settings Edit
         $settingsResponse = $this->getRequest("zones/{$zoneId}/settings/rocket_loader");
         if (!$cfOk($settingsResponse)) {
             $missingPermissions[] = 'Zone - Zone Settings - Edit';
@@ -2735,13 +2424,13 @@ GQL;
             $permissionTests['Zone Settings Edit'] = 'OK';
         }
 
-        
-        
+        // Test 3: Cache Purge
+        // Use POST with minimal valid data to test permission without actually purging
         $cacheResponse = $this->postRequest("zones/{$zoneId}/purge_cache", ['files' => []]);
 
 
-        
-        
+        // Deliberately malformed probe (files:[]) — success is impossible, so absence of a
+        // permission error is the only signal. An auth failure still disqualifies it.
         $hasCachePurgePermission = !$isPermissionError($cacheResponse) && !$authFail($cacheResponse);
 
         if (!$hasCachePurgePermission) {
@@ -2751,7 +2440,7 @@ GQL;
             $permissionTests['Cache Purge'] = 'OK';
         }
 
-        
+        // Test 4: Firewall Services Edit
         $firewallResponse = $this->getRequest("zones/{$zoneId}/firewall/access_rules/rules", ['per_page' => 1]);
         if (!$cfOk($firewallResponse)) {
             $missingPermissions[] = 'Zone - Firewall Services - Edit';
@@ -2760,7 +2449,7 @@ GQL;
             $permissionTests['Firewall Services Edit'] = 'OK';
         }
 
-        
+        // Test 5: DNS Edit
         $dnsResponse = $this->getRequest("zones/{$zoneId}/dns_records", ['per_page' => 1]);
         if (!$cfOk($dnsResponse)) {
             $missingPermissions[] = 'Zone - DNS - Edit';
@@ -2780,7 +2469,7 @@ GQL;
             $permissionTests['Analytics Read'] = 'OK (basic check)';
         }
 
-        
+        // Test 7: Cache Rules (Rulesets)
         $rulesetsResponse = $this->getRequest("zones/{$zoneId}/rulesets");
         if (!$cfOk($rulesetsResponse)) {
             $missingPermissions[] = 'Zone - Cache Rules - Edit';
@@ -2789,23 +2478,23 @@ GQL;
             $permissionTests['Cache Rules Edit'] = 'OK';
         }
 
-        
-        
-        
-        
-        
-        
+        // v7.21.20 — the WAF phase needs its OWN scope: a token can list rulesets (Cache Rules
+        // read) yet be "not authorized" on http_request_firewall_custom, so every Optimizer
+        // Bypass / CDN Host Exempt write fails while this panel says all-green (bakes: months
+        // of unauthorized rule writes behind an all-OK permissions screen — the .503 lesson
+        // again). Positive proof: read the phase entrypoint; CF error 10003 ("could not find
+        // entrypoint") is authorized-but-empty and counts as OK.
         $wafPhaseResponse = $this->getRequest("zones/{$zoneId}/rulesets/phases/http_request_firewall_custom/entrypoint");
-        $wpc_waf_ok2120 = $cfOk($wafPhaseResponse);
-        if (!$wpc_waf_ok2120 && is_wp_error($wafPhaseResponse)) {
-            foreach ((array) $wafPhaseResponse->get_error_data() as $wpc_we2120) {
-                if (is_array($wpc_we2120) && isset($wpc_we2120['code']) && (int) $wpc_we2120['code'] === 10003) {
-                    $wpc_waf_ok2120 = true;
+        $wafPhaseOk = $cfOk($wafPhaseResponse);
+        if (!$wafPhaseOk && is_wp_error($wafPhaseResponse)) {
+            foreach ((array) $wafPhaseResponse->get_error_data() as $wafError) {
+                if (is_array($wafError) && isset($wafError['code']) && (int) $wafError['code'] === 10003) {
+                    $wafPhaseOk = true;
                     break;
                 }
             }
         }
-        if (!$wpc_waf_ok2120) {
+        if (!$wafPhaseOk) {
             $missingPermissions[] = 'Zone - Zone WAF - Edit';
             $permissionTests['Zone WAF Edit'] = 'Failed';
         } else {
@@ -2816,7 +2505,7 @@ GQL;
         $criticalRefs = ['Zone - Zone - Read', 'Zone - Cache Purge - Purge'];
 
 
-        
+        // Permissions row = [Zone] [Group] [Access]).
         $cfLabel = [
             'Zone - Zone - Read'              => 'Zone → Read',
             'Zone - Cache Purge - Purge'      => 'Cache Purge → Purge',
@@ -2846,25 +2535,65 @@ GQL;
             }
         }
 
+        // The token's identity is read here and nowhere else, so the panel can name the token it
+        // checked without a Cloudflare call on every page load. An account-owned token (cfat_)
+        // answers only on the account path, whose id the zone details carry.
+        $accountId = (is_array($zoneDetailsResponse) && !empty($zoneDetailsResponse['result']['account']['id']))
+            ? (string) $zoneDetailsResponse['result']['account']['id'] : '';
+
         return [
             'ok'               => empty($critical_missing),
             'critical_missing' => $critical_missing,
             'optional_missing' => $optional_missing,
             'tests'            => $permissionTests,
+            'token'            => $this->verifyToken($accountId),
         ];
+    }
+
+    /**
+     * The identity of the stored token: {id, status, t}. Only the id Cloudflare gives the token is
+     * kept or logged, never the token value. A token Cloudflare will not describe reads as
+     * status 'unverified' with an empty id, so the panel never shows an id it did not confirm.
+     */
+    public function verifyToken($accountId = '')
+    {
+        $paths = ['user/tokens/verify'];
+        if ($accountId !== '') {
+            $paths[] = 'accounts/' . rawurlencode($accountId) . '/tokens/verify';
+        }
+        $why = '';
+        foreach ($paths as $path) {
+            $answer = $this->getRequest($path);
+            if (is_array($answer) && !empty($answer['result']['id'])) {
+                $out = [
+                    'id'     => (string) $answer['result']['id'],
+                    'status' => (string) ($answer['result']['status'] ?? ''),
+                    't'      => time(),
+                ];
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('cf-token-verified', '', '', ['id_prefix' => substr($out['id'], 0, 6), 'status' => $out['status']]);
+                }
+                return $out;
+            }
+            $why = is_wp_error($answer) ? $answer->get_error_code() : 'no-id';
+        }
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('cf-token-verify-failed', '', '', ['why' => $why, 'paths' => count($paths)]);
+        }
+        return ['id' => '', 'status' => 'unverified', 't' => time()];
     }
 
 
     public function getZoneAnalyticsUnfiltered($from, $to)
     {
-        
+        // Get zone ID from settings
         $cf = get_option(WPS_IC_CF);
         if (!$cf || empty($cf['zone'])) {
             return new WP_Error('missing_zone', 'Cloudflare zone ID not found in settings');
         }
         $zoneId = $cf['zone'];
 
-        
+        // Format dates for GraphQL
         $fromDate = new DateTime($from, new DateTimeZone('UTC'));
         $toDate = new DateTime($to, new DateTimeZone('UTC'));
 
@@ -2909,7 +2638,7 @@ GQL;
             return $response;
         }
 
-        
+        // Check for GraphQL errors
         if (isset($response['errors']) && !empty($response['errors'])) {
             $errorMessages = array_map(function ($error) {
                 return $error['message'] ?? 'Unknown GraphQL error';
@@ -2918,14 +2647,14 @@ GQL;
             return new WP_Error('cloudflare_graphql_error', implode(', ', $errorMessages), $response['errors']);
         }
 
-        
+        // Extract and format the data
         $series = $response['data']['viewer']['zones'][0]['httpRequests1dGroups'] ?? [];
 
         $formatted = [];
         foreach ($series as $dataPoint) {
             $date = $dataPoint['dimensions']['date'] ?? null;
             if ($date) {
-                
+                // Extract INTEGER values directly, not arrays
                 $formatted[$date] = ['bytes' => (int)($dataPoint['sum']['bytes'] ?? 0), 'requests' => (int)($dataPoint['sum']['requests'] ?? 0), 'cached_bytes' => (int)($dataPoint['sum']['cachedBytes'] ?? 0), 'cached_requests' => (int)($dataPoint['sum']['cachedRequests'] ?? 0),];
             }
         }
@@ -2957,7 +2686,7 @@ GQL;
         $error_code = null;
         $error_message = '';
 
-        
+        // Extract error code and message
         if (!empty($error_data[0]['code'])) {
             $error_code = $error_data[0]['code'];
         }
@@ -2965,7 +2694,7 @@ GQL;
             $error_message = $error_data[0]['message'];
         }
 
-        
+        // Check if it's a permission/authentication error
         $permission_codes = [9109, 10000, 1095, 9103];
         if (in_array($error_code, $permission_codes)) {
             $msg = $context ? "{$context}: API token is missing required permissions" : "API token is missing required permissions";
@@ -2975,7 +2704,7 @@ GQL;
             return $msg;
         }
 
-        
+        // For other errors, return the original message or a fallback
         if (empty($error_message)) {
             $error_message = $wp_error->get_error_message();
         }
@@ -3009,10 +2738,10 @@ GQL;
             ],
         ];
 
-        
+        // Find-or-create the late_transform entrypoint ruleset, then update-or-add the rule by ref.
         $rulesetId = $this->getTransformRulesRulesetId($zoneId);
         if (is_wp_error($rulesetId)) {
-            
+            // No transform ruleset yet → create one carrying this single rule (SAFE — new ruleset).
             return $this->postRequest("zones/$zoneId/rulesets", [
                 'name'  => 'WP Compress Transform Rules',
                 'kind'  => 'zone',
@@ -3021,7 +2750,7 @@ GQL;
             ]);
         }
 
-        
+        // Ruleset exists — update our rule in place if present (no duplicates), else append it.
         $existing = $this->findTransformRuleByRef($zoneId, $rulesetId, WPC_CONFIG_INJECT_RULE_REF);
         if ($existing && !empty($existing['id'])) {
             return $this->patchRequest("zones/$zoneId/rulesets/$rulesetId/rules/{$existing['id']}", $rule);
@@ -3083,16 +2812,16 @@ GQL;
 
 }
 if (function_exists('add_action') && !has_action('wpc_cf_bypass_tighten')) {
-    add_action('wpc_cf_bypass_tighten', function ($wpc_zone740 = '', $wpc_expr740 = '') {
-        if ($wpc_zone740 === '' || $wpc_expr740 === '' || !class_exists('WPC_CloudflareAPI')
+    add_action('wpc_cf_bypass_tighten', function ($zoneId = '', $expression = '') {
+        if ($zoneId === '' || $expression === '' || !class_exists('WPC_CloudflareAPI')
             || !defined('WPS_IC_CF') || !function_exists('get_option')) {
             return;
         }
-        $wpc_cf740 = get_option(WPS_IC_CF);
-        if (empty($wpc_cf740['token'])) {
+        $cfSettings = get_option(WPS_IC_CF);
+        if (empty($cfSettings['token'])) {
             return;
         }
-        $wpc_sdk740 = new WPC_CloudflareAPI($wpc_cf740['token']);
-        $wpc_sdk740->tightenCdnBypassRule((string) $wpc_zone740, (string) $wpc_expr740);
+        $cloudflare = new WPC_CloudflareAPI($cfSettings['token']);
+        $cloudflare->tightenCdnBypassRule((string) $zoneId, (string) $expression);
     }, 10, 2);
 }

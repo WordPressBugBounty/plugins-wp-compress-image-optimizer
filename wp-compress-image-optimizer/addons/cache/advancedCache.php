@@ -1,20 +1,12 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/cache/advancedCache.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 include_once __DIR__ . '/wpc-fs.php';
 define('WPS_IC_CACHE', WP_CONTENT_DIR . '/cache/wp-cio/');
 
-
-
+// Drop-in loads before the plugin, so these are defined in BOTH places under !function_exists —
+// whichever loads first wins and the two HTML writers can never drift apart.
 if (!function_exists('wpc_edge_swr')) {
-    
-    
+    // Default matches the s-maxage branch's 86400. Shipping 0 made .488 inert: line 25 reads
+    // must-revalidate whenever swr is 0, so the fix was present and off.
     function wpc_edge_swr()
     {
         try {
@@ -36,49 +28,27 @@ if (!function_exists('wpc_cc_freshness')) {
     }
 }
 
-if (!function_exists('wpc_dcv_stale146')) {
-    
-    
-    function wpc_dcv_stale146($file)
-    {
-        try {
-            if (!defined('WPS_IC_CACHE')) {
-                return false;
-            }
-            $wpc_d146 = rtrim(WPS_IC_CACHE, '/') . '/dcv.txt';
-            if (!@file_exists($wpc_d146)) {
-                return false;
-            }
-            $wpc_dm146 = (int) @filemtime($wpc_d146);
-            $wpc_fm146 = (int) @filemtime($file);
-            return $wpc_dm146 > 0 && $wpc_fm146 > 0 && $wpc_fm146 < $wpc_dm146;
-        } catch (\Throwable $e) {
-            return false;
-        }
-    }
-}
-
-if (!function_exists('wpc_stale43_plan')) {
-    function wpc_stale43_plan($dir, $prefix = '')
+if (!function_exists('wpc_stale_serve_plan')) {
+    function wpc_stale_serve_plan($dir, $prefix = '')
     {
         try {
             $dir = rtrim((string) $dir, '/') . '/';
             if (!@is_file($dir . $prefix . 'index.html') && !@is_file($dir . $prefix . 'index.html_gzip')) {
-                $wpc_sm39 = 0;
-                foreach (['stale.html_gzip', 'stale.html'] as $wpc_f39) {
-                    $wpc_m39 = (int) @filemtime($dir . $prefix . $wpc_f39);
-                    if ($wpc_m39 > $wpc_sm39) {
-                        $wpc_sm39 = $wpc_m39;
+                $stale_mtime = 0;
+                foreach (['stale.html_gzip', 'stale.html'] as $stale_file) {
+                    $stale_file_mtime = (int) @filemtime($dir . $prefix . $stale_file);
+                    if ($stale_file_mtime > $stale_mtime) {
+                        $stale_mtime = $stale_file_mtime;
                     }
                 }
-                if ($wpc_sm39 > 0) {
-                    $wpc_max39 = defined('WPC_STALE_SERVE_MAX') ? (int) WPC_STALE_SERVE_MAX : 86400;
-                    if ($wpc_max39 > 0 && (time() - $wpc_sm39) > $wpc_max39) {
+                if ($stale_mtime > 0) {
+                    $stale_max_age = defined('WPC_STALE_SERVE_MAX') ? (int) WPC_STALE_SERVE_MAX : 86400;
+                    if ($stale_max_age > 0 && (time() - $stale_mtime) > $stale_max_age) {
                         return 'miss';
                     }
-                    $wpc_st39 = $dir . $prefix . 'wpc-rewarm43.txt';
-                    $wpc_n39 = (@is_file($wpc_st39) && (int) @filemtime($wpc_st39) >= $wpc_sm39) ? (int) @file_get_contents($wpc_st39) : 0;
-                    if ($wpc_n39 >= 4) {
+                    $stale_rewarm_file = $dir . $prefix . 'wpc-rewarm43.txt';
+                    $stale_rewarm_count = (@is_file($stale_rewarm_file) && (int) @filemtime($stale_rewarm_file) >= $stale_mtime) ? (int) @file_get_contents($stale_rewarm_file) : 0;
+                    if ($stale_rewarm_count >= 4) {
                         return 'miss';
                     }
                     return 'stale';
@@ -87,32 +57,32 @@ if (!function_exists('wpc_stale43_plan')) {
             if (!defined('WPS_IC_CACHE')) {
                 return 'fresh';
             }
-            $wpc_mk43 = rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt';
-            if (!@is_file($wpc_mk43)) {
+            $stale_marker_file = rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt';
+            if (!@is_file($stale_marker_file)) {
                 return 'fresh';
             }
-            $wpc_ep43 = (int) @file_get_contents($wpc_mk43);
-            if ($wpc_ep43 <= 0) {
+            $stale_epoch = (int) @file_get_contents($stale_marker_file);
+            if ($stale_epoch <= 0) {
                 return 'fresh';
             }
             $dir = rtrim((string) $dir, '/') . '/';
-            $wpc_nw43 = 0;
-            foreach (['index.html_gzip', 'index.html'] as $wpc_f43) {
-                $wpc_m43 = (int) @filemtime($dir . $prefix . $wpc_f43);
-                if ($wpc_m43 > $wpc_nw43) {
-                    $wpc_nw43 = $wpc_m43;
+            $index_mtime = 0;
+            foreach (['index.html_gzip', 'index.html'] as $index_file) {
+                $index_file_mtime = (int) @filemtime($dir . $prefix . $index_file);
+                if ($index_file_mtime > $index_mtime) {
+                    $index_mtime = $index_file_mtime;
                 }
             }
-            if ($wpc_nw43 === 0 || $wpc_nw43 >= $wpc_ep43) {
+            if ($index_mtime === 0 || $index_mtime >= $stale_epoch) {
                 return 'fresh';
             }
-            $wpc_max43 = defined('WPC_STALE_SERVE_MAX') ? (int) WPC_STALE_SERVE_MAX : 86400;
-            if ($wpc_max43 > 0 && (time() - $wpc_ep43) > $wpc_max43) {
+            $marked_max_age = defined('WPC_STALE_SERVE_MAX') ? (int) WPC_STALE_SERVE_MAX : 86400;
+            if ($marked_max_age > 0 && (time() - $stale_epoch) > $marked_max_age) {
                 return 'miss';
             }
-            $wpc_st43 = $dir . $prefix . 'wpc-rewarm43.txt';
-            $wpc_n43 = (@is_file($wpc_st43) && (int) @filemtime($wpc_st43) >= $wpc_ep43) ? (int) @file_get_contents($wpc_st43) : 0;
-            if ($wpc_n43 >= 4) {
+            $rewarm_file = $dir . $prefix . 'wpc-rewarm43.txt';
+            $rewarm_count = (@is_file($rewarm_file) && (int) @filemtime($rewarm_file) >= $stale_epoch) ? (int) @file_get_contents($rewarm_file) : 0;
+            if ($rewarm_count >= 4) {
                 return 'miss';
             }
             return 'stale';
@@ -121,115 +91,11 @@ if (!function_exists('wpc_stale43_plan')) {
         }
     }
 
-    function wpc_stale43_miss($dir, $prefix = '')
+    function wpc_stale_unlink_copies($dir, $prefix = '')
     {
         $dir = rtrim((string) $dir, '/') . '/';
-        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt'] as $wpc_f43) {
-            @unlink($dir . $prefix . $wpc_f43);
-        }
-    }
-
-    function wpc_stale43_serve($dir, $prefix = '')
-    {
-        try {
-            header('Cache-Control: no-cache, max-age=0, must-revalidate');
-            header('Expires: ' . gmdate('D, d M Y H:i:s', time() - 60) . ' GMT');
-            header('X-WPC-Cache: stale-rewarm');
-            $dir = rtrim((string) $dir, '/') . '/';
-            $wpc_st43 = $dir . $prefix . 'wpc-rewarm43.txt';
-            $wpc_ep43 = (int) @file_get_contents(rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt');
-            foreach (['stale.html_gzip', 'stale.html'] as $wpc_f39) {
-                $wpc_m39 = (int) @filemtime($dir . $prefix . $wpc_f39);
-                if ($wpc_m39 > $wpc_ep43) {
-                    $wpc_ep43 = $wpc_m39;
-                }
-            }
-            $wpc_n43 = 0;
-            if (@is_file($wpc_st43) && (int) @filemtime($wpc_st43) >= $wpc_ep43) {
-                if (time() - (int) @filemtime($wpc_st43) < 120) {
-                    return false;
-                }
-                $wpc_n43 = (int) @file_get_contents($wpc_st43);
-            }
-            wpc_fs_put($wpc_st43, (string) ($wpc_n43 + 1));
-            $wpc_host43 = isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : '';
-            $wpc_path43 = (string) (parse_url(isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/', PHP_URL_PATH) ?: '/');
-            if ($wpc_host43 === '' || preg_match('/[^A-Za-z0-9.\-:\[\]]/', $wpc_host43) || preg_match('/[\s"\']/', $wpc_path43)) {
-                return false;
-            }
-            $wpc_https43 = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-                || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443)
-                || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-            $wpc_ua43 = substr((string) preg_replace('/[\r\n]+/', ' ', isset($_SERVER['HTTP_USER_AGENT']) ? (string) $_SERVER['HTTP_USER_AGENT'] : 'Mozilla/5.0'), 0, 300);
-            $wpc_ac43 = substr((string) preg_replace('/[\r\n]+/', ' ', isset($_SERVER['HTTP_ACCEPT']) ? (string) $_SERVER['HTTP_ACCEPT'] : 'text/html'), 0, 200);
-            register_shutdown_function('wpc_stale43_fire', $wpc_host43, $wpc_https43, $wpc_path43, $wpc_ua43, $wpc_ac43);
-            return true;
-        } catch (\Throwable $e) {
-            return false;
-        }
-    }
-
-    function wpc_stale43_fire($host, $https, $path, $ua, $accept)
-    {
-        try {
-            $wpc_fin44 = false;
-            if (function_exists('wpc_finish_request39')) { $wpc_fin44 = (bool) wpc_finish_request39(); } elseif (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); $wpc_fin44 = true; } else {
-                while (ob_get_level() > 0) {
-                    @ob_end_flush();
-                }
-                @flush();
-                if (function_exists('litespeed_finish_request')) {
-                    @litespeed_finish_request();
-                    $wpc_fin44 = true;
-                }
-            }
-            $wpc_ho43 = (string) preg_replace('/:\d+$/', '', (string) $host);
-            $wpc_port43 = $https ? 443 : 80;
-            if (preg_match('/:(\d+)$/', (string) $host, $wpc_pm43)) {
-                $wpc_port43 = (int) $wpc_pm43[1];
-            }
-            $wpc_ctx43 = $https ? stream_context_create(['ssl' => [
-                'peer_name' => $wpc_ho43, 'SNI_enabled' => true,
-                'verify_peer' => false, 'verify_peer_name' => false, 'allow_self_signed' => true,
-            ]]) : stream_context_create();
-            $wpc_req43 = "GET {$path} HTTP/1.1\r\nHost: {$host}\r\nUser-Agent: {$ua}\r\nAccept: {$accept}\r\nX-WPC-Cache-Warm: 1\r\nConnection: close\r\n\r\n";
-            $wpc_tries47 = [];
-            foreach (['127.0.0.1', 'localhost', $wpc_ho43] as $wpc_c43) {
-                $wpc_en43 = 0;
-                $wpc_es43 = '';
-                $wpc_fp43 = @stream_socket_client(($https ? 'tls://' : 'tcp://') . $wpc_c43 . ':' . $wpc_port43, $wpc_en43, $wpc_es43, $wpc_fin44 ? 1.0 : 0.3, STREAM_CLIENT_CONNECT, $wpc_ctx43);
-                if ($wpc_fp43) {
-                    @stream_set_timeout($wpc_fp43, 0, 200000);
-                    @fwrite($wpc_fp43, $wpc_req43);
-                    $wpc_st47 = '';
-                    if ($wpc_fin44) {
-                        @stream_set_timeout($wpc_fp43, 3, 0);
-                        $wpc_st47 = trim((string) @fgets($wpc_fp43));
-                    }
-                    @fclose($wpc_fp43);
-                    wpc_stale47_note($path, ['rung' => $wpc_c43, 'fin' => $wpc_fin44 ? 1 : 0, 'status' => substr($wpc_st47, 0, 40), 'tries' => implode(',', $wpc_tries47)]);
-                    return true;
-                }
-                $wpc_tries47[] = $wpc_c43 . '(' . (int) $wpc_en43 . ')';
-            }
-            wpc_stale47_note($path, ['rung' => '', 'fin' => $wpc_fin44 ? 1 : 0, 'status' => '', 'tries' => implode(',', $wpc_tries47)]);
-        } catch (\Throwable $e) {
-        }
-        return false;
-    }
-
-    function wpc_stale47_note($path, $layers)
-    {
-        try {
-            if (!defined('WPS_IC_CACHE')) {
-                return;
-            }
-            $wpc_lf47 = rtrim(WPS_IC_CACHE, '/') . '/wpc-cflog.jsonl';
-            $wpc_ln47 = json_encode(['t' => time(), 'event' => 'stale-fire', 'key' => substr((string) $path, 0, 120), 'url' => '', 'layers' => $layers]);
-            if (is_string($wpc_ln47) && @is_dir(dirname($wpc_lf47))) {
-                @file_put_contents($wpc_lf47, $wpc_ln47 . "\n", FILE_APPEND | LOCK_EX);
-            }
-        } catch (\Throwable $e) {
+        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt'] as $copy_file) {
+            @unlink($dir . $prefix . $copy_file);
         }
     }
 }
@@ -255,7 +121,7 @@ class wps_advancedCache
         $this->url_key_class = new wps_ic_url_key();
         $this->urlKey = $this->url_key_class->setup();
 
-	      
+	      // Append user cookie hash to the cache path if user is logged in
 	      $user_hash = '';
 				if (defined('WPC_CACHE_LOGGED_IN') && WPC_CACHE_LOGGED_IN){
 						foreach ( $_COOKIE as $key => $value ) {
@@ -267,29 +133,29 @@ class wps_advancedCache
 
 				}
 
-	    
+	    // Add cookie variation to cache path
 	    $cookie_string = '';
 	    if (defined('WPC_CACHE_COOKIES') && WPC_CACHE_COOKIES !== false) {
 		    $cookie_values = [];
 		    $cache_cookies = WPC_CACHE_COOKIES;
 
 		    foreach ($cache_cookies as $cookie_name) {
-			    
+			    // Check if this is a prefix cookie (ends with _)
 			    if (substr($cookie_name, -1) === '_') {
-				    
-				    $prefix = $cookie_name; 
+				    // This is a prefix - find all cookies that start with this prefix
+				    $prefix = $cookie_name; // Keep the underscore for matching
 				    foreach ($_COOKIE as $actual_cookie_name => $cookie_value) {
 					    if (strpos($actual_cookie_name, $prefix) === 0 && !empty($cookie_value)) {
-						    
+						    // Get the suffix (part after the prefix)
 						    $suffix = substr($actual_cookie_name, strlen($prefix));
 
-						    
+						    // Create a 7-character hash of the suffix and append to cookie value
 						    $suffix_hash = substr(hash('md5', $suffix), 0, 7);
 						    $cookie_values[] = $cookie_value . '_' . $suffix_hash;
 					    }
 				    }
 			    } else {
-				    
+				    // Regular cookie - exact match
 				    if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
 					    $cookie_values[] = $_COOKIE[$cookie_name];
 				    }
@@ -306,10 +172,10 @@ class wps_advancedCache
 
     }
 
-    
-
-
-
+    /**
+     * FrontEnd Editors Detection for various page builders
+     * @return bool
+     */
     public static function isPageBuilder()
     {
         $page_builders = ['run_compress',
@@ -317,7 +183,7 @@ class wps_advancedCache
             'elementor-preview',
             'fl_builder',
             'et_fb',
-            'preview', 
+            'preview', //WP Preview
             'builder',
             'brizy',
             'fb-edit',
@@ -368,10 +234,10 @@ class wps_advancedCache
         return false;
     }
 
-    
-
-
-
+    /**
+     * FrontEnd Editors Detection for various page builders
+     * @return bool
+     */
     public static function isPageBuilderFE()
     {
         if (class_exists('BT_BB_Root')) {
@@ -431,7 +297,7 @@ class wps_advancedCache
             return true;
         }
 
-        
+        // Hours into minutes into seconds
         $expireInterval = $this->options['cache']['expire'] * 60 * 60;
         $fileModifiedTime = filemtime($cacheFile);
 
@@ -474,12 +340,12 @@ class wps_advancedCache
 
     public function byPass()
     {
-        
+        // Cart Fragments
         if ($this->isWooFragments()) {
             return true;
         }
 
-        
+        // Don't cache for specific WooCommerce pages or AJAX requests
         $excluded_pages = ['cart', 'checkout', 'my-account'];
         $request_uri = trim($_SERVER['REQUEST_URI']);
         $is_excluded_page = false;
@@ -493,12 +359,12 @@ class wps_advancedCache
             }
         }
 
-        
+        // Check for wc-ajax requests
         if ($is_excluded_page || str_contains($request_uri, 'wc-ajax')) {
             return true;
         }
 
-        
+        // Check mandatory cookies - bypass if any required cookie is missing
         if (defined('WPC_MANDATORY_COOKIES') && WPC_MANDATORY_COOKIES !== false && is_array(WPC_MANDATORY_COOKIES)) {
             foreach (WPC_MANDATORY_COOKIES as $mandatoryCookie) {
                 if (substr($mandatoryCookie, -1) === '_') {
@@ -536,12 +402,15 @@ class wps_advancedCache
             }
             return false;
         }
-        if (function_exists('wpc_stale43_plan') && wpc_stale43_plan($this->cachePath, $prefix) === 'miss') {
-            wpc_stale43_miss($this->cachePath, $prefix);
+        // The copy family is part of the file prefix from here on: every name below is the
+        // device's local-only copy when that family is on disk.
+        $prefix .= wpc_copy_family_on_disk($this->cachePath, $prefix);
+        if (function_exists('wpc_stale_serve_plan') && wpc_stale_serve_plan($this->cachePath, $prefix) === 'miss') {
+            wpc_stale_unlink_copies($this->cachePath, $prefix);
             return false;
         }
-        foreach (['stale.html_gzip', 'stale.html'] as $wpc_f39) {
-            if (@file_exists($this->cachePath . $prefix . $wpc_f39) && (int) @filesize($this->cachePath . $prefix . $wpc_f39) > 0) {
+        foreach (['stale.html_gzip', 'stale.html'] as $staleFile) {
+            if (@file_exists($this->cachePath . $prefix . $staleFile) && (int) @filesize($this->cachePath . $prefix . $staleFile) > 0) {
                 return true;
             }
         }
@@ -560,119 +429,6 @@ class wps_advancedCache
     }
 
 
-    
-
-
-
-    public function pageTest()
-    {
-        return false;
-    }
-
-    public function saveCache($buffer, $prefix = '')
-    {
-
-        if (!empty($_GET['disable_cache'])) {
-            return true;
-        }
-
-
-        if (function_exists('wpc_update_window_active') && wpc_update_window_active()
-            && (!function_exists('wpc_render_armed_for_cache') || !wpc_render_armed_for_cache($buffer))) {
-            return $buffer;
-        }
-
-        if (empty($buffer) || strlen($buffer) < 100 || strpos($buffer, '</body>') === false) {
-            return $buffer;
-        }
-
-        if (defined('DONOTCACHEPAGE') && DONOTCACHEPAGE) {
-            global $post;
-            if (!empty($post->ID)) {
-                $preload_warmup = new wps_ic_preload_warmup();
-                $preload_warmup->addError($post->ID, 'DONOTCACHEPAGE');
-            }
-            return $buffer;
-        }
-
-        
-        
-        if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'tierWriteBlocked')
-            && wps_ic_url_key::tierWriteBlocked()) {
-            return $buffer;
-        }
-
-        if (!empty($prefix)) {
-            $prefix = $prefix . '_';
-        }
-
-        $excludes = get_option('wpc-excludes');
-        $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-        $url = explode('?', $url)[0];
-        if (!empty($excludes) && !empty($excludes['cache']) && function_exists('wpc_url_is_excluded')) {
-            if (wpc_url_is_excluded($url, $excludes['cache']) !== false) {
-                return $buffer;
-            }
-        }
-
-        if (!empty($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
-            return $buffer;
-        }
-
-		    if (is_user_logged_in()) {
-				    return $buffer;
-		    }
-
-        if (!file_exists($this->cachePath)) {
-            mkdir(rtrim($this->cachePath, '/'), 0777, true);
-        }
-
-        if (function_exists('gzencode')) {
-            $this->saveGzCache($buffer, $prefix);
-        }
-
-        return $buffer;
-    }
-
-    public function saveGzCache($buffer, $prefix)
-    {
-        if (!empty($_GET['disable_cache'])) {
-            return true;
-        }
-
-
-        $final = $this->cachePath . $prefix . 'index.html' . '_gzip';
-        
-        @unlink($this->cachePath . $prefix . 'index.html_br');
-        $tmp   = $final . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
-        $fp = @fopen($tmp, 'w+');
-        if ($fp === false) {
-            return $buffer;
-        }
-        fwrite($fp, gzencode($buffer, 8));
-        fclose($fp);
-        if (!@rename($tmp, $final)) {
-            @unlink($tmp);
-        } else {
-            wpc_fs_put($this->cachePath . $prefix . 'index.html_md5', md5($buffer));
-            @unlink($this->cachePath . $prefix . 'wpc-rewarm43.txt');
-            foreach (['stale.html_br', 'stale.html_gzip', 'stale.html'] as $wpc_f39) {
-                @unlink($this->cachePath . $prefix . $wpc_f39);
-            }
-        }
-
-        return $buffer;
-    }
-
-    public function getCacheFilePath($prefix = '')
-    {
-        if (function_exists('readgzfile')) {
-            return $this->cachePath . $prefix . '/index.html' . '_gzip';
-        }
-
-        return $this->cachePath . $prefix . '/index.html';
-    }
-
     public function getCache($prefix = '')
     {
 
@@ -681,23 +437,23 @@ class wps_advancedCache
             return;
         }
 
-        
-        
-        
-        
-        
-        $wpc_qs210 = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
-        if ($wpc_qs210 !== '') {
+        // Path-keyed mirror: never serve it for query URLs beyond marketing params.
+        // v7.10.598 — same predicate as the WRITE gate (cacheHtml::saveCache), so read and write
+        // cannot disagree about which query strings are cacheable. This file is include_once'd by
+        // the advanced-cache drop-in (advancedCacheSample.php:51) alongside traits/url_key.php,
+        // so both gates and the strip list are one deployable unit — no baked copy to drift.
+        $queryString = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
+        if ($queryString !== '') {
             if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'queryIsCacheable')) {
-                if (!wps_ic_url_key::queryIsCacheable($wpc_qs210)) {
+                if (!wps_ic_url_key::queryIsCacheable($queryString)) {
                     return;
                 }
             } else {
-                parse_str($wpc_qs210, $wpc_qp210);
-                foreach (array_keys((array) $wpc_qp210) as $wpc_qk210) {
-                    $wpc_qk210 = strtolower((string) $wpc_qk210);
-                    if (strpos($wpc_qk210, 'utm_') !== 0
-                        && !in_array($wpc_qk210, ['fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'mc_cid', 'mc_eid', 'ref', '_ga', 'igshid', 'ttclid'], true)) {
+                parse_str($queryString, $queryParams);
+                foreach (array_keys((array) $queryParams) as $queryKey) {
+                    $queryKey = strtolower((string) $queryKey);
+                    if (strpos($queryKey, 'utm_') !== 0
+                        && !in_array($queryKey, ['fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'mc_cid', 'mc_eid', 'ref', '_ga', 'igshid', 'ttclid'], true)) {
                         return;
                     }
                 }
@@ -706,21 +462,20 @@ class wps_advancedCache
 
 
         try {
-            $wpc_hb = $this->cachePath ? dirname(rtrim($this->cachePath, '/')) . '/wpc-cron-heartbeat.stamp' : '';
-            if ($wpc_hb && (!@file_exists($wpc_hb) || (time() - (int) @filemtime($wpc_hb)) > 60)) {
-                @touch($wpc_hb);
-                $wpc_hh = !empty($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
-                if ($wpc_hh && strpos($wpc_hh, ':') === false) {
-                    $wpc_ssl = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443);
-                    $wpc_fp  = @fsockopen(($wpc_ssl ? 'ssl://' : '') . $wpc_hh, $wpc_ssl ? 443 : 80, $wpc_en, $wpc_es, 0.3);
-                    if ($wpc_fp) {
-                        @stream_set_blocking($wpc_fp, false);
-                        @fwrite($wpc_fp, "GET /wp-cron.php?doing_wp_cron HTTP/1.1
-Host: " . $wpc_hh . "
-Connection: Close
-
-");
-                        @fclose($wpc_fp);
+            // The cron heartbeat asks wp-cron.php of THIS install: wpc_loopback_install_url() keeps a
+            // subdirectory install's prefix. It was `GET /wp-cron.php` on the request's host, which on
+            // a subdirectory install is not this install's cron (for noktaltema.com/tibet/teknikservis/
+            // it asked noktaltema.com/wp-cron.php; found by reading, 2026-09-24).
+            $cronHeartbeatStamp = $this->cachePath ? dirname(rtrim($this->cachePath, '/')) . '/wpc-cron-heartbeat.stamp' : '';
+            if ($cronHeartbeatStamp && (!@file_exists($cronHeartbeatStamp) || (time() - (int) @filemtime($cronHeartbeatStamp)) > 60)) {
+                @touch($cronHeartbeatStamp);
+                $cronTarget = wpc_loopback_target(wpc_loopback_install_url('wp-cron.php') . '?doing_wp_cron');
+                if ($cronTarget !== [] && strpos($cronTarget['host'], ':') === false) {
+                    $cronSocket = @fsockopen(($cronTarget['https'] ? 'ssl://' : '') . $cronTarget['host'], $cronTarget['https'] ? 443 : 80, $cronErrorNumber, $cronErrorText, 0.3);
+                    if ($cronSocket) {
+                        @stream_set_blocking($cronSocket, false);
+                        @fwrite($cronSocket, wpc_loopback_request($cronTarget, []));
+                        @fclose($cronSocket);
                     }
                 }
             }
@@ -729,119 +484,79 @@ Connection: Close
         if (!empty($prefix)) {
             $prefix = $prefix . '_';
         }
+        $wpc_family = wpc_copy_family_on_disk($this->cachePath, $prefix);
+        $prefix .= $wpc_family;
 
-        
-        
-        foreach (['index.html_gzip', 'index.html'] as $wpc_cf178) {
-            $wpc_cfp178 = $this->cachePath . $prefix . $wpc_cf178;
-            if (@file_exists($wpc_cfp178) && (int) @filesize($wpc_cfp178) < 1024) {
-                @unlink($wpc_cfp178);
-                
-                
-                @unlink($this->cachePath . $prefix . 'index.html_br');
-                @unlink($this->cachePath . $prefix . 'index.html_md5');
-            }
+        $stalePlan = function_exists('wpc_stale_serve_plan') ? wpc_stale_serve_plan($this->cachePath, $prefix) : 'fresh';
+        $baseFileName = 'index.html';
+        if ($stalePlan === 'stale' && !@file_exists($this->cachePath . $prefix . 'index.html') && !@file_exists($this->cachePath . $prefix . 'index.html_gzip')) {
+            $baseFileName = 'stale.html';
         }
 
-        
-        foreach (['index.html_br', 'index.html_gzip', 'index.html'] as $wpc_cf146) {
-            $wpc_cfp146 = $this->cachePath . $prefix . $wpc_cf146;
-            if (function_exists('wpc_dcv_stale146') && @file_exists($wpc_cfp146) && wpc_dcv_stale146($wpc_cfp146)) {
-                @unlink($wpc_cfp146);
-                @unlink($this->cachePath . $prefix . 'index.html_md5');
-            }
-        }
-
-        $wpc_plan43 = function_exists('wpc_stale43_plan') ? wpc_stale43_plan($this->cachePath, $prefix) : 'fresh';
-        $wpc_base39 = 'index.html';
-        if ($wpc_plan43 === 'stale' && !@file_exists($this->cachePath . $prefix . 'index.html') && !@file_exists($this->cachePath . $prefix . 'index.html_gzip')) {
-            $wpc_base39 = 'stale.html';
-        }
-
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        $wpc_ae662 = isset($_SERVER['HTTP_ACCEPT_ENCODING']) ? $_SERVER['HTTP_ACCEPT_ENCODING'] : '';
-        $wpc_cfpass662 = isset($_SERVER['HTTP_CF_RAY'])
+        // v7.10.647 — Brotli lane (spec R2: payload substitution inside the lane the
+        // request already took; R1 pairing is the writers' job, so presence == paired).
+        // Note readgzfile below INFLATES and re-lets the server compress — this branch
+        // ships the pre-compressed q11 body as-is, so it is strictly cheaper.
+        // v7.10.662 — CF passthrough. Serve the pre-compressed q11 blob when the client accepts
+        // br directly, OR when the request arrived through Cloudflare (HTTP_CF_RAY present).
+        // Behind CF the origin never sees Accept-Encoding (the edge strips it — B2's finding),
+        // but PROVEN on wpspeedkit.com: CF forwards our Content-Encoding:br to br-capable
+        // clients AND decompresses it for the rest, so serving br unconditionally is safe there
+        // and ships our q11 (~16% smaller than CF's own on-the-fly ~q4-5 brotli). With NEITHER
+        // signal we must not serve br — a non-br client with no negotiating layer in front would
+        // get undecodable bytes. Filter kill-switch, default on; guarded for the drop-in where
+        // apply_filters may not be loaded yet.
+        $acceptEncoding = isset($_SERVER['HTTP_ACCEPT_ENCODING']) ? $_SERVER['HTTP_ACCEPT_ENCODING'] : '';
+        $cloudflarePassthrough = isset($_SERVER['HTTP_CF_RAY'])
             && (!function_exists('apply_filters') || apply_filters('wpc_br_cf_passthrough', true));
-        if (strpos($wpc_ae662, 'br') !== false || $wpc_cfpass662) {
-            $wpc_br647 = $this->cachePath . $prefix . $wpc_base39 . '_br';
-            if (@file_exists($wpc_br647) && @is_readable($wpc_br647) && (int) @filesize($wpc_br647) > 512) {
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                $wpc_brm658 = (int) @filemtime($wpc_br647);
-                $wpc_hm658 = 0;
-                $wpc_hany658 = false;
-                foreach ([$wpc_base39 . '_gzip', 'index.html_md5', $wpc_base39] as $wpc_hf658) {
-                    $wpc_hfp658 = $this->cachePath . $prefix . $wpc_hf658;
-                    if (@file_exists($wpc_hfp658)) {
-                        $wpc_hany658 = true;
-                        $wpc_hfm658 = (int) @filemtime($wpc_hfp658);
-                        if ($wpc_hfm658 > $wpc_hm658) {
-                            $wpc_hm658 = $wpc_hfm658;
-                        }
-                    }
+        if (strpos($acceptEncoding, 'br') !== false || $cloudflarePassthrough) {
+            $brotliFile = $this->cachePath . $prefix . $baseFileName . '_br';
+            // A _br is always the current html's pair: every html writer unlinks it before writing
+            // (cacheHtml::saveGzCache), and the only land re-checks the md5 sidecar after writing
+            // (html-br-land.php). The serve-time mtime comparison that re-proved it on every hit
+            // is gone; a blob present here is served.
+            if (@file_exists($brotliFile) && @is_readable($brotliFile) && (int) @filesize($brotliFile) > 512) {
+                $this->setupCacheHeaders($brotliFile, 'br', $wpc_family);
+                wpc_hit_kick((string) $this->urlKey);
+                if ($stalePlan === 'stale') {
+                    wpc_serve_stale_copy($this->cachePath, $prefix);
                 }
-                if ($wpc_hany658 && $wpc_brm658 >= $wpc_hm658) {
-                    $this->setupCacheHeaders($wpc_br647, 'br');
-                    if ($wpc_plan43 === 'stale') {
-                        wpc_stale43_serve($this->cachePath, $prefix);
-                    }
-                    header('Content-Encoding: br');
-                    readfile($wpc_br647);
-                    exit;
-                }
-                @unlink($wpc_br647);
-            }
-        }
-
-        if (function_exists('readgzfile')) {
-            $wpc_gz39 = $this->cachePath . $prefix . $wpc_base39 . '_gzip';
-            if (file_exists($wpc_gz39) && is_readable($wpc_gz39)) {
-                $this->setupCacheHeaders($this->cachePath . $prefix . $wpc_base39 . '_gzip', 'gzip');
-                if ($wpc_plan43 === 'stale') {
-                    wpc_stale43_serve($this->cachePath, $prefix);
-                }
-                
-                readgzfile($this->cachePath . $prefix . $wpc_base39 . '_gzip');
+                header('Content-Encoding: br');
+                readfile($brotliFile);
                 exit;
             }
         }
 
-        if (file_exists($this->cachePath . $prefix . $wpc_base39) && is_readable($this->cachePath . $prefix . $wpc_base39)) {
-            $this->setupCacheHeaders($this->cachePath . $prefix . $wpc_base39, 'html');
-            if ($wpc_plan43 === 'stale') {
-                wpc_stale43_serve($this->cachePath, $prefix);
+        if (function_exists('readgzfile')) {
+            $gzipFile = $this->cachePath . $prefix . $baseFileName . '_gzip';
+            if (file_exists($gzipFile) && is_readable($gzipFile)) {
+                $this->setupCacheHeaders($this->cachePath . $prefix . $baseFileName . '_gzip', 'gzip', $wpc_family);
+                wpc_hit_kick((string) $this->urlKey);
+                if ($stalePlan === 'stale') {
+                    wpc_serve_stale_copy($this->cachePath, $prefix);
+                }
+                // Nginx instantly echoes readgzfile instead of saving it to variable.
+                readgzfile($this->cachePath . $prefix . $baseFileName . '_gzip');
+                exit;
             }
-            readfile($this->cachePath . $prefix . $wpc_base39);
+        }
+
+        if (file_exists($this->cachePath . $prefix . $baseFileName) && is_readable($this->cachePath . $prefix . $baseFileName)) {
+            $this->setupCacheHeaders($this->cachePath . $prefix . $baseFileName, 'html', $wpc_family);
+            wpc_hit_kick((string) $this->urlKey);
+            if ($stalePlan === 'stale') {
+                wpc_serve_stale_copy($this->cachePath, $prefix);
+            }
+            readfile($this->cachePath . $prefix . $baseFileName);
             exit;
         }
     }
 
-    
-    
-    
-    
-    public function serveTraceCopy717($script)
+    // v7.10.717 — instrument parity serve: the armed clean-key copy with the trace beacon
+    // injected after the opening head tag. Admission mirrors the normal serve lane (byPass +
+    // exists + not expired + valid, same device/webp prefix), and the response is no-store:
+    // an instrumented body must never become a cacheable representation anywhere.
+    public function serveTraceCopy($script)
     {
         try {
             if (!is_string($script) || $script === '') {
@@ -850,33 +565,34 @@ Connection: Close
             if ($this->byPass()) {
                 return false;
             }
-            $wpc_pm717 = $this->is_mobile();
-            $wpc_pw717 = (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'image/webp') !== false);
-            $wpc_pfx717 = '';
-            if ($wpc_pm717 && $wpc_pw717) { $wpc_pfx717 = 'mobile-webp'; }
-            elseif ($wpc_pm717) { $wpc_pfx717 = 'mobile'; }
-            elseif ($wpc_pw717) { $wpc_pfx717 = 'webp'; }
-            if (!$this->cacheExists($wpc_pfx717) || $this->cacheExpired() || !$this->cacheValid()) {
+            $isMobile = $this->is_mobile();
+            $acceptsWebp = (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'image/webp') !== false);
+            $devicePrefix = '';
+            if ($isMobile && $acceptsWebp) { $devicePrefix = 'mobile-webp'; }
+            elseif ($isMobile) { $devicePrefix = 'mobile'; }
+            elseif ($acceptsWebp) { $devicePrefix = 'webp'; }
+            if (!$this->cacheExists($devicePrefix) || $this->cacheExpired() || !$this->cacheValid()) {
                 return false;
             }
-            $wpc_dir717 = $wpc_pfx717 !== '' ? $wpc_pfx717 . '_' : '';
+            $filePrefix = $devicePrefix !== '' ? $devicePrefix . '_' : '';
+            $filePrefix .= wpc_copy_family_on_disk($this->cachePath, $filePrefix);
             $html = '';
-            $wpc_pl717 = $this->cachePath . $wpc_dir717 . 'index.html';
-            $wpc_gz717 = $this->cachePath . $wpc_dir717 . 'index.html_gzip';
-            if (@is_readable($wpc_pl717) && (int) @filesize($wpc_pl717) >= 1024) {
-                $html = (string) @file_get_contents($wpc_pl717);
-            } elseif (function_exists('gzdecode') && @is_readable($wpc_gz717) && (int) @filesize($wpc_gz717) >= 200) {
-                $html = (string) @gzdecode((string) @file_get_contents($wpc_gz717));
+            $plainFile = $this->cachePath . $filePrefix . 'index.html';
+            $gzipFile = $this->cachePath . $filePrefix . 'index.html_gzip';
+            if (@is_readable($plainFile) && (int) @filesize($plainFile) >= 1024) {
+                $html = (string) @file_get_contents($plainFile);
+            } elseif (function_exists('gzdecode') && @is_readable($gzipFile) && (int) @filesize($gzipFile) >= 200) {
+                $html = (string) @gzdecode((string) @file_get_contents($gzipFile));
             }
             if ($html === '' || stripos($html, '</html>') === false) {
                 return false;
             }
-            $wpc_at717 = stripos($html, '<head');
-            $wpc_cut717 = $wpc_at717 !== false ? strpos($html, '>', $wpc_at717) : false;
-            if ($wpc_cut717 === false) {
+            $headAt = stripos($html, '<head');
+            $headTagEnd = $headAt !== false ? strpos($html, '>', $headAt) : false;
+            if ($headTagEnd === false) {
                 return false;
             }
-            $out = substr($html, 0, $wpc_cut717 + 1) . "\n" . $script . substr($html, $wpc_cut717 + 1);
+            $out = substr($html, 0, $headTagEnd + 1) . "\n" . $script . substr($html, $headTagEnd + 1);
             if (!headers_sent()) {
                 header('Content-Type: text/html; charset=UTF-8');
                 header('Cache-Control: private, no-store, max-age=0', true);
@@ -890,111 +606,82 @@ Connection: Close
         }
     }
 
-    public function setupCacheHeaders($cache_filepath, $type = 'gzip')
+    /**
+     * Headers for a copy served from the file. $family is the copy family the reader found: a
+     * local-only copy goes out private, with no s-maxage and no Cache-Tag, so no shared cache
+     * holds it on the second request either — the file carries the verdict the render made.
+     */
+    public function setupCacheHeaders($cache_filepath, $type = 'gzip', $family = '')
     {
-        
-        
+        $wpc_localonly = (string) $family !== '';
+        // Session cookies make CDNs refuse to store the response; cached-file serves are
+        // anonymous by definition.
         if (function_exists('header_remove')) {
             @header_remove('Set-Cookie');
         }
-        header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($cache_filepath)) . ' GMT');
+        wpc_send_header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($cache_filepath)) . ' GMT');
 
 
-        $wpc_hma49 = max(0, (int) apply_filters('wpc_html_max_age', 300));
-        
-        $wpc_sm210 = 0;
+        $browserMaxAge = max(0, (int) apply_filters('wpc_html_max_age', 300));
+        // Mirror serves carry the same edge-TTL gate as PHP renders.
+        $edgeMaxAge = 0;
+        // Only the edge TTL is decided here (whether Cloudflare is connected). This block used to
+        // restate the renderer's combined/split crit verdict as well, through four more option
+        // reads, and never read the result; the page this file serves was rendered under that
+        // verdict already. get_option() does not exist yet when the drop-in serves, so on the
+        // fast path the whole block is skipped; it runs when the plugin serves a trace copy.
         if (function_exists('get_option')) {
-            $wpc_st210 = get_option(defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings');
-            
-            
-            
-            
-            
-            
-            $wpc_cc210 = (is_array($wpc_st210) && isset($wpc_st210['combined-crit']))
-                ? (string) $wpc_st210['combined-crit'] : '';
-            if ($wpc_cc210 === '1') {
-                $wpc_on210 = true;
-            } elseif ($wpc_cc210 === '0') {
-                $wpc_on210 = false;
-            } else {
-                
-                
-                if (apply_filters('wpc_split_default_on', true)) {
-                    $wpc_on210 = false;
-                } else {
-                    $wpc_cf210 = get_option(defined('WPS_IC_CF') ? WPS_IC_CF : 'wps-ic-cf');
-                    $wpc_on210 = is_array($wpc_cf210) && !empty($wpc_cf210['token']) && !empty($wpc_cf210['zone'])
-                        && !(is_array($wpc_st210) && !empty($wpc_st210['minimal-mobile-css'])
-                            && $wpc_st210['minimal-mobile-css'] == '1');
-                }
-            }
-            
-            
-            
-            
-            if (!$wpc_on210 && apply_filters('wpc_combined_crit_devkey_floor', true)) {
-                $wpc_cfx210 = get_option(defined('WPS_IC_CF') ? WPS_IC_CF : 'wps-ic-cf');
-                if (is_array($wpc_cfx210) && !empty($wpc_cfx210['token']) && !empty($wpc_cfx210['zone'])) {
-                    $wpc_dk210 = get_option('wpc_cf_devkey_verified');
-                    
-                    
-                    if (!is_array($wpc_dk210) || empty($wpc_dk210['devkey'])
-                        || (isset($wpc_dk210['src']) ? (string) $wpc_dk210['src'] : '') !== 'readback') {
-                        $wpc_on210 = true;
-                    }
-                }
-            }
-            
-            
-            if (!$wpc_on210) {
-                $wpc_cfd210 = get_option(defined('WPS_IC_CF') ? WPS_IC_CF : 'wps-ic-cf');
-                if (!(is_array($wpc_cfd210) && !empty($wpc_cfd210['token']) && !empty($wpc_cfd210['zone']))
-                    && function_exists('wpc_foreign_device_blind_cache') && wpc_foreign_device_blind_cache()) {
-                    $wpc_on210 = true;
-                }
-            }
-            
-            
-            
-            
-            $wpc_cfsm210 = get_option(defined('WPS_IC_CF') ? WPS_IC_CF : 'wps-ic-cf');
-            if (is_array($wpc_cfsm210) && !empty($wpc_cfsm210['token']) && !empty($wpc_cfsm210['zone'])
+            // v7.10.670 — parity with wpc_edge_smaxage(): high edge TTL whenever Cloudflare is
+            // CONNECTED, full stop. The purge is device-clearing by construction (purgeEdgeHtmlUrls
+            // always prefix+tag), so no crit-mode or purge-crown gate: those proxy conditions are
+            // exactly what collapsed the edge TTL when device-split turned on (99->88).
+            $cloudflareSettings = get_option(defined('WPS_IC_CF') ? WPS_IC_CF : 'wps-ic-cf');
+            if (is_array($cloudflareSettings) && !empty($cloudflareSettings['token']) && !empty($cloudflareSettings['zone'])
                 && apply_filters('wpc_edge_smaxage_on', true)) {
-                $wpc_sm210 = max(0, (int) apply_filters('wpc_cf_html_edge_ttl', 86400));
+                $edgeMaxAge = max(0, (int) apply_filters('wpc_cf_html_edge_ttl', 86400));
             }
         }
-        header('Cache-Control: ' . wpc_cc_freshness($wpc_hma49, $wpc_sm210, wpc_edge_swr()));
-        header('Expires: ' . gmdate('D, d M Y H:i:s', time() + $wpc_hma49) . ' GMT');
-        
-        
-        
-        
-        
-        header('Vary: Accept-Encoding');
+        if ($wpc_localonly) {
+            wpc_send_header('Cache-Control: ' . WPC_CC_LOCAL_ONLY);
+            wpc_send_header('Expires: ' . gmdate('D, d M Y H:i:s') . ' GMT');
+            // The reason the render stored this copy private (wpc_copy_reason_label, wpc-fs.php).
+            wpc_send_header('X-WPC-CC: local-only-' . wpc_copy_reason_label($cache_filepath));
+        } else {
+            wpc_send_header('Cache-Control: ' . wpc_cc_freshness($browserMaxAge, $edgeMaxAge, wpc_edge_swr()));
+            wpc_send_header('Expires: ' . gmdate('D, d M Y H:i:s', time() + $browserMaxAge) . ' GMT');
+        }
+        // v7.10.658 (B2-R4) — the cached document is served in more than one encoding (raw
+        // brotli on the _br branch; inflated-then-server-recompressed on gzip/html). Emit Vary
+        // on EVERY branch so an intermediary cache (CDN, proxy) keys on Accept-Encoding and
+        // never hands a br body to a client that did not ask for it, or vice versa. Cheap and
+        // correct even where the origin serves uncompressed and the edge compresses.
+        wpc_send_header('Vary: Accept-Encoding');
 
 
-        $wpc_th105 = strtolower((string) preg_replace('/:\d+$/', '', isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : ''));
-        if (strpos($wpc_th105, 'www.') === 0) { $wpc_th105 = substr($wpc_th105, 4); }
-        $wpc_tp105 = (string) (parse_url(isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/', PHP_URL_PATH) ?: '/');
-        $wpc_tp105 = '/' . trim($wpc_tp105, '/');
-        if ($wpc_tp105 !== '/') { $wpc_tp105 .= '/'; }
-        if ($wpc_th105 !== '') {
-            header('Cache-Tag: wpc-html,wpc-u-' . substr(md5($wpc_th105 . $wpc_tp105), 0, 20), false);
+        $tagHost = strtolower((string) preg_replace('/:\d+$/', '', isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : ''));
+        if (strpos($tagHost, 'www.') === 0) { $tagHost = substr($tagHost, 4); }
+        $tagPath = (string) (parse_url(isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/', PHP_URL_PATH) ?: '/');
+        $tagPath = '/' . trim($tagPath, '/');
+        if ($tagPath !== '/') { $tagPath .= '/'; }
+        if ($tagHost !== '' && !$wpc_localonly) {
+            wpc_send_header('Cache-Tag: wpc-html,wpc-u-' . substr(md5($tagHost . $tagPath), 0, 20), false);
         }
 
 
-        
-        header('Server-Timing: wpc-cache;desc=hit', false);
+        // (stored headers), readable same-origin via the navigation entry's serverTiming.
+        wpc_send_header('Server-Timing: wpc-cache;desc=hit', false);
 
 		    $headerCacheFile = $this->cachePath . 'headers.json';
-		    
+		    // A local-only copy never takes an edge directive from the stored set, whichever
+		    // render wrote it.
+		    $wpc_edge_directives = $wpc_localonly ? ['cache-tag' => 1, 'cache-control' => 1, 'cdn-cache-control' => 1, 'surrogate-control' => 1, 'expires' => 1] : [];
+		    // Check if cache file exists
 		    if (file_exists($headerCacheFile)) {
 
 			    $cachedHeadersJson = file_get_contents($headerCacheFile);
 			    $cachedHeaders = json_decode($cachedHeadersJson, true);
 
-			    
+			    // Get headers we've already set in this response
 			    $existingHeaders = array();
 			    foreach (headers_list() as $header) {
 				    $parts = explode(':', $header, 2);
@@ -1003,17 +690,17 @@ Connection: Close
 				    }
 			    }
 
-			    
+			    // Apply cached headers that aren't already defined
 			    if (is_array($cachedHeaders)) {
 				    foreach ($cachedHeaders as $name => $value) {
-					    if (!isset($existingHeaders[$name])) {
+					    if (!isset($existingHeaders[$name]) && !isset($wpc_edge_directives[strtolower((string) $name)])) {
 						    header($name . ': ' . $value);
 					    }
 				    }
 			    }
 		    }
 
-        header('X-Cache-By: Advanced Cache - ' . $type);
+        wpc_send_header('X-Cache-By: Advanced Cache - ' . $type);
     }
 
     public function is_mobile()
@@ -1021,22 +708,7 @@ Connection: Close
         if (!empty($_GET['simulate_mobile'])) {
             return true;
         }
-
-        if (isset($_SERVER['HTTP_USER_AGENT'])) {
-            $agent = strtolower($_SERVER['HTTP_USER_AGENT']);
-            
-            
-            
-            if (strpos($agent, 'ipad') !== false || strpos($agent, 'tablet') !== false
-                || strpos($agent, 'windows phone') !== false || strpos($agent, 'mobile') !== false) {
-                return true;
-            }
-            if ((preg_match('#^.*(2.0\ MMP|240x320|400X240|mobile|AvantGo|BlackBerry|Blazer|Cellphone|Danger|DoCoMo|Elaine/3.0|EudoraWeb|Googlebot-Mobile|hiptop|IEMobile|KYOCERA/WX310K|LG/U990|MIDP-2.|MMEF20|MOT-V|NetFront|Newt|Nintendo\ Wii|Nitro|Nokia|Opera\ Mini|Palm|PlayStation\ Portable|portalmmm|Proxinet|ProxiNet|SHARP-TQ-GX10|SHG-i900|Small|SonyEricsson|Symbian\ OS|SymbianOS|TS21i-10|UP.Browser|UP.Link|webOS|Windows\ CE|WinWAP|YahooSeeker/M1A1-R2D2|iPhone|iPod|Android|BlackBerry9530|LG-TU915\ Obigo|LGE\ VX|webOS|Nokia5800).*#i', $agent) || preg_match('#^(w3c\ |w3c-|acs-|alav|alca|amoi|audi|avan|benq|bird|blac|blaz|brew|cell|cldc|cmd-|dang|doco|eric|hipt|htc_|inno|ipaq|ipod|jigs|kddi|keji|leno|lg-c|lg-d|lg-g|lge-|lg/u|maui|maxo|midp|mits|mmef|mobi|mot-|moto|mwbp|nec-|newt|noki|palm|pana|pant|phil|play|port|prox|qwap|sage|sams|sany|sch-|sec-|send|seri|sgh-|shar|sie-|siem|smal|smar|sony|sph-|symb|t-mo|teli|tim-|tosh|tsm-|upg1|upsi|vk-v|voda|wap-|wapa|wapi|wapp|wapr|webc|winw|winw|xda\ |xda-).*#i', substr($agent, 0, 4)))) {
-                return true;
-            }
-        }
-
-        return false;
+        return isset($_SERVER['HTTP_USER_AGENT']) && wpc_ua_mobile_match((string) $_SERVER['HTTP_USER_AGENT']);
     }
 
 
@@ -1075,14 +747,14 @@ Connection: Close
 
     public function removeCombinedFiles($post_id)
     {
-        
-        
-        
-        
-        
-        
-        
-        
+        // v7.10.644 — OVERWRITE-ONLY (service receipt: 4/16 domains with un-fetchable
+        // combined CSS, 102 domains / 1,178 recorded 404s — cached HTML referenced files
+        // this delete had removed). CSS combine rebuilds every uncached render (its
+        // serve-from-existing gate is hard-disabled), so deleting bought nothing but the
+        // 404 window; files stay and the next render overwrites them, the .642 retention
+        // sweep collects dead keys. JS combine DOES serve-from-existing, so its rebuild
+        // trigger becomes a stale marker (epoch for 'all', per-key file) that the gate
+        // honors — rebuild overwrites in place, no absence window for either lane.
         if ($post_id == 'all') {
             update_option('wpc_combine_stale_epoch', time(), false);
             return;
@@ -1162,7 +834,7 @@ Connection: Close
 
     public function recursiveDelete($folder)
     {
-        
+        // Delete all the files in the folder
         $files = glob($folder . '/*');
         foreach ($files as $file) {
             if (is_file($file)) {
@@ -1172,7 +844,7 @@ Connection: Close
             }
         }
 
-        
+        // Delete the folder itself
         if (is_dir($folder)) rmdir($folder);
     }
 

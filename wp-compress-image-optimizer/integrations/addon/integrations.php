@@ -1,14 +1,6 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: integrations/addon/integrations.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 class wpc_addon_integrations
@@ -16,14 +8,14 @@ class wpc_addon_integrations
 
     public function __construct()
     {
-        
+        #$this->wpMaintenance();
     }
 
 
     public function wpMaintenance()
     {
         if (class_exists('MTNC') || class_exists('MTNC_PRO')) {
-            
+            // WP Maintenance Plugin
             $wpMaintenance = get_option('maintenance_options');
             if (!empty($wpMaintenance)) {
                 if (!empty($wpMaintenance['state']) && $wpMaintenance['state'] === 1) {

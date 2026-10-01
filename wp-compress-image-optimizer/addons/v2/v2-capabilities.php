@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-capabilities.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 if (!defined('ABSPATH')) {
@@ -17,26 +9,24 @@ if (!function_exists('wpc_use_v2_protocol')) {
 
 
 if (!defined('WPC_V2_CAPS_CACHE_KEY'))     define('WPC_V2_CAPS_CACHE_KEY',     'wpc_v2_capabilities');
-if (!defined('WPC_V2_CAPS_TTL'))           define('WPC_V2_CAPS_TTL',           86400);   
-if (!defined('WPC_V2_CANARY_OPTION_KEY'))  define('WPC_V2_CANARY_OPTION_KEY',  'wpc_v2_canary_pct');
-if (!defined('WPC_V2_CANARY_DEFAULT_PCT')) define('WPC_V2_CANARY_DEFAULT_PCT', 0);       
+if (!defined('WPC_V2_CAPS_TTL'))           define('WPC_V2_CAPS_TTL',           86400);   // 24h
 
 
 if (!function_exists('wpc_v2_get_apikey')) {
     function wpc_v2_get_apikey()
     {
-        
+        // 1) Canonical — `wps_ic` option (WPS_IC_OPTIONS).
         $canon = get_option('wps_ic');
         if (is_array($canon) && !empty($canon['api_key'])) {
             return (string) $canon['api_key'];
         }
-        
+        // 2) Migration-staging option `wps_ic_options` (WPS_IC_OPTIONS_V2).
         $migration = get_option('wps_ic_options');
         if (is_array($migration) && !empty($migration['api_key'])) {
             return (string) $migration['api_key'];
         }
-        
-        
+        // 3) Settings option `wps_ic_settings` — `api_key` field is rarely
+        //    populated there but check as last resort.
         $settings = get_option('wps_ic_settings');
         if (is_array($settings) && !empty($settings['api_key'])) {
             return (string) $settings['api_key'];
@@ -45,34 +35,16 @@ if (!function_exists('wpc_v2_get_apikey')) {
     }
 }
 
-
-
-
-
+/**
+ * True: the v2 orchestrator is the only compression protocol. Rule: nothing switches a site off
+ * it. Observed failure: the gate read `wpc_protocol_version` (v1 / shadow / auto), which no
+ * UI writes; `wp wpcompress v2-test` wrote `auto`, and auto asked the capability probe and
+ * then a canary cohort that defaults to 0 %, so running the test turned v2 off on that site
+ * and sent its images to the retired v1 routes (404).
+ */
 function wpc_use_v2_protocol()
 {
-    static $cached = null;
-    if ($cached !== null) return $cached;
-
-
-    $mode = get_option('wpc_protocol_version', 'v2');
-
-    if ($mode === 'v1' || $mode === 'shadow') {
-        $cached = false;
-        return $cached;
-    }
-    if ($mode === 'v2') {
-        $cached = true;
-        return $cached;
-    }
-
-    $caps = wpc_probe_orchestrator_capabilities();
-    if (empty($caps['v2_optimize'])) {
-        $cached = false;
-        return $cached;
-    }
-    $cached = wpc_v2_canary_cohort_active();
-    return $cached;
+    return true;
 }
 
 
@@ -111,30 +83,23 @@ function wpc_probe_orchestrator_capabilities($force = false)
         'max_inline_bytes'         => isset($body['max_inline_bytes']) ? (int) $body['max_inline_bytes'] : 26214400,
         'max_callback_bytes'       => isset($body['max_callback_bytes']) ? (int) $body['max_callback_bytes'] : 4194304,
         'max_callbacks_per_second' => isset($body['max_callbacks_per_second']) ? (int) $body['max_callbacks_per_second'] : 10,
+        // The most megapixels the service encodes from; a larger original answers 413 (read by
+        // WPS_LocalV2::build_request_body()).
+        'max_source_mp'            => isset($body['max_source_mp']) ? (float) $body['max_source_mp'] : 0.0,
 
         'status_poll_supported'    => !empty($body['status_poll_supported']),
         'source_cache_enabled'     => !empty($body['source_cache_enabled']),
         'signed_urls_supported'    => !empty($body['signed_urls_supported']),
         'redeliver_supported'      => !empty($body['redeliver_supported']),
+        // The host the service pulls variants from, when it declares one: the inbound verifier
+        // allows fetch URLs on it (wpc_v2_inbound_fetch_hosts).
+        'variants_host'            => isset($body['variants_host']) ? (string) $body['variants_host'] : '',
         'probed_at'                => time(),
         'probe_source'             => 'live',
     ];
 
     set_site_transient(WPC_V2_CAPS_CACHE_KEY, $caps, WPC_V2_CAPS_TTL);
     return $caps;
-}
-
-
-function wpc_v2_canary_cohort_active()
-{
-    $apikey = wpc_v2_get_apikey();
-    if ($apikey === '') return false;
-
-    $canary_pct = (int) get_option(WPC_V2_CANARY_OPTION_KEY, WPC_V2_CANARY_DEFAULT_PCT);
-    if ($canary_pct <= 0) return false;
-    if ($canary_pct >= 100) return true;
-
-    return (crc32($apikey) % 100) < $canary_pct;
 }
 
 
@@ -145,7 +110,7 @@ function wpc_v2_orchestrator_url()
         return rtrim((string) WPC_V2_ORCHESTRATOR_URL, '/');
     }
 
-    
+    // 2) Filter override.
     $override = apply_filters('wpc_v2_orchestrator_url', '');
     if ($override !== '') return rtrim((string) $override, '/');
 
@@ -156,7 +121,7 @@ function wpc_v2_orchestrator_url()
     $geo = get_option('wps_ic_geo_locate_v2');
     if (is_array($geo) && !empty($geo['server'])) {
         $server = trim((string) $geo['server'], '/');
-        
+        // Strip scheme for the whitelist check; preserve original for return.
         $host_only = preg_replace('#^https?://#i', '', $server);
         if (in_array($host_only, $valid_hosts, true)) {
             if (preg_match('#^https?://#i', $server)) return $server;
@@ -170,10 +135,31 @@ function wpc_v2_orchestrator_url()
     return 'https://local-mc.zapwp.net';
 }
 
+/**
+ * The signature headers of a request to the image service's signed plugin routes (the manifest
+ * GET, ack and purge, and the variants list and delete). $message is what the route verifies:
+ * the canonical query for a GET, the raw body for a POST.
+ *
+ * Rule: X-WPC-Sig = HMAC-SHA256(apikey, "<X-WPC-Timestamp>.<message>"), the timestamp being the
+ * exact header string sent, as verifyHmacRawBytes() in the orchestrator's lib/manifestPull.js
+ * checks its v2 form. Observed: the v1 form HMAC(apikey, message) bound nothing to the timestamp,
+ * so a captured request replayed with a fresh X-WPC-Timestamp still verified; the service
+ * accepts v2 since v3.24.143 and drops v1 once its sig_form counter shows v1 near zero (hub ask
+ * 047, item 1).
+ */
+function wpc_v2_service_sign($apikey, $message, $ts = null)
+{
+    $ts = (string) ($ts === null ? time() : (int) $ts);
+    return [
+        'X-WPC-Sig'       => hash_hmac('sha256', $ts . '.' . (string) $message, (string) $apikey),
+        'X-WPC-Timestamp' => $ts,
+    ];
+}
 
-
-
-
+/**
+ * The capabilities answered when the probe fails and no prior cache exists (read by
+ * `wp wpcompress v2-probe`; the protocol gate no longer asks).
+ */
 function wpc_v2_safe_fallback_caps($reason)
 {
     return [
@@ -193,9 +179,9 @@ function wpc_v2_safe_fallback_caps($reason)
     ];
 }
 
-
-
-
+/**
+ * Admin-side hook: force-refresh on plugin upgrade. Add to upgrader_process_complete.
+ */
 function wpc_v2_invalidate_caps_on_upgrade($upgrader_object, $options)
 {
     if (!is_array($options) || empty($options['action']) || $options['action'] !== 'update') return;
@@ -238,11 +224,11 @@ if (!function_exists('wpc_get_optimization_mode')) {
     }
 }
 
-
-
-
-
-
+/**
+ * True when a `lazy_*` mode is active (lazy_full, lazy_smart, lazy_cdn).
+ * Used to gate the lazy first-view trigger in modern-delivery.
+ * Manual + Legacy modes return FALSE here — neither does lazy first-view encoding.
+ */
 if (!function_exists('wpc_lazy_mode_active')) {
     function wpc_lazy_mode_active()
     {
@@ -250,14 +236,17 @@ if (!function_exists('wpc_lazy_mode_active')) {
     }
 }
 
-
-
-
-
-
+/**
+ * True when auto-on-upload should be disabled. Any mode other than 'legacy'
+ * means the customer opted out of upload-time encoding (manual = nothing
+ * auto; lazy_* = encode on view instead of upload).
+ */
 if (!function_exists('wpc_auto_encoding_disabled')) {
     function wpc_auto_encoding_disabled()
     {
+        if (class_exists('wps_ic_plan') && !wps_ic_plan::allows('on_upload')) {
+            return true;
+        }
         return wpc_get_optimization_mode() !== 'legacy';
     }
 }
@@ -266,22 +255,22 @@ if (!function_exists('wpc_auto_encoding_disabled')) {
 if (!function_exists('wpc_v2_lazy_cdn_use_original')) {
     function wpc_v2_lazy_cdn_use_original($attachment_id = 0)
     {
-        
+        // Per-attachment override (advanced — for hero/hand-edited images).
         if ($attachment_id > 0) {
             $override = get_post_meta($attachment_id, '_wpc_lazy_use_sub_size', true);
             if ($override === 'yes') {
                 return (bool) apply_filters('wpc_v2_lazy_cdn_use_original', false, $attachment_id);
             }
         }
-        
+        // Global toggle: default ON (best quality).
         $enabled = ((int) get_option('wpc_v2_lazy_cdn_use_original', 1) === 1);
         return (bool) apply_filters('wpc_v2_lazy_cdn_use_original', $enabled, $attachment_id);
     }
 }
 
 
-if (!function_exists('wpc_v2_store_broken_path197')) {
-    function wpc_v2_store_broken_path197()
+if (!function_exists('wpc_v2_store_broken_marker_path')) {
+    function wpc_v2_store_broken_marker_path()
     {
         $up = wp_get_upload_dir();
         if (empty($up['basedir'])) return '';
@@ -292,9 +281,9 @@ if (!function_exists('wpc_v2_store_broken_path197')) {
         return $dir . '/wpc-store-broken.json';
     }
 
-    function wpc_v2_store_broken_note197($failed)
+    function wpc_v2_note_store_broken($failed)
     {
-        $p = wpc_v2_store_broken_path197();
+        $p = wpc_v2_store_broken_marker_path();
         if ($p === '') return;
         if (!$failed) {
             if (@is_file($p)) @unlink($p);
@@ -311,9 +300,9 @@ if (!function_exists('wpc_v2_store_broken_path197')) {
         error_log('[WPC StoreVerify] marker_verify_failed consecutive=' . $st['n']);
     }
 
-    function wpc_v2_store_broken_active197()
+    function wpc_v2_is_store_broken_active()
     {
-        $p = wpc_v2_store_broken_path197();
+        $p = wpc_v2_store_broken_marker_path();
         if ($p === '' || !@is_file($p)) return false;
         $j = json_decode((string) @file_get_contents($p), true);
         if (!is_array($j)) return false;
@@ -322,16 +311,16 @@ if (!function_exists('wpc_v2_store_broken_path197')) {
         if (!($n >= 3 && (time() - $ts) < 12 * HOUR_IN_SECONDS)) {
             return false;
         }
-        
-        
-        
-        
+        // A stored verdict re-evaluates itself: while the file says broken, a live write/read-back
+        // on the SAME store (postmeta, cache dropped between write and read) runs at most once per
+        // 10 minutes, and a pass clears the file. Reinstall and Safe Mode never touched the file
+        // (madda.org.au), so a host that had been fixed kept the warning and the pause forever.
         if (get_transient('wpc_store_probe51_at')) {
             return true;
         }
         set_transient('wpc_store_probe51_at', 1, 10 * MINUTE_IN_SECONDS);
-        if (wpc_v2_store_probe51()) {
-            wpc_v2_store_broken_note197(false);
+        if (wpc_v2_probe_meta_readback()) {
+            wpc_v2_note_store_broken(false);
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('media-store-recovered', '', '', ['n' => $n, 'age' => time() - $ts]);
             }
@@ -339,7 +328,7 @@ if (!function_exists('wpc_v2_store_broken_path197')) {
         }
         return true;
     }
-    function wpc_v2_store_probe51()
+    function wpc_v2_probe_meta_readback()
     {
         global $wpdb;
         try {
@@ -363,8 +352,8 @@ if (!function_exists('wpc_v2_store_broken_path197')) {
     }
 }
 
-if (!function_exists('wpc_park_reset52')) {
-    function wpc_park_reset52()
+if (!function_exists('wpc_reset_parked_attempts')) {
+    function wpc_reset_parked_attempts()
     {
         if (!function_exists('delete_metadata') || !defined('WPC_PLUGIN_VERSION')) {
             return 0;
@@ -379,7 +368,7 @@ if (!function_exists('wpc_park_reset52')) {
             $n = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = 'ic_v2_attempts'");
         }
         delete_metadata('post', 0, 'ic_v2_attempts', '', true);
-        $p = function_exists('wpc_v2_parked_path197') ? wpc_v2_parked_path197() : '';
+        $p = function_exists('wpc_v2_parked_list_path') ? wpc_v2_parked_list_path() : '';
         if ($p !== '' && @is_file($p)) {
             @unlink($p);
         }
@@ -389,8 +378,8 @@ if (!function_exists('wpc_park_reset52')) {
         return $n;
     }
 }
-if (!function_exists('wpc_v2_parked_path197')) {
-    function wpc_v2_parked_path197()
+if (!function_exists('wpc_v2_parked_list_path')) {
+    function wpc_v2_parked_list_path()
     {
         $up = wp_get_upload_dir();
         if (empty($up['basedir'])) return '';
@@ -401,19 +390,19 @@ if (!function_exists('wpc_v2_parked_path197')) {
         return $dir . '/wpc-parked-images.json';
     }
 
-    function wpc_v2_parked_list197()
+    function wpc_v2_parked_list()
     {
-        $p = wpc_v2_parked_path197();
+        $p = wpc_v2_parked_list_path();
         if ($p === '' || !@is_file($p)) return [];
         $j = json_decode((string) @file_get_contents($p), true);
         return is_array($j) ? array_map('intval', array_values($j)) : [];
     }
 
-    function wpc_v2_parked_set197($id, $add)
+    function wpc_v2_set_parked($id, $add)
     {
-        $p = wpc_v2_parked_path197();
+        $p = wpc_v2_parked_list_path();
         if ($p === '') return;
-        $list = wpc_v2_parked_list197();
+        $list = wpc_v2_parked_list();
         $id   = (int) $id;
         if ($add) {
             if (!in_array($id, $list, true)) $list[] = $id;
@@ -429,27 +418,27 @@ if (!function_exists('wpc_v2_parked_path197')) {
     }
 }
 
-if (!function_exists('wpc_v2_attempts_admit197')) {
-    function wpc_v2_attempts_admit197($attachment_id)
+if (!function_exists('wpc_v2_admit_optimize_attempt')) {
+    function wpc_v2_admit_optimize_attempt($attachment_id)
     {
         $attachment_id = (int) $attachment_id;
-        
-        
-        
-        
-        
-        $wpc_ic349 = get_post_meta($attachment_id, 'ic_compressing', true);
-        if (is_array($wpc_ic349) && !empty($wpc_ic349['status'])
-            && ($wpc_ic349['status'] === 'optimizing' || $wpc_ic349['status'] === 'queueing')
-            && !empty($wpc_ic349['time'])
-            && (time() - (int) $wpc_ic349['time']) > (int) apply_filters('wpc_v2_inflight_stale_secs', 7200)) {
+        // v7.21.349 — STALE-INFLIGHT SELF-HEAL at the shared admission seam (eleven-ecu:
+        // a row can sit "Optimizing..." forever when its in-flight meta outlives every
+        // realistic pull window; the queue flows around it but every UI reads the meta).
+        // Older than the grace? The flight is dead: mark failed so the badge recovers
+        // and the image re-enters the queue as a normal candidate.
+        $compressing_meta = get_post_meta($attachment_id, 'ic_compressing', true);
+        if (is_array($compressing_meta) && !empty($compressing_meta['status'])
+            && ($compressing_meta['status'] === 'optimizing' || $compressing_meta['status'] === 'queueing')
+            && !empty($compressing_meta['time'])
+            && (time() - (int) $compressing_meta['time']) > (int) apply_filters('wpc_v2_inflight_stale_secs', 7200)) {
             if (function_exists('wpc_v2_ic_compressing_set_status')) {
                 wpc_v2_ic_compressing_set_status($attachment_id, 'failed');
             } else {
                 update_post_meta($attachment_id, 'ic_compressing', ['status' => 'failed', 'time' => time()]);
             }
             if (function_exists('wpc_cache_first_log')) {
-                wpc_cache_first_log('media-stale-inflight-clear', (string) $attachment_id, '', ['age' => time() - (int) $wpc_ic349['time']]);
+                wpc_cache_first_log('media-stale-inflight-clear', (string) $attachment_id, '', ['age' => time() - (int) $compressing_meta['time']]);
             }
         }
         $a = get_post_meta($attachment_id, 'ic_v2_attempts', true);
@@ -458,12 +447,12 @@ if (!function_exists('wpc_v2_attempts_admit197')) {
         if ($n <= 0) return true;
         if ((time() - $last) > 7 * DAY_IN_SECONDS) {
             delete_post_meta($attachment_id, 'ic_v2_attempts');
-            wpc_v2_parked_set197($attachment_id, false);
+            wpc_v2_set_parked($attachment_id, false);
             return true;
         }
         $cap = (int) apply_filters('wpc_v2_attempt_cap', 4);
         if ($n >= $cap) {
-            wpc_v2_parked_set197($attachment_id, true);
+            wpc_v2_set_parked($attachment_id, true);
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('media-admit', (string) $attachment_id, '', ['v' => 'parked_attempt_cap', 'n' => $n]);
             }
@@ -480,7 +469,7 @@ if (!function_exists('wpc_v2_attempts_admit197')) {
         return true;
     }
 
-    function wpc_v2_attempts_bump197($attachment_id, $reason)
+    function wpc_v2_bump_attempts($attachment_id, $reason)
     {
         $attachment_id = (int) $attachment_id;
         $a = get_post_meta($attachment_id, 'ic_v2_attempts', true);
@@ -493,37 +482,37 @@ if (!function_exists('wpc_v2_attempts_admit197')) {
         wp_cache_delete($attachment_id, 'post_meta');
         $rb = get_post_meta($attachment_id, 'ic_v2_attempts', true);
         if (!is_array($rb) || (int) ($rb['n'] ?? 0) !== $n) {
-            wpc_v2_store_broken_note197(true);
+            wpc_v2_note_store_broken(true);
         }
         return $n;
     }
 
-    function wpc_v2_attempts_reset197($attachment_id)
+    function wpc_v2_reset_attempts($attachment_id)
     {
         $attachment_id = (int) $attachment_id;
         delete_post_meta($attachment_id, 'ic_v2_attempts');
-        wpc_v2_parked_set197($attachment_id, false);
+        wpc_v2_set_parked($attachment_id, false);
     }
 }
 
-if (!function_exists('wpc_v2_landing_admin_notice197')) {
-    function wpc_v2_landing_admin_notice197()
+if (!function_exists('wpc_v2_render_landing_admin_notice')) {
+    function wpc_v2_render_landing_admin_notice()
     {
         if (!function_exists('wpc_cache_first_log')) return;
-        $hold = function_exists('wpc_admin_held69') && function_exists('wpc_admin_hold69');
-        if (function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197()) {
-            if (!$hold || !wpc_admin_held69('wpc_media_store_paused80')) {
-                if ($hold) wpc_admin_hold69('wpc_media_store_paused80', DAY_IN_SECONDS);
+        $hold = function_exists('wpc_is_admin_lane_held') && function_exists('wpc_hold_admin_lane');
+        if (function_exists('wpc_v2_is_store_broken_active') && wpc_v2_is_store_broken_active()) {
+            if (!$hold || !wpc_is_admin_lane_held('wpc_media_store_paused80')) {
+                if ($hold) wpc_hold_admin_lane('wpc_media_store_paused80', DAY_IN_SECONDS);
                 wpc_cache_first_log('media-store-paused', '', '', ['v' => 'markers_not_persisting']);
             }
         }
-        $parked = function_exists('wpc_v2_parked_list197') ? wpc_v2_parked_list197() : [];
-        if (!empty($parked) && (!$hold || !wpc_admin_held69('wpc_media_parked80'))) {
-            if ($hold) wpc_admin_hold69('wpc_media_parked80', DAY_IN_SECONDS);
+        $parked = function_exists('wpc_v2_parked_list') ? wpc_v2_parked_list() : [];
+        if (!empty($parked) && (!$hold || !wpc_is_admin_lane_held('wpc_media_parked80'))) {
+            if ($hold) wpc_hold_admin_lane('wpc_media_parked80', DAY_IN_SECONDS);
             wpc_cache_first_log('media-parked', '', '', ['n' => count($parked), 'ids' => implode(',', array_slice($parked, 0, 5))]);
         }
     }
-    add_action('admin_init', 'wpc_v2_landing_admin_notice197', 20);
+    add_action('admin_init', 'wpc_v2_render_landing_admin_notice', 20);
 }
 
 if (!function_exists('wpc_lazy_trigger_v2')) {
@@ -533,22 +522,14 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
         $attachment_id = (int) $attachment_id;
         if ($attachment_id <= 0) return false;
 
-        if (function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197()) {
+        if (function_exists('wpc_v2_is_store_broken_active') && wpc_v2_is_store_broken_active()) {
             return false;
         }
-        if (function_exists('wpc_v2_journal_has_image') && wpc_v2_journal_has_image($attachment_id)) {
-            error_log('[WPC LazyV2 trigger] image=' . $attachment_id . ' bailed Gate 1b (journal pending merge — drain owns it)');
-            return false;
-        }
-        $wpc_adm197 = function_exists('wpc_v2_attempts_admit197') ? wpc_v2_attempts_admit197($attachment_id) : true;
-        if ($wpc_adm197 !== true) {
-            error_log('[WPC LazyV2 trigger] image=' . $attachment_id . ' bailed Gate 3 (' . $wpc_adm197 . ')');
-            return false;
-        }
-
-
-        if (get_transient('wpc_restoring_' . $attachment_id)) {
-            error_log('[WPC LazyV2 trigger] image=' . $attachment_id . ' bailed Gate 0 (restore in flight)');
+        // The dispatch door answers whether the image may go (attempt back-off, lock, parked,
+        // journal, a pending job, a restore); asked here too so a refused image fires no loopback.
+        $refused_by = wps_ic_image_optimize::refusal($attachment_id, 'lazy');
+        if ($refused_by !== null) {
+            error_log('[WPC LazyV2 trigger] image=' . $attachment_id . ' refused (' . $refused_by . ')');
             return false;
         }
 
@@ -561,8 +542,8 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
                 error_log('[WPC LazyV2 trigger] image=' . $attachment_id . ' bailed Gate 1 (variants exist count=' . count($variants) . ')');
                 return false;
             }
-            
-            
+            // Mark for the drain's race-protection re-check (separate request) so it also
+            // admits this upgrade instead of skipping on "variants present".
             set_transient('wpc_lazy_v2_full_' . $attachment_id, 1, 600);
             error_log('[WPC LazyV2 trigger] image=' . $attachment_id . ' UPGRADE admit (variants=' . count($variants) . ') — full compress queued');
         }
@@ -585,12 +566,10 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
         }
         set_transient($lock_key, time(), 600);
 
-
-        update_post_meta($attachment_id, 'ic_compressing', [
-            'status' => 'optimizing',
-            'time'   => time(),
-            'source' => 'lazy_v2',
-        ]);
+        // ic_compressing is written by the dispatch when the request goes out. Observed: the
+        // trigger's own 'optimizing' write made the door's pending-job gate refuse the drain
+        // this trigger fires, and a loopback that never connected left the badge spinning
+        // until the 2-hour stale self-heal.
         set_transient('wps_ic_compress_' . $attachment_id, [
             'imageID' => $attachment_id,
             'status'  => 'compressing',
@@ -607,23 +586,19 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
             $widths_clean = array_values(array_unique($widths_clean));
             set_transient('wpc_lazy_v2_widths_' . $attachment_id, $widths_clean, 600);
         } else {
-            
-            
+            // Clear any stale per-image widths if this trigger doesn't have any
+            // (avoid a previous trigger's widths leaking into a new lazy run).
             delete_transient('wpc_lazy_v2_widths_' . $attachment_id);
         }
 
-        $wpc_reason197 = isset($trigger_opts['reason']) && $trigger_opts['reason'] !== '' ? (string) $trigger_opts['reason'] : 'new';
-        $wpc_attempt197 = function_exists('wpc_v2_attempts_bump197')
-            ? wpc_v2_attempts_bump197($attachment_id, $wpc_reason197)
-            : 1;
-        $wpc_ctx197 = [
-            'reason'  => $wpc_reason197,
-            'attempt' => $wpc_attempt197,
+        // The attempt is counted by the dispatch door when the drain sends the request.
+        $trigger_ctx = [
+            'reason' => isset($trigger_opts['reason']) && $trigger_opts['reason'] !== '' ? (string) $trigger_opts['reason'] : 'new',
         ];
         if (!empty($trigger_opts['formats']) && is_array($trigger_opts['formats'])) {
-            $wpc_ctx197['formats'] = array_values(array_map('strval', $trigger_opts['formats']));
+            $trigger_ctx['formats'] = array_values(array_map('strval', $trigger_opts['formats']));
         }
-        set_transient('wpc_lazy_v2_ctx_' . $attachment_id, $wpc_ctx197, 600);
+        set_transient('wpc_lazy_v2_ctx_' . $attachment_id, $trigger_ctx, 600);
 
         error_log('[WPC LazyV2] queued image=' . $attachment_id . ' mode=' . wpc_get_optimization_mode() . ' smart_widths=' . (empty($widths_clean) ? 'all' : implode(',', $widths_clean)));
 
@@ -644,8 +619,8 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
             $lz_req   = "POST {$lz_path} HTTP/1.1\r\nHost: {$lz_host}\r\nContent-Type: application/x-www-form-urlencoded\r\n"
                       . "Content-Length: " . strlen($lz_body) . "\r\nConnection: close\r\nUser-Agent: WPCLazyDrain/1.0\r\n\r\n" . $lz_body;
 
-            
-            
+            // (v2-pull-manifest.php + v2-direct-entry.php), which both guard this — defends against a
+            // partial-bootstrap context where wps_ic_ajax isn't loaded.
             $lz_fp = (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'wpc_loopback_open_socket')) ? wps_ic_ajax::wpc_loopback_open_socket($lz_host, $lz_port, $lz_https, 0.2) : false;
             if ($lz_fp) { @stream_set_timeout($lz_fp, 0, 100000); @fwrite($lz_fp, $lz_req); @fclose($lz_fp); }
         }
@@ -656,11 +631,11 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
 
 
 if (!function_exists('wpc_v2_variants_all_lazy')) {
-    
-
-
-
-
+    /**
+     * TRUE when every ic_local_variants entry is a lazy_cdn ingest (the partial
+     * "0J 0W 1A" state: on-demand avif(s) only, no Phase-A jpeg parents). Distinguishes a
+     * lazy partial (upgrade-eligible under CDN-off backfill) from a real compress (never touch).
+     */
     function wpc_v2_variants_all_lazy($variants)
     {
         if (!is_array($variants) || empty($variants)) return false;
@@ -711,12 +686,6 @@ if (!function_exists('wpc_lazy_v2_drain_ajax')) {
         @ignore_user_abort(true);
         @set_time_limit(180);
 
-        if (!class_exists('wps_ic_ajax') || !method_exists('wps_ic_ajax', 'run_v2_optimize')) {
-            error_log('[WPC LazyV2 drain] image=' . $attachment_id . ' run_v2_optimize unavailable');
-            delete_transient('wpc_lazy_v2_trigger_' . $attachment_id);
-            wp_die('handler unavailable', 500);
-        }
-
 
         if (class_exists('wps_local_compress')) {
             $compress = new wps_local_compress();
@@ -733,18 +702,10 @@ if (!function_exists('wpc_lazy_v2_drain_ajax')) {
         } else {
             $option_overrides = [];
         }
-        $wpc_ctx197d = get_transient('wpc_lazy_v2_ctx_' . $attachment_id);
-        if (is_array($wpc_ctx197d)) {
-            delete_transient('wpc_lazy_v2_ctx_' . $attachment_id);
-            if (!empty($wpc_ctx197d['formats']) && is_array($wpc_ctx197d['formats'])) {
-                $option_overrides['formats'] = array_values(array_map('strval', $wpc_ctx197d['formats']));
-            }
-            if (!empty($wpc_ctx197d['reason']))  $option_overrides['resubmit_reason'] = (string) $wpc_ctx197d['reason'];
-            if (!empty($wpc_ctx197d['attempt'])) $option_overrides['attempt']         = (int) $wpc_ctx197d['attempt'];
-        }
+        $option_overrides = wpc_lazy_v2_take_trigger_ctx($attachment_id, $option_overrides);
 
         $t_start = microtime(true);
-        $result  = wps_ic_ajax::run_v2_optimize($attachment_id, $option_overrides);
+        $result  = wps_ic_image_optimize::dispatch($attachment_id, 'lazy', $option_overrides);
         $wall_ms = (int) round((microtime(true) - $t_start) * 1000);
         error_log(sprintf(
             '[WPC LazyV2 drain] image=%d result=%s wall_ms=%d %s',
@@ -756,8 +717,10 @@ if (!function_exists('wpc_lazy_v2_drain_ajax')) {
 
 
         if (empty($result['ok'])) {
-            if (!empty($result['error']) && $result['error'] === 'already_in_flight') {
-                error_log('[WPC LazyV2 drain] image=' . $attachment_id . ' bailed: already_in_flight — preserving state for in-flight run');
+            if (!empty($result['refused'])) {
+                // A gate refused it (another dispatch owns the image, or its back-off holds):
+                // nothing was sent, so the state belongs to whoever holds the image.
+                error_log('[WPC LazyV2 drain] image=' . $attachment_id . ' refused: ' . $result['reason'] . ' — preserving state');
             } else {
                 delete_transient('wpc_lazy_v2_trigger_' . $attachment_id);
                 delete_post_meta($attachment_id, 'ic_compressing');
@@ -776,11 +739,30 @@ if (!function_exists('wpc_lazy_v2_drain_ajax')) {
 add_action('wp_ajax_wpc_lazy_v2_drain',        'wpc_lazy_v2_drain_ajax');
 add_action('wp_ajax_nopriv_wpc_lazy_v2_drain', 'wpc_lazy_v2_drain_ajax');
 
-
-
-
-
-
+/**
+ * Cron handler for the v2 lazy trigger. Calls the same self-contained v2
+ * optimize path the manual Compress button uses (wps_ic_image_optimize::dispatch).
+ * The result is returned synchronously to the cron worker — Phase A's parents
+ * write to disk, Phase B callbacks land asynchronously via /wpc/v2/bg_swap.
+ */
+if (!function_exists('wpc_lazy_v2_take_trigger_ctx')) {
+    /** The trigger's reason and formats, handed to the drain in a transient; read once. */
+    function wpc_lazy_v2_take_trigger_ctx($attachment_id, array $option_overrides)
+    {
+        $ctx = get_transient('wpc_lazy_v2_ctx_' . $attachment_id);
+        if (!is_array($ctx)) {
+            return $option_overrides;
+        }
+        delete_transient('wpc_lazy_v2_ctx_' . $attachment_id);
+        if (!empty($ctx['formats']) && is_array($ctx['formats'])) {
+            $option_overrides['formats'] = array_values(array_map('strval', $ctx['formats']));
+        }
+        if (!empty($ctx['reason'])) {
+            $option_overrides['resubmit_reason'] = (string) $ctx['reason'];
+        }
+        return $option_overrides;
+    }
+}
 
 if (!function_exists('wpc_lazy_v2_compress_handler')) {
     function wpc_lazy_v2_compress_handler($attachment_id)
@@ -788,21 +770,14 @@ if (!function_exists('wpc_lazy_v2_compress_handler')) {
         $attachment_id = (int) $attachment_id;
         if ($attachment_id <= 0) return;
 
-        
-        
+        // Sanity re-check: variants may have landed via another path in the
+        // ~1s between trigger queue and cron fire.
         $variants = get_post_meta($attachment_id, 'ic_local_variants', true);
         if (is_array($variants) && !empty($variants)) {
             error_log('[WPC LazyV2] skipped image=' . $attachment_id . ' — variants now present');
             delete_transient('wpc_lazy_v2_trigger_' . $attachment_id);
             return;
         }
-
-        if (!class_exists('wps_ic_ajax') || !method_exists('wps_ic_ajax', 'run_v2_optimize')) {
-            error_log('[WPC LazyV2] failed image=' . $attachment_id . ' — run_v2_optimize unavailable');
-            delete_transient('wpc_lazy_v2_trigger_' . $attachment_id);
-            return;
-        }
-
 
         if (class_exists('wps_local_compress')) {
             $compress = new wps_local_compress();
@@ -811,7 +786,7 @@ if (!function_exists('wpc_lazy_v2_compress_handler')) {
             }
         }
 
-        
+        // Phase 2 smart-lazy: pick up cron-context needed widths too.
         $needed_widths = get_transient('wpc_lazy_v2_widths_' . $attachment_id);
         if (is_array($needed_widths) && !empty($needed_widths)) {
             delete_transient('wpc_lazy_v2_widths_' . $attachment_id);
@@ -819,18 +794,10 @@ if (!function_exists('wpc_lazy_v2_compress_handler')) {
         } else {
             $option_overrides = [];
         }
-        $wpc_ctx197c = get_transient('wpc_lazy_v2_ctx_' . $attachment_id);
-        if (is_array($wpc_ctx197c)) {
-            delete_transient('wpc_lazy_v2_ctx_' . $attachment_id);
-            if (!empty($wpc_ctx197c['formats']) && is_array($wpc_ctx197c['formats'])) {
-                $option_overrides['formats'] = array_values(array_map('strval', $wpc_ctx197c['formats']));
-            }
-            if (!empty($wpc_ctx197c['reason']))  $option_overrides['resubmit_reason'] = (string) $wpc_ctx197c['reason'];
-            if (!empty($wpc_ctx197c['attempt'])) $option_overrides['attempt']         = (int) $wpc_ctx197c['attempt'];
-        }
+        $option_overrides = wpc_lazy_v2_take_trigger_ctx($attachment_id, $option_overrides);
 
         $t_start = microtime(true);
-        $result  = wps_ic_ajax::run_v2_optimize($attachment_id, $option_overrides);
+        $result  = wps_ic_image_optimize::dispatch($attachment_id, 'lazy', $option_overrides);
         $wall_ms = (int) round((microtime(true) - $t_start) * 1000);
 
         error_log(sprintf(
@@ -843,8 +810,8 @@ if (!function_exists('wpc_lazy_v2_compress_handler')) {
 
 
         if (empty($result['ok'])) {
-            if (!empty($result['error']) && $result['error'] === 'already_in_flight') {
-                error_log('[WPC LazyV2] image=' . $attachment_id . ' bailed: already_in_flight');
+            if (!empty($result['refused'])) {
+                error_log('[WPC LazyV2] image=' . $attachment_id . ' refused: ' . $result['reason']);
             } else {
                 delete_transient('wpc_lazy_v2_trigger_' . $attachment_id);
             }
@@ -881,11 +848,11 @@ function wpc_v2_probe_orchestrator_clock()
     return ['ok' => true, 'skew_s' => $skew_s, 'reason' => ''];
 }
 
-
-
-
-
-
+/**
+ * Daily cron — surface excessive clock skew. >30s warns (HMAC may flake under
+ * load); >60s errors (callbacks WILL 401). Logs to debug.log only; admin
+ * notice is a future-session deliverable.
+ */
 function wpc_v2_clock_check_cron()
 {
     $result = wpc_v2_probe_orchestrator_clock();
@@ -899,7 +866,7 @@ function wpc_v2_clock_check_cron()
     } elseif ($skew > 30) {
         error_log(sprintf('[WPC V2Clock WARN] skew=%.1fs approaching 60s HMAC window', $skew));
     }
-    
+    // Cache last good probe for diagnostics endpoint.
     set_site_transient('wpc_v2_clock_last', [
         'skew_s'  => $skew,
         'checked' => time(),
@@ -907,10 +874,10 @@ function wpc_v2_clock_check_cron()
 }
 add_action('wpc_v2_clock_check', 'wpc_v2_clock_check_cron');
 
-
-
-
-
+/**
+ * Schedule the daily cron if not already armed. Hooks `init` so it lands on
+ * any admin request and self-heals if the cron was cleared.
+ */
 function wpc_v2_clock_check_schedule()
 {
     if (!wp_next_scheduled('wpc_v2_clock_check')) {
@@ -920,19 +887,15 @@ function wpc_v2_clock_check_schedule()
 add_action('init', 'wpc_v2_clock_check_schedule');
 
 
+/**
+ * Stamp the last write of an image's set or status (`wpc_v2_last_meta_write_at`, at most every
+ * 500 ms): Stop waits for it to go quiet before it answers the library counts.
+ */
 function wpc_v2_invalidate_splash_count($meta_id, $object_id, $meta_key)
 {
     if ($meta_key !== 'ic_local_variants' && $meta_key !== 'ic_status') return;
 
-
     $now_ms = (int) (microtime(true) * 1000);
-
-    $wpc_snap38 = get_option('wpc_bulk_library_counts_d');
-    if (class_exists('wps_ic_local') && (!is_array($wpc_snap38) || empty($wpc_snap38['dead37']))) {
-        wps_ic_local::wpc_counts_invalidate37();
-        update_option('wpc_v2_last_splash_bust_at', $now_ms, false);
-    }
-
     $last_write_ms = (int) get_option('wpc_v2_last_meta_write_at', 0);
     if (($now_ms - $last_write_ms) >= 500) {
         update_option('wpc_v2_last_meta_write_at', $now_ms, false);
@@ -975,55 +938,55 @@ function wpc_v2_head_poll_enabled()
 
 }
 
-
-
-
-
-
-
-if (!function_exists('wpc_apikey_canonicalize644')) {
-    function wpc_apikey_canonicalize644()
+// v7.10.644 — ONE APIKEY PER SITE (service: staging AND thepttv each carry two keys;
+// artifacts split across them and neither half is complete). The getter's fallback
+// chain MASKED store divergence instead of healing it: wps_ic, wps_ic_options and
+// wps_ic_settings can each hold a different api_key, and different subsystems read
+// different stores. Canonical is wps_ic; the janitor rewrites the other two to match
+// and journals every heal. Runs on the daily sweep + once per version bump.
+if (!function_exists('wpc_canonicalize_apikey')) {
+    function wpc_canonicalize_apikey()
     {
         try {
             if (!apply_filters('wpc_apikey_canonicalize', true)) {
                 return;
             }
-            $wpc_canon644 = get_option('wps_ic');
-            $wpc_key644 = (is_array($wpc_canon644) && !empty($wpc_canon644['api_key'])) ? (string) $wpc_canon644['api_key'] : '';
-            if ($wpc_key644 === '') {
-                return; 
+            $canonical_options = get_option('wps_ic');
+            $canonical_key = (is_array($canonical_options) && !empty($canonical_options['api_key'])) ? (string) $canonical_options['api_key'] : '';
+            if ($canonical_key === '') {
+                return; // no canonical key — never invent one
             }
-            $wpc_healed644 = [];
-            foreach (['wps_ic_options', 'wps_ic_settings'] as $wpc_opt644) {
-                $wpc_v644 = get_option($wpc_opt644);
-                if (is_array($wpc_v644) && isset($wpc_v644['api_key'])
-                    && $wpc_v644['api_key'] !== '' && $wpc_v644['api_key'] !== $wpc_key644) {
-                    $wpc_healed644[$wpc_opt644] = substr(md5((string) $wpc_v644['api_key']), 0, 8);
-                    $wpc_v644['api_key'] = $wpc_key644;
-                    update_option($wpc_opt644, $wpc_v644, false);
+            $healed_fingerprints = [];
+            foreach (['wps_ic_options', 'wps_ic_settings'] as $option_name) {
+                $option_value = get_option($option_name);
+                if (is_array($option_value) && isset($option_value['api_key'])
+                    && $option_value['api_key'] !== '' && $option_value['api_key'] !== $canonical_key) {
+                    $healed_fingerprints[$option_name] = substr(md5((string) $option_value['api_key']), 0, 8);
+                    $option_value['api_key'] = $canonical_key;
+                    update_option($option_name, $option_value, false);
                 }
             }
-            if (!empty($wpc_healed644) && function_exists('wpc_cache_first_log')) {
-                
-                
-                
-                $wpc_healed644['canon'] = substr(md5($wpc_key644), 0, 8);
-                wpc_cache_first_log('apikey-healed', '', '', $wpc_healed644);
+            if (!empty($healed_fingerprints) && function_exists('wpc_cache_first_log')) {
+                // v7.10.646 — BOTH fingerprints (service wave-one guard): a heal onto a
+                // key with no dispatch history orphans the site's artifacts; the join
+                // must distinguish "migrated identity" from "layering hurt it".
+                $healed_fingerprints['canon'] = substr(md5($canonical_key), 0, 8);
+                wpc_cache_first_log('apikey-healed', '', '', $healed_fingerprints);
             }
         } catch (\Throwable $e) {
         }
     }
-    add_action('wpc_autopurge_sweep', 'wpc_apikey_canonicalize644', 5);
+    add_action('wpc_autopurge_sweep', 'wpc_canonicalize_apikey', 5);
 }
 
-
-
-
-
-
-
-if (!function_exists('wpc_v2_callback_secret650')) {
-    function wpc_v2_callback_secret650($create = true)
+// v7.10.650 — DEDICATED CALLBACK SECRET (CVE-2026-18518 structural follow-up).
+// The api_key identifies the site to the CDN and travels widely — dashboards, support
+// tickets, config payloads, and wp_options (readable by any other plugin on the site, or
+// by a SQL-injection in one). Using it as the HMAC secret meant any disclosure of that
+// identifier authorized writing files to disk. This secret does ONE job, is never
+// rendered, never leaves over an unauthenticated channel, and is cheap to rotate.
+if (!function_exists('wpc_v2_callback_secret')) {
+    function wpc_v2_callback_secret($create = true)
     {
         $s = (string) get_option('wpc_cb_secret650', '');
         if ($s === '' && $create) {
@@ -1047,27 +1010,27 @@ if (!function_exists('wpc_v2_callback_secret650')) {
         return $s;
     }
 
-    
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-    function wpc_v2_callback_strict650()
+    /**
+     * Strict = the api_key is no longer accepted as a signing secret.
+     * Flipped by OBSERVED EFFECT, never by a flag day: a site hardens only once it has
+     * seen the orchestrator sign successfully with the dedicated secret, so an
+     * unmigrated site keeps working and a migrated one stops accepting the old key
+     * without anyone scheduling a cutover.
+     */
+    /**
+     * v7.10.652 — HARDENING NEEDS TWO INDEPENDENT SIGNALS, and the sender's is the
+     * authoritative one. The orchestrator showed that observation alone is unsafe: THREE
+     * services sign bg_swap (orchestrator, jpgwebp pod, avif pod) and the pods learn their
+     * credential from the job envelope, not from /v2/config. Three good orchestrator
+     * callbacks would have hardened a site and then permanently rejected every pod
+     * callback — most of the delivery volume — with no way back.
+     *
+     * Only the sender knows when ALL of its services are migrated, so the sender declares
+     * it: the orchestrator echoes cb_enforce=1 on the config-sync response. The plugin
+     * still refuses to harden until it has ALSO observed the dedicated secret working on a
+     * write route, so a mis-set flag cannot brick callbacks. Both signals, or no hardening.
+     */
+    function wpc_v2_is_callback_auth_strict()
     {
         if (!apply_filters('wpc_v2_hmac_allow_apikey_fallback', true)) {
             return true;
@@ -1075,16 +1038,16 @@ if (!function_exists('wpc_v2_callback_secret650')) {
         return get_option('wpc_cb_strict650') === '1';
     }
 
-    function wpc_v2_callback_maybe_harden652()
+    function wpc_v2_maybe_harden_callback_auth()
     {
         if (get_option('wpc_cb_strict650') === '1') {
             return;
         }
-        
+        // Signal 1: the sender declares every one of its services migrated.
         if (get_option('wpc_cb_enforce652') !== '1') {
             return;
         }
-        
+        // Signal 2: this site has actually seen the dedicated secret verify a WRITE.
         $n = (int) get_option('wpc_cb_seen650', 0);
         if ($n < (int) apply_filters('wpc_v2_hmac_strict_after', 3)) {
             return;
@@ -1095,12 +1058,12 @@ if (!function_exists('wpc_v2_callback_secret650')) {
         }
     }
 
-    function wpc_v2_callback_note_secret_use650()
+    function wpc_v2_note_callback_secret_use()
     {
         if (get_option('wpc_cb_strict650') === '1') {
             return;
         }
         update_option('wpc_cb_seen650', (int) get_option('wpc_cb_seen650', 0) + 1, false);
-        wpc_v2_callback_maybe_harden652();
+        wpc_v2_maybe_harden_callback_auth();
     }
 }

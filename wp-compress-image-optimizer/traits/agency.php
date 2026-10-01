@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: traits/agency.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 trait wps_ic_agency_trait
 {
@@ -51,16 +43,16 @@ trait wps_ic_agency_trait
         $fontsMap    = $remoteSettings['fonts_map']        ?? false;
         $cf          = $remoteSettings['cf']               ?? [];
         $cfCname     = $remoteSettings['cf_cname']         ?? '';
-        
-        
-        
-        
+        // Always coerce to '' when the site did not send them (a plugin older than the
+        // getSettings() that added them). Falling through to the real option would let the
+        // PORTAL's own ic_custom_cname / ic_cdn_zone_name render as if it were the client's —
+        // a fabricated identifier, which is worse than an empty card.
         $customCname = (string) ($remoteSettings['custom_cname']  ?? '');
         $cdnZoneName = (string) ($remoteSettings['cdn_zone_name'] ?? '');
         $remoteSiteUrl  = $remoteSettings['site_url']     ?? '';
         $remoteHomeUrl  = $remoteSettings['home_url']     ?? $remoteSiteUrl;
 
-        
+        // Override the static already populated at init time (before filters apply)
         wps_ic::$settings = $settings;
 
         add_filter('pre_option_' . WPS_IC_SETTINGS,   function() use ($settings)    { return $settings; });
@@ -74,14 +66,14 @@ trait wps_ic_agency_trait
         add_filter('pre_option_' . WPS_IC_FONTS_MAP,  function() use ($fontsMap)    { return $fontsMap; });
         add_filter('pre_option_' . WPS_IC_CF,            function() use ($cf)            { return $cf ?: false; });
         add_filter('pre_option_' . WPS_IC_CF_CNAME,      function() use ($cfCname)       { return $cfCname; });
-        
-        
+        // Feeds wpc_gui_v4::cname() (configured vs Configure, the Remove button) and the Custom
+        // DNS popup (the CNAME target to copy, the prefilled input, the DNS-checker link).
         add_filter('pre_option_ic_custom_cname',         function() use ($customCname)   { return $customCname; });
         add_filter('pre_option_ic_cdn_zone_name',        function() use ($cdnZoneName)   { return $cdnZoneName; });
         add_filter('pre_option_wpc_remote_site_url',     function() use ($remoteSiteUrl) { return $remoteSiteUrl; });
         add_filter('pre_option_wpc_remote_home_url',     function() use ($remoteHomeUrl) { return $remoteHomeUrl; });
-        
-        
+        // Inject remote plan version so templates can gate features correctly (e.g. Woohoo footer)
+        // Read local options now (before the filter is registered) to avoid recursive pre_option trigger
         $localOpts = get_option(WPS_IC_OPTIONS) ?: [];
         add_filter('pre_option_' . WPS_IC_OPTIONS,    function() use ($localOpts, $planVersion) {
             $opts = $localOpts;
@@ -110,24 +102,24 @@ trait wps_ic_agency_trait
         add_filter('pre_option_wpc_vitals_enabled',  function() use ($enabled)  { return $enabled; });
 
 
-        
-        
+        // wpc_vitals_export() already folded the site's today-partial into 'daily'; parsing
+        // the PORTAL's own day-file here would mix agency traffic into the client's charts.
         add_filter('wpc_vitals_today_partial_pre', '__return_false', 99);
 
-        
-        
-        
-        
-        
-        
+        // v7.21.02 — the panel's auto speed check and auto baseline iframe home_url(), which
+        // in the portal resolves to the PORTAL's own URL (agency-v6 filters no url hooks), so
+        // both would synthetically load the agency site and record vitals against its own
+        // collector instead of the client's. 'sc' is not demo-gated, so it fired on every
+        // view-site render. The portal's real remote path is the optimizeStart/optimizeStatus
+        // forward, which runs the check on the site.
         add_filter('wpc_vitals_speed_check',   '__return_false', 99);
         add_filter('wpc_vitals_auto_baseline', '__return_false', 99);
 
-        
-        
-        
+        // v7.21.02 — wpc_vitals_sample_preview is deliberately NOT killed: the portal shows
+        // the same badged sample preview the plugin dashboard shows before the first data
+        // lands. Suppressing it here left an empty box behind the .863 doctrine.
 
-        
+        // Diagnostic only since v7.21.02 — vitalsHasData() no longer gates on this.
         self::$remoteVitalsHasData = function_exists('wpc_vitals_export_has_data')
             ? (bool) wpc_vitals_export_has_data($vitals)
             : false;

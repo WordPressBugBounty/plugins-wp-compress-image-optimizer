@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/oEmbed.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 class wps_ic_oEmbed
@@ -17,10 +9,10 @@ class wps_ic_oEmbed
 
   public function run()
   {
-    
+    /* @var WP $wp */
     global $wp;
 
-    
+    // Remove the embed query var.
     $wp->public_query_vars = array_diff($wp->public_query_vars, [
         'embed',
     ]);

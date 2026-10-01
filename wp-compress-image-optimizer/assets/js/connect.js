@@ -38,7 +38,7 @@ jQuery(document).ready(function ($) {
                 saveMode(modes_popup);
             },
             onClose: function () {
-                
+                //openConfigurePopup(popup_modal);
             }
         });
     }
@@ -63,7 +63,7 @@ jQuery(document).ready(function ($) {
                 if (response.success) {
                     window.location.reload();
                 } else {
-                    
+                    //error?
                 }
             });
 
@@ -72,9 +72,9 @@ jQuery(document).ready(function ($) {
     }
 
 
-    
-
-
+    /**
+     * Single Checkbox
+     */
     function hookCheckbox() {
         $('label', '.swal2-content').on('click', function () {
             var parent = $(this).parent();
@@ -87,11 +87,11 @@ jQuery(document).ready(function ($) {
             var beforeValue = $(checkbox).attr('checked');
 
             if (beforeValue == 'checked') {
-                
+                // It was already active, remove checked
                 $(this).removeAttr('checked').prop('checked', false);
                 $(parent).removeClass('active');
             } else {
-                
+                // It's not active, activate
                 $(this).attr('checked', 'checked').prop('checked', true);
                 $(parent).addClass('active');
             }
@@ -117,7 +117,7 @@ jQuery(document).ready(function ($) {
             var checked = $('.form-check-input', '.wpc-popup-option-checkbox').is(':checked');
 
             if (modeSelect == 'safe') {
-                
+                // Safe mode - turn off CDN
                 $('.form-check-input', '.wpc-popup-option-checkbox').removeAttr('checked').prop('checked', false);
             } else {
                 if (!checked) {
@@ -161,10 +161,10 @@ jQuery(document).ready(function ($) {
                 jQuery('.wps-ic-connect-retry').on('click', function (e) {
                     e.preventDefault();
                     var swal = jQuery('.swal2-container');
-                    
+                    // Hide ALL error + loading states
                     var allStates = jQuery('.wps-ic-site-already-connected, .wps-ic-invalid-apikey, .wps-ic-apikey-in-use, .wps-ic-unable-to-communicate, .wps-ic-loading-container', swal);
                     var form = jQuery('.wps-lite-form-container', swal);
-                    
+                    // Hide everything first, then show form once
                     allStates.hide();
                     form.css('display', 'none').fadeIn(250, function() {
                         jQuery('input[name="apikey"]', swal).val('').focus();
@@ -226,7 +226,7 @@ jQuery(document).ready(function ($) {
                     }).done(function (response) {
                         wpcConnT0 = 0;
                         if (response && response.success) {
-                            
+                            // Connect
                             wpcConnT0 = Date.now() - 16000;
                             $('.wps-ic-connect-inner').addClass('padded');
                             WPCSwal.close();
@@ -251,14 +251,49 @@ jQuery(document).ready(function ($) {
                 });
 
 
+                // The one field: an email claims the site (wpc_claim); anything else is a key or a
+                // connect token and takes the keyed connect below.
+                var wpcClaimState = $('.wps-ic-lite-claim-state', swal_container);
+                var wpcClaimSubmit = function (value, nonce) {
+                    wpcClaimState.hide();
+                    $(submitBtn).prop('disabled', true).val('Setting up…');
+                    $.ajax({
+                        url: ajaxurl, type: 'POST', timeout: 60000,
+                        data: { action: 'wpc_claim', value: value, nonce: nonce }
+                    }).done(function (response) {
+                        var d = (response && response.data) ? response.data : {};
+                        if (response && response.success && d.state === 'linked') {
+                            WPCSwal.close();
+                            window.location.reload();
+                            return;
+                        }
+                        $(submitBtn).prop('disabled', false).val(d.state === 'pending' ? 'Send again' : 'Turn on');
+                        wpcClaimState.text(d.msg || 'We could not reach WP Compress. Try again in a moment.').show();
+                    }).fail(function () {
+                        $(submitBtn).prop('disabled', false).val('Turn on');
+                        wpcClaimState.text('We could not reach WP Compress. Try again in a moment.').show();
+                    });
+                };
+
                 $('#wps-ic-connect-form', swal_container).on('submit', function (e) {
 
                     var nonce = $('input[name="nonce"]', swal_container).val();
-                    var apikey = $('input[name="apikey"]', form_container).val();
+                    var apikey = $.trim($('input[name="apikey"]', form_container).val() || '');
 
                     if (apikey == '' || typeof apikey == "undefined") {
                         $('.wps-ic-lite-input-container', swal_container).addClass('wpc-error');
-                        
+                        //$('.wps-ic-lite-input-field-error', swal_container).show();
+                        return false;
+                    }
+                    if (apikey.indexOf('@') > -1) {
+                        e.preventDefault();
+                        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(apikey)) {
+                            $('.wps-ic-lite-input-container', swal_container).addClass('wpc-error');
+                            $('.wps-ic-lite-input-field-error', swal_container).show();
+                            return false;
+                        }
+                        $('.wps-ic-lite-input-field-error', swal_container).hide();
+                        wpcClaimSubmit(apikey, nonce);
                         return false;
                     }
 
@@ -287,7 +322,7 @@ jQuery(document).ready(function ($) {
                         var wpcMsg = (response && response.data && response.data.msg) ? response.data.msg : '';
                         if (response && response.success) {
                             wpcConnT0 = Date.now() - 16000;
-                            
+                            // Inject full-page overlay so Lite dashboard never shows during reload
                             $('body').append(
                                 '<div id="wpc-activation-overlay" style="position:fixed;inset:0;z-index:999999;background:#fff;display:flex;align-items:center;justify-content:center;text-align:center;">' +
                                 '<div>' +
@@ -301,7 +336,7 @@ jQuery(document).ready(function ($) {
                             window.location.reload();
                         } else {
 
-                            
+                            // Hide loading + form, keep left illustration visible
                             $(loader).hide();
                             $(loaderLite).hide();
                             $(form_container).hide();
@@ -319,7 +354,7 @@ jQuery(document).ready(function ($) {
                                 $(error_message_text).show();
                             }
 
-                            
+                            // $('.wps-ic-connect-retry', swal_container).bind('click');
 
                         }
                     }).fail(function () {

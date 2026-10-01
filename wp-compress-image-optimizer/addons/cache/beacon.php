@@ -1,25 +1,17 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/cache/beacon.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
     exit;
 }
 
 
+// Fires the phase-timeline events (linked → preset_applied → gen_dispatched → crit_landed →
+// fonts_landed → armed → auto_*) to the manager tracker (contract: p1-handoff §8) so every
 
+//
+// HARD-GATED — customer sites must never phone home by default: events fire only when BOTH
 
-
-
-
-
-
-
+//   2. the Auto Mode toggle is on.
+// With the constant undefined and the option absent the gate is a single boolean check — zero
 
 
 if (!function_exists('wpc_cohort_beacon_key')) {

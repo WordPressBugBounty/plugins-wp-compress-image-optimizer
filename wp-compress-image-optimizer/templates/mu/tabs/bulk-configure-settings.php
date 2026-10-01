@@ -1,12 +1,4 @@
 <?php
-
-
-
-
-
-
-
-
 include WPS_IC_DIR . 'classes/gui-v4.class.php';
 $options = new wps_ic_options();
 

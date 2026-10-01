@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/comms.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 class wps_ic_comms extends wps_ic
@@ -32,7 +24,7 @@ class wps_ic_comms extends wps_ic
         $setting_value = sanitize_text_field($_GET['value']);
 
         if ($setting_key == 'cdn') {
-            
+            // First check if CDN Zone already exists
             $options = get_option(WPS_IC_OPTIONS);
 
             $request_params = [];
@@ -41,10 +33,10 @@ class wps_ic_comms extends wps_ic
             $request_params['action'] = 'cdn_check';
             $request_params['url'] = site_url();
 
-            $params = ['method' => 'POST', 'timeout' => 30, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, 
+            $params = ['method' => 'POST', 'timeout' => 30, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
                 'headers' => [], 'body' => $request_params, 'cookies' => []];
 
-            
+            // Send call to API
             $call = wp_remote_post(WPS_IC_APIURL, $params);
         }
 
@@ -87,7 +79,7 @@ class wps_ic_comms extends wps_ic
             require_once(ABSPATH . "wp-admin" . '/includes/media.php');
         }
 
-        
+        // Get attachment
         $attachments = $wpdb->get_results(
             $wpdb->prepare(
                 "
@@ -117,11 +109,11 @@ class wps_ic_comms extends wps_ic
 
                 $compressed = get_post_meta($attachments[0]->ID, 'wps_ic_compressed', true);
                 if ($compressed == 'true') {
-                    
+                    // Restore first
                     $file_name = basename($attachment_Path);
                     $file_path = str_replace($file_name, '', $attachment_Path);
 
-                    
+                    // Find image source on site
                     $image = wp_get_attachment_image_src($attachments[0]->ID, 'full');
                     $file_name = basename($image[0]);
 
@@ -142,10 +134,13 @@ class wps_ic_comms extends wps_ic
                             if (!is_wp_error($temp) && filesize($temp) > 0) {
                                 clearstatcache();
 
-                                
+                                // Remove file
+                                if (class_exists('wps_ic_image_library')) {
+                                    wps_ic_image_library::file_deleted($attachments[0]->ID, $file_path . $file_name, 'comms-restore');
+                                }
                                 unlink($file_path . $file_name);
 
-                                
+                                // New file
                                 $fp = @fopen($file_path . $file_name, 'w+');
                                 if ($fp) {
                                     fclose($fp);
@@ -159,7 +154,7 @@ class wps_ic_comms extends wps_ic
                                 $attach_data = wp_generate_attachment_metadata($attachments[0]->ID, $attachment_Path);
                                 wp_update_attachment_metadata($attachments[0]->ID, $attach_data);
 
-                                
+                                // Delete compress data
                                 delete_post_meta($attachments[0]->ID, 'wps_ic_started');
                                 delete_post_meta($attachments[0]->ID, 'wps_ic_reset');
                                 delete_post_meta($attachments[0]->ID, 'wps_ic_times');
@@ -175,7 +170,7 @@ class wps_ic_comms extends wps_ic
 
                     }
 
-                    
+                    // Set compressing
                     delete_post_meta($attachments[0]->ID, 'wps_ic_reset');
                     delete_post_meta($attachments[0]->ID, 'wps_ic_started');
                     delete_post_meta($attachments[0]->ID, 'wps_ic_restoring');
@@ -313,10 +308,17 @@ class wps_ic_comms extends wps_ic
                 }
 
                 $option = get_option($settingName);
+                if ($settingName === 'wpc-excludes') {
+                    // One Delay JS exclude list: a `delay_js_v2` box saves into `delay_js_v3`.
+                    $option = wpc_delay_excludes_fold($option);
+                }
                 if (!empty($settingData)) {
                     foreach ($settingData as $settingSubset => $settingValue) {
                         $settingValue = rtrim($settingValue, "\n");
                         $settingValue = explode("\n", $settingValue);
+                        if ($settingName === 'wpc-excludes') {
+                            $settingSubset = wpc_delay_excludes_key($settingSubset);
+                        }
                         $option[$settingSubset] = $settingValue;
                     }
                 }
@@ -334,7 +336,12 @@ class wps_ic_comms extends wps_ic
     public static function get_excludes()
     {
         $option = get_option($_GET['name']);
-        $value = $option[$_GET['subset']];
+        $subset = $_GET['subset'];
+        if ($_GET['name'] === 'wpc-excludes') {
+            $option = wpc_delay_excludes_fold($option);
+            $subset = wpc_delay_excludes_key($subset);
+        }
+        $value = $option[$subset];
 
         if (empty($value)) {
             $value = '';
@@ -419,6 +426,13 @@ class wps_ic_comms extends wps_ic
         }
 
         $option = get_option($form['groupName']);
+        if ($form['groupName'] === 'wpc-excludes') {
+            // THE AGENCY PORTAL'S DELAY BOX SENDS `delay_js_v2`. It is stored in the one list,
+            // `delay_js_v3`, and a stored v2 copy is folded away first: two copies are why a
+            // removal made here came back from the site's own box (acrystalglass.com, ticket 12056).
+            $option = wpc_delay_excludes_fold($option);
+            $form['settingName'] = wpc_delay_excludes_key((string) $form['settingName']);
+        }
 
         $excludedList = rtrim($form['value'], "\n");
         $excludedList = explode("\n", $excludedList);
@@ -464,6 +478,11 @@ class wps_ic_comms extends wps_ic
         }
 
         $option = get_option($group_name);
+        if ($group_name === 'wpc-excludes') {
+            // The portal box shows the one Delay JS list, the same entries the site's box shows.
+            $option = wpc_delay_excludes_fold($option);
+            $setting_name = wpc_delay_excludes_key($setting_name);
+        }
         $value = !empty($option[$setting_name]) ? $option[$setting_name] : [];
         $default_excludes = isset($option[$setting_name . '_default_excludes_disabled']) ? $option[$setting_name . '_default_excludes_disabled'] : '';
         $exclude_themes   = isset($option[$setting_name . '_exclude_themes'])   ? $option[$setting_name . '_exclude_themes']   : '';
@@ -504,19 +523,19 @@ class wps_ic_comms extends wps_ic
     {
         $options = get_option(WPS_IC_OPTIONS);
 
-        
+        // If a test is already in progress, don't start another one
         if (get_transient('wpc_initial_test')) {
             wp_send_json_success('already-running');
         }
 
-        
+        // Purge homepage HTML cache (same as reset button on user site)
         $url = home_url();
         $url_key_class = new wps_ic_url_key();
         $url_key = $url_key_class->setup($url);
         $cache = new wps_ic_cache_integrations();
         $cache::purgeCacheFiles($url_key);
 
-        
+        // Clear home test entry from WPS_IC_TESTS
         $tests = get_option(WPS_IC_TESTS);
         unset($tests['home']);
         update_option(WPS_IC_TESTS, $tests);
@@ -529,15 +548,15 @@ class wps_ic_comms extends wps_ic
         $history[time()] = get_option(WPS_IC_LITE_GPS);
         update_option(WPS_IC_LITE_GPS_HISTORY, $history);
 
-        
+        // Clear current results and flags
         delete_transient('wpc_test_running');
         delete_option(WPS_IC_LITE_GPS);
         delete_option(WPC_WARMUP_LOG_SETTING);
 
-        
+        // Mark test as running
         set_transient('wpc_initial_test', 'running', 5 * 60);
 
-        
+        // Kick off pagespeed test
         $requests = new wps_ic_requests();
         $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'hash' => time() . mt_rand(100, 9999), 'apikey' => $options['api_key']];
         $response = $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 5, 'blocking' => true, 'headers' => ['Content-Type' => 'application/json']]);
@@ -558,8 +577,17 @@ class wps_ic_comms extends wps_ic
 
     public function getCFOption()
     {
-        $cf = get_option(WPS_IC_CF);
-        wp_send_json_success($cf ?: []);
+        wp_send_json_success(self::cf_without_token(get_option(WPS_IC_CF)));
+    }
+
+    /** The Cloudflare connection as the portal may see it: everything but the API token. */
+    public static function cf_without_token($cf)
+    {
+        if (!is_array($cf)) {
+            return [];
+        }
+        unset($cf['token']);
+        return $cf;
     }
 
     public function getCFCname()
@@ -571,11 +599,24 @@ class wps_ic_comms extends wps_ic
     public function saveCFOption()
     {
         $form = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
+        // Rule: the relay never erases the Cloudflare token. The portal does not hold it
+        // (getSettings stopped sending it in 7.24.22), so its Refresh and Connect relay a cf array
+        // with an empty token; writing that erased the site's token and every later Cloudflare
+        // call failed. An empty token keeps the stored one.
         if (!empty($form['cf'])) {
-            update_option(WPS_IC_CF, $form['cf']);
+            $relayed_cf = $form['cf'];
+            if (is_array($relayed_cf) && trim((string) ($relayed_cf['token'] ?? '')) === '') {
+                $stored_cf    = get_option(WPS_IC_CF);
+                $stored_token = is_array($stored_cf) ? (string) ($stored_cf['token'] ?? '') : '';
+                $relayed_cf['token'] = $stored_token;
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('cf-relay-token-empty', '', '', ['kept' => $stored_token !== '' ? 1 : 0]);
+                }
+            }
+            update_option(WPS_IC_CF, $relayed_cf);
         }
         if (!empty($form['cname'])) {
-            update_option(WPS_IC_CF_CNAME, $form['cname']);
+            wpc_cf_cname_persist($form['cname'], 'portal-relay');
         }
         if (isset($form['settings_cf'])) {
             $settings = get_option(WPS_IC_SETTINGS);
@@ -624,43 +665,17 @@ class wps_ic_comms extends wps_ic
         $form        = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
         $changedKeys = isset($form['changed_keys']) ? (array) $form['changed_keys'] : [];
 
-        $htmlPurgeKeys = [
-            'replace-fonts', 'font-display', 'icon-font-display',
-            'preload-crit-fonts', 'fontawesome-lazy',
-            'css', 'js', 'fonts', 'lazy',
-            'serve,jpg', 'serve,png', 'serve,gif', 'serve,svg',
-            'generate_adaptive', 'generate_webp', 'retina', 'background-sizing',
-            'qualityLevel',
-            'avif-natural-source', 'fetchpriority-high', 'single-url-image-format',
-            'critical,css', 'delay,js',
-            'minify,html', 'minify,css', 'minify,js',
-            'cf,cdn', 'cf,assets',
-        ];
-        $critPurgeKeys = ['replace-fonts', 'font-display', 'icon-font-display', 'preload-crit-fonts', 'css', 'fonts', 'minify,css', 'critical,css'];
+        // The page cache is not purged here. The portal's settings write (saveSettings) already
+        // ran update_option on this site, and the delivery-config flip that hook runs is the one
+        // owner of "settings changed, the stored pages are stale" (a purge of every layer, hard
+        // for a relayed save: wpc_purge_human_save()).
+        // This handler purged again from its own key list and then deleted cache/wp-cio
+        // wholesale, which erased the receipt journal on every portal save.
 
-        $needsHtmlPurge = !empty($changedKeys) && !empty(array_intersect($changedKeys, $htmlPurgeKeys));
-        $needsCritPurge = !empty($changedKeys) && !empty(array_intersect($changedKeys, $critPurgeKeys));
-
-        if ($needsHtmlPurge) {
-            delete_transient('wps_ic_css_cache');
-            delete_option('wps_ic_modified_css_cache');
-            delete_option('wps_ic_css_combined_cache');
-            $cache = new wps_ic_cache_integrations();
-            $cache::purgeAll(false, true, false, false, true);
-            $cache::purgeCombinedFiles();
-            wps_ic_ajax::purgeBreeze();
-            wps_ic_ajax::purge_cache_files();
-            if (function_exists('rocket_clean_domain')) rocket_clean_domain();
-            if (defined('LSCWP_V')) do_action('litespeed_purge_all');
-            if (defined('WPHB_VERSION')) do_action('wphb_clear_page_cache');
-        }
-
-        if ($needsCritPurge) {
-            global $wpdb;
-            $options_table = $wpdb->options;
-            $wpdb->query($wpdb->prepare("DELETE FROM $options_table WHERE option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like('_transient_wpc_critical_key_') . '%', $wpdb->esc_like('_transient_timeout_wpc_critical_key_') . '%'));
-            if (!isset($cache)) $cache = new wps_ic_cache_integrations();
-            $cache::purgeCriticalFiles();
+        // The same call the site's own settings save makes: a setting changed from the portal
+        // invalidates the critical CSS exactly as the same change made on the site does.
+        if (function_exists('wpc_crit_invalidate_on_settings_save')) {
+            wpc_crit_invalidate_on_settings_save($changedKeys);
         }
 
         wp_send_json_success();
@@ -676,6 +691,50 @@ class wps_ic_comms extends wps_ic
         wp_send_json_success($cookies_setting ?: []);
     }
 
+    /**
+     * comms_action=getCacheQueryParams — hands the agency portal this site's query-parameter
+     * lists (`params` vary the cache, `exclude_params` are stripped from the key) so the
+     * "Cache by Query Parameter" popup can be filled in from the portal.
+     */
+    public function getCacheQueryParams()
+    {
+        $query_params_setting = get_option('wps_ic_cache_query_params', []);
+        wp_send_json_success(is_array($query_params_setting) ? $query_params_setting : []);
+    }
+
+    /**
+     * comms_action=saveCacheQueryParams — stores the lists the portal pushed. Each key is written
+     * only when the portal sent it, so a relay that carries one list cannot blank the other.
+     */
+    public function saveCacheQueryParams()
+    {
+        $form                 = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
+        $query_params_setting = get_option('wps_ic_cache_query_params', []);
+        $query_params_setting = is_array($query_params_setting) ? $query_params_setting : [];
+        if (isset($form['params'])) {
+            $query_params_setting['params'] = $form['params'];
+        }
+        if (isset($form['exclude_params'])) {
+            $query_params_setting['exclude_params'] = $form['exclude_params'];
+        }
+        update_option('wps_ic_cache_query_params', $query_params_setting);
+
+        // The drop-in reads the baked constants, so the lists only take effect once it is re-baked.
+        $settings = get_option(WPS_IC_SETTINGS);
+        if (!empty($settings['cache']['advanced']) && $settings['cache']['advanced'] == '1') {
+            if (!class_exists('wps_ic_htaccess')) {
+                include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+            }
+            $htaccess = new wps_ic_htaccess();
+            $htaccess->setAdvancedCache();
+        }
+
+        $cache = new wps_ic_cache_integrations();
+        $cache::purgeAll(false, true, false, false, true);
+
+        wp_send_json_success();
+    }
+
     public function importSettings()
     {
         $form = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
@@ -688,7 +747,8 @@ class wps_ic_comms extends wps_ic
         }
 
         if (isset($form['excludes'])) {
-            update_option('wpc-excludes', $form['excludes']);
+            // An export from an older site carries two Delay JS lists; store the one.
+            update_option('wpc-excludes', wpc_delay_excludes_fold($form['excludes']));
         }
 
         if (isset($form['cache'])) {
@@ -701,9 +761,8 @@ class wps_ic_comms extends wps_ic
 
         $cache = new wps_ic_cache_integrations();
 
-        if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead()) {
-            $cache::purgeCriticalFiles();
-        }
+        // The same call the site's own import makes.
+        $cache::invalidateCritical('all', 'settings-import', 'stale');
 
         $cache::purgeAll(false, true, false, false, true);
 
@@ -800,18 +859,25 @@ class wps_ic_comms extends wps_ic
         if (!$cdnEnabled && !empty($settings['fonts']) && $settings['fonts'] == '1') $cdnEnabled = '1';
         $settings['live-cdn'] = $cdnEnabled;
 
-        
+        // Capture old modern_image_delivery value BEFORE option write, for toggle-transition handling (L8/L13)
         $oldModernDelivery = get_option(WPS_IC_SETTINGS)['modern_image_delivery'] ?? '0';
         $newModernDelivery = $settings['modern_image_delivery'] ?? '0';
 
         update_option(WPS_IC_SETTINGS, $settings);
 
-        
+        // The negotiation block follows the settings the portal just saved (the opt-out for the
+        // private negotiated body rides this row), not the next admin page load on the site.
+        if (!class_exists('wps_ic_htaccess')) {
+            include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+        }
+        (new wps_ic_htaccess())->syncWebpReplace($settings);
+
+        // Toggle-transition cleanup (fires AFTER option write — L8 + L13 + G13)
         if ($oldModernDelivery !== $newModernDelivery) {
-            
+            // Toggle ON: clear all retry-state so previously-failed attachments get a fresh try (L8)
             if ($oldModernDelivery === '0' && $newModernDelivery === '1') {
                 global $wpdb;
-                
+                // One-shot cleanup — can take 5-10s on sites with 100K+ options, acceptable for admin action
                 $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_wpc_failed_%' OR option_name LIKE '_transient_timeout_wpc_failed_%'");
                 $wpdb->query("DELETE FROM {$wpdb->postmeta} WHERE meta_key = '_wpc_optimize_attempts'");
             }
@@ -873,17 +939,17 @@ class wps_ic_comms extends wps_ic
         $wpc_excludes['delay_js'] = [];
         update_option('wpc-excludes', $wpc_excludes);
 
-        if (function_exists('wpc_preset_cache_gate67')) {
-            $settings = wpc_preset_cache_gate67($settings);
+        if (function_exists('wpc_drop_preset_advanced_cache_if_foreign')) {
+            $settings = wpc_drop_preset_advanced_cache_if_foreign($settings);
         }
 
         update_option(WPS_IC_SETTINGS, $settings);
         update_option(WPS_IC_PRESET, $preset);
 
-        
+        // Preload Page
         $cacheLogic = new wps_ic_cache();
 
-        
+        // Remove generateCriticalCSS Options
         delete_option('wps_ic_gen_hp_url');
 
         if (!class_exists('wps_ic_htaccess')) {
@@ -893,22 +959,19 @@ class wps_ic_comms extends wps_ic
         $htaccess = new wps_ic_htaccess();
 
         if ($preset == 'safe') {
-            
+            // Setup Advanced Caching
             $htaccess->removeHtaccessRules();
             $htaccess->removeAdvancedCache();
             $htaccess->setWPCache(false);
         } elseif (!empty($settings['cache']['advanced'])) {
-            
-            
+            // Setup Advanced Caching
+            // Add WP_CACHE to wp-config.php
             $htaccess->setWPCache(true);
             $htaccess->setAdvancedCache();
         }
 
-        
+        // Remove & Purge Cache Files for home directory (that's all pages)
         $cacheLogic::removeHtmlCacheFiles(0);
-
-        
-        $cacheLogic::preloadPage(0);
 
         wp_send_json_success();
     }
@@ -928,7 +991,14 @@ class wps_ic_comms extends wps_ic
             }
         }
 
-        $excludes = get_option('wpc-excludes');
+        // The portal's Delay JS popup reads `excludes['delay_js_v2']` from this answer. It gets the
+        // one list under both names (the v2 name is a view, never stored), so the portal box and
+        // the site's box show the same entries without a portal change.
+        $excludes = wpc_delay_excludes_fold(get_option('wpc-excludes'));
+        if (is_array($excludes)) {
+            $excludes['delay_js_v3'] = isset($excludes['delay_js_v3']) && is_array($excludes['delay_js_v3']) ? $excludes['delay_js_v3'] : [];
+            $excludes['delay_js_v2'] = $excludes['delay_js_v3'];
+        }
         $inlines = get_option('wpc-inline');
         $url_excludes = get_option('wpc-url-excludes');
         $mode = get_option(WPS_IC_PRESET);
@@ -939,17 +1009,24 @@ class wps_ic_comms extends wps_ic
         $plan_version = $plugin_options['version'] ?? '';
         $fonts_map = get_option(WPS_IC_FONTS_MAP);
 
-        $cf = get_option(WPS_IC_CF) ?: [];
+        $cf = self::cf_without_token(get_option(WPS_IC_CF));
         $cf_cname = get_option(WPS_IC_CF_CNAME) ?: '';
 
-        
-        
-        
-        
-        
-        
+        // The agency portal renders OUR settings template against ITS OWN options, so every
+        // get_option() the CDN card and the Custom DNS popup make has to be shipped here or it
+        // resolves against the portal install. These two never were: the portal drew the card in
+        // its "not configured" state for every site (no Connected Domain, no Remove), and the
+        // popup told the customer to point a CNAME at an empty string. Not injected = not a
+        // "blank" state, it is the portal's own value or nothing — both are wrong for the client.
         $custom_cname   = (string) get_option('ic_custom_cname');
         $cdn_zone_name  = (string) get_option('ic_cdn_zone_name');
+
+        // The plugins, theme and server block is wpc_site_facts(), the one reader the doctor's
+        // site compartment and a ticket bundle also report; the portal reads these three keys.
+        if (!function_exists('wpc_site_facts')) {
+            require_once WPS_IC_DIR . 'addons/doctor/doctor.php';
+        }
+        $site_facts = wpc_site_facts();
 
         wp_send_json_success([
             'settings'       => $options,
@@ -968,27 +1045,9 @@ class wps_ic_comms extends wps_ic
             'cdn_zone_name'  => $cdn_zone_name,
             'site_url'       => site_url(),
             'home_url'       => home_url(),
-            'active_plugins' => (function () {
-                $all    = get_plugins();
-                $active = get_option('active_plugins', []);
-                $result = [];
-                foreach ($active as $path) {
-                    $slug     = explode('/', $path)[0];
-                    $result[] = ['slug' => $slug, 'name' => $all[$path]['Name'] ?? $slug, 'path' => $path];
-                }
-                return $result;
-            })(),
-            'active_theme'   => [
-                'slug' => wp_get_theme()->get_stylesheet(),
-                'name' => wp_get_theme()->get('Name'),
-                'type' => 'theme',
-            ],
-            'server_info'    => [
-                'php_version'  => phpversion(),
-                'wp_version'   => $GLOBALS['wp_version'],
-                'max_upload'   => size_format(wp_max_upload_size()),
-                'memory_limit' => ini_get('memory_limit'),
-            ],
+            'active_plugins' => $site_facts['active_plugins'],
+            'active_theme'   => $site_facts['active_theme'],
+            'server_info'    => $site_facts['server_info'],
 
 
             'vitals'         => function_exists('wpc_vitals_export') ? wpc_vitals_export() : null,
@@ -997,6 +1056,22 @@ class wps_ic_comms extends wps_ic
                 'state' => function_exists('wpc_auto_state') ? wpc_auto_state() : [],
             ],
         ]);
+    }
+
+
+    /**
+     * comms_action=doctor: the doctor's report (or ticket bundle) for the agency portal, read-only.
+     * The form is what the portal's callSiteAction() sends: compartments, url, probe, bundle,
+     * hours, device (addons/doctor/doctor.php, wpc_doctor_request()).
+     */
+    public function doctor()
+    {
+        if (!function_exists('wpc_doctor_comms')) {
+            require_once WPS_IC_DIR . 'addons/doctor/doctor.php';
+        }
+        $raw = isset($_POST['form']) ? $_POST['form'] : ($_GET['form'] ?? '{}');
+        $form = is_array($raw) ? $raw : json_decode(stripslashes((string) $raw), true);
+        wp_send_json_success(wpc_doctor_comms(is_array($form) ? $form : []));
     }
 
 
@@ -1179,7 +1254,9 @@ class wps_ic_comms extends wps_ic
                 wp_send_json_error('Hacking?');
             }
 
-            if ($apikey != $options['api_key']) {
+            // Constant-time: a loose != leaks the key's shape through timing and type juggling,
+            // and this door answers with the site's settings and state.
+            if (empty($options['api_key']) || !hash_equals((string) $options['api_key'], (string) $apikey)) {
                 wp_send_json_error('Hacking?');
             }
 
@@ -1255,33 +1332,33 @@ class wps_ic_comms extends wps_ic
         }
 
         $pushed = null;
-        foreach (['cdn_enabled', 'local_enabled', 'suspended'] as $wpc_pk7) {
-            if (isset($_POST[$wpc_pk7])) {
+        foreach (['cdn_enabled', 'local_enabled', 'suspended'] as $pushed_key) {
+            if (isset($_POST[$pushed_key])) {
                 if ($pushed === null) {
                     $pushed = new stdClass();
                 }
-                $pushed->$wpc_pk7 = (int) $_POST[$wpc_pk7];
+                $pushed->$pushed_key = (int) $_POST[$pushed_key];
             }
         }
 
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
-        $wpc_t07 = microtime(true);
+        $started_at = microtime(true);
         $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'],]]);
-        $wpc_ms7 = (int) round((microtime(true) - $wpc_t07) * 1000);
+        $elapsed_ms = (int) round((microtime(true) - $started_at) * 1000);
 
         $fail = null;
         $data = null;
         if (is_wp_error($call)) {
-            $fail = ['reason' => 'api_unreachable', 'error' => $call->get_error_message(), 'http' => 0, 'ms' => $wpc_ms7];
+            $fail = ['reason' => 'api_unreachable', 'error' => $call->get_error_message(), 'http' => 0, 'ms' => $elapsed_ms];
         } else {
             $body = wp_remote_retrieve_body($call);
             $response_code = (int) wp_remote_retrieve_response_code($call);
             if ($response_code !== 200) {
-                $fail = ['reason' => 'api_http_' . $response_code, 'error' => substr((string) $body, 0, 200), 'http' => $response_code, 'ms' => $wpc_ms7];
+                $fail = ['reason' => 'api_http_' . $response_code, 'error' => substr((string) $body, 0, 200), 'http' => $response_code, 'ms' => $elapsed_ms];
             } else {
                 $data = json_decode($body);
                 if (json_last_error() !== JSON_ERROR_NONE || !is_object($data)) {
-                    $fail = ['reason' => 'api_bad_json', 'error' => substr((string) $body, 0, 200), 'http' => 200, 'ms' => $wpc_ms7];
+                    $fail = ['reason' => 'api_bad_json', 'error' => substr((string) $body, 0, 200), 'http' => 200, 'ms' => $elapsed_ms];
                     $data = null;
                 }
             }
@@ -1295,7 +1372,7 @@ class wps_ic_comms extends wps_ic
         if ($data === null) {
             update_option('wpc_credits_check_err', ['t' => time(), 'err' => (string) $fail['error'], 'http' => (int) $fail['http']], false);
             if (function_exists('wpc_cache_first_log')) {
-                wpc_cache_first_log('credits-check-failed', 'settings-check', '', ['err' => substr((string) $fail['error'], 0, 160), 'http' => (int) $fail['http'], 'ms' => $wpc_ms7]);
+                wpc_cache_first_log('credits-check-failed', 'settings-check', '', ['err' => substr((string) $fail['error'], 0, 160), 'http' => (int) $fail['http'], 'ms' => $elapsed_ms]);
             }
             wp_send_json_error($fail);
         }
@@ -1310,7 +1387,7 @@ class wps_ic_comms extends wps_ic
                 $cache::purgeAll(false, true, false, false, true);
             }
         }
-        wp_send_json_success(['updated_local' => $updated_local, 'updated_live' => $updated_live, 'allow_local' => $allow_local, 'allow_live' => $allow_live, 'source' => $source, 'api' => $fail, 'ms' => $wpc_ms7]);
+        wp_send_json_success(['updated_local' => $updated_local, 'updated_live' => $updated_live, 'allow_local' => $allow_local, 'allow_live' => $allow_live, 'source' => $source, 'api' => $fail, 'ms' => $elapsed_ms]);
     }
 
 

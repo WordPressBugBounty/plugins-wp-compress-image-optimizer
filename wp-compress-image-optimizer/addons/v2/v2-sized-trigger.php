@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-sized-trigger.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) exit;
 
 
@@ -64,23 +56,21 @@ if (!function_exists('wpc_v2_sized_trigger_queue')) {
         $width = (int) $width;
         if ($att <= 0 || $width <= 0) return false;
         if (!apply_filters('wpc_sized_trigger_enabled', true)) return false;
-        
+        // Smart Delivery required: the DELIVERY leg (pull manifest → lazy ingest) only runs in
 
         if (!function_exists('wpc_v2_get_lazy_enabled') || !wpc_v2_get_lazy_enabled()) return false;
 
 
-        if (get_transient('wpc_restoring_' . $att)) return false;
-
         $meta = function_exists('wp_get_attachment_metadata') ? wp_get_attachment_metadata($att) : false;
         if (!is_array($meta) || empty($meta['file']) || empty($meta['width']) || empty($meta['height'])) return false;
 
-        
+        // CDN flag 3 — cap at the source's natural width (never upscale; collapses small-source DPR rungs).
         $natural = (int) $meta['width'];
         if ($width >= $natural) return false;
 
 
         if (!function_exists('wpc_v2_adaptive_variant_suffix')) return false;
-        $suffix = wpc_v2_adaptive_variant_suffix($width, $meta); 
+        $suffix = wpc_v2_adaptive_variant_suffix($width, $meta); // "-{W}x{H}" (or "-{W}w" if no aspect)
         if ($suffix === '' || strpos($suffix, 'x') === false) return false;
 
 
@@ -92,28 +82,31 @@ if (!function_exists('wpc_v2_sized_trigger_queue')) {
         }
 
 
-        $s_c22 = get_option(WPS_IC_SETTINGS);
-        $cdn_drives_c22 = is_array($s_c22) && !empty($s_c22['live-cdn']) && (string) $s_c22['live-cdn'] === '1'
-            && (!class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled($s_c22));
-        $wpc_origin23 = function_exists('wpc_policy23_serve') && wpc_policy23_serve() === 'origin';
-        if ($cdn_drives_c22 && !$wpc_origin23) {
+        $settings = get_option(WPS_IC_SETTINGS);
+        $cdn_drives_images = is_array($settings) && !empty($settings['live-cdn']) && (string) $settings['live-cdn'] === '1'
+            && (!class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled($settings));
+        $origin_serving = function_exists('wpc_policy_serve') && wpc_policy_serve() === 'origin';
+        if ($cdn_drives_images && !$origin_serving) {
             return false;
         }
-        if (!$wpc_origin23 && (string) get_option('wpc_envelope_ideal_widths', '1') === '1'
+        if (!$origin_serving && (string) get_option('wpc_envelope_ideal_widths', '1') === '1'
             && get_post_meta($att, 'ic_status', true) !== 'compressed') {
             return false;
         }
 
-        
+        // Skip if the avif is already on disk (idempotent, zero network).
         $up = wp_get_upload_dir();
         if (empty($up['basedir']) || empty($up['baseurl'])) return false;
         $subdir = (strpos($meta['file'], '/') !== false) ? substr($meta['file'], 0, strrpos($meta['file'], '/') + 1) : '';
         $stem   = preg_replace('/(-scaled)?\.[^.]+$/', '', basename((string) $meta['file']));
         if (@file_exists(rtrim($up['basedir'], '/') . '/' . $subdir . $stem . $suffix . '.avif')) return false;
 
-        
+        // Burst guard: one trigger per (attachment, width) per 15 min.
         $guard = 'wpc_szt_' . $att . '_' . $width;
         if (get_transient($guard)) return false;
+        // The dispatch door's gates for a rung fill (parked, callbacks waiting in the journal, a
+        // restore), asked after the cheap guards: this runs per image on a render.
+        if (wps_ic_image_optimize::refusal($att, 'sized-trigger') !== null) return false;
         set_transient($guard, 1, 15 * MINUTE_IN_SECONDS);
 
 
@@ -133,31 +126,31 @@ if (!function_exists('wpc_v2_sized_trigger_queue')) {
         if (!$hooked) {
             $hooked = true;
             if (function_exists('did_action') && did_action('shutdown')) {
-                wpc_szt_spool_add79($batch);
+                wpc_sized_trigger_spool_add($batch);
                 $batch = [];
-                wpc_szt_schedule79();
+                wpc_sized_trigger_schedule_drain();
                 return true;
             }
             add_action('shutdown', function () use (&$batch) {
                 if (empty($batch)) {
                     return;
                 }
-                wpc_szt_spool_add79($batch);
+                wpc_sized_trigger_spool_add($batch);
                 $batch = [];
-                $can79 = apply_filters('wpc_szt_can_detach79', function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'));
-                if ($can79 && function_exists('wpc_render_guard39_active') && wpc_render_guard39_active() && function_exists('wpc_net_defer39')) {
-                    wpc_net_defer39('szt79', 'wpc_szt_drain79');
+                $can_detach = apply_filters('wpc_szt_can_detach79', function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'));
+                if ($can_detach && function_exists('wpc_render_guard_active') && wpc_render_guard_active() && function_exists('wpc_net_defer')) {
+                    wpc_net_defer('szt79', 'wpc_sized_trigger_drain');
                     return;
                 }
-                register_shutdown_function('wpc_szt_after_response79');
+                register_shutdown_function('wpc_sized_trigger_after_response');
             }, 1);
         }
         return true;
     }
 }
 
-if (!function_exists('wpc_szt_spool_add79')) {
-    function wpc_szt_spool_add79($items)
+if (!function_exists('wpc_sized_trigger_spool_add')) {
+    function wpc_sized_trigger_spool_add($items)
     {
         $spool = get_option('wpc_szt_spool79', []);
         if (!is_array($spool)) {
@@ -193,41 +186,41 @@ if (!function_exists('wpc_szt_spool_add79')) {
     }
 }
 
-if (!function_exists('wpc_szt_schedule79')) {
-    function wpc_szt_schedule79($delay = 60)
+if (!function_exists('wpc_sized_trigger_schedule_drain')) {
+    function wpc_sized_trigger_schedule_drain($delay = 60)
     {
         $delay = max(60, min(3600, (int) $delay));
-        if (!function_exists('wp_next_scheduled') || wp_next_scheduled('wpc_szt_drain79')) {
+        if (!function_exists('wp_next_scheduled') || wp_next_scheduled(WPC_SIZED_TRIGGER_DRAIN_HOOK)) {
             return false;
         }
-        if (function_exists('wpc_pl_sched') && wpc_pl_sched(time() + $delay, 'wpc_szt_drain79')) {
+        if (function_exists('wpc_pl_sched') && wpc_pl_sched(time() + $delay, WPC_SIZED_TRIGGER_DRAIN_HOOK)) {
             return true;
         }
         if (function_exists('wp_schedule_single_event')) {
-            wp_schedule_single_event(time() + $delay, 'wpc_szt_drain79');
+            wp_schedule_single_event(time() + $delay, WPC_SIZED_TRIGGER_DRAIN_HOOK);
             return true;
         }
         return false;
     }
 }
 
-if (!function_exists('wpc_szt_after_response79')) {
-    function wpc_szt_after_response79()
+if (!function_exists('wpc_sized_trigger_after_response')) {
+    function wpc_sized_trigger_after_response()
     {
-        $released = function_exists('wpc_finish_request39') ? wpc_finish_request39() : false;
+        $released = function_exists('wpc_finish_request') ? wpc_finish_request() : false;
         if ($released) {
             if (function_exists('ignore_user_abort')) {
                 @ignore_user_abort(true);
             }
-            wpc_szt_drain79();
+            wpc_sized_trigger_drain();
             return;
         }
-        wpc_szt_schedule79();
+        wpc_sized_trigger_schedule_drain();
     }
 }
 
-if (!function_exists('wpc_szt_journal38')) {
-    function wpc_szt_journal38($what, $layers = [])
+if (!function_exists('wpc_sized_trigger_log')) {
+    function wpc_sized_trigger_log($what, $layers = [])
     {
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('sized-trigger', $what, '', $layers);
@@ -235,16 +228,16 @@ if (!function_exists('wpc_szt_journal38')) {
     }
 }
 
-if (!function_exists('wpc_szt_drain79')) {
-    function wpc_szt_drain79()
+if (!function_exists('wpc_sized_trigger_drain')) {
+    function wpc_sized_trigger_drain()
     {
-        if (function_exists('wpc_render_guard39_active') && wpc_render_guard39_active()) {
-            wpc_szt_schedule79();
+        if (function_exists('wpc_render_guard_active') && wpc_render_guard_active()) {
+            wpc_sized_trigger_schedule_drain();
             return 0;
         }
-        if (function_exists('wpc_pressure_bounded28') ? wpc_pressure_bounded28('trigger') : (function_exists('wpc_under_pressure') && wpc_under_pressure())) {
-            wpc_szt_journal38('pressure', ['spool' => count((array) get_option('wpc_szt_spool79', []))]);
-            wpc_szt_schedule79();
+        if (function_exists('wpc_should_shed_under_pressure') ? wpc_should_shed_under_pressure('trigger') : (function_exists('wpc_under_pressure') && wpc_under_pressure())) {
+            wpc_sized_trigger_log('pressure', ['spool' => count((array) get_option('wpc_szt_spool79', []))]);
+            wpc_sized_trigger_schedule_drain();
             return 0;
         }
         if (get_transient('wpc_szt_draining79')) {
@@ -277,26 +270,13 @@ if (!function_exists('wpc_szt_drain79')) {
                 $chunk[] = ['origin_url' => $spool[$k]['origin_url'], 'sizeLabel' => $spool[$k]['sizeLabel'], 'slot_w' => $spool[$k]['slot_w']]
                     + (!empty($spool[$k]['display_w']) ? ['display_w' => (int) $spool[$k]['display_w']] : []);
             }
-            $body_raw = wp_json_encode(['apikey' => $apikey, 'items' => $chunk]);
-            if ($body_raw === false) {
+            $resp = wps_ic_image_optimize::dispatch_sized($chunk);
+            if (is_wp_error($resp) && $resp->get_error_code() === 'wpc_encode') {
                 foreach ($chunk_keys as $k) {
                     unset($spool[$k]);
                 }
                 continue;
             }
-            $ts  = time();
-            $sig = hash_hmac('sha256', $ts . '.' . hash('sha256', $body_raw), $apikey);
-            $resp = wp_remote_post(rtrim($orch, '/') . '/v2/sized-trigger', [
-                'timeout'   => 8,
-                'blocking'  => true,
-                'sslverify' => true,
-                'headers'   => [
-                    'Content-Type' => 'application/json',
-                    'X-WPC-Sig'    => 't=' . $ts . ',v1=' . $sig,
-                    'User-Agent'   => 'WPCompress/' . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '?'),
-                ],
-                'body' => $body_raw,
-            ]);
             $labels = implode(',', array_map(function ($it) { return $it['sizeLabel']; }, $chunk));
             $code = is_wp_error($resp) ? 0 : (int) wp_remote_retrieve_response_code($resp);
             if ($code >= 200 && $code < 300) {
@@ -304,23 +284,23 @@ if (!function_exists('wpc_szt_drain79')) {
                     unset($spool[$k]);
                 }
                 $sent += count($chunk_keys);
-                wpc_szt_journal38('dispatched', ['n' => count($chunk), 'labels' => $labels, 'http' => $code, 'spool' => count($spool)]);
+                wpc_sized_trigger_log('dispatched', ['n' => count($chunk), 'labels' => $labels, 'http' => $code, 'spool' => count($spool)]);
                 error_log('[WPC SizedTrigger] dispatched items=' . count($chunk) . ' [' . $labels . '] http=' . $code
                     . ' resp=' . substr(preg_replace('/\s+/', ' ', (string) wp_remote_retrieve_body($resp)), 0, 400));
                 continue;
             }
             error_log('[WPC SizedTrigger] deferred items=' . count($chunk) . ' [' . $labels . '] '
                 . (is_wp_error($resp) ? 'ERR=' . $resp->get_error_message() : 'http=' . $code) . ' spool=' . count($spool));
-            wpc_szt_journal38('deferred', ['n' => count($chunk), 'labels' => $labels, 'http' => $code, 'err' => is_wp_error($resp) ? substr((string) $resp->get_error_message(), 0, 120) : '', 'spool' => count($spool), 'retry_after' => (int) wp_remote_retrieve_header($resp, 'retry-after')]);
+            wpc_sized_trigger_log('deferred', ['n' => count($chunk), 'labels' => $labels, 'http' => $code, 'err' => is_wp_error($resp) ? substr((string) $resp->get_error_message(), 0, 120) : '', 'spool' => count($spool), 'retry_after' => (int) wp_remote_retrieve_header($resp, 'retry-after')]);
             if ($code === 429) {
-                $wpc_ra23 = (int) wp_remote_retrieve_header($resp, 'retry-after');
-                $wpc_now23 = time();
-                foreach ($spool as $wpc_k23 => $wpc_e23) {
-                    if (is_array($wpc_e23)) { $spool[$wpc_k23]['t'] = $wpc_now23; }
+                $retry_after = (int) wp_remote_retrieve_header($resp, 'retry-after');
+                $now = time();
+                foreach ($spool as $spool_key => $spool_entry) {
+                    if (is_array($spool_entry)) { $spool[$spool_key]['t'] = $now; }
                 }
                 update_option('wpc_szt_spool79', $spool, false);
                 delete_transient('wpc_szt_draining79');
-                wpc_szt_schedule79($wpc_ra23 > 0 ? $wpc_ra23 : 300);
+                wpc_sized_trigger_schedule_drain($retry_after > 0 ? $retry_after : 300);
                 return $sent;
             }
             break;
@@ -328,13 +308,13 @@ if (!function_exists('wpc_szt_drain79')) {
         update_option('wpc_szt_spool79', $spool, false);
         delete_transient('wpc_szt_draining79');
         if (!empty($spool)) {
-            wpc_szt_schedule79();
+            wpc_sized_trigger_schedule_drain();
         }
         return $sent;
     }
 }
 if (function_exists('add_action')) {
-    add_action('wpc_szt_drain79', 'wpc_szt_drain79');
-    add_action('wpc_v2_pull_cron', 'wpc_szt_drain79', 20);
+    add_action(WPC_SIZED_TRIGGER_DRAIN_HOOK, 'wpc_sized_trigger_drain');
+    add_action('wpc_v2_pull_cron', 'wpc_sized_trigger_drain', 20);
 }
 

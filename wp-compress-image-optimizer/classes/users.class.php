@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/users.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 class wps_ic_users extends wps_ic{
 
@@ -19,9 +11,9 @@ class wps_ic_users extends wps_ic{
     }
 
 
-    
-
-
+    /**
+     * Check and add missing capabilities for roles.
+     */
     public function checkAndAddCaps() {
         $this->ensureRoleHasCap('administrator', 'manage_wpc_settings');
 
@@ -45,9 +37,9 @@ class wps_ic_users extends wps_ic{
     }
 
 
-    
-
-
+    /**
+     * Check if permission is added
+     */
     public function permissionEnabled($role, $permission)
     {
         if (isset(self::$settings['permissions'])) {
@@ -71,12 +63,12 @@ class wps_ic_users extends wps_ic{
     }
 
 
-    
-
-
-
-
-
+    /**
+     * Ensures that a role has a specific capability. Adds it if missing.
+     *
+     * @param string $role_name
+     * @param string $cap
+     */
     private function ensureRoleHasCap($role_name, $cap) {
         $role = get_role($role_name);
 

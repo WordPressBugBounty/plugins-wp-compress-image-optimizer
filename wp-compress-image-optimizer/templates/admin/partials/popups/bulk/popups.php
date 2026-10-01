@@ -1,13 +1,5 @@
 <?php
 
-
-
-
-
-
-
-
-
 $support_url = function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url() : 'https://www.wpcompress.com/';
 
 $warn_icon = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
@@ -53,7 +45,7 @@ $error_template('bulk-process-failed',
 
 $error_template('all-parked',
     __('These images need individual attention', WPS_IC_TEXTDOMAIN),
-    __('Every remaining image has been parked after repeated failed optimization attempts, or is waiting on a retry window. Re-optimize them one by one from the Media Library to see the exact error, or try again later - parked images retry automatically after 7 days.', WPS_IC_TEXTDOMAIN)
+    __('Every remaining image has been parked after repeated failed optimization attempts, or is waiting on a retry window. Re-optimize them one by one from the Media Library to see the exact error, or run Bulk Optimize again later - an image waiting for a retry is sent by the next run once its wait is over, and a parked image after 7 days.', WPS_IC_TEXTDOMAIN)
 );
 
 $error_template('bulk-process-bad-apikey',

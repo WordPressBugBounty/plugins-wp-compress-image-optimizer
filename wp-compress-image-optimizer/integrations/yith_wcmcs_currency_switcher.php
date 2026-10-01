@@ -1,14 +1,6 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: integrations/yith_wcmcs_currency_switcher.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 class wps_ic_yith_wcmcs_currency_switcher extends wps_ic_integrations {
@@ -20,7 +12,7 @@ class wps_ic_yith_wcmcs_currency_switcher extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        
+        // No conflicting settings to auto-fix for this plugin
     }
 
     public function fix_setting($setting) {

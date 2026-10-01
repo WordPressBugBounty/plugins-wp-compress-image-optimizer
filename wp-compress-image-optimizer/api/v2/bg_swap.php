@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: api/v2/bg_swap.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 define('WPC_V2_DIRECT_ENTRY', true);
@@ -19,10 +11,10 @@ if (!is_string($body_raw) || $body_raw === '') {
 }
 
 $sig_header = isset($_SERVER['HTTP_X_WPC_SIG']) ? (string) $_SERVER['HTTP_X_WPC_SIG'] : '';
-$hmac = wpc_v2_direct_verify_hmac($sig_header, $body_raw);
+// The inbound verifier the REST callbacks use: size, signature (cb_secret first), fetch host, inline bytes.
+$hmac = wpc_v2_inbound_verify('direct_bg_swap', $sig_header, $body_raw, ['scope' => 'write', 'auth_status' => 401]);
 if (!$hmac['ok']) {
-    error_log('[wpc_v2_direct_single] auth_rejected reason=' . $hmac['reason']);
-    wpc_v2_direct_respond(401, ['error' => 'auth', 'reason' => $hmac['reason']]);
+    wpc_v2_direct_respond($hmac['status'], ['error' => $hmac['status'] === 401 ? 'auth' : $hmac['reason'], 'reason' => $hmac['detail']]);
 }
 
 $body = json_decode($body_raw, true);
@@ -62,14 +54,7 @@ if ($jobId !== '') {
     }
 }
 
-if ($filename === '') {
-    $filename = wpc_v2_direct_derive_filename($imageID, $size_label, $format);
-    if ($filename === '') {
-        wpc_v2_direct_respond(400, ['error' => 'filename_derive_failed']);
-    }
-}
-
-
+// No-improvement signal
 if (!empty($body['noImprovement']) || (isset($body['bumped']) && (string) $body['bumped'] === 'source_already_optimal')) {
     $reason = !empty($body['noImprovement'])
         ? (isset($body['reason']) ? (string) $body['reason'] : 'no_improvement')
@@ -98,7 +83,16 @@ if (!empty($body['noImprovement']) || (isset($body['bumped']) && (string) $body[
     wpc_v2_direct_respond(200, ['ok' => true, 'kind' => $reason, 'direct_entry' => true]);
 }
 
+// Derived only for a body that carries bytes: a size-floor POST has none and names no file
+// (see the REST twin, wpc_v2_handle_bg_swap()).
+if ($filename === '') {
+    $filename = wpc_v2_direct_derive_filename($imageID, $size_label, $format);
+    if ($filename === '') {
+        wpc_v2_direct_respond(400, ['error' => 'filename_derive_failed']);
+    }
+}
 
+// Resolve bytes
 $raw = null;
 if ($b64 !== '') {
     $raw = base64_decode($b64, true);
@@ -106,9 +100,6 @@ if ($b64 !== '') {
 } elseif ($fetch_url !== '') {
 
 
-    if (!wpc_v2_direct_safe_fetch_url($fetch_url)) {
-        wpc_v2_direct_respond(400, ['error' => 'unsafe_fetch_url']);
-    }
     $ctx = stream_context_create(['http' => ['timeout' => 15, 'follow_location' => 0, 'max_redirects' => 0]]);
     $raw = @file_get_contents($fetch_url, false, $ctx);
     if ($raw === false || $raw === '') wpc_v2_direct_respond(502, ['error' => 'fetch_url_failed']);
@@ -116,8 +107,25 @@ if ($b64 !== '') {
     wpc_v2_direct_respond(400, ['error' => 'missing_bytes_or_fetchUrl']);
 }
 
+if (!wpc_v2_inbound_image_ok($raw, $format, $imageID, 'direct_bg_swap')) {
+    wpc_v2_direct_respond(422, ['error' => 'invalid_image_bytes']);
+}
 
-$persist = wpc_v2_direct_persist_bytes($imageID, $filename, $raw);
+// Atomic disk write
+$persist = wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $size_label, $format, 'direct_bg_swap');
+if (($persist['refused'] ?? '') === 'larger_than_disk') {
+    // No smaller than the file WordPress serves at this size: settled as no improvement, not written.
+    $journal_file = wpc_v2_journal_write($imageID, $jobId, [
+        'flush_reason' => 'single',
+        'received_ms'  => (int) round($entry_t * 1000),
+        'entries'      => [['type' => 'no_improvement', 'sizeLabel' => $size_label, 'format' => $format, 'reason' => 'larger_than_disk', 'baselineKb' => 0.0]],
+    ]);
+    if ($journal_file === false) {
+        wpc_v2_direct_respond(503, ['error' => 'journal_unavailable', 'retry_via' => 'rest']);
+    }
+    register_shutdown_function('wpc_v2_journal_fire_loopback');
+    wpc_v2_direct_respond(200, ['ok' => true, 'kind' => 'no_improvement', 'reason' => 'larger_than_disk', 'direct_entry' => true]);
+}
 if (!$persist['ok']) {
     wpc_v2_direct_respond(500, ['error' => $persist['error']]);
 }
@@ -151,7 +159,7 @@ error_log(sprintf(
     (microtime(true) - $entry_t) * 1000
 ));
 
-
+// Trigger drain on threshold (less likely with single-variant, but consistent)
 $threshold = defined('WPC_V2_JOURNAL_DRAIN_THRESHOLD') ? (int) WPC_V2_JOURNAL_DRAIN_THRESHOLD : 5;
 if (wpc_v2_journal_count() >= $threshold) {
     register_shutdown_function('wpc_v2_journal_fire_loopback');

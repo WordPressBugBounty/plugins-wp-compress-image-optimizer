@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: wp-compress-cli.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 if (!defined('WP_CLI') || !WP_CLI) return;
@@ -17,7 +9,7 @@ class WPC_CLI_Command extends WP_CLI_Command
 
     public function backfill_avif($args, $assoc)
     {
-        
+        // Bootstrap the plugin's core under wp-cli (normally gated out by wp-compress.php:22)
         if (!function_exists('wpc_backfill_missing_avif')) {
             $core = __DIR__ . '/wp-compress-core.php';
             if (file_exists($core)) {
@@ -91,9 +83,85 @@ class WPC_CLI_Command extends WP_CLI_Command
     }
 
 
+    /**
+     * Print the plugin log's raw lines (JSONL, oldest first).
+     *
+     * ## OPTIONS
+     *
+     * [--since=<unix-time>]
+     * : Only entries written at or after this time.
+     *
+     * [--lines=<n>]
+     * : At most this many, the newest. Default 500.
+     *
+     * The log is wp-content/cache/wp-cio/wpc-cflog.php, which answers nothing over HTTP.
+     */
+    public function cflog($args, $assoc)
+    {
+        if (!function_exists('wpc_cflog_lines')) {
+            WP_CLI::error('The log reader is not loaded.');
+        }
+        foreach (wpc_cflog_lines(isset($assoc['lines']) ? (int) $assoc['lines'] : 500, isset($assoc['since']) ? (int) $assoc['since'] : 0) as $line) {
+            WP_CLI::line($line);
+        }
+    }
+
+    /**
+     * What each part of the plugin decided for a page, and why, read from the state it keeps and
+     * the receipts it writes. Writes nothing; no network call without --probe.
+     *
+     * ## OPTIONS
+     *
+     * [<compartment>...]
+     * : site, cache, crit, render, logs. Default: all of them.
+     *
+     * [--url=<url>]
+     * : A page of this site, absolute or as a path. Default: the homepage.
+     *
+     * [--probe]
+     * : Also fetch the page as a logged-out visitor. It may store a page copy exactly as a visit would.
+     *
+     * [--hours=<n>]
+     * : The journal window in hours. Default 24.
+     *
+     * [--device=<device>]
+     * : desktop or mobile. Default: both.
+     *
+     * [--format=<format>]
+     * : table or json. Default table.
+     *
+     * [--bundle]
+     * : A ticket bundle on stdout (JSON): every compartment plus every journal entry of the window.
+     */
+    public function doctor($args, $assoc)
+    {
+        // Under WP-CLI the plugin core is gated out (wp-compress.php) and the cron file loads
+        // defines.php, warm.php and the url key class. Booting the core here would run its
+        // request-time boot, which can write; the doctor loads declarations only: its own files
+        // and rewriteLogic.php (a class file that runs nothing at load) for the crit payload check.
+        // Any other owner that is missing reads "unavailable" in the report.
+        if (!class_exists('wps_ic_url_key') && file_exists(__DIR__ . '/traits/url_key.php')) {
+            require_once __DIR__ . '/traits/url_key.php';
+        }
+        if (!class_exists('wps_rewriteLogic') && file_exists(__DIR__ . '/addons/cdn/rewriteLogic.php')) {
+            require_once __DIR__ . '/addons/cdn/rewriteLogic.php';
+        }
+        if (!function_exists('wpc_doctor_run')) {
+            require_once __DIR__ . '/addons/doctor/doctor.php';
+        }
+        // --url is WP-CLI's own global parameter: WP-CLI takes it before the command sees its
+        // arguments (on the rig, --url=/about/ reached the command as nothing and the report was
+        // the homepage's), so the page is read from WP-CLI's config.
+        $assoc = (array) $assoc;
+        if (!isset($assoc['url'])) {
+            $assoc['url'] = (string) WP_CLI::get_config('url');
+        }
+        wpc_doctor_cli((array) $args, $assoc);
+    }
+
     public function purge_variants($args, $assoc)
     {
-        
+        // Bootstrap the plugin's core under wp-cli (gated out by wp-compress.php:22)
         if (!function_exists('wpc_purge_variants_for_image')) {
             $core = __DIR__ . '/wp-compress-core.php';
             if (file_exists($core)) {
@@ -128,8 +196,8 @@ class WPC_CLI_Command extends WP_CLI_Command
     }
 }
 
-
-
+// v2 protocol smoke + staging tests. Adds CLI surface for
+// driving WPS_LocalV2 directly without the wp-admin UI (which is Day 5-6
 
 
 if (!class_exists('WPC_CLI_V2_Command')) {
@@ -157,7 +225,7 @@ class WPC_CLI_V2_Command extends WP_CLI_Command
         }
 
         if (!function_exists('wpc_probe_orchestrator_capabilities')) {
-            WP_CLI::error('v2 capabilities probe not loaded — check wpc_protocol_version setting');
+            WP_CLI::error('v2 capabilities probe not loaded — addons/v2/v2-capabilities.php is missing');
         }
         $caps = wpc_probe_orchestrator_capabilities(true);
         WP_CLI::log(json_encode($caps, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
@@ -175,7 +243,6 @@ class WPC_CLI_V2_Command extends WP_CLI_Command
         if (!defined('WPC_CC_PLUGIN_FILE')) define('WPC_CC_PLUGIN_FILE', __DIR__ . '/wp-compress.php');
         require_once __DIR__ . '/wp-compress-core.php';
         if (!defined('WPC_V2_LOADED')) {
-            update_option('wpc_protocol_version', 'auto');
             require_once __DIR__ . '/addons/v2/v2-bootstrap.php';
         }
 
@@ -188,54 +255,26 @@ class WPC_CLI_V2_Command extends WP_CLI_Command
             WP_CLI::log('Using orchestrator: ' . $url);
         }
 
-        $opts = get_option('wps_ic_options');
-        $apikey = is_array($opts) && !empty($opts['api_key']) ? (string) $opts['api_key'] : '';
-        if ($apikey === '') WP_CLI::error('No apikey configured in wps_ic_options');
-
-        $orch_url = function_exists('wpc_v2_orchestrator_url') ? wpc_v2_orchestrator_url() : '';
-        if ($orch_url === '') WP_CLI::error('Could not resolve orchestrator URL');
-        WP_CLI::log('Orchestrator: ' . $orch_url);
-
-        $client = new WPS_LocalV2($apikey, $orch_url);
-
-        
-        $meta = wp_get_attachment_metadata($imageID);
-        $variants = [];
-        if (is_array($meta) && !empty($meta['sizes'])) {
-            foreach ($meta['sizes'] as $label => $info) {
-                $variants[] = [
-                    'sizeLabel' => (string) $label,
-                    'maxWidth'  => isset($info['width']) ? (int) $info['width'] : 0,
-                    'maxHeight' => isset($info['height']) ? (int) $info['height'] : 0,
-                    'crop'      => ($label === 'thumbnail'),
-                ];
-            }
+        // The same door the Compress button uses, so the test sends the envelope production sends.
+        $options = ['triggerContext' => 'wpcli-v2-test'];
+        if (!empty($assoc['level'])) {
+            $options['level'] = (string) $assoc['level'];
         }
-        $variants[] = ['sizeLabel' => 'scaled', 'maxWidth' => 2560, 'crop' => false, 'parent' => true];
-        $variants[] = ['sizeLabel' => 'original', 'maxWidth' => null, 'crop' => false];
-
-        $options = [
-            'level'          => $assoc['level'] ?? 'intelligent',
-            'formats'        => ['jpeg', 'webp', 'avif'],
-            'triggerContext' => 'wpcli-v2-test',
-            'callback_url'   => rest_url('wpc/v2/bg_swap'),
-        ];
         if (isset($assoc['source-mode']) && $assoc['source-mode'] === 'url') {
             $options['force_url_source'] = true;
         }
 
         set_transient('wps_ic_compress_' . $imageID, ['imageID' => $imageID, 'status' => 'compressing', 'time' => time()], 120);
 
-        $t0 = microtime(true);
-        $result = $client->optimize($imageID, $variants, $options);
-        $wall_ms = (int) round((microtime(true) - $t0) * 1000);
+        $result = wps_ic_image_optimize::dispatch($imageID, 'cli', $options);
+        $wall_ms = (int) ($result['wall_ms'] ?? 0);
 
         WP_CLI::log('Phase A wall: ' . $wall_ms . ' ms');
         WP_CLI::log('Result: ' . wp_json_encode([
             'ok'    => $result['ok'] ?? false,
             'error' => $result['error'] ?? null,
             'jobId' => $result['jobId'] ?? null,
-            'variants_written' => isset($result['write']['variants_written']) ? $result['write']['variants_written'] : [],
+            'variants_written' => $result['variants_written'] ?? [],
         ], JSON_PRETTY_PRINT));
 
         if (empty($result['ok'])) {
@@ -253,6 +292,43 @@ class WPC_CLI_V2_Command extends WP_CLI_Command
         WP_CLI::log('Tail debug.log for [WPC V2BgSwap ACK] entries to watch Phase B drain.');
     }
 
+
+    /**
+     * The image doctor, read-only: why an image is or is not compressed, and what this site's
+     * folders, orchestrator and loopback answer (classes/image_doctor.class.php).
+     *
+     * ## OPTIONS
+     *
+     * [--ids=<ids>]
+     * : Comma-separated attachment ids.
+     *
+     * [--parked]
+     * : The images on the parked list.
+     *
+     * [--status=<status>]
+     * : The images whose ic_status is this value.
+     *
+     * [--limit=<n>]
+     * : At most this many images. Default 200.
+     *
+     * [--format=<format>]
+     * : table or json. Default table.
+     *
+     * [--site-only]
+     * : Only the site block.
+     *
+     * [--export]
+     * : The image lane's state for the selected images as one JSON document.
+     */
+    public function image_doctor($args, $assoc)
+    {
+        if (!defined('WPC_CC_PLUGIN_FILE')) define('WPC_CC_PLUGIN_FILE', __DIR__ . '/wp-compress.php');
+        require_once __DIR__ . '/wp-compress-core.php';
+        if (!defined('WPC_V2_LOADED')) {
+            require_once __DIR__ . '/addons/v2/v2-bootstrap.php';
+        }
+        wps_ic_image_doctor::cli($args, $assoc);
+    }
 
     public function fpm_stats($args, $assoc)
     {
@@ -297,6 +373,7 @@ class WPC_CLI_V2_Command extends WP_CLI_Command
 WP_CLI::add_command('wpcompress v2-capabilities', ['WPC_CLI_V2_Command', 'v2_capabilities']);
 WP_CLI::add_command('wpcompress v2-test',         ['WPC_CLI_V2_Command', 'v2_test']);
 WP_CLI::add_command('wpcompress fpm-stats',       ['WPC_CLI_V2_Command', 'fpm_stats']);
+WP_CLI::add_command('wpcompress image-doctor',    ['WPC_CLI_V2_Command', 'image_doctor']);
 
 }
 
@@ -304,3 +381,5 @@ WP_CLI::add_command('wpcompress fpm-stats',       ['WPC_CLI_V2_Command', 'fpm_st
 WP_CLI::add_command('wpcompress', 'WPC_CLI_Command');
 WP_CLI::add_command('wpcompress backfill-avif', ['WPC_CLI_Command', 'backfill_avif']);
 WP_CLI::add_command('wpcompress purge-variants', ['WPC_CLI_Command', 'purge_variants']);
+WP_CLI::add_command('wpcompress cflog', ['WPC_CLI_Command', 'cflog']);
+WP_CLI::add_command('wpcompress doctor', ['WPC_CLI_Command', 'doctor']);

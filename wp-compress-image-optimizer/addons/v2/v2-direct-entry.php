@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-direct-entry.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 include_once __DIR__ . '/../cache/wpc-fs.php';
 if (!defined('ABSPATH')) {
     exit;
@@ -14,11 +6,11 @@ if (!defined('ABSPATH')) {
 
 if (!function_exists('wpc_v2_callback_url')) {
 
-
-
-
-
-
+/**
+ * Returns the active callback URL for the /optimize-v2 envelope. Caches the
+ * result per-request so multiple v2-client calls in the same request don't
+ * thrash get_option.
+ */
 function wpc_v2_callback_url($endpoint = 'bg_swap') {
     static $cache = [];
     if (isset($cache[$endpoint])) return $cache[$endpoint];
@@ -34,7 +26,7 @@ function wpc_v2_callback_url($endpoint = 'bg_swap') {
 
 
 function wpc_v2_probe_direct_entry($force = false) {
-    
+    // Rate-limit re-probes to once per hour unless forced.
     if (!$force) {
         $last_at = (int) get_option('wpc_v2_direct_entry_probe_at', 0);
         if ($last_at > 0 && (time() - $last_at) < HOUR_IN_SECONDS) {
@@ -58,7 +50,7 @@ function wpc_v2_probe_direct_entry($force = false) {
         'body'      => ['probe_token' => $token],
     ]);
 
-    
+    // Always update probe-at so we don't re-probe on every page load.
     update_option('wpc_v2_direct_entry_probe_at', time(), false);
 
     if (is_wp_error($r)) {
@@ -73,16 +65,16 @@ function wpc_v2_probe_direct_entry($force = false) {
     if ($code !== 200) {
         update_option('wpc_v2_direct_entry_healthy', 0, false);
         update_option('wpc_v2_direct_entry_last_error', 'http_' . $code, false);
-        
-        
-        
-        
-        
-        
+        // Persistent 403 = host-level PHP-execution deny in the plugin dir
+        // (nginx hardening — Cloudways template class; .htaccess is Apache-only
+        // there). No amount of hourly re-probing changes server config: after 3
+        // consecutive 403s, stretch re-probes to daily and surface an admin
+        // notice carrying the exact nginx exception the host needs (Automa/680-
+        // site fleet report: ~half their installs sat in this state silently).
         if ($code === 403) {
-            $wpc_de403 = (int) get_option('wpc_v2_direct_entry_403s', 0) + 1;
-            update_option('wpc_v2_direct_entry_403s', $wpc_de403, false);
-            if ($wpc_de403 >= 3) {
+            $forbidden_streak = (int) get_option('wpc_v2_direct_entry_403s', 0) + 1;
+            update_option('wpc_v2_direct_entry_403s', $forbidden_streak, false);
+            if ($forbidden_streak >= 3) {
                 update_option('wpc_v2_direct_entry_probe_at', time() + DAY_IN_SECONDS - HOUR_IN_SECONDS, false);
             }
         } else {
@@ -93,14 +85,14 @@ function wpc_v2_probe_direct_entry($force = false) {
     delete_option('wpc_v2_direct_entry_403s');
 
     if ($body !== $token) {
-        
-        
+        // Host didn't run the PHP (returned source/text) or the round-trip
+        // broke (transient lost, SHORTINIT crash). Either way: no direct entry.
         update_option('wpc_v2_direct_entry_healthy', 0, false);
         update_option('wpc_v2_direct_entry_last_error', 'token_mismatch', false);
         return ['ok' => false, 'reason' => 'token_mismatch', 'detail' => 'body=' . substr($body, 0, 100)];
     }
 
-    
+    // Optional journal-writable flag from probe response header
     $headers = wp_remote_retrieve_headers($r);
     $journal_ok = '1';
     if (is_object($headers) || is_array($headers)) {
@@ -109,8 +101,8 @@ function wpc_v2_probe_direct_entry($force = false) {
     }
     update_option('wpc_v2_direct_entry_journal_ok', $journal_ok === '1' ? 1 : 0, false);
 
-    
-    
+    // If direct entry works but uploads/journal isn't writable, we still fall
+    // back to REST — batch handler needs to write bytes + journal entries.
     if ($journal_ok !== '1') {
         update_option('wpc_v2_direct_entry_healthy', 0, false);
         update_option('wpc_v2_direct_entry_last_error', 'journal_not_writable', false);
@@ -123,12 +115,12 @@ function wpc_v2_probe_direct_entry($force = false) {
 }
 
 
-
+// Plugin activation hook (fires once on activate)
 register_activation_hook(WPC_CC_PLUGIN_FILE, function () {
     wpc_v2_probe_direct_entry(true);
 });
 
-
+// Re-probe when apikey is saved/rotated (option update hook)
 add_action('update_option_wps_ic_options', function ($old_value, $new_value) {
     $old_key = is_array($old_value) ? ($old_value['api_key'] ?? '') : '';
     $new_key = is_array($new_value) ? ($new_value['api_key'] ?? '') : '';
@@ -139,15 +131,15 @@ add_action('update_option_wps_ic_options', function ($old_value, $new_value) {
 
 
 add_action('admin_init', function () {
-    
-    
+    // Probe is a blocking loopback — skip it on admin-ajax; it'll run on the
+    // next regular page load instead.
     if (function_exists('wp_doing_ajax') && wp_doing_ajax()) return;
     if (get_option('wpc_v2_direct_entry_probe_at', null) === null) {
         wpc_v2_probe_direct_entry(true);
     }
 }, 999);
 
-
+// Manual re-detect AJAX (for admin "Re-detect" button)
 add_action('wp_ajax_wpc_v2_redetect_direct_entry', function () {
     if (!current_user_can('manage_wpc_settings')) {
         wp_send_json_error('forbidden');
@@ -162,8 +154,8 @@ add_action('wp_ajax_nopriv_wpc_v2_journal_drain', 'wpc_v2_journal_drain_handler'
 
 
 function wpc_v2_journal_drain_handler() {
-    
-    
+    // Auth via HMAC. Canonical helper also reads 'wps_ic_settings' (where the
+    // settings UI writes the api_key on fresh installs).
     $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
     if ($apikey === '') {
         wp_die('', '', ['response' => 200]);
@@ -209,45 +201,45 @@ function wpc_v2_journal_note_progress($drained, $remaining) {
     $n = (is_array($s) ? (int) (isset($s['noprog']) ? $s['noprog'] : 0) : 0) + 1;
     $until = 0;
     if ($n >= 3) {
-        $until = time() + (int) min(900 * pow(2, $n - 3), 7200); 
+        $until = time() + (int) min(900 * pow(2, $n - 3), 7200); // 15m, 30m, 1h, 2h cap
         error_log(sprintf('[wpc_v2_journal_drain] no-progress x%d — backing off until %s (files=%d)', $n, gmdate('H:i:s', $until), $remaining));
     }
     wpc_fs_put($f, json_encode(['noprog' => $n, 'until' => $until]));
 }
 
-
-
-
-
+/**
+ * The actual drain loop. Extracted so the WP cron safety net can call it
+ * directly (no HMAC needed when triggered by cron).
+ */
 function wpc_v2_journal_drain_run() {
     @ini_set('memory_limit', '256M');
     @ini_set('max_execution_time', '30');
     @ignore_user_abort(true);
 
-    
-    
-    
-    
-    
-    
-    
-    
+    // v7.10.472 — the recurring-hook audit found this the ONLY high-frequency recurrence
+    // (5 min) with no load/memory shed: every other one already has it. It is otherwise well
+    // belted (restore yield, backoff, GET_LOCK(0), 8s wall budget, 200-file cap), so this is
+    // the last belt missing.
+    // BUT a shed that never lifts is a LEAK: the stale-file abandonment below runs INSIDE this
+    // drain, so on a permanently loaded box (busy: load1 38-52 on 2 cores all day) skipping
+    // forever means nothing ever reclaims the journal. Shed at most N consecutive times, then
+    // force one drain through regardless — shedding must bound the work, never abandon it.
     if (function_exists('wpc_under_pressure') && wpc_under_pressure()
         && apply_filters('wpc_v2_journal_shed_on_pressure', true)) {
-        $wpc_sn472  = (int) get_option('wpc_v2_journal_shed_n', 0);
-        $wpc_smx472 = max(1, (int) apply_filters('wpc_v2_journal_shed_max', 6)); 
-        if ($wpc_sn472 < $wpc_smx472) {
-            update_option('wpc_v2_journal_shed_n', $wpc_sn472 + 1, false);
-            error_log('[wpc_v2_journal_drain] shed_pressure n=' . ($wpc_sn472 + 1) . '/' . $wpc_smx472);
+        $shed_count  = (int) get_option('wpc_v2_journal_shed_n', 0);
+        $shed_max = max(1, (int) apply_filters('wpc_v2_journal_shed_max', 6)); // ~30 min at 5-min cadence
+        if ($shed_count < $shed_max) {
+            update_option('wpc_v2_journal_shed_n', $shed_count + 1, false);
+            error_log('[wpc_v2_journal_drain] shed_pressure n=' . ($shed_count + 1) . '/' . $shed_max);
             return;
         }
-        error_log('[wpc_v2_journal_drain] shed_ceiling_reached n=' . $wpc_sn472 . ' — forcing one drain so the journal cannot leak');
+        error_log('[wpc_v2_journal_drain] shed_ceiling_reached n=' . $shed_count . ' — forcing one drain so the journal cannot leak');
     }
     if ((int) get_option('wpc_v2_journal_shed_n', 0) !== 0) {
         update_option('wpc_v2_journal_shed_n', 0, false);
     }
 
-    
+    // Yield to a foreground bulk restore. The journal drain is the heaviest
 
 
     if (function_exists('wpc_v2_active_restore_count') && wpc_v2_active_restore_count() > 0) {
@@ -256,7 +248,7 @@ function wpc_v2_journal_drain_run() {
     }
 
 
-    
+    // GET_LOCK — a backed-off drain costs one file stat, no DB contention, no loopback.
     if (wpc_v2_journal_backoff_until() > time()) {
         return;
     }
@@ -264,7 +256,7 @@ function wpc_v2_journal_drain_run() {
     global $wpdb;
     $got = wpc_worker_lock('wpc_v2_journal_drain', 0) ? 1 : 0;
     if (!$got) {
-        
+        // Another drain chain is already running. Bail silently.
         return;
     }
 
@@ -300,7 +292,7 @@ function wpc_v2_journal_drain_run() {
             }
             if (empty($files)) break;
 
-            
+            // Group entries by imageID
             $by_image = [];
             foreach ($files as $file) {
                 $raw = @file_get_contents($file);
@@ -321,8 +313,8 @@ function wpc_v2_journal_drain_run() {
                         'files'   => [],
                     ];
                 }
-                
-                
+                // Each file's payload['entries'] is a wrapped structure:
+                //   ['flush_reason' => ..., 'received_ms' => ..., 'entries' => [...actual entries...]]
                 if (isset($payload['entries']) && is_array($payload['entries'])) {
                     $inner = isset($payload['entries']['entries']) ? $payload['entries']['entries'] : $payload['entries'];
                     if (is_array($inner)) {
@@ -398,8 +390,8 @@ function wpc_v2_journal_drain_run() {
                     ));
                 } else {
                     $total_files_retained += count($group['files']);
-                    foreach ($group['files'] as $wpc_rf197) {
-                        @touch($wpc_rf197);
+                    foreach ($group['files'] as $retained_file) {
+                        @touch($retained_file);
                     }
                     error_log(sprintf(
                         '[wpc_v2_journal_drain] retaining_after_failure imageID=%d files=%d reason=%s',
@@ -422,8 +414,8 @@ function wpc_v2_journal_drain_run() {
         wpc_worker_unlock('wpc_v2_journal_drain');
     }
 
-    
-    
+    // Self-chain if files remain OR a pending-fire marker is set. The marker is
+    // set when a batch handler hits the fire throttle and skips firing; without
 
 
     $pending_fire = (int) get_transient('wpc_v2_journal_pending_fire');
@@ -439,395 +431,334 @@ function wpc_v2_journal_drain_run() {
     }
 }
 
-
-
-
-
-
-
+/**
+ * Merge N journal entries for one image into ic_local_variants under a single
+ * GET_LOCK + single update_post_meta. Then recompute_savings if appropriate.
+ *
+ * @return array ['ok' => bool, 'reason' => string|null, 'merged' => int]
+ */
 function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array $pulled_bytes_by_url = []) {
     if (empty($entries)) {
         return ['ok' => true, 'merged' => 0, 'reason' => 'no_entries'];
     }
-    global $wpdb;
-    $lock = 'wpc_bg_meta_' . (int) $imageID;
-    
-    $got_lock = wpc_worker_lock($lock);
-    if (!$got_lock) {
-        error_log(sprintf('[WPC V2] journal_merge lock_unavailable imageID=%d entries=%d — proceeding unlocked (race possible)', (int) $imageID, count($entries)));
-    }
-
     $merged = 0;
-    $merged_keys197 = [];
+    $merged_keys = [];
     $any_drain_complete_signal = false;
     $any_pull_failed = false;
-    try {
-        wp_cache_delete($imageID, 'post_meta');
-        $existing = get_post_meta($imageID, 'ic_local_variants', true);
-        if (!is_array($existing)) $existing = [];
+    // The entries this journal lands; the variant-set owner merges them under its lock.
+    $landed = [];
+    $now = time();
+    $now_ms = (int) round(microtime(true) * 1000);
+    $t0_ms = (int) get_transient('wpc_v2_t0_ms_' . $imageID);
 
-        $now = time();
-        $now_ms = (int) round(microtime(true) * 1000);
-        $t0_ms = (int) get_transient('wpc_v2_t0_ms_' . $imageID);
-
-        foreach ($entries as $e) {
-            if (!is_array($e) || empty($e['sizeLabel']) || empty($e['format'])) continue;
+    foreach ($entries as $e) {
+        if (!is_array($e) || empty($e['sizeLabel']) || empty($e['format'])) continue;
 
 
-            if (isset($e['source']) && $e['source'] === 'lazycdn') {
-                if (function_exists('wpc_v2_lazy_cdn_ingest')) {
-                    wpc_v2_lazy_cdn_ingest($e);
-                }
-                continue;
+        if (isset($e['source']) && $e['source'] === 'lazycdn') {
+            if (function_exists('wpc_v2_lazy_cdn_ingest')) {
+                wpc_v2_lazy_cdn_ingest($e);
             }
+            continue;
+        }
 
-            $sz  = (string) $e['sizeLabel'];
-            $fmt = (string) $e['format'];
-
-
-            $key = function_exists('wpc_v2_variant_key')
-                ? wpc_v2_variant_key($sz, $fmt)
-                : ($fmt === 'jpeg' || $fmt === 'jpg' ? $sz : $sz . '-' . $fmt);
-            $type = isset($e['type']) ? (string) $e['type'] : 'persisted';
-
-            if ($type === 'no_improvement') {
-                $entry = [
-                    'bg_no_improvement'     => true,
-                    'no_improvement_reason' => isset($e['reason']) ? (string) $e['reason'] : 'no_improvement',
-                    'baseline_kb'           => isset($e['baselineKb']) ? (float) $e['baselineKb'] : 0.0,
-                    'phase_b_v2'            => true,
-                    'phase_b_direct_entry'  => true,
-                    'bg_upgraded'           => $now,
-                    'bg_upgraded_ms'        => $now_ms,
-                ];
-                $existing[$key] = array_merge($existing[$key] ?? [], $entry);
-                $merged_keys197[] = $key;
-                $any_drain_complete_signal = true;
-                continue;
-            }
-            if ($type === 'idempotent_noop') {
-                
-                
-                $existing[$key] = array_merge($existing[$key] ?? [], [
-                    'bg_upgraded'    => $now,
-                    'bg_upgraded_ms' => $now_ms,
-                ]);
-                $merged_keys197[] = $key;
-                continue;
-            }
+        $sz  = (string) $e['sizeLabel'];
+        $fmt = (string) $e['format'];
 
 
-            if ($type === 'persisted_pending_bytes') {
-                $url = isset($e['fetch_url']) ? (string) $e['fetch_url'] : '';
-                $raw = ($url !== '' && isset($pulled_bytes_by_url[$url])) ? $pulled_bytes_by_url[$url] : null;
-                if ($raw === null || !is_string($raw) || $raw === '') {
-                    error_log(sprintf(
-                        '[wpc_v2_journal_merge] pull_missing imageID=%d sizeLabel=%s format=%s url_tail=%s (will retry)',
-                        $imageID, $sz, $fmt, $url !== '' ? substr($url, -50) : '-'
-                    ));
-                    $any_pull_failed = true;
-                    continue;
-                }
-                $dest_dir = isset($e['dest_dir']) ? (string) $e['dest_dir'] : '';
-                $filename = isset($e['filename']) ? (string) $e['filename'] : '';
-                if ($dest_dir === '' || $filename === '') {
-                    error_log(sprintf('[wpc_v2_journal_merge] missing_dest_or_filename imageID=%d sizeLabel=%s format=%s', $imageID, $sz, $fmt));
-                    continue;
-                }
+        $key = function_exists('wpc_v2_variant_key')
+            ? wpc_v2_variant_key($sz, $fmt)
+            : ($fmt === 'jpeg' || $fmt === 'jpg' ? $sz : $sz . '-' . $fmt);
+        $type = isset($e['type']) ? (string) $e['type'] : 'persisted';
 
-
-                $filename = basename($filename);
-                $j_segs   = explode('.', strtolower($filename));
-                $j_last   = end($j_segs);
-                $j_danger = ['php','php3','php4','php5','php6','php7','php8','phps','pht','phtml','phar','shtml','xhtml','html','htm','svg','svgz','js','mjs','jsp','asp','aspx','cgi','pl','py','sh','exe','dll','htaccess','ini','sql','phpt'];
-                $j_unsafe = ($filename === '' || $filename[0] === '.' || strpos($filename, "\0") !== false
-                    || count($j_segs) < 2
-                    || !in_array($j_last, ['jpg','jpeg','png','gif','webp','avif'], true));
-                if (!$j_unsafe) {
-                    foreach (array_slice($j_segs, 0, -1) as $j_seg) {
-                        if (in_array($j_seg, $j_danger, true)) { $j_unsafe = true; break; }
-                    }
-                }
-                if ($j_unsafe) {
-                    error_log(sprintf('[wpc_v2_journal_merge] reject_unsafe_filename imageID=%d fn=%s', (int) $imageID, substr($filename, 0, 60)));
-                    continue;
-                }
-                $dest = $dest_dir . '/' . $filename;
-
-                
-                $skip_write = false;
-                if (file_exists($dest) && filesize($dest) === strlen($raw)
-                    && hash_file('sha256', $dest) === hash('sha256', $raw)) {
-                    $skip_write = true;
-                }
-                if (!$skip_write) {
-                    $tmp = $dest . '.wpc_v2_tmp_' . wp_generate_password(8, false);
-                    
-                    
-                    if (wpc_fs_put($tmp, $raw) === false) {
-                        $err = error_get_last();
-                        error_log(sprintf(
-                            '[wpc_v2_journal_merge] write_failed imageID=%d sz=%s fmt=%s bytes=%d dest_tail=%s msg=%s',
-                            (int) $imageID, (string) $sz, (string) $fmt, strlen($raw),
-                            substr($dest, -60), $err['message'] ?? '-'
-                        ));
-                        continue;
-                    }
-                    if (!@rename($tmp, $dest)) {
-                        $err = error_get_last();
-                        error_log(sprintf(
-                            '[wpc_v2_journal_merge] rename_failed imageID=%d sz=%s fmt=%s dest_tail=%s msg=%s',
-                            (int) $imageID, (string) $sz, (string) $fmt,
-                            substr($dest, -60), $err['message'] ?? '-'
-                        ));
-                        @unlink($tmp);
-                        continue;
-                    }
-                    if (!@chmod($dest, 0644)) {
-                        $err = error_get_last();
-                        error_log(sprintf(
-                            '[wpc_v2_journal_merge] chmod_failed imageID=%d dest_tail=%s msg=%s',
-                            (int) $imageID, substr($dest, -60), $err['message'] ?? '-'
-                        ));
-                    }
-                }
-                
-                
-                $e['bytes_path'] = $dest;
-                $e['bytes_size'] = strlen($raw);
-
-            }
-            
-            $orig_size = isset($e['originalSize']) ? (int) $e['originalSize'] : 0;
-            $bytes_size = isset($e['bytes_size']) ? (int) $e['bytes_size'] : 0;
-            $savings = ($orig_size > 0 && $bytes_size > 0)
-                ? max(0, (int) round((1 - ($bytes_size / $orig_size)) * 100))
-                : 0;
-            $url = '';
-            if (!empty($e['bytes_path'])) {
-                $up = wp_get_upload_dir();
-                $rel = ltrim(str_replace($up['basedir'], '', $e['bytes_path']), '/');
-                $url = $up['baseurl'] . '/' . $rel;
-            }
-
-
+        if ($type === 'no_improvement') {
             $entry = [
-                'size'                => $bytes_size,
-                'originalSize'        => $orig_size,
-                'url'                 => $url,
-                'local'               => true,
-                'skipped'             => false,
-                'savings'             => $savings,
-                'bg_upgraded'         => $now,
-                'bg_upgraded_ms'      => $now_ms,
-                'encoded_at_ms'       => isset($e['ms']) && $e['ms'] > 0 ? (int) $e['ms'] : 0,
-                'bg_t_from_click_ms'  => ($t0_ms > 0 && isset($e['ms']) && $e['ms'] > $t0_ms) ? ((int) $e['ms'] - $t0_ms) : 0,
-                'kb_reported'         => isset($e['kb']) ? (float) $e['kb'] : 0.0,
-                'butter'              => isset($e['butter']) ? (float) $e['butter'] : 0.0,
-                'phase_b_v2'          => true,
-                'phase_b_direct_entry' => true,
+                'bg_no_improvement'     => true,
+                'no_improvement_reason' => isset($e['reason']) ? (string) $e['reason'] : 'no_improvement',
+                'baseline_kb'           => isset($e['baselineKb']) ? (float) $e['baselineKb'] : 0.0,
+                'phase_b_v2'            => true,
+                'phase_b_direct_entry'  => true,
+                'bg_upgraded'           => $now,
+                'bg_upgraded_ms'        => $now_ms,
             ];
-            
-            
-            if (!empty($e['bytes_sha256'])) {
-                $entry['bytes_sha256'] = (string) $e['bytes_sha256'];
-            }
-
-            if (!empty($e['delivery_method'])) {
-                $entry['delivery_method'] = (string) $e['delivery_method'];
-            }
-            if (!empty($e['source'])) {
-                $entry['journal_source'] = (string) $e['source'];
-            }
-            if (isset($e['q']))      $entry['q']      = (int) $e['q'];
-            if (isset($e['bumped'])) $entry['bumped'] = (string) $e['bumped'];
-            $existing[$key] = array_merge($existing[$key] ?? [], $entry);
-            $merged_keys197[] = $key;
-            $merged++;
+            $landed[$key] = array_merge($landed[$key] ?? [], $entry);
+            $merged_keys[] = $key;
             $any_drain_complete_signal = true;
-
-
-            if ($orig_size > 0 && $bytes_size > 0 && $savings > 0) {
-                $cur_savings = (float) get_post_meta($imageID, 'ic_savings', true);
-                if ((float) $savings > $cur_savings) {
-                    update_post_meta($imageID, 'ic_savings',          round((float) $savings, 1));
-                    update_post_meta($imageID, 'ic_savings_format',   $fmt);
-                    update_post_meta($imageID, 'ic_savings_bytes',    max(0, $orig_size - $bytes_size));
-                    update_post_meta($imageID, 'ic_savings_baseline', $orig_size);
-                }
-            }
-
-            
-            
-            $chip_fmt  = strtoupper((string) $fmt);
-            $chip_size = ucfirst(str_replace(['_', '-'], ' ', (string) $sz));
-            $compressing = get_post_meta($imageID, 'ic_compressing', true);
-            $current_status = (is_array($compressing) && !empty($compressing['status']))
-                ? (string) $compressing['status'] : 'optimizing';
-
-
-            $eager = function_exists('wpc_v2_use_eager_compressed_flip')
-                && wpc_v2_use_eager_compressed_flip();
-            if ($eager && $current_status !== 'compressed') {
-                wpc_v2_ic_compressing_set_status($imageID, 'compressed');
-                delete_transient('wps_ic_compress_' . $imageID);
-                $current_status = 'compressed';
-            }
-
-            set_transient('wps_ic_heartbeat_' . $imageID, [
-                'imageID'         => $imageID,
-                'status'          => $current_status,
-                'event'           => 'bg_variant_arrived',
-                'time'            => time(),
-                'bg_variant_fmt'  => $chip_fmt,
-                'bg_variant_size' => $chip_size,
-            ], 300);
-
-            
-            if (function_exists('wpc_v2_remove_pending')) {
-                $drain_complete = wpc_v2_remove_pending($imageID, $sz, $fmt);
-                if ($drain_complete) {
-                    $any_drain_complete_signal = true;
-
-
-                    if ($current_status !== 'compressed') {
-                        wpc_v2_ic_compressing_set_status($imageID, 'compressed');
-                        delete_transient('wps_ic_compress_' . $imageID);
-                    }
-
-
-                    wp_cache_delete('wpc_v2_drain_alive_until_ms', 'options');
-                    $now_ms = (int) (microtime(true) * 1000);
-                    $extend_to = $now_ms + 10000;
-                    $current_deadline = (int) get_option('wpc_v2_drain_alive_until_ms', 0);
-                    if ($extend_to > $current_deadline) {
-                        update_option('wpc_v2_drain_alive_until_ms', $extend_to, false);
-                    }
-
-                    
-                    
-                    $img_variants = get_post_meta($imageID, 'ic_local_variants', true);
-                    if (is_array($img_variants)) {
-                        $cnt_j = 0; $cnt_w = 0; $cnt_a = 0;
-                        foreach ($img_variants as $vk => $ve) {
-                            if (!is_array($ve)) continue;
-                            if (!empty($ve['bg_no_improvement'])) continue;
-                            if (empty($ve['size'])) continue;
-                            if (strpos((string) $vk, '-avif') !== false)      $cnt_a++;
-                            elseif (strpos((string) $vk, '-webp') !== false)  $cnt_w++;
-                            else                                              $cnt_j++;
-                        }
-                        $total = $cnt_j + $cnt_w + $cnt_a;
-                        $expected_sizes = ['thumbnail','medium','medium_large','large','1536x1536','2048x2048','scaled','original'];
-                        $missing_keys = [];
-                        foreach ($expected_sizes as $sz_label) {
-                            foreach (['jpeg', 'webp', 'avif'] as $fmt_label) {
-                                $expected_key = function_exists('wpc_v2_variant_key')
-                                    ? wpc_v2_variant_key($sz_label, $fmt_label)
-                                    : ($fmt_label === 'jpeg' ? $sz_label : $sz_label . '-' . $fmt_label);
-                                if (!isset($img_variants[$expected_key])
-                                    || !is_array($img_variants[$expected_key])
-                                    || empty($img_variants[$expected_key]['size'])) {
-                                    $missing_keys[] = $expected_key;
-                                }
-                            }
-                        }
-                        if ($total < 22) {
-                            error_log(sprintf(
-                                '[WPC DrainComplete] imageID=%d INCOMPLETE total=%d J=%d W=%d A=%d missing=[%s]',
-                                $imageID, $total, $cnt_j, $cnt_w, $cnt_a, implode(', ', $missing_keys)
-                            ));
-                        } elseif (!empty($missing_keys)) {
-                            error_log(sprintf(
-                                '[WPC DrainComplete] imageID=%d near_complete total=%d J=%d W=%d A=%d missing=[%s]',
-                                $imageID, $total, $cnt_j, $cnt_w, $cnt_a, implode(', ', $missing_keys)
-                            ));
-                        } else {
-                            error_log(sprintf(
-                                '[WPC DrainComplete] imageID=%d ok total=%d J=%d W=%d A=%d',
-                                $imageID, $total, $cnt_j, $cnt_w, $cnt_a
-                            ));
-                        }
-
-
-                        if (!empty($missing_keys) && function_exists('wpc_v2_fire_image_bg_retry')) {
-                            $dc_retry_guard = 'wpc_v2_bg_retry_fired_' . $imageID;
-                            if (!get_transient($dc_retry_guard)) {
-                                set_transient($dc_retry_guard, 1, 60);
-                                error_log(sprintf(
-                                    '[WPC DrainComplete] imageID=%d firing server-side BGRetry — %d missing',
-                                    $imageID, count($missing_keys)
-                                ));
-                                wpc_v2_fire_image_bg_retry($imageID);
-                            }
-                        }
-                    }
-                }
-            }
+            continue;
         }
-        update_post_meta($imageID, 'ic_local_variants', $existing);
+        if ($type === 'idempotent_noop') {
+            // Already on disk; no meta change needed beyond touching bg_upgraded_ms
+            // so heartbeat picks up the re-arrival.
+            $landed[$key] = array_merge($landed[$key] ?? [], [
+                'bg_upgraded'    => $now,
+                'bg_upgraded_ms' => $now_ms,
+            ]);
+            $merged_keys[] = $key;
+            continue;
+        }
 
-        if (!empty($merged_keys197)) {
-            wp_cache_delete($imageID, 'post_meta');
-            $wpc_rb197 = get_post_meta($imageID, 'ic_local_variants', true);
-            $wpc_verify197 = is_array($wpc_rb197);
-            if ($wpc_verify197) {
-                foreach ($merged_keys197 as $wpc_mk197) {
-                    if (!isset($wpc_rb197[$wpc_mk197])) { $wpc_verify197 = false; break; }
-                }
-            }
-            if (!$wpc_verify197) {
-                if (function_exists('wpc_v2_store_broken_note197')) {
-                    wpc_v2_store_broken_note197(true);
-                }
+
+        if ($type === 'persisted_pending_bytes') {
+            $url = isset($e['fetch_url']) ? (string) $e['fetch_url'] : '';
+            $raw = ($url !== '' && isset($pulled_bytes_by_url[$url])) ? $pulled_bytes_by_url[$url] : null;
+            if ($raw === null || !is_string($raw) || $raw === '') {
                 error_log(sprintf(
-                    '[wpc_v2_journal_merge] marker_verify_failed imageID=%d keys=%d — journal retained for retry',
-                    (int) $imageID, count($merged_keys197)
+                    '[wpc_v2_journal_merge] pull_missing imageID=%d sizeLabel=%s format=%s url_tail=%s (will retry)',
+                    $imageID, $sz, $fmt, $url !== '' ? substr($url, -50) : '-'
                 ));
-                return ['ok' => false, 'merged' => 0, 'reason' => 'marker_verify_failed', 'any_pull_failed' => $any_pull_failed];
+                $any_pull_failed = true;
+                continue;
             }
-            if (function_exists('wpc_v2_store_broken_note197')) {
-                wpc_v2_store_broken_note197(false);
+            $dest_dir = isset($e['dest_dir']) ? (string) $e['dest_dir'] : '';
+            $filename = isset($e['filename']) ? (string) $e['filename'] : '';
+            if ($dest_dir === '' || $filename === '') {
+                error_log(sprintf('[wpc_v2_journal_merge] missing_dest_or_filename imageID=%d sizeLabel=%s format=%s', $imageID, $sz, $fmt));
+                continue;
             }
-            if (function_exists('wpc_v2_attempts_reset197')) {
-                wpc_v2_attempts_reset197($imageID);
+
+
+            $filename = basename($filename);
+            $j_segs   = explode('.', strtolower($filename));
+            $j_last   = end($j_segs);
+            $j_danger = ['php','php3','php4','php5','php6','php7','php8','phps','pht','phtml','phar','shtml','xhtml','html','htm','svg','svgz','js','mjs','jsp','asp','aspx','cgi','pl','py','sh','exe','dll','htaccess','ini','sql','phpt'];
+            $j_unsafe = ($filename === '' || $filename[0] === '.' || strpos($filename, "\0") !== false
+                || count($j_segs) < 2
+                || !in_array($j_last, ['jpg','jpeg','png','gif','webp','avif'], true));
+            if (!$j_unsafe) {
+                foreach (array_slice($j_segs, 0, -1) as $j_seg) {
+                    if (in_array($j_seg, $j_danger, true)) { $j_unsafe = true; break; }
+                }
             }
+            if ($j_unsafe) {
+                error_log(sprintf('[wpc_v2_journal_merge] reject_unsafe_filename imageID=%d fn=%s', (int) $imageID, substr($filename, 0, 60)));
+                continue;
+            }
+            $dest = $dest_dir . '/' . $filename;
+
+            // Idempotent fast path: if same bytes already on disk, no write.
+            $skip_write = false;
+            if (file_exists($dest) && filesize($dest) === strlen($raw)
+                && hash_file('sha256', $dest) === hash('sha256', $raw)) {
+                $skip_write = true;
+            }
+            if (!$skip_write) {
+                $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $sz, 'fmt' => $fmt, 'src' => (string) ($e['source'] ?? 'journal')]]);
+                if (($put['error'] ?? '') === 'larger_than_disk') {
+                    // Settled by the store (no improvement, out of pending): nothing lands.
+                    $any_drain_complete_signal = true;
+                    continue;
+                }
+                if (empty($put['ok'])) {
+                    // errno + bytes on failure so disk-full vs perms-denied vs missing-dir are distinguishable.
+                    error_log(sprintf(
+                        '[wpc_v2_journal_merge] %s imageID=%d sz=%s fmt=%s bytes=%d dest_tail=%s msg=%s',
+                        (string) $put['error'], (int) $imageID, (string) $sz, (string) $fmt, strlen($raw),
+                        substr($dest, -60), (string) $put['msg']
+                    ));
+                    continue;
+                }
+            }
+            // Patch into an inline-bytes shape so the 'persisted' block below
+            // handles it. bytes_size from actual bytes, not service-supplied.
+            $e['bytes_path'] = $dest;
+            $e['bytes_size'] = strlen($raw);
+
+        }
+        // Default: 'persisted'
+        $orig_size = isset($e['originalSize']) ? (int) $e['originalSize'] : 0;
+        $bytes_size = isset($e['bytes_size']) ? (int) $e['bytes_size'] : 0;
+        $savings = ($orig_size > 0 && $bytes_size > 0)
+            ? max(0, (int) round((1 - ($bytes_size / $orig_size)) * 100))
+            : 0;
+        $url = '';
+        if (!empty($e['bytes_path'])) {
+            $up = wp_get_upload_dir();
+            $rel = ltrim(str_replace($up['basedir'], '', $e['bytes_path']), '/');
+            $url = $up['baseurl'] . '/' . $rel;
         }
 
 
-        if ($merged > 0) {
-            $promote_status = get_post_meta($imageID, 'ic_status', true);
-            if ($promote_status !== 'compressed') {
-                $promote_cmp        = get_post_meta($imageID, 'ic_compressing', true);
-                $promote_cmp_status = (is_array($promote_cmp) && !empty($promote_cmp['status']))
-                    ? (string) $promote_cmp['status']
-                    : '';
-                if ($promote_cmp_status !== 'optimizing' && $promote_cmp_status !== 'queueing') {
-                    update_post_meta($imageID, 'ic_status', 'compressed');
-                    if (function_exists('wpc_invalidate_local_cache')) wpc_invalidate_local_cache();
-                    if ($promote_cmp_status !== 'compressed') {
-                        update_post_meta($imageID, 'ic_compressing', ['status' => 'compressed']);
+        $entry = [
+            'size'                => $bytes_size,
+            'originalSize'        => $orig_size,
+            'url'                 => $url,
+            'local'               => true,
+            'skipped'             => false,
+            'savings'             => $savings,
+            'bg_upgraded'         => $now,
+            'bg_upgraded_ms'      => $now_ms,
+            'encoded_at_ms'       => isset($e['ms']) && $e['ms'] > 0 ? (int) $e['ms'] : 0,
+            'bg_t_from_click_ms'  => ($t0_ms > 0 && isset($e['ms']) && $e['ms'] > $t0_ms) ? ((int) $e['ms'] - $t0_ms) : 0,
+            'kb_reported'         => isset($e['kb']) ? (float) $e['kb'] : 0.0,
+            'butter'              => isset($e['butter']) ? (float) $e['butter'] : 0.0,
+            'phase_b_v2'          => true,
+            'phase_b_direct_entry' => true,
+        ];
+        // Persist bytes_sha256 so pull-manifest can dedupe pre-flight (skip
+        // variants already on disk via push).
+        if (!empty($e['bytes_sha256'])) {
+            $entry['bytes_sha256'] = (string) $e['bytes_sha256'];
+        }
+
+        if (!empty($e['delivery_method'])) {
+            $entry['delivery_method'] = (string) $e['delivery_method'];
+        }
+        if (!empty($e['source'])) {
+            $entry['journal_source'] = (string) $e['source'];
+        }
+        if (isset($e['q']))      $entry['q']      = (int) $e['q'];
+        if (isset($e['bumped'])) $entry['bumped'] = (string) $e['bumped'];
+        $landed[$key] = array_merge($landed[$key] ?? [], $entry);
+        $merged_keys[] = $key;
+        $merged++;
+        $any_drain_complete_signal = true;
+
+
+        // Heartbeat on each merged variant so the chip animation ticks up
+        // in real time during pull-driven landings.
+        $chip_fmt  = strtoupper((string) $fmt);
+        $chip_size = ucfirst(str_replace(['_', '-'], ' ', (string) $sz));
+        $compressing = get_post_meta($imageID, 'ic_compressing', true);
+        $current_status = (is_array($compressing) && !empty($compressing['status']))
+            ? (string) $compressing['status'] : 'optimizing';
+
+
+        $eager = function_exists('wpc_v2_use_eager_compressed_flip')
+            && wpc_v2_use_eager_compressed_flip();
+        if ($eager && $current_status !== 'compressed') {
+            wpc_v2_ic_compressing_set_status($imageID, 'compressed');
+            delete_transient('wps_ic_compress_' . $imageID);
+            $current_status = 'compressed';
+        }
+
+        set_transient('wps_ic_heartbeat_' . $imageID, [
+            'imageID'         => $imageID,
+            'status'          => $current_status,
+            'event'           => 'bg_variant_arrived',
+            'time'            => time(),
+            'bg_variant_fmt'  => $chip_fmt,
+            'bg_variant_size' => $chip_size,
+        ], 300);
+
+        // Remove from wpc_v2_pending_$id (mirrors REST handler's behavior)
+        if (function_exists('wpc_v2_remove_pending')) {
+            $drain_complete = wpc_v2_remove_pending($imageID, $sz, $fmt);
+            if ($drain_complete) {
+                $any_drain_complete_signal = true;
+
+
+                if ($current_status !== 'compressed') {
+                    wpc_v2_ic_compressing_set_status($imageID, 'compressed');
+                    delete_transient('wps_ic_compress_' . $imageID);
+                }
+
+
+                wp_cache_delete('wpc_v2_drain_alive_until_ms', 'options');
+                $now_ms = (int) (microtime(true) * 1000);
+                $extend_to = $now_ms + 10000;
+                $current_deadline = (int) get_option('wpc_v2_drain_alive_until_ms', 0);
+                if ($extend_to > $current_deadline) {
+                    update_option('wpc_v2_drain_alive_until_ms', $extend_to, false);
+                }
+
+                // Log which specific variants are missing, by diffing on-disk
+                // keys against the full expected size×format matrix.
+                $img_variants = get_post_meta($imageID, 'ic_local_variants', true);
+                if (is_array($img_variants)) {
+                    $cnt_j = 0; $cnt_w = 0; $cnt_a = 0;
+                    foreach ($img_variants as $vk => $ve) {
+                        if (!is_array($ve)) continue;
+                        if (!empty($ve['bg_no_improvement'])) continue;
+                        if (empty($ve['size'])) continue;
+                        if (strpos((string) $vk, '-avif') !== false)      $cnt_a++;
+                        elseif (strpos((string) $vk, '-webp') !== false)  $cnt_w++;
+                        else                                              $cnt_j++;
+                    }
+                    $total = $cnt_j + $cnt_w + $cnt_a;
+                    $expected_sizes = ['thumbnail','medium','medium_large','large','1536x1536','2048x2048','scaled','original'];
+                    $missing_keys = [];
+                    foreach ($expected_sizes as $sz_label) {
+                        foreach (['jpeg', 'webp', 'avif'] as $fmt_label) {
+                            $expected_key = function_exists('wpc_v2_variant_key')
+                                ? wpc_v2_variant_key($sz_label, $fmt_label)
+                                : ($fmt_label === 'jpeg' ? $sz_label : $sz_label . '-' . $fmt_label);
+                            if (!isset($img_variants[$expected_key])
+                                || !is_array($img_variants[$expected_key])
+                                || empty($img_variants[$expected_key]['size'])) {
+                                $missing_keys[] = $expected_key;
+                            }
+                        }
+                    }
+                    if ($total < 22) {
+                        error_log(sprintf(
+                            '[WPC DrainComplete] imageID=%d INCOMPLETE total=%d J=%d W=%d A=%d missing=[%s]',
+                            $imageID, $total, $cnt_j, $cnt_w, $cnt_a, implode(', ', $missing_keys)
+                        ));
+                    } elseif (!empty($missing_keys)) {
+                        error_log(sprintf(
+                            '[WPC DrainComplete] imageID=%d near_complete total=%d J=%d W=%d A=%d missing=[%s]',
+                            $imageID, $total, $cnt_j, $cnt_w, $cnt_a, implode(', ', $missing_keys)
+                        ));
+                    } else {
+                        error_log(sprintf(
+                            '[WPC DrainComplete] imageID=%d ok total=%d J=%d W=%d A=%d',
+                            $imageID, $total, $cnt_j, $cnt_w, $cnt_a
+                        ));
+                    }
+
+
+                    if (!empty($missing_keys) && function_exists('wpc_v2_fire_image_bg_retry')) {
+                        $dc_retry_guard = 'wpc_v2_bg_retry_fired_' . $imageID;
+                        if (!get_transient($dc_retry_guard)) {
+                            set_transient($dc_retry_guard, 1, 60);
+                            error_log(sprintf(
+                                '[WPC DrainComplete] imageID=%d firing server-side BGRetry — %d missing',
+                                $imageID, count($missing_keys)
+                            ));
+                            wpc_v2_fire_image_bg_retry($imageID);
+                        }
                     }
                 }
             }
         }
-    } finally {
-        if ($got_lock) {
-            wpc_worker_unlock($lock);
+    }
+    // The owner promotes the image (any landed variant counts on this lane).
+    wps_ic_image_variants::record($imageID, $landed, 'direct-entry', ['any_variant' => true]);
+
+    if (!empty($merged_keys)) {
+        wp_cache_delete($imageID, 'post_meta');
+        $stored_variants = get_post_meta($imageID, 'ic_local_variants', true);
+        $markers_verified = is_array($stored_variants);
+        if ($markers_verified) {
+            foreach ($merged_keys as $merged_key) {
+                if (!isset($stored_variants[$merged_key])) { $markers_verified = false; break; }
+            }
+        }
+        if (!$markers_verified) {
+            if (function_exists('wpc_v2_note_store_broken')) {
+                wpc_v2_note_store_broken(true);
+            }
+            error_log(sprintf(
+                '[wpc_v2_journal_merge] marker_verify_failed imageID=%d keys=%d — journal retained for retry',
+                (int) $imageID, count($merged_keys)
+            ));
+            return ['ok' => false, 'merged' => 0, 'reason' => 'marker_verify_failed', 'any_pull_failed' => $any_pull_failed];
+        }
+        if (function_exists('wpc_v2_note_store_broken')) {
+            wpc_v2_note_store_broken(false);
+        }
+        if (function_exists('wpc_v2_reset_attempts')) {
+            wpc_v2_reset_attempts($imageID);
         }
     }
 
-    
-    
-    if ($any_drain_complete_signal && function_exists('wpc_v2_recompute_savings')) {
+
+    if ($any_drain_complete_signal) {
         $imageID_for_shutdown = (int) $imageID;
         add_action('shutdown', function () use ($imageID_for_shutdown) {
-            if (function_exists('wpc_finish_request39')) { wpc_finish_request39(); } elseif (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
-            if (function_exists('wpc_v2_recompute_savings')) {
-                wpc_v2_recompute_savings($imageID_for_shutdown);
-            }
-            
-            
+            if (function_exists('wpc_finish_request')) { wpc_finish_request(); } elseif (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
+            // Invalidate HTML cache for pages referencing this attachment so the
+            // next render emits natural URLs, not stale CDN transform URLs.
             if (function_exists('wpc_v2_purge_html_for_attachment')) {
                 wpc_v2_purge_html_for_attachment($imageID_for_shutdown, 'direct-entry');
             }
@@ -837,9 +768,9 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
     return ['ok' => true, 'merged' => $merged, 'reason' => null, 'any_pull_failed' => $any_pull_failed];
 }
 
-
-
-
+/**
+ * List up to $limit .jsonl files in the journal dir, oldest first.
+ */
 function wpc_v2_journal_list_files($limit = 50) {
     $up = wp_get_upload_dir();
     if (empty($up['basedir'])) return [];
@@ -858,10 +789,10 @@ function wpc_v2_journal_list_files($limit = 50) {
     return $files;
 }
 
-
-
-
-
+/**
+ * Cheap count of .jsonl files (no full readdir loop — just for the
+ * "should we self-chain?" check).
+ */
 function wpc_v2_journal_count_files() {
     $up = wp_get_upload_dir();
     if (empty($up['basedir'])) return 0;
@@ -878,13 +809,13 @@ function wpc_v2_journal_count_files() {
     return $n;
 }
 
-
-
-
-
-
+/**
+ * Fire loopback drain from within WP context (used by self-chain + cron).
+ * Direct-entry handlers use their own wpc_v2_journal_fire_loopback() since
+ * they may not have wp_remote_post available in SHORTINIT.
+ */
 function wpc_v2_journal_fire_loopback_from_wp() {
-    
+    // Canonical helper (reads 'wps_ic_settings', falls back to 'wps_ic_options').
     $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
     if ($apikey === '') return;
     $ts = time();
@@ -918,7 +849,7 @@ function wpc_v2_journal_fire_loopback_from_wp() {
     }
 }
 
-
+// ─── WP cron safety net (every 5 min) ────────────────────────────────────
 
 add_action('wpc_v2_journal_drain_cron', 'wpc_v2_journal_drain_run');
 
@@ -944,7 +875,7 @@ add_action('init', function () {
     }
 }, 100);
 
-
+// Cleanup on plugin deactivation
 register_deactivation_hook(WPC_CC_PLUGIN_FILE, function () {
     $ts = wp_next_scheduled('wpc_v2_journal_drain_cron');
     if ($ts) wp_unschedule_event($ts, 'wpc_v2_journal_drain_cron');

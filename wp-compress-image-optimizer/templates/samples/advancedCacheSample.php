@@ -1,13 +1,5 @@
 <?php
 
-
-
-
-
-
-
-
-
 defined('ABSPATH') || exit;
 define('WP_COMPRESS_ADVANCED_CACHE', true);
 
@@ -30,6 +22,14 @@ define('WPC_EXCLUDE_COOKIES', false);
 #WPC_MANDATORY_COOKIES_START
 define('WPC_MANDATORY_COOKIES', false);
 #WPC_MANDATORY_COOKIES_END
+
+#WPC_CACHE_QUERY_PARAMS_START
+define('WPC_CACHE_QUERY_PARAMS', false);
+#WPC_CACHE_QUERY_PARAMS_END
+
+#WPC_IGNORE_QUERY_PARAMS_START
+define('WPC_IGNORE_QUERY_PARAMS', false);
+#WPC_IGNORE_QUERY_PARAMS_END
 
 #WPC_URL_EXCLUDES_START
 define('WPC_URL_EXCLUDES', false);
@@ -65,27 +65,27 @@ include_once $pluginExists . 'addons/cache/advancedCache.php';
 
 foreach($_COOKIE as $key => $value) {
   if (strpos($key, 'wordpress_logged_in_') === 0 && !WPC_CACHE_LOGGED_IN) {
-    return; 
+    return; // Don't cache for logged-in users
   }
 }
 
-
+// Check for excluded cookies
 if (defined('WPC_EXCLUDE_COOKIES')) {
     if (WPC_EXCLUDE_COOKIES !== false && is_array(WPC_EXCLUDE_COOKIES)) {
         foreach ($_COOKIE as $cookieName => $cookieValue) {
             foreach (WPC_EXCLUDE_COOKIES as $excludedCookie) {
 
-                
+                // Trailing "_" means: treat as wildcard prefix (e.g. "wp-postpass_")
                 if (substr($excludedCookie, -1) === '_') {
                     if (stripos($cookieName, $excludedCookie) === 0) {
                         define('DONOTCACHEPAGE', true);
-                        return; 
+                        return; // Don't cache if excluded cookie prefix is detected
                     }
                 } else {
-                    
+                    // Exact match (case-insensitive)
                     if (strcasecmp($cookieName, $excludedCookie) === 0) {
                         define('DONOTCACHEPAGE', true);
-                        return; 
+                        return; // Don't cache if exact excluded cookie is detected
                     }
                 }
             }
@@ -93,11 +93,11 @@ if (defined('WPC_EXCLUDE_COOKIES')) {
     }
 }
 
-
+// Check for mandatory cookies - if any are missing, bypass cache entirely
 if (defined('WPC_MANDATORY_COOKIES')) {
     if (WPC_MANDATORY_COOKIES !== false && is_array(WPC_MANDATORY_COOKIES)) {
         foreach (WPC_MANDATORY_COOKIES as $mandatoryCookie) {
-            
+            // Trailing "_" means: treat as wildcard prefix
             if (substr($mandatoryCookie, -1) === '_') {
                 $found = false;
                 foreach ($_COOKIE as $cookieName => $cookieValue) {
@@ -108,31 +108,31 @@ if (defined('WPC_MANDATORY_COOKIES')) {
                 }
                 if (!$found) {
                     define('DONOTCACHEPAGE', true);
-                    return; 
+                    return; // Mandatory cookie prefix not present, bypass cache
                 }
             } else {
                 if (empty($_COOKIE[$mandatoryCookie])) {
                     define('DONOTCACHEPAGE', true);
-                    return; 
+                    return; // Mandatory cookie not set, bypass cache
                 }
             }
         }
     }
 }
 
-
+// Don't cache for POST requests
 if (!empty($_SERVER['REQUEST_METHOD'])) {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'HEAD') {
         return;
     }
 }
 
-
+// Don't cache if critical combine, cache disable headers, or disableWPC GET param are present
 if (isset($_SERVER['HTTP_CRITICALCOMBINE']) || isset($_SERVER['HTTP_DISABLEWPC']) || !empty($_GET['disableWPC'])) {
     return;
 }
 
-
+// URL bypass — cache exclude (wpc-excludes['cache']) AND full plugin bypass (wpc-url-excludes).
 
 
 $check_url = ($_SERVER['HTTP_HOST'] ?? '') . ($_SERVER['REQUEST_URI'] ?? '');
@@ -150,7 +150,7 @@ $wpc_match_pattern = function ($url, $pattern) {
     return stripos($url, $pattern) !== false;
 };
 
-
+// Resolve each exclude list: baked constant wins (zero DB); null means "not baked → read DB".
 $wpc_url_excludes_list   = defined('WPC_URL_EXCLUDES')   ? ((WPC_URL_EXCLUDES   === false) ? [] : WPC_URL_EXCLUDES)   : null;
 $wpc_cache_excludes_list = defined('WPC_CACHE_EXCLUDES') ? ((WPC_CACHE_EXCLUDES === false) ? [] : WPC_CACHE_EXCLUDES) : null;
 
@@ -170,19 +170,19 @@ if (($wpc_url_excludes_list === null || $wpc_cache_excludes_list === null) && is
 if (is_array($wpc_url_excludes_list)) {
     foreach ($wpc_url_excludes_list as $pattern) {
         if ($wpc_match_pattern($check_url, $pattern)) {
-            return; 
+            return; // Bypass cache (plugin will also be bypassed via dontRunif)
         }
     }
 }
 if (is_array($wpc_cache_excludes_list)) {
     foreach ($wpc_cache_excludes_list as $pattern) {
         if ($wpc_match_pattern($check_url, $pattern)) {
-            return; 
+            return; // Skip cache for this URL (plugin still optimizes)
         }
     }
 }
 
-
+// Don't cache if DONOTCACHEPAGE constant is defined
 if (defined('DONOTCACHEPAGE') && DONOTCACHEPAGE){
 	return;
 }
@@ -200,7 +200,7 @@ elseif ($webp) $prefix = 'webp';
 if (!$cache->byPass() && $cache->cacheExists($prefix)) {
   $isCacheExpired = $cache->cacheExpired();
 
-  
+  // Not required as get cache sorts this
   $isCacheValid = $cache->cacheValid();
 
   if (!$isCacheExpired && $isCacheValid) {
@@ -208,7 +208,7 @@ if (!$cache->byPass() && $cache->cacheExists($prefix)) {
   }
 }
 
-
+//If cache wasn't served
 function wps_ic_early_buffer_callback($html) {
 		global $wps_ic_cdn_instance;
 
@@ -220,6 +220,6 @@ function wps_ic_early_buffer_callback($html) {
 }
 
 
-
+//Start the buffer
 define('WPS_IC_CACHE_BUFFER_STARTED', true);
 ob_start('wps_ic_early_buffer_callback');

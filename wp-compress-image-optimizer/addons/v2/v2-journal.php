@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-journal.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 if (!defined('ABSPATH')) {
@@ -38,7 +30,7 @@ function wpc_v2_journal_dir() {
             $cached = '';
             return $cached;
         }
-        
+        // Files contain no secrets but no reason to serve them either.
         wpc_fs_put($dir . '/.htaccess', "Deny from all\n");
         wpc_fs_put($dir . '/index.html', '');
     }
@@ -57,7 +49,7 @@ function wpc_v2_journal_write_batch($imageID, $jobId, array $entries, $flush_rea
     }
     $dir = wpc_v2_journal_dir();
     if ($dir === '') {
-        
+        // Postmortem item p0: this was silent. The caller (pull-manifest
 
 
         error_log(sprintf(
@@ -120,6 +112,37 @@ function wpc_v2_journal_has_image($imageID) {
     return is_array($g) && !empty($g);
 }
 
+/**
+ * Every journal file that carries callbacks for one image, in both name layouts: this file's
+ * writer (`<ms>-<id>-<rand>.jsonl`) and the REST fast path's (`<id>-<job>-<ms>-<rand>.jsonl`,
+ * api/v2/_shared.php). `.tmp` files are a write in progress and are not listed.
+ */
+function wpc_v2_journal_image_files($imageID) {
+    $imageID = (int) $imageID;
+    if ($imageID <= 0) return [];
+    $dir = wpc_v2_journal_dir();
+    if ($dir === '') return [];
+    $files = array_merge(
+        (array) glob($dir . '/*-' . $imageID . '-*.jsonl'),
+        (array) glob($dir . '/' . $imageID . '-*.jsonl')
+    );
+    return array_values(array_unique(array_filter($files, 'is_string')));
+}
+
+/**
+ * Drop the journal files of one image (a restore is a clean slate). Answers how many were
+ * removed. Observed: entries left from a service 429 window, whose fetch_url no longer answers,
+ * stayed after the image was restored and refused every later bulk run of it (the journal gate;
+ * rig, 2026-09-26: 51 of 51 refused, 0 dispatched).
+ */
+function wpc_v2_journal_drop_image($imageID) {
+    $n = 0;
+    foreach (wpc_v2_journal_image_files($imageID) as $f) {
+        if (@unlink($f)) $n++;
+    }
+    return $n;
+}
+
 
 function wpc_v2_journal_fire_loopback_fast() {
     $throttle_ms = defined('WPC_V2_JOURNAL_FIRE_THROTTLE_MS')
@@ -136,7 +159,7 @@ function wpc_v2_journal_fire_loopback_fast() {
     }
     update_option('wpc_v2_journal_fire_last_ms', $now_ms, false);
 
-    
+    // Canonical helper (see v2-capabilities.php).
     $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
     if ($apikey === '') {
         return false;
@@ -182,7 +205,7 @@ function wpc_v2_journal_fire_loopback_fast() {
         }
     }
     if (!$fp) {
-        
+        // Mark pending so drain exit-fence or shutdown-hook catches up.
         set_transient('wpc_v2_journal_pending_fire', $now_ms, 60);
         return false;
     }

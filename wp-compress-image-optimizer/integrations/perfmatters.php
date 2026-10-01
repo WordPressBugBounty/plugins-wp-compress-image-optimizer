@@ -1,14 +1,6 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: integrations/perfmatters.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 class wps_ic_perfmatters extends wps_ic_integrations
@@ -38,7 +30,7 @@ class wps_ic_perfmatters extends wps_ic_integrations
 
   public function do_checks()
   {
-    
+    // Logic to check for conflicts
     $perfmatters_options = get_option('perfmatters_options');
     $updated = false;
 

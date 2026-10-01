@@ -19,7 +19,7 @@ jQuery(document).ready(function ($) {
             customClass: {
                 container: 'in',
                 popup: 'wps-ic-lite-connect-popup'
-            }, 
+            }, //customClass:'wps-ic-connect-popup',
             showCloseButton: false,
             showCancelButton: false,
             showConfirmButton: false,
@@ -69,7 +69,7 @@ jQuery(document).ready(function ($) {
 
                     if (apikey == '' || typeof apikey == "undefined") {
                         $('.wps-ic-lite-input-container', swal_container).addClass('wpc-error');
-                        
+                        //$('.wps-ic-lite-input-field-error', swal_container).show();
                         return false;
                     }
 
@@ -98,7 +98,7 @@ jQuery(document).ready(function ($) {
                         var wpcMsg = (response && response.data && response.data.msg) ? response.data.msg : '';
                         if (response && response.success) {
                             wpcConnT0 = Date.now() - 16000;
-                            
+                            // Inject full-page overlay so Lite dashboard never shows during reload
                             $('body').append(
                                 '<div id="wpc-activation-overlay" style="position:fixed;inset:0;z-index:999999;background:#fff;display:flex;align-items:center;justify-content:center;text-align:center;">' +
                                 '<div>' +
@@ -111,9 +111,9 @@ jQuery(document).ready(function ($) {
                             WPCSwal.close();
                             window.location.reload();
                         } else {
-                            
-                            
-                            
+                            // Not OK
+                            // msg = 'Your api key does not match our records.';
+                            //                 title = 'API Key Validation';
 
                             if (wpcMsg == 'site-already-connected') {
                                 $(already_connected).show();
@@ -143,7 +143,7 @@ jQuery(document).ready(function ($) {
                                 $(tests).hide();
                             }
 
-                            
+                            // $('.wps-ic-connect-retry', swal_container).bind('click');
 
                         }
                     }).fail(function () {
@@ -175,7 +175,7 @@ jQuery(document).ready(function ($) {
             customClass: {
                 container: 'in',
                 popup: 'wps-ic-lite-connect-popup'
-            }, 
+            }, //customClass:'wps-ic-connect-popup',
             showCloseButton: false,
             showCancelButton: false,
             showConfirmButton: false,
@@ -194,7 +194,7 @@ jQuery(document).ready(function ($) {
 
                 $('.wps-ic-lite-input-container', swal_container).on('click', function () {
                     $('.wps-ic-lite-input-container', swal_container).removeClass('wpc-error');
-                    
+                    //$('.wps-ic-lite-input-field-error', swal_container).fadeOut(500);
                 });
 
 
@@ -227,7 +227,7 @@ jQuery(document).ready(function ($) {
 
                     if (apikey == '' || typeof apikey == "undefined") {
                         $('.wps-ic-lite-input-container', swal_container).addClass('wpc-error');
-                        
+                        //$('.wps-ic-lite-input-field-error', swal_container).show();
                         return false;
                     }
 
@@ -256,7 +256,7 @@ jQuery(document).ready(function ($) {
                         var wpcMsg = (response && response.data && response.data.msg) ? response.data.msg : '';
                         if (response && response.success) {
                             wpcConnT0 = Date.now() - 16000;
-                            
+                            // Inject full-page overlay so Lite dashboard never shows during reload
                             $('body').append(
                                 '<div id="wpc-activation-overlay" style="position:fixed;inset:0;z-index:999999;background:#fff;display:flex;align-items:center;justify-content:center;text-align:center;">' +
                                 '<div>' +
@@ -269,9 +269,9 @@ jQuery(document).ready(function ($) {
                             WPCSwal.close();
                             window.location.reload();
                         } else {
-                            
-                            
-                            
+                            // Not OK
+                            // msg = 'Your api key does not match our records.';
+                            //                 title = 'API Key Validation';
 
                             if (wpcMsg == 'site-already-connected') {
                                 $(already_connected).show();
@@ -292,7 +292,7 @@ jQuery(document).ready(function ($) {
                                 $(tests).hide();
                             }
 
-                            
+                            // $('.wps-ic-connect-retry', swal_container).bind('click');
 
                         }
                     }).fail(function () {

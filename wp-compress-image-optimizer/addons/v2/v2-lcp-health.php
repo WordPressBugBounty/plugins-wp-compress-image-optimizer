@@ -1,14 +1,12 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-lcp-health.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
     exit;
+}
+
+// The health endpoint reports the observation, so it needs the reader even when the v2
+// bootstrap runs on its own (the drop-in path does not include the CDN addons).
+if (!class_exists('wps_ic_atf_observation') && defined('WPS_IC_DIR')) {
+    require_once WPS_IC_DIR . 'classes/atf_observation.class.php';
 }
 
 
@@ -41,7 +39,7 @@ add_action('init', function () {
     $key   = hash_hmac('sha256', 'wpc-lcp-health-v1', $apikey);
     $given = (string) $_GET['wpc_lcp_health'];
 
-    
+    // Admin key retrieval: ?wpc_lcp_health=mykey
     if ($given === 'mykey') {
         if (function_exists('current_user_can') && current_user_can('manage_options')) {
             wpc_lcp_health_json([
@@ -55,7 +53,7 @@ add_action('init', function () {
         wpc_lcp_health_json(['error' => 'bad key (admin: ?wpc_lcp_health=mykey to retrieve it)'], 403);
     }
 
-    
+    // ---- build state ----
     $url     = (isset($_GET['url']) && $_GET['url'] !== '') ? esc_url_raw(urldecode((string) $_GET['url'])) : home_url('/');
     $url_key = class_exists('wps_ic_url_key') ? (new wps_ic_url_key())->setup($url) : '';
     $dir     = (defined('WPS_IC_CRITICAL') ? WPS_IC_CRITICAL : '') . $url_key . '/';
@@ -92,21 +90,13 @@ add_action('init', function () {
         $j = json_decode((string) @file_get_contents($lcp_file), true);
         if (is_array($j)) {
             $lcp_hint = (isset($j['lcp']) && is_array($j['lcp'])) ? $j['lcp'] : null;
-            $atf = (isset($j['atf_images']) && is_array($j['atf_images'])) ? $j['atf_images'] : null;
-            if ($atf !== null) {
-                $mob = (isset($atf['mobile'])  && is_array($atf['mobile']))  ? $atf['mobile']  : [];
-                $des = (isset($atf['desktop']) && is_array($atf['desktop'])) ? $atf['desktop'] : [];
-                if (empty($mob) && empty($des)) { $mob = $atf; $des = $atf; }
-                $map = [];
-                foreach (['mobile_w' => $mob, 'desktop_w' => $des] as $field => $list) {
-                    foreach ((array) $list as $im) {
-                        if (!is_array($im) || empty($im['stem']) || empty($im['css_w'])) continue;
-                        $st = strtolower((string) $im['stem']);
-                        if (!isset($map[$st])) $map[$st] = ['stem' => $st, 'mobile_w' => 0, 'desktop_w' => 0];
-                        if ($map[$st][$field] === 0) $map[$st][$field] = (int) round((float) $im['css_w']);
-                    }
-                }
-                $afold = array_values($map);
+            // Report the widths the render will actually use, resolved, not the raw entries.
+            $map = [];
+            foreach (wps_ic_atf_observation::widths(wps_ic_atf_observation::SCOPE_ATF) as $st => $record) {
+                $map[] = ['stem' => $st, 'mobile_w' => (int) $record['m'], 'desktop_w' => (int) $record['d']];
+            }
+            if (!empty($map)) {
+                $afold = $map;
             }
         }
     }
@@ -142,10 +132,10 @@ add_action('init', function () {
             'on_disk'    => $lcp_on_disk,
             'path'       => $lcp_file,
             'mtime'      => $iso($lcp_file),
-            'last_fetch' => is_array($heal_rec) ? $heal_rec : null,   
+            'last_fetch' => is_array($heal_rec) ? $heal_rec : null,   // {at, http_status, wrote}
         ],
         'healer'         => [
-            'give_up_count' => $giveup,   
+            'give_up_count' => $giveup,   // >=15 = gave up (producer never wrote it for this uuid)
             'throttled'     => ($stash_url !== '' && function_exists('get_transient') && get_transient('wpc_lcp_heal_' . md5($dir))) ? true : false,
         ],
         'hints'          => [

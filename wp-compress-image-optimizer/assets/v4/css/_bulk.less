@@ -2636,6 +2636,14 @@
 .wpc-bulk-splash-card--restore  .wpc-bulk-splash-meta-row svg { color: @color-text-secondary; }
 .wpc-bulk-splash-card--restore  .wpc-bulk-splash-meta-row svg.is-warning { color: @color-warning; }
 
+// An inline warning line (wps_ic_admin_notice::render_inline): the restore card's warning sign,
+// amber text, a link. The "no file on disk" row of the splash and of the completion card.
+.wpc-inline-notice.is-warning { color: darken(@color-warning, 22%); }
+.wpc-inline-notice.is-warning svg.is-warning { color: @color-warning; }
+.wpc-inline-notice-link { color: inherit; text-decoration: underline; }
+.wpc-bulk-complete-missing { display: flex; justify-content: center; margin: 4px 0 16px; }
+.wpc-bulk-complete-missing[hidden] { display: none; }
+
 // ─── CTAs — bigger pill (14px 28px, 16px text, chevron) ─────────────────
 // !important needed to override _header.less .button-start-bulk-* base.
 

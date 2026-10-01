@@ -1,16 +1,8 @@
 <?php
 
-
-
-
-
-
-
-
-
-
-
-
+/**
+ * GeoLocation Stuff
+ */
 switch_to_blog(1);
 
 
@@ -38,9 +30,9 @@ if (empty($multisiteDefaultSettings)) {
 
 $settings = $multisiteDefaultSettings;
 
-
-
-
+/**
+ * Quick fix for PHP undefined notices
+ */
 $wps_ic_active_settings['live-cdn']['local'] = '';
 $wps_ic_active_settings['live-cdn']['live'] = '';
 $wps_ic_active_settings['optimization']['lossless'] = '';
@@ -61,9 +53,9 @@ else {
   }
 }
 
-
-
-
+/**
+ * Decides which setting is active
+ */
 if ( ! empty($settings['optimization'])) {
   if ($settings['optimization'] == 'lossless') {
     $wps_ic_active_settings['optimization']['lossless'] = 'class="current"';
@@ -376,18 +368,6 @@ else {
                     <input type="checkbox" id="external-url-toggle" value="1" name="wp-ic-setting[external-url]" data-setting_name="external-urls" data-setting_value="1" <?php echo checked($settings['external-url'], '1'); ?>/>
                     <div>
                       <label for="external-url-toggle" class="external-url-toggle"></label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="setting-option">
-                <div class="setting-label">Remove Render Blocking</div>
-                <div class="setting-value ic-custom-tooltip" title="Remove render blocking on crucial assets.">
-                  <div class="checkbox-container-v3 wps-ic-ajax-checkbox" style="display: inline-block;">
-                    <input type="checkbox" id="remove-render-blocking-toggle" value="1" name="wp-ic-setting[remove-render-blocking]" data-setting_name="remove-render-blocking" data-setting_value="1" <?php echo checked($settings['remove-render-blocking'], '1'); ?>/>
-                    <div>
-                      <label for="remove-render-blocking-toggle" class="remove-render-blocking-toggle"></label>
                     </div>
                   </div>
                 </div>

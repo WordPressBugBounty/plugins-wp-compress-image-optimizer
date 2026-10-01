@@ -1,18 +1,10 @@
 <?php
+
+
 /**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/amp.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
+ * Class - AMP
+ * Handles AMP
  */
-
-
-
-
-
-
-
 class wps_ic_amp
 {
 
@@ -22,7 +14,7 @@ class wps_ic_amp
   {
     self::$isAmp = false;
 
-    
+    // Is AMP?
     if (function_exists('amp_is_request')) {
       self::$isAmp = $_GET['wpc_is_amp'] = amp_is_request();
     }

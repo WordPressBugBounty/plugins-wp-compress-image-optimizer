@@ -1,24 +1,16 @@
 <?php
-
-
-
-
-
-
-
-
-if (function_exists('update_option')) {
-    update_option('wpc_diag_until', time() + 7 * 86400, true);
-}
+// Rendering this page writes nothing: the diagnostic log is armed only by the switch below
+// (wpc_diag_window_request), never by opening the settings page.
 global $wps_ic, $wpdb;
+$wpc_debug_dumps = get_option('wpc_show_hidden_menus') == 'true';   // raw dumps below only with the hidden menus on
 
-
-
-
-
-
-if (!function_exists('wpc_dbg_base651')) {
-    function wpc_dbg_base651($slug)
+// v7.10.651 — these action links hardcoded admin.php?page=<slug>, but the menu registers
+// EITHER top-level (add_menu_page) OR under Settings (add_submenu_page 'options-general.php')
+// depending on configuration — so on Settings-registered installs every debug link 403'd
+// ("not allowed to access this page"). Pre-existing, and unrelated to the nonce work, but
+// found while verifying it. menu_page_url() returns whichever base is real.
+if (!function_exists('wpc_debug_tool_base_url')) {
+    function wpc_debug_tool_base_url($slug)
     {
         if (function_exists('menu_page_url')) {
             $u = menu_page_url($slug, false);
@@ -30,56 +22,56 @@ if (!function_exists('wpc_dbg_base651')) {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-$wpc_get651 = ['delete_option', 'wps_ic_critical_mc', 'wps_ic_cdn_mc', 'wps_ic_delay_v2_debug',
+// ── v7.10.651 — CVE-2026-17608: CSRF → arbitrary option deletion (and its siblings) ──
+// The reported hole was `?delete_option=<any option>` with no nonce: one forged link
+// clicked by a logged-in admin could delete siteurl/home/active_plugins. The sweep found
+// the same shape on 9 more GET parameters here (php_development, wps_ic_debug_log,
+// optimizejs_*, ccss_debug, wps_ic_cdn_mc ...) and on unprotected POST bodies — only three
+// actions in this file were nonce-checked.
+//
+// SCOPE NOTE (why this is an explicit list and not deny-by-default): this template is
+// include_once'd unconditionally by advanced_settings_v4.php, so it executes on every
+// settings page render. A "anything unrecognised needs a nonce" guard would wp_die() on
+// that page's own parameters and forms. The list below is instead enforced by the test
+// suite, which re-derives it from this file and fails the build if a state-changing
+// parameter is ever added without being gated here.
+$gatedGetParams = ['delete_option', 'wps_ic_critical_mc', 'wps_ic_cdn_mc', 'wps_ic_delay_v2_debug',
     'optimizejs_remove', 'optimizejs_debug', 'wps_ic_debug_log', 'php_development',
     'php_debug', 'js_debug', 'ps_debug', 'ccss_debug'];
-$wpc_post651 = ['wps_settings', 'cache_refresh_time', 'elementor_skip_sections',
+$gatedPostParams = ['wps_settings', 'cache_refresh_time', 'elementor_skip_sections',
     'elementor_skip_desktop', 'elementor_skip_mobile', 'local_server', 'savePreloads',
     'preloads', 'preloadsMobile', 'preloads_lcp', 'preloadsMobile_lcp', 'remove_fonts'];
-$wpc_hit651 = false;
-foreach ($wpc_get651 as $wpc_k651) {
-    if (isset($_GET[$wpc_k651])) { $wpc_hit651 = true; break; }
+$gatedParamSent = false;
+foreach ($gatedGetParams as $gatedParam) {
+    if (isset($_GET[$gatedParam])) { $gatedParamSent = true; break; }
 }
-if (!$wpc_hit651) {
-    foreach ($wpc_post651 as $wpc_k651) {
-        if (isset($_POST[$wpc_k651])) { $wpc_hit651 = true; break; }
+if (!$gatedParamSent) {
+    foreach ($gatedPostParams as $gatedParam) {
+        if (isset($_POST[$gatedParam])) { $gatedParamSent = true; break; }
     }
 }
-if ($wpc_hit651) {
+if ($gatedParamSent) {
     if (!current_user_can('manage_wpc_settings') && !current_user_can('manage_options')) {
         wp_die(esc_html__('You do not have permission to perform this action.', WPS_IC_TEXTDOMAIN), 403);
     }
-    
-    
-    $wpc_toks651 = [];
-    foreach (['_wpnonce', 'wpc_settings_save_nonce'] as $wpc_f651) {
-        if (!empty($_REQUEST[$wpc_f651])) {
-            $wpc_toks651[] = (string) $_REQUEST[$wpc_f651];
+    // Pre-existing flows keep their own nonce actions; wpc_settings_save uses a custom
+    // field name, so both carriers are read.
+    $nonceValues = [];
+    foreach (['_wpnonce', 'wpc_settings_save_nonce'] as $nonceField) {
+        if (!empty($_REQUEST[$nonceField])) {
+            $nonceValues[] = (string) $_REQUEST[$nonceField];
         }
     }
-    $wpc_ok651 = false;
-    foreach (['wpc_debug_action', 'wpc_clear_diagnostic_log', 'wpc_excl_diag', 'wpc_prov_diag', 'wpc_settings_save'] as $wpc_a651) {
-        foreach ($wpc_toks651 as $wpc_t651) {
-            if (wp_verify_nonce($wpc_t651, $wpc_a651)) {
-                $wpc_ok651 = true;
+    $nonceValid = false;
+    foreach (['wpc_debug_action', 'wpc_clear_diagnostic_log', 'wpc_excl_diag', 'wpc_prov_diag', 'wpc_settings_save'] as $nonceAction) {
+        foreach ($nonceValues as $nonceValue) {
+            if (wp_verify_nonce($nonceValue, $nonceAction)) {
+                $nonceValid = true;
                 break 2;
             }
         }
     }
-    if (!$wpc_ok651) {
+    if (!$nonceValid) {
         wp_nonce_ays('wpc_debug_action');
     }
 }
@@ -95,11 +87,11 @@ if (!isset($settings['cache_refresh_time'])) {
 }
 
 if (!empty($_GET['delete_option'])) {
-    
-    
-    $wpc_opt651 = sanitize_text_field((string) $_GET['delete_option']);
-    if (preg_match('/^(wps_ic|wpc_|ic_|wps_optimizejs|wps_critical|wps_no_content)/', $wpc_opt651)) {
-        delete_option($wpc_opt651);
+    // Even past the nonce gate, only plugin-owned options are deletable — an admin
+    // mis-click can no longer remove siteurl/home/active_plugins.
+    $optionToDelete = sanitize_text_field((string) $_GET['delete_option']);
+    if (preg_match('/^(wps_ic|wpc_|ic_|wps_optimizejs|wps_critical|wps_no_content)/', $optionToDelete)) {
+        delete_option($optionToDelete);
     } else {
         echo '<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:8px 12px;border-radius:6px;margin:10px 0;font-size:12px;">Refused: only WP Compress options may be deleted here.</div>';
     }
@@ -167,13 +159,13 @@ if (isset($_POST['savePreloads'])) {
 
 if (!empty($_POST['preloads_lcp'])) {
 	$preloadsLcp = get_option('wps_ic_preloads', []);
-	$preloadsLcp['lcp'] = [$_POST['preloads_lcp']]; 
+	$preloadsLcp['lcp'] = [$_POST['preloads_lcp']]; // Wrap in array
 	update_option('wps_ic_preloads', $preloadsLcp);
 }
 
 if (!empty($_POST['preloadsMobile_lcp'])) {
 	$preloadsLcp = get_option('wps_ic_preloadsMobile', []);
-	$preloadsLcp['lcp'] = [$_POST['preloadsMobile_lcp']]; 
+	$preloadsLcp['lcp'] = [$_POST['preloadsMobile_lcp']]; // Wrap in array
 	update_option('wps_ic_preloadsMobile', $preloadsLcp);
 }
 
@@ -231,12 +223,12 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                         $settings = get_option(WPS_IC_SETTINGS);
                         $settings['mcCriticalCSS'] = 'mc';
                         update_option(WPS_IC_SETTINGS, $settings);
-                        
+                        #update_option('wps_ic_critical_mc', sanitize_text_field($_GET['wps_ic_critical_mc']));
                     } else {
                         $settings = get_option(WPS_IC_SETTINGS);
                         $settings['mcCriticalCSS'] = 'api';
                         update_option(WPS_IC_SETTINGS, $settings);
-                        
+                        #delete_option('wps_ic_critical_mc');
                     }
                 }
 
@@ -244,9 +236,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
 
 
                 if (empty($settings['mcCriticalCSS']) || $settings['mcCriticalCSS'] == 'mc') {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&wps_ic_critical_mc=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable Old API', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&wps_ic_critical_mc=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable Old API', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&wps_ic_critical_mc=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable New API', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&wps_ic_critical_mc=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable New API', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
                 <?php esc_html_e('Enable Bunny Critical CSS API.', WPS_IC_TEXTDOMAIN); ?>
@@ -278,9 +270,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $cdn_mc = get_option('wps_ic_cdn_mc');
 
                 if (empty($cdn_mc) || $cdn_mc == 'false') {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&wps_ic_cdn_mc=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&wps_ic_cdn_mc=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&wps_ic_cdn_mc=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&wps_ic_cdn_mc=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
                 <?php esc_html_e('Enable Bunny MC API.', WPS_IC_TEXTDOMAIN); ?>
@@ -303,9 +295,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
 					    $v2_debug = get_option('wps_ic_delay_v2_debug');
 
 					    if (empty($v2_debug) || $v2_debug == 'false') {
-						    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&wps_ic_delay_v2_debug=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
+						    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&wps_ic_delay_v2_debug=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
 					    } else {
-						    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&wps_ic_delay_v2_debug=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
+						    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&wps_ic_delay_v2_debug=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
 					    }
 					    ?>
                 <?php esc_html_e('Enable console log debug.', WPS_IC_TEXTDOMAIN); ?>
@@ -328,9 +320,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $optimizejs_remove = get_option('wps_optimizejs_remove');
 
                 if (empty($optimizejs_remove) || $optimizejs_remove == 'false') {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&optimizejs_remove=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&optimizejs_remove=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&optimizejs_remove=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&optimizejs_remove=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
                 <?php esc_html_e('Stops the local image runtime (optimizer.*.js: lazy / adaptive) from being enqueued.', WPS_IC_TEXTDOMAIN); ?>
@@ -349,9 +341,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $development = get_option('wps_ic_debug_log');
 
                 if (empty($development) || $development == 'false') {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&wps_ic_debug_log=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&wps_ic_debug_log=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&wps_ic_debug_log=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&wps_ic_debug_log=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
             </p>
@@ -364,7 +356,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 <?php
                 if (!empty($_GET['php_development'])) {
                     update_option('wps_ic_development', sanitize_text_field($_GET['php_development']));
-                    
+                    // fresh 24h window on every explicit toggle-on; clear the stamp on toggle-off
                     if (sanitize_text_field($_GET['php_development']) === 'true') {
                         update_option('wpc_dev_flag_seen', time(), false);
                     } else {
@@ -375,9 +367,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $development = get_option('wps_ic_development');
 
                 if (empty($development) || $development == 'false') {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&php_development=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&php_development=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&php_development=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&php_development=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
             </p>
@@ -395,9 +387,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $ccss_debug = get_option('ccss_debug');
 
                 if (empty($ccss_debug) || $ccss_debug == 'false') {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&ccss_debug=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&ccss_debug=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&ccss_debug=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&ccss_debug=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
                 <?php esc_html_e('If you are having any sort of issues with critical CSS.', WPS_IC_TEXTDOMAIN); ?>
@@ -416,9 +408,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $debugPhp = get_option('wps_ps_debug');
 
                 if (empty($debugPhp) || $debugPhp == 'false') {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&ps_debug=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&ps_debug=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&ps_debug=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&ps_debug=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
                 <?php esc_html_e('If you are having any sort of issues with our plugin, enabling this option will give you some basic debug output in Console log of your browser.', WPS_IC_TEXTDOMAIN); ?>
@@ -437,9 +429,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $debugPhp = get_option('wps_ic_debug');
 
                 if (empty($debugPhp) || $debugPhp == 'false') {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&php_debug=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&php_debug=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&php_debug=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&php_debug=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
                 <?php esc_html_e('If you are having any sort of issues with our plugin, enabling this option will give you some basic debug output in Console log of your browser.', WPS_IC_TEXTDOMAIN); ?>
@@ -456,9 +448,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 }
 
                 if (get_option('wps_ic_js_debug') == 'false') {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&js_debug=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&js_debug=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&js_debug=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
+                    echo '<a href="' . wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&js_debug=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
                 <?php esc_html_e('If you are having any sort of issues with our plugin, enabling this option will give you some basic debug output in Console log of your browser.', WPS_IC_TEXTDOMAIN); ?>
@@ -492,7 +484,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $allowLocal = get_option('wps_ic_allow_local');
                 echo '<h3>' . esc_html__('Allow live:', WPS_IC_TEXTDOMAIN) . '</h3>' .$allowLive;
                 echo '<h3>' . esc_html__('Allow local:', WPS_IC_TEXTDOMAIN) . '</h3>' .$allowLocal;
-                echo '<h3>' . esc_html__('Account Status:', WPS_IC_TEXTDOMAIN) . '</h3>' . var_dump(get_transient('wps_ic_account_status'));
+                if ($wpc_debug_dumps) {
+                    echo '<h3>' . esc_html__('Account Status:', WPS_IC_TEXTDOMAIN) . '</h3>' . var_dump(get_transient('wps_ic_account_status'));
+                }
                 ?>
             </p>
         </td>
@@ -504,7 +498,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
             <p>
                 <?php
                 $jobID = get_transient(WPS_IC_JOB_TRANSIENT);
-                var_dump($jobID);
+                if ($wpc_debug_dumps) {
+                    var_dump($jobID);
+                }
                 ?>
             </p>
         </td>
@@ -516,7 +512,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
             <p>
                 <?php
                 $locate = get_option('wps_ic_geo_locate_v2');
-                echo print_r($locate,true);
+                if ($wpc_debug_dumps) {
+                    echo print_r($locate,true);
+                }
                 ?>
             </p>
         </td>
@@ -562,7 +560,9 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
             <?php
             $sizes = get_intermediate_image_sizes();
             echo sprintf(esc_html__('Total Thumbs: %d', WPS_IC_TEXTDOMAIN), count($sizes));
-            echo print_r($sizes, true);
+            if ($wpc_debug_dumps) {
+                echo print_r($sizes, true);
+            }
             ?>
         </td>
     </tr>
@@ -602,7 +602,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
         <td>
             <a href="<?php
-            echo wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&delete_option=ic_cdn_zone_name', 'wpc_debug_action'); ?>"><?php esc_html_e('Delete', WPS_IC_TEXTDOMAIN); ?></a>
+            echo wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&delete_option=ic_cdn_zone_name', 'wpc_debug_action'); ?>"><?php esc_html_e('Delete', WPS_IC_TEXTDOMAIN); ?></a>
         </td>
         <td></td>
     </tr>
@@ -615,7 +615,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
         <td>
             <a href="<?php
-            echo wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&delete_option=ic_custom_cname', 'wpc_debug_action'); ?>"><?php esc_html_e('Delete', WPS_IC_TEXTDOMAIN); ?></a>
+            echo wp_nonce_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&delete_option=ic_custom_cname', 'wpc_debug_action'); ?>"><?php esc_html_e('Delete', WPS_IC_TEXTDOMAIN); ?></a>
         </td>
         <td></td>
     </tr>
@@ -876,6 +876,31 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     </tbody>
 </table>
 
+<?php
+// The diagnostic log's switch. It sits below the table above on purpose: that table's first
+// nested <form> closes the settings form, so a form placed here is a form of its own and adds
+// nothing to what the settings Save submits.
+if ($wpc_debug_dumps) {
+    $wpc_diag_until = (int) get_option('wpc_diag_until', 0);
+    $wpc_diag_open = $wpc_diag_until >= time();
+    $wpc_diag_lines = get_option('wpc_diagnostic_log', []);
+    ?>
+<h2>Diagnostic log</h2>
+<form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" id="wpc-diag-window">
+    <input type="hidden" name="action" value="wpc_diag_window">
+    <input type="hidden" name="window" value="<?php echo $wpc_diag_open ? 'off' : 'on'; ?>">
+    <?php wp_nonce_field('wpc_diag_window'); ?>
+    <p>
+        <?php if ($wpc_diag_open) { ?>
+            Recording until <?php echo esc_html(gmdate('Y-m-d H:i', $wpc_diag_until)); ?> UTC.
+        <?php } else { ?>
+            Off. Switching it on records for <?php echo (int) (WPC_DIAG_WINDOW_SECONDS / 86400); ?> days, then it stops by itself.
+        <?php } ?>
+        <?php echo is_array($wpc_diag_lines) ? count($wpc_diag_lines) : 0; ?> lines in <code>wpc_diagnostic_log</code>.
+        <input type="submit" class="button" value="<?php echo $wpc_diag_open ? 'Switch off' : 'Switch on'; ?>">
+    </p>
+</form>
+<?php } ?>
 
 <?php
 
@@ -1129,7 +1154,7 @@ $wpcLadderTotalFailed    = (int) ($wpcLadderFleet['total_backfills_failed'] ?? 0
 
 <?php
 
-
+// End-to-end singleCompressV4 timings with source attribution.
 $wpcCompressStats = get_option('wpc_compress_stats', []);
 if (!is_array($wpcCompressStats)) $wpcCompressStats = [];
 $wpcCompressFleet   = isset($wpcCompressStats['fleet']) && is_array($wpcCompressStats['fleet']) ? $wpcCompressStats['fleet'] : [];
@@ -1203,7 +1228,7 @@ $wpcCompressFailed    = (int) ($wpcCompressFleet['total_compresses_failed'] ?? 0
 
 <?php
 
-
+// Telemetry for the restore pipeline — mirrors the ladder stats panel structure.
 $wpcRestoreStats = get_option('wpc_restore_stats', []);
 if (!is_array($wpcRestoreStats)) $wpcRestoreStats = [];
 $wpcRestoreFleet   = isset($wpcRestoreStats['fleet']) && is_array($wpcRestoreStats['fleet']) ? $wpcRestoreStats['fleet'] : [];
@@ -1284,21 +1309,21 @@ $wpcRestoreFailed    = (int) ($wpcRestoreFleet['total_restores_failed'] ?? 0);
             console.log(field);
             var text = document.getElementById('wps_' + field + '_field');
 
-
+            // Copy the text inside the text field
             navigator.clipboard.writeText(text.value);
 
-
+            // Alert the copied text
             alert('<?php echo esc_js(__('Copied to Clipboard', WPS_IC_TEXTDOMAIN)); ?>');
         })
 
     });
 </script>
 <?php
-
-
-
-
-
+// v7.21.123 — CF Doctor surface. The wpc_cf_doctor endpoint (end-to-end edge-purge
+// verification: connection, plain per-URL purge arm, Cache-Tag control test + crown,
+// tag emission plumbing) existed since the bypass era but had NO UI — it was only
+// reachable from the browser console, so nobody ran it and unverified zones served
+// stale HTML after crit landed (beucomply: landed crit invisible to PSI's colo).
 $wpc_cfdoc_cf = get_option(WPS_IC_CF);
 if (!empty($wpc_cfdoc_cf['token']) && !empty($wpc_cfdoc_cf['zone'])) :
     $wpc_cfdoc_crown = get_option('wpc_cf_purge_verified');
@@ -1354,76 +1379,4 @@ if (!empty($wpc_cfdoc_cf['token']) && !empty($wpc_cfdoc_cf['zone'])) :
         });
     });
 </script>
-<?php endif; ?>
-<?php
-
-
-
-
-if (defined('WPS_IC_CRITICAL') && class_exists('wps_ic_url_key')) :
-    $wpc_bs128 = [];
-    $wpc_bk128 = ltrim((string) (new wps_ic_url_key())->setup(home_url('/')), '/');
-    $wpc_bd128 = rtrim(WPS_IC_CRITICAL, '/') . '/' . $wpc_bk128 . '/';
-    $wpc_bw128 = @is_readable($wpc_bd128 . 'wire.json') ? json_decode((string) @file_get_contents($wpc_bd128 . 'wire.json'), true) : null;
-    if (is_array($wpc_bw128) && !empty($wpc_bw128['budget_final']) && is_array($wpc_bw128['budget_final'])) {
-        foreach (['mobile', 'desktop'] as $wpc_bdev128) {
-            if (!empty($wpc_bw128['budget_final'][$wpc_bdev128]) && is_array($wpc_bw128['budget_final'][$wpc_bdev128])) {
-                $wpc_bv128 = $wpc_bw128['budget_final'][$wpc_bdev128];
-                $wpc_bs128[$wpc_bdev128] = [
-                    'src'  => 'wire.json',
-                    'out'  => (int) ($wpc_bv128['out'] ?? 0),
-                    'cap'  => (int) ($wpc_bv128['cap'] ?? 0),
-                    'over' => !empty($wpc_bv128['over']),
-                    'x'    => (float) ($wpc_bv128['x'] ?? 0),
-                ];
-            }
-        }
-    }
-    foreach (['mobile' => 'critical_mobile.css', 'desktop' => 'critical_desktop.css'] as $wpc_bdev128 => $wpc_bf128) {
-        if (isset($wpc_bs128[$wpc_bdev128]) || !@is_readable($wpc_bd128 . $wpc_bf128)) { continue; }
-        $wpc_bh128 = (string) @file_get_contents($wpc_bd128 . $wpc_bf128, false, null, 0, 4096);
-        if (preg_match('/wpc-budget-final:\s*(?:mobile\s+|desktop\s+)?(over|ok)\s+out=(\d+)\s+cap=(\d+)/', $wpc_bh128, $wpc_bm128)) {
-            $wpc_bx148 = preg_match('/\bx=([0-9.]+)/', substr($wpc_bh128, 0, 4096), $wpc_bxm148) ? (float) $wpc_bxm148[1] : 0.0;
-            $wpc_bif148 = preg_match('/\binline_fonts=(\d+)/', substr($wpc_bh128, 0, 4096), $wpc_bim148) ? (int) $wpc_bim148[1] : 0;
-            $wpc_bs128[$wpc_bdev128] = [
-                'src'  => 'stamp',
-                'out'  => (int) $wpc_bm128[2],
-                'cap'  => (int) $wpc_bm128[3],
-                'over' => $wpc_bm128[1] === 'over',
-                'x'    => $wpc_bx148 > 0 ? $wpc_bx148
-                    : ((int) $wpc_bm128[3] > 0 ? round(max(0, (int) $wpc_bm128[2] - $wpc_bif148) / (int) $wpc_bm128[3], 2) : 0),
-            ];
-        }
-    }
-?>
-<h3 style="margin-top:24px;"><?php echo esc_html__('Critical CSS Budget (homepage)', WPS_IC_TEXTDOMAIN); ?></h3>
-<?php if (empty($wpc_bs128)) : ?>
-<p><?php echo esc_html__('No budget verdict on disk yet — no wire manifest or stamped critical CSS for the homepage. Generate critical CSS first.', WPS_IC_TEXTDOMAIN); ?></p>
-<?php else : ?>
-<table class="widefat striped" style="max-width:640px;">
-    <thead><tr>
-        <th><?php echo esc_html__('Device', WPS_IC_TEXTDOMAIN); ?></th>
-        <th><?php echo esc_html__('Bytes', WPS_IC_TEXTDOMAIN); ?></th>
-        <th><?php echo esc_html__('Cap', WPS_IC_TEXTDOMAIN); ?></th>
-        <th><?php echo esc_html__('Verdict', WPS_IC_TEXTDOMAIN); ?></th>
-        <th><?php echo esc_html__('Source', WPS_IC_TEXTDOMAIN); ?></th>
-    </tr></thead>
-    <tbody>
-    <?php foreach ($wpc_bs128 as $wpc_bdev128 => $wpc_bv128) : ?>
-        <tr>
-            <td><?php echo esc_html(ucfirst($wpc_bdev128)); ?></td>
-            <td><?php echo esc_html(number_format($wpc_bv128['out'])); ?></td>
-            <td><?php echo esc_html(number_format($wpc_bv128['cap'])); ?></td>
-            <td><?php if ($wpc_bv128['over']) : ?>
-                <span style="color:#b45309;"><?php echo esc_html(sprintf(__('Over budget ×%s', WPS_IC_TEXTDOMAIN), number_format($wpc_bv128['x'], 2))); ?></span>
-            <?php else : ?>
-                <span style="color:#1a7f37;"><?php echo esc_html(sprintf(__('Within budget ×%s — inlined', WPS_IC_TEXTDOMAIN), number_format($wpc_bv128['x'], 2))); ?></span>
-            <?php endif; ?></td>
-            <td><?php echo esc_html($wpc_bv128['src']); ?></td>
-        </tr>
-    <?php endforeach; ?>
-    </tbody>
-</table>
-<p class="description" style="max-width:640px;"><?php echo esc_html__('An over-budget critical CSS was trimmed by the service to fit the 64 KB device cap. When the served artifact carries the budget stamp, the plugin automatically restores stylesheets to render-blocking so the first paint stays fully styled.', WPS_IC_TEXTDOMAIN); ?></p>
-<?php endif; ?>
 <?php endif; ?>

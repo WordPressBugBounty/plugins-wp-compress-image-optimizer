@@ -1,16 +1,8 @@
 <?php
-
-
-
-
-
-
-
-
 global $wps_ic, $wpdb;
 
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -19,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-
+// For Lite Settings
 $settings = get_option(WPS_IC_SETTINGS);
 if (empty($settings['imagesPreset']) || empty($settings['cdnAll'])) {
     if (!empty($settings['generate_adaptive']) || !empty($settings['retina']) || !empty($settings['generate_webp'])) {
@@ -32,7 +24,7 @@ if (empty($settings['imagesPreset']) || empty($settings['cdnAll'])) {
 
     update_option(WPS_IC_SETTINGS, $settings);
 }
-
+// End
 
 
 if (!empty($_GET['resetTest'])) {
@@ -54,26 +46,26 @@ if (!empty($_POST)) {
     $newSettings = $settings;
 
 
-    
-    
-    
-    
-    
-    
-    $wpc_lite_pillars148 = [
+    // v7.10.927 / v7.21.148 — the simple toggles are PILLARS, not bare keys: each one owns a
+    // set of real settings (Images → retina/adaptive/webp/picture_*/next-gen, CDN → live-cdn/
+    // serve/css/js/fonts, CSS → used-css, JS → the legacy + v3 engines). The expansion used to
+    // be hand-rolled here AND in wps_ic_ajax_checkbox and drifted twice; it now lives once in
+    // wpc_lite_apply_pillar_riders() (defines.php) and both writers call it. An unchecked box is
+    // simply absent from $_POST, so every pillar is written on every save.
+    $litePillars = [
         'delay-js-v2'  => (!empty($sentSettings['delay-js-v2']) && $sentSettings['delay-js-v2'] == '1') ? '1' : '0',
         'imagesPreset' => (isset($sentSettings['imagesPreset']) && $sentSettings['imagesPreset'] == '1') ? '1' : '0',
         'cdnAll'       => (isset($sentSettings['cdnAll']) && $sentSettings['cdnAll'] == '1') ? '1' : '0',
         'nativeLazy'   => (isset($sentSettings['nativeLazy']) && $sentSettings['nativeLazy'] == '1') ? '1' : '0',
     ];
-    foreach ($wpc_lite_pillars148 as $wpc_pillarKey148 => $wpc_pillarVal148) {
-        $newSettings = wpc_lite_pillar_riders148($newSettings, $wpc_pillarKey148, $wpc_pillarVal148);
+    foreach ($litePillars as $pillarKey => $pillarValue) {
+        $newSettings = wpc_lite_apply_pillar_riders($newSettings, $pillarKey, $pillarValue);
     }
 
-    $newSettings = wpc_lite_pillar_riders148($newSettings, ['critical', 'css'],
+    $newSettings = wpc_lite_apply_pillar_riders($newSettings, ['critical', 'css'],
         (isset($sentSettings['critical']['css']) && $sentSettings['critical']['css'] == '1') ? '1' : '0');
 
-    $newSettings = wpc_lite_pillar_riders148($newSettings, ['cache', 'advanced'],
+    $newSettings = wpc_lite_apply_pillar_riders($newSettings, ['cache', 'advanced'],
         (isset($sentSettings['cache']['advanced']) && $sentSettings['cache']['advanced'] == '1') ? '1' : '0');
 
 
@@ -81,7 +73,7 @@ if (!empty($_POST)) {
 
     $cache = new wps_ic_cache_integrations();
 
-    
+    // Get Purge List
     $options_class = new wps_ic_options();
     $purgeList = $options_class->getPurgeList($options);
 
@@ -91,18 +83,13 @@ if (!empty($_POST)) {
         $cache::purgeCombinedFiles();
     }
 
-    if (in_array('critical', $purgeList)) {
-        if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead('all')) {
-        $cache::purgeCriticalFiles();
-    }
+    if (in_array('critical', $purgeList) && function_exists('wpc_crit_invalidate')) {
+        wpc_crit_invalidate('all', 'settings-save', 'stale');
     }
 
     if (in_array('cdn', $purgeList)) {
         $cacheLogic = new wps_ic_cache();
         $cacheLogic->purgeCDN(false);
-	    if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead('all')) {
-        $cache::purgeCriticalFiles();
-    }
 	    $cache::purgePreloads();
     }
 
@@ -122,24 +109,23 @@ if (!empty($_POST)) {
     if (!empty($options['cache']['advanced']) && $options['cache']['advanced'] == '1') {
 
         if (!empty($options['cache']['compatibility']) && $options['cache']['compatibility'] == '1' && $htacces->isApache) {
-            
-            
+            // Modify HTAccess
+            #$htacces->checkHtaccess();
         } else {
             $htacces->removeHtaccessRules();
         }
 
-        
+        // Add WP_CACHE to wp-config.php
         $htacces->setWPCache(true);
         $htacces->setAdvancedCache();
 
         $this->cacheLogic = new wps_ic_cache();
-        $this->cacheLogic::removeHtmlCacheFiles(0); 
-        $this->cacheLogic::preloadPage(0); 
+        $this->cacheLogic::removeHtmlCacheFiles(0); // Purge & Preload
     } else {
-        
+        // Modify HTAccess
         $htacces->removeHtaccessRules();
 
-        
+        // Add WP_CACHE to wp-config.php
         $htacces->setWPCache(false);
         $htacces->removeAdvancedCache();
     }
@@ -212,7 +198,47 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
     <div class="wpc-advanced-settings-container wpc-lite-settings-container wps_ic_settings_page<?php if ($isLiteMode) echo ' wpc-is-lite'; ?>">
         <?php
         $wps_ic->integrations->render_plugin_notices();
-        if (function_exists('wpc_states81_render')) { wpc_states81_render(); }
+        if (function_exists('wpc_render_state_notices')) { wpc_render_state_notices(); }
+        if (class_exists('wps_ic_plan')) {
+            $wpc_claim_pending = wps_ic_plan::pending();
+            ?>
+            <script>window.wpcClaim = <?php echo wp_json_encode([
+                'email'   => (string) apply_filters('wpc_claim_prefill_email', wp_get_current_user()->user_email),
+                'nonce'   => wp_create_nonce('wps_ic_nonce_action'),
+                'pending' => $wpc_claim_pending ? (string) $wpc_claim_pending['email'] : '',
+                'version' => wps_ic_plan::version(),
+            ]); ?>;</script>
+            <style>
+            #wpc-claim-modal{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;font-family:proxima_regular,-apple-system,sans-serif}
+            #wpc-claim-modal[hidden]{display:none}
+            #wpc-claim-modal .wpc-claim-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.45)}
+            #wpc-claim-modal .wpc-claim-card{position:relative;width:min(440px,92vw);background:#fff;border-radius:14px;padding:26px 26px 22px;box-shadow:0 24px 60px -24px rgba(15,23,42,.5)}
+            #wpc-claim-modal h3{margin:0 0 6px;font:600 20px/1.25 proxima_semibold,sans-serif;color:#0f172a}
+            #wpc-claim-modal p{margin:0 0 14px;color:#475569;font-size:14px;line-height:1.5}
+            #wpc-claim-email{width:100%;font-size:15px;padding:11px 12px;border:1px solid #cbd5e1;border-radius:9px;margin:0 0 10px;box-sizing:border-box}
+            #wpc-claim-send{width:100%;border:0;border-radius:9px;background:#0e7c7b;color:#fff;font:600 15px/1 proxima_semibold,sans-serif;padding:13px 16px;cursor:pointer}
+            #wpc-claim-send[disabled]{opacity:.6;cursor:default}
+            #wpc-claim-modal .wpc-claim-hint{margin:10px 0 0;font-size:12.5px;color:#64748b}
+            #wpc-claim-modal .wpc-claim-state{margin:10px 0 0;font-size:13.5px;padding:9px 11px;border-radius:8px;background:#f1f5f9;color:#0f172a}
+            #wpc-claim-modal .wpc-claim-state.is-warn{background:#fef3c7;color:#78350f}
+            #wpc-claim-modal .wpc-claim-state.is-ok{background:#dcfce7;color:#14532d}
+            #wpc-claim-modal .wpc-claim-state[hidden]{display:none}
+            #wpc-claim-close{position:absolute;top:10px;right:12px;border:0;background:none;font-size:22px;line-height:1;color:#94a3b8;cursor:pointer}
+            </style>
+            <div id="wpc-claim-modal" hidden>
+                <div class="wpc-claim-backdrop"></div>
+                <div class="wpc-claim-card" role="dialog" aria-labelledby="wpc-claim-title">
+                    <button type="button" id="wpc-claim-close" aria-label="<?php echo esc_attr__('Close', WPS_IC_TEXTDOMAIN); ?>">&times;</button>
+                    <h3 id="wpc-claim-title"><?php echo esc_html__('Link this site', WPS_IC_TEXTDOMAIN); ?></h3>
+                    <p><?php echo esc_html__('One click. We set everything up and email you a login link.', WPS_IC_TEXTDOMAIN); ?></p>
+                    <input type="email" id="wpc-claim-email" autocomplete="email" placeholder="<?php echo esc_attr__('you@example.com', WPS_IC_TEXTDOMAIN); ?>" value="<?php echo esc_attr((string) apply_filters('wpc_claim_prefill_email', wp_get_current_user()->user_email)); ?>">
+                    <button type="button" id="wpc-claim-send"><?php echo esc_html__('Turn on', WPS_IC_TEXTDOMAIN); ?></button>
+                    <div id="wpc-claim-state" class="wpc-claim-state" hidden></div>
+                    <p class="wpc-claim-hint"><?php echo esc_html__("Already have an account? Enter the same email and confirm from your inbox.", WPS_IC_TEXTDOMAIN); ?></p>
+                </div>
+            </div>
+            <?php
+        }
         ?>
 
 
@@ -403,7 +429,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                             <!-- Stats -->
                             <?php
-                            
+                            // Parse the bytes value to extract number and unit
                             preg_match('/([0-9.,]+)\s*([a-zA-Z]+)/', $apiStats->display->bytes, $bytesMatch);
                             $bytesNum = isset($bytesMatch[1]) ? $bytesMatch[1] : $apiStats->display->bytes;
                             $bytesUnit = isset($bytesMatch[2]) ? $bytesMatch[2] : '';
@@ -527,10 +553,10 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 <?php } else {
                                     $date = new DateTime();
 
-                                    
+                                    // Get the WordPress timezone
                                     $timezone = get_option('timezone_string');
 
-                                    
+                                    // Fallback if timezone_string is not set
                                     if (!$timezone) {
                                         $gmt_offset = get_option('gmt_offset');
                                         if ($gmt_offset == 0) {
@@ -538,22 +564,22 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         } else {
                                             $timezone = timezone_name_from_abbr('', $gmt_offset * 3600, 0);
 
-                                            
+                                            // If timezone_name_from_abbr() fails, set default timezone
                                             if (!$timezone) {
-                                                $timezone = 'UTC'; 
+                                                $timezone = 'UTC'; // Default to UTC to prevent errors
                                             }
                                         }
                                     }
 
-                                    
+                                    // Patch: IF-ovi su losi
                                     if (!empty($initialPageSpeedScore)) {
-                                        
+                                        // Apply the timezone to the DateTime object
 
                                         try {
                                             $date->setTimezone(new DateTimeZone($timezone));
                                         } catch (Exception $e) {
-                                            
-                                            $date->setTimezone(new DateTimeZone('UTC')); 
+                                            #error_log("Invalid timezone: $timezone - Falling back to UTC");
+                                            $date->setTimezone(new DateTimeZone('UTC')); // Default to UTC
                                         }
 
                                         $date->setTimestamp($initialPageSpeedScore['lastRun']);
@@ -952,12 +978,12 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                     $isPerfect = ($v2_dev['diff'] === esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN));
                                     $beforeScore = round($v2_dev['before'] * 100);
                                     $afterScore = round($v2_dev['after'] * 100);
-                                    
+                                    // SVG circle math
                                     $smSize = 50; $smR = 21; $smStroke = 5; $smCirc = 2 * M_PI * $smR;
                                     $lgSize = 50; $lgR = 21; $lgStroke = 5; $lgCirc = 2 * M_PI * $lgR;
                                     $smOffset = $smCirc - ($smCirc * $v2_dev['before']);
                                     $lgOffset = $lgCirc - ($lgCirc * $v2_dev['after']);
-                                    
+                                    // Color by score
                                     $smColor = $beforeScore <= 55 ? '#ef4444' : ($beforeScore <= 89 ? '#f59e0b' : '#22c55e');
                                     $smBg = $beforeScore <= 55 ? '#fee2e2' : ($beforeScore <= 89 ? '#fef3c7' : '#dcfce7');
                                     $lgColor = $afterScore <= 55 ? '#ef4444' : ($afterScore <= 89 ? '#f59e0b' : '#22c55e');

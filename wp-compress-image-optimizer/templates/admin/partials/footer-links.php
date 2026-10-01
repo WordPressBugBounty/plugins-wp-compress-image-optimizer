@@ -1,12 +1,4 @@
-<?php
-
-
-
-
-
-
-
- global $wps_ic; ?>
+<?php global $wps_ic; ?>
 <div class="wp-compress-settings-footer">
   <div class="wp-compress-separator"></div>
   <ul>

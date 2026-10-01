@@ -1,12 +1,4 @@
 <?php
-
-
-
-
-
-
-
-
 global $wps_ic, $wpdb;
 ?>
 <div class="wrap">

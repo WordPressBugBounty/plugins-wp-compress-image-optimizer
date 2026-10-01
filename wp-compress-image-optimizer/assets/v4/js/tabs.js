@@ -198,40 +198,77 @@ jQuery(document).ready((function($) {
         var rest = cut > 0 ? full.slice(cut + 2).trim() : "";
         return "<span>" + wpcEsc(head) + "</span>" + (rest ? '<details class="wpc-cf-err-more"><summary>What to check</summary><p>' + wpcEsc(rest) + "</p></details>" : "");
     }
+    // The permission rows the template prints as JSON (wpc_cf_permission_rows + _row_lines), so
+    // this list shows the same name and the same two lines as the rows in the panel.
+    function wpcCfPermTable() {
+        var el = document.getElementById("wpc-cfperm-rows");
+        if (!el) return [];
+        try {
+            var rows = JSON.parse(el.textContent || "[]");
+            return Array.isArray(rows) ? rows : [];
+        } catch (e) {
+            return [];
+        }
+    }
     function wpcRenderCfPerms(p) {
         if (!p || !p.tests) return "";
-        var req = {
-            "Zone Read": 1,
-            "Cache Purge": 1
-        };
-        var rows = "";
-        for (var k in p.tests) {
-            if (!p.tests.hasOwnProperty(k)) continue;
-            var ok = String(p.tests[k]).indexOf("OK") === 0;
-            rows += '<li class="' + (ok ? "wpc-cf-diag-ok" : "wpc-cf-diag-fail") + '">' + '<span class="wpc-cf-diag-icon">' + (ok ? "✓" : "✕") + "</span>" + '<span class="wpc-cf-diag-name">' + wpcEsc(k) + (req[k] ? " (required)" : "") + "</span>" + "</li>";
+        var table = wpcCfPermTable();
+        var byKey = {};
+        var order = [];
+        table.forEach((function(r) {
+            byKey[r.key] = r;
+            order.push(r.key);
+        }));
+        for (var t in p.tests) {
+            if (p.tests.hasOwnProperty(t) && !byKey[t]) order.push(t);
         }
+        var rows = "";
+        order.forEach((function(k) {
+            if (!p.tests.hasOwnProperty(k)) return;
+            var r = byKey[k];
+            var ok = String(p.tests[k]).indexOf("OK") === 0;
+            var name = r ? r.action : k;
+            var required = r ? r.tier === "req" : k === "Zone Read" || k === "Cache Purge";
+            var does = r ? '<small class="wpc-cfperm-does">' + wpcEsc(r.allows) + "<br>" + wpcEsc(r.missing) + "</small>" : "";
+            rows += '<li class="' + (ok ? "wpc-cf-diag-ok" : "wpc-cf-diag-fail") + '">' + '<span class="wpc-cf-diag-icon">' + (ok ? "✓" : "✕") + "</span>" + '<span class="wpc-cf-diag-name">' + wpcEsc(name) + (required ? " (required)" : "") + does + "</span>" + "</li>";
+        }));
         return rows ? '<ul class="wpc-cf-diag">' + rows + "</ul>" : "";
     }
+    // One row per component of the Connect/Refresh report (ajax.class.php wpc_ic_refreshCFConnection).
+    // Every row is {ok, mode, detail}; corp_guard is a bare verdict string. A row the server did not
+    // send is not shown: bypass_rule and whitelist exist only when a token and zone are stored.
     function wpcRenderCfReport(report) {
         if (!report || typeof report !== "object") return "";
         var labels = {
-            bypass_rule: "CDN bypass rule",
-            static_rule: "Static-asset cache rule",
-            whitelist: "IP whitelist",
+            rules: "Cache rules",
+            bypass_rule: "Security bypass rule",
+            vary_images: "Cloudflare Vary for Images",
+            whitelist: "Optimization servers allow list",
+            keys: "Provisioning server",
             cname: "CDN hostname (CNAME)",
-            v2_sync: "Server sync"
+            natural_assets: "Natural asset URLs",
+            v2_sync: "Config sync",
+            corp_guard: "Cross-origin guard"
         };
-        var order = [ "bypass_rule", "static_rule", "whitelist", "cname", "v2_sync" ];
+        var order = [ "rules", "bypass_rule", "vary_images", "whitelist", "keys", "cname", "natural_assets", "v2_sync", "corp_guard" ];
         var rows = "";
         order.forEach((function(k) {
             var c = report[k];
             if (!c) return;
+            if (typeof c === "string") c = {
+                ok: c !== "ineffective",
+                mode: c === "ineffective" ? "failed" : "ok",
+                detail: c
+            };
             var ok = !!c.ok;
             var mode = c.mode || (ok ? "ok" : "failed");
             var icon, cls;
             if (mode === "pending" || mode === "scheduled") {
                 icon = "⋯";
                 cls = "wpc-cf-diag-pending";
+            } else if (mode === "skipped") {
+                icon = "–";
+                cls = "wpc-cf-diag-skipped";
             } else if (ok && mode === "ok") {
                 icon = "✓";
                 cls = "wpc-cf-diag-ok";
@@ -309,22 +346,48 @@ jQuery(document).ready((function($) {
         }));
         return false;
     }));
+    // Refresh Connection answers with a per-component report and the page shows it. It reloads only
+    // when the server says so (keys answered with a different CDN hostname, which the panel's host
+    // line depends on). The old handler reloaded on success and on failure alike, so every outcome
+    // was hidden: perkzilla 2026-09-24 pressed Refresh twice and saw nothing of the rules left on
+    // override_origin or the keys timeout.
     $(".wpc-cf-token-verify").on("click", (function(e) {
+        e.preventDefault();
+        var $report = $(".wpc-cf-refresh-report");
         $(".wpc-cf-token-hide-on-load").hide();
         $(".wpc-cf-token-connected").hide();
         $(".wpc-cf-loader-disconnecting").hide();
         $(".wpc-cf-loader-refreshing").show();
         $(".wpc-cf-loader-error").hide();
-        e.preventDefault();
+        $report.hide().empty();
+        function showError(text) {
+            $("<div/>").addClass("wpc-cf-refresh-report-error").text(text).appendTo($report);
+        }
+        function done() {
+            $(".wpc-cf-loader-refreshing").hide();
+            $report.show();
+            $(".wpc-cf-token-connected").show();
+        }
         $.post(ajaxurl, {
             action: "wpc_ic_refreshCFConnection",
             wps_ic_nonce: wpc_ajaxVar.nonce,
-            timeout: 120,
             _nonce: Math.random().toString(36).substr(2, 9)
-        }, (function() {
-            window.location.reload();
-        })).fail((function() {
-            window.location.reload();
+        }, (function(response) {
+            if (response && response.success && response.data && response.data.reload === true) {
+                window.location.reload();
+                return;
+            }
+            var html = response && response.success && response.data ? wpcRenderCfReport(response.data.report) : "";
+            if (html) {
+                $report.html(html);
+            } else {
+                var why = response && !response.success && typeof response.data === "string" ? response.data : "no report in the answer";
+                showError("Refresh did not report (" + why + "). Reload the page and try again.");
+            }
+            done();
+        })).fail((function(xhr) {
+            showError("Refresh did not answer (HTTP " + (xhr && xhr.status ? xhr.status : "no response") + ") — the request failed before the plugin could report. Check the site's error log.");
+            done();
         }));
         return false;
     }));
@@ -1573,6 +1636,11 @@ jQuery(document).ready((function($) {
                 if (res && res.success && res.data && res.data.privileges && res.data.privileges.tests) {
                     acc.setAttribute("data-checked", String(Math.floor(Date.now() / 1e3)));
                     resolveRows(res.data.privileges.tests);
+                    var tk = res.data.privileges.token;
+                    var idLine = document.getElementById("wpc-cf-token-identity");
+                    if (idLine && tk) {
+                        idLine.textContent = tk.id ? "Token id: " + tk.id + ", status: " + (tk.status || "") + ", checked just now" : "Token id: Cloudflare did not confirm it, status: " + (tk.status || "unverified") + ", checked just now";
+                    }
                     var pv = res.data.purge_verified;
                     done("Verified just now via live Cloudflare API checks." + (pv && pv.t ? " · HTML purge verified working end-to-end (Cache-Tag)." : ""));
                 } else {

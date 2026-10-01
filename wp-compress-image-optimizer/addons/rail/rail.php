@@ -1,21 +1,13 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/rail/rail.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
     exit;
 }
 
-
-
-
-
-
+/**
+ * WPC Job Rail — single queue, single consumer, off-pool where the host allows.
+ * All background work enters through wpc_rail_enqueue(); exactly one consumer per
+ * site executes time-boxed slices. Flag-gated: dormant unless wpc_rail_enabled=1.
+ */
 
 if (!function_exists('wpc_rail_on')) {
     function wpc_rail_on()
@@ -56,7 +48,7 @@ if (!function_exists('wpc_rail_on')) {
         update_option('wpc_rail_schema_v', '1', false);
     }
 
-    
+    // Priorities: lower = sooner. Crit beats warm beats fonts beats housekeeping.
     function wpc_rail_priority($hook)
     {
         $map = ['wpc_lcp_repull' => 10, 'wpc_land_finalize' => 15, 'wpc_url_warm' => 30,
@@ -81,7 +73,7 @@ if (!function_exists('wpc_rail_on')) {
             'created_at'   => time(),
             'max_attempts' => isset($opts['max_attempts']) ? (int) $opts['max_attempts'] : 3,
         ];
-        
+        // INSERT IGNORE: the dedupe unique key coalesces duplicate pending work for free
         $wpdb->query($wpdb->prepare(
             "INSERT IGNORE INTO {$t} (hook, args, dedupe, priority, available_at, created_at, max_attempts)
              VALUES (%s, %s, %s, %d, %d, %d, %d)",
@@ -98,11 +90,11 @@ if (!function_exists('wpc_rail_on')) {
         return (int) $wpdb->get_var("SELECT COUNT(*) FROM {$t}");
     }
 
-    
-
-
-
-
+    /**
+     * Claim exactly one due job. UPDATE-with-ORDER-BY is atomic per row in MySQL, so
+     * concurrent consumers cannot double-claim; claims older than 120s are dead and
+     * reclaimable (a killed worker never wedges the queue).
+     */
     function wpc_rail_claim($claim_id)
     {
         global $wpdb;
@@ -139,7 +131,7 @@ if (!function_exists('wpc_rail_on')) {
             update_option('wpc_rail_parked28', (int) get_option('wpc_rail_parked28', 0) + 1, false);
             return;
         }
-        
+        // Release + widening backoff; restore a dedupe key so future duplicates coalesce
         $wpdb->update($t, [
             'attempts'     => $attempts,
             'claimed_at'   => 0,
@@ -148,11 +140,11 @@ if (!function_exists('wpc_rail_on')) {
         ], ['id' => (int) $job['id']]);
     }
 
-    
-
-
-
-    function wpc_rail_warm_hook28($hook)
+    /**
+     * One consumer slice: pressure-gated, time-boxed, core-aware. This is the ONLY
+     * place rail work executes — concurrency-of-one by construction.
+     */
+    function wpc_rail_is_warm_hook($hook)
     {
         foreach (['wpc_url_warm', 'wpc_lcp_repull', 'wpc_land_', 'wpc_combine_fonts', 'wpc_crit_', 'wpc_presc', 'wpc_autopurge'] as $p) {
             if (strpos((string) $hook, $p) === 0) {
@@ -161,13 +153,13 @@ if (!function_exists('wpc_rail_on')) {
         }
         return false;
     }
-    function wpc_rail_has_correctness28()
+    function wpc_rail_has_correctness_work()
     {
         global $wpdb;
         $t = wpc_rail_table();
         $hooks = $wpdb->get_col("SELECT DISTINCT hook FROM {$t} WHERE claimed_at = 0 AND available_at <= " . (int) time() . " LIMIT 50");
         foreach ((array) $hooks as $h) {
-            if (!wpc_rail_warm_hook28($h)) {
+            if (!wpc_rail_is_warm_hook($h)) {
                 return true;
             }
         }
@@ -178,8 +170,8 @@ if (!function_exists('wpc_rail_on')) {
         if (!wpc_rail_on()) {
             return 0;
         }
-        $wpc_hot28 = function_exists('wpc_under_pressure') && wpc_under_pressure();
-        if ($wpc_hot28 && !wpc_rail_has_correctness28()) {
+        $under_pressure = function_exists('wpc_under_pressure') && wpc_under_pressure();
+        if ($under_pressure && !wpc_rail_has_correctness_work()) {
             if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_rail_pressure14')) {
                 set_transient('wpc_rail_pressure14', 1, 300);
                 wpc_cache_first_log('rail-pressure-skip', '', '', [
@@ -190,14 +182,14 @@ if (!function_exists('wpc_rail_on')) {
             }
             return 0;
         }
-        
-        
-        
-        
+        // v7.10.473 — Safe Mode stops DRAINING as well as scheduling. Gating admission alone
+        // leaves whatever is already queued to run, which is precisely the half-measure the warm
+        // pause documents ("Disabling the scheduler alone leaves the queue to drain"). Jobs stay
+        // in the table and resume on &safe=off — stood down, not discarded.
         if (function_exists('wpc_safe_mode') && wpc_safe_mode()) {
             return 0;
         }
-        
+        // Single consumer: same-second option-write mutex (parallel nudges collapse)
         $lk = (int) get_option('wpc_rail_consuming');
         if (time() - $lk < 30) {
             return 0;
@@ -231,17 +223,17 @@ if (!function_exists('wpc_rail_on')) {
         if ($done > 0 && function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('rail-slice', '', '', ['jobs' => $done, 'ms' => (int) round((microtime(true) - $t0) * 1000), 'engine' => (string) get_option('wpc_rail_engine', 'loopback')]);
         }
-        
+        // More work pending → keep the chain alive via the engine
         if ($done >= $max && wpc_rail_depth() > 0) {
             wpc_rail_nudge(true);
         }
         return $done;
     }
 
-    
-
-
-
+    /**
+     * Engine detection (deferred, once per version): loopback by default. System cron is
+     * OBSERVED, not configured — if runner pings arrive, the engine upgrades itself.
+     */
     function wpc_rail_detect_engine()
     {
         $engine = 'loopback';
@@ -253,7 +245,7 @@ if (!function_exists('wpc_rail_on')) {
         return $engine;
     }
 
-    
+    /** Fire a consumer via the best engine — detached, never blocking the caller. */
     function wpc_rail_nudge($chain = false)
     {
         static $nudged = false;
@@ -261,8 +253,8 @@ if (!function_exists('wpc_rail_on')) {
             return;
         }
         $nudged = true;
-        
-        
+        // Loopback: fire-and-forget socket (house pattern), consumer runs in
+        // a fresh worker with the 30s mutex preventing pileups
         if (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'wpc_loopback_open_socket')) {
             $p = wp_parse_url(admin_url('admin-ajax.php'));
             if (!empty($p['host'])) {
@@ -279,14 +271,14 @@ if (!function_exists('wpc_rail_on')) {
                 }
             }
         }
-        
+        // Last resort: single-event backstop (ONE cron entry, ever)
         if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
             && !wp_next_scheduled('wpc_rail_tick')) {
             wp_schedule_single_event(time() + 30, 'wpc_rail_tick');
         }
     }
 
-    
+    // Consumer entry points: keyed nopriv ajax (loopback/system-cron runner) + cron backstop
     add_action('wp_ajax_wpc_rail_run', 'wpc_rail_run_endpoint');
     add_action('wp_ajax_nopriv_wpc_rail_run', 'wpc_rail_run_endpoint');
     function wpc_rail_run_endpoint()
@@ -295,7 +287,7 @@ if (!function_exists('wpc_rail_on')) {
         if (!hash_equals(substr(md5('wpc-rail:' . (string) get_option('wpc_rail_key')), 0, 20), $k)) {
             wp_die('', '', ['response' => 403]);
         }
-        
+        // System-cron observation: external runner pings upgrade the engine label
         if (!empty($_SERVER['HTTP_X_WPC_SYSCRON'])) {
             update_option('wpc_rail_engine', 'syscron', false);
         }
@@ -304,14 +296,14 @@ if (!function_exists('wpc_rail_on')) {
             http_response_code(200);
         }
         if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
-            wpc_finish_request39();
+            wpc_finish_request();
         }
         wpc_rail_consume();
         wp_die('', '', ['response' => 200]);
     }
     add_action('wpc_rail_tick', 'wpc_rail_consume');
 
-    
+    // Backstop while queue non-empty: piggyback tick (same trick wp-cron uses), bounded
     add_action('shutdown', function () {
         if (!wpc_rail_on() || wp_doing_ajax() || (defined('DOING_CRON') && DOING_CRON)) {
             return;
@@ -326,7 +318,7 @@ if (!function_exists('wpc_rail_on')) {
         }
     }, 99);
 
-    
+    // Install + engine detection ride the deferred post-update lane, never a request
     add_action('wpc_v2_postupdate_purge', function () {
         try {
             if (get_option('wpc_rail_key') === false) {

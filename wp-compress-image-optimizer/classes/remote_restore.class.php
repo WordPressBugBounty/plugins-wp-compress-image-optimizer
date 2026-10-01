@@ -1,17 +1,9 @@
 <?php
+
+
 /**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/remote_restore.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
+ * Class - Remote Restore
  */
-
-
-
-
-
-
 class wps_ic_remote_restore extends wps_ic
 {
 

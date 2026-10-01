@@ -4,15 +4,7 @@
         <div class="cdn-popup-loading">
             <div class="wpc-popup-saving-logo-container">
                 <div class="wpc-popup-saving-preparing-logo">
-                    <img src="<?php
-
-
-
-
-
-
-
- echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg" class="wpc-ic-popup-logo-saving"/>
+                    <img src="<?php echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg" class="wpc-ic-popup-logo-saving"/>
                     <div class="wpc-ic-popup-logo-saving-loader" aria-hidden="true"></div>
                 </div>
             </div>
@@ -49,13 +41,10 @@
                     <div class="cdn-popup-content-full">
                         <div class="cdn-popup-content-inner">
                             <?php
-                            
-                            
-                            $wpc_dset55 = get_option(defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings');
-                            $wpc_dkey55 = (!is_array($wpc_dset55) || !isset($wpc_dset55['delay-js-v3']) || $wpc_dset55['delay-js-v3'] != '0')
-                                ? 'delay_js_v3' : 'delay_js_v2';
+                            // One Delay JS exclude list for both engines and both boxes (site and
+                            // agency portal): `delay_js_v3`, see wpc_delay_excludes_fold in defines.php.
                             ?>
-                            <textarea name="wpc-excludes[<?php echo esc_attr($wpc_dkey55); ?>]" data-setting-name="wpc-excludes" data-setting-subset="<?php echo esc_attr($wpc_dkey55); ?>" class="exclude-list-textarea-value" placeholder="<?php echo esc_attr__("One pattern per line, e.g.\nanalytics.js\n/my-plugin/tracking.js\ngoogle-tag", WPS_IC_TEXTDOMAIN); ?>"></textarea>
+                            <textarea name="wpc-excludes[delay_js_v3]" data-setting-name="wpc-excludes" data-setting-subset="delay_js_v3" class="exclude-list-textarea-value" placeholder="<?php echo esc_attr__("One pattern per line, e.g.\nanalytics.js\n/my-plugin/tracking.js\ngoogle-tag", WPS_IC_TEXTDOMAIN); ?>"></textarea>
 
                             <div class="wps-empty-row">&nbsp;</div>
 

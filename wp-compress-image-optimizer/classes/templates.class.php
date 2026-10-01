@@ -1,17 +1,9 @@
 <?php
+
+
 /**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/templates.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
+ * Class - Templates
  */
-
-
-
-
-
-
 class wps_ic_templates extends wps_ic {
 
 

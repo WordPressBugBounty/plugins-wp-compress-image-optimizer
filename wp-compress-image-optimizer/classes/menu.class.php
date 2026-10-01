@@ -1,17 +1,9 @@
 <?php
+
+
 /**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/menu.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
+ * Class - Menu
  */
-
-
-
-
-
-
 class wps_ic_menu extends wps_ic
 {
 
@@ -33,7 +25,7 @@ class wps_ic_menu extends wps_ic
 
             $this->templates = new wps_ic_templates();
 
-            
+            // API Key is removed!
             if (empty(self::$connected['api_key']) || empty(self::$connected['response_key'])) {
                 $option['hide_compress'] = '0';
                 update_option(WPS_IC_SETTINGS, $option);
@@ -102,25 +94,25 @@ class wps_ic_menu extends wps_ic
             $admin_bar->add_menu(['id' => 'wp-compress', 'title' => $title_html, 'href' => wpc_settings_page_url(), 'meta' => ['title' => __(''), 'html' => '<div class="wp-compress-admin-bar-icon"></div>'],]);
         }
 
-        $wpc_page725 = $this->wpc_page_context_725($options);
+        $page_context = $this->wpc_current_page_context($options);
 
         if (!is_admin() && current_user_can('manage_wpc_purge')) {
-            
+            // Show options in frontend
 
-            if ($wpc_page725 !== null) {
-                $this->wpc_add_page_items_725($admin_bar, $options, $wpc_page725);
+            if ($page_context !== null) {
+                $this->wpc_add_admin_bar_page_items($admin_bar, $options, $page_context);
             }
-            $this->wpc_add_purge_menu_641($admin_bar, $options);
+            $this->wpc_add_admin_bar_purge_menu($admin_bar, $options);
 
             $admin_bar->add_menu(['id' => 'wp-compress-view-as-visitor', 'parent' => 'wp-compress', 'title' => __('View as Visitor', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('View as Visitor', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-view-as-visitor'],]);
 
         } elseif (current_user_can('manage_wpc_settings') ||current_user_can('manage_wpc_purge')) {
-            
+            // Shows if user is logged in!
 
-            if ($wpc_page725 !== null) {
-                $this->wpc_add_page_items_725($admin_bar, $options, $wpc_page725);
+            if ($page_context !== null) {
+                $this->wpc_add_admin_bar_page_items($admin_bar, $options, $page_context);
             }
-            $this->wpc_add_purge_menu_641($admin_bar, $options);
+            $this->wpc_add_admin_bar_purge_menu($admin_bar, $options);
 
         }
 
@@ -130,28 +122,28 @@ class wps_ic_menu extends wps_ic
 
     }
 
-    
-    
-    
-    
-    private function wpc_page_context_725($options)
+    // v7.10.725 — resolve "this page" for the admin bar. Front end: the URL being viewed.
+    // wp-admin: ONLY the post editor (post.php) resolves, to the edited post's permalink —
+    // every other admin screen has no page context, and a per-page button that silently
+    // targets some other URL is worse than no button. Returns null when there is no page.
+    private function wpc_current_page_context($options)
     {
-        $wpc_url725 = '';
+        $page_url = '';
         if (!is_admin()) {
             if (!empty($_SERVER['HTTP_HOST']) && isset($_SERVER['REQUEST_URI'])) {
-                $wpc_url725 = (is_ssl() ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+                $page_url = (is_ssl() ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
             }
         } else {
             global $pagenow;
             if ($pagenow === 'post.php' && !empty($_GET['post'])) {
-                $wpc_post725 = get_post((int) $_GET['post']);
-                if ($wpc_post725 && $wpc_post725->post_status === 'publish'
-                    && is_post_type_viewable(get_post_type_object($wpc_post725->post_type))) {
-                    $wpc_url725 = (string) get_permalink($wpc_post725);
+                $edited_post = get_post((int) $_GET['post']);
+                if ($edited_post && $edited_post->post_status === 'publish'
+                    && is_post_type_viewable(get_post_type_object($edited_post->post_type))) {
+                    $page_url = (string) get_permalink($edited_post);
                 }
             }
         }
-        if ($wpc_url725 === '') {
+        if ($page_url === '') {
             return null;
         }
         if (!class_exists('wps_ic_url_key') && defined('WPS_IC_DIR')) {
@@ -160,90 +152,90 @@ class wps_ic_menu extends wps_ic
         if (!class_exists('wps_ic_url_key')) {
             return null;
         }
-        $wpc_clean725 = wps_ic_url_key::sanitizeSameHostUrl($wpc_url725);
-        if ($wpc_clean725 === '' || !wps_ic_url_key::isPageUrl($wpc_clean725)) {
+        $clean_url = wps_ic_url_key::sanitizeSameHostUrl($page_url);
+        if ($clean_url === '' || !wps_ic_url_key::isPageUrl($clean_url)) {
             return null;
         }
-        $wpc_key725 = ltrim((string) (new wps_ic_url_key())->setup($wpc_clean725), '/');
-        if ($wpc_key725 === '') {
+        $url_key = ltrim((string) (new wps_ic_url_key())->setup($clean_url), '/');
+        if ($url_key === '') {
             return null;
         }
-        $wpc_crit_on725 = !empty($options['critical']['css']) && $options['critical']['css'] == '1';
-        $wpc_dir725 = defined('WPS_IC_CRITICAL') ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $wpc_key725 . '/' : '';
-        $wpc_has725 = $wpc_dir725 !== ''
-            && (@is_file($wpc_dir725 . 'critical_desktop.css') || @is_file($wpc_dir725 . 'critical_mobile.css'));
-        $wpc_dsp725 = $wpc_dir725 !== '' ? (int) @filemtime($wpc_dir725 . 'dispatch_ts.txt') : 0;
-        $wpc_lnd725 = $wpc_dir725 !== '' ? (int) @filemtime($wpc_dir725 . 'land_ts.txt') : 0;
+        $crit_on = !empty($options['critical']['css']) && $options['critical']['css'] == '1';
+        $crit_dir = defined('WPS_IC_CRITICAL') ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $url_key . '/' : '';
+        $has_crit = $crit_dir !== ''
+            && (@is_file($crit_dir . 'critical_desktop.css') || @is_file($crit_dir . 'critical_mobile.css'));
+        $dispatched_at = $crit_dir !== '' ? (int) @filemtime($crit_dir . 'dispatch_ts.txt') : 0;
+        $landed_at = $crit_dir !== '' ? (int) @filemtime($crit_dir . 'land_ts.txt') : 0;
         return [
-            'url'      => $wpc_clean725,
-            'key'      => $wpc_key725,
-            'crit_on'  => $wpc_crit_on725,
-            'has'      => $wpc_has725,
-            'stale'    => $wpc_dir725 !== '' && @is_file($wpc_dir725 . 'stale.txt'),
-            'inflight' => $wpc_dsp725 > 0 && $wpc_dsp725 > $wpc_lnd725 && (time() - $wpc_dsp725) < 180,
+            'url'      => $clean_url,
+            'key'      => $url_key,
+            'crit_on'  => $crit_on,
+            'has'      => $has_crit,
+            'stale'    => $crit_dir !== '' && @is_file($crit_dir . 'stale.txt'),
+            'inflight' => $dispatched_at > 0 && $dispatched_at > $landed_at && (time() - $dispatched_at) < 180,
         ];
     }
 
-    
-    
-    
-    
-    private function wpc_add_page_items_725($admin_bar, $options, $wpc_page725)
+    // v7.10.725 — the per-page group: one honest status line + the two per-page actions.
+    // Refresh = the free lane (HTML layers only). Rebuild = the paid lane (one service
+    // generation for THIS url; its HTML purge rides the land, never the click, so the
+    // page keeps serving until the new version actually exists).
+    private function wpc_add_admin_bar_page_items($admin_bar, $options, $page_context)
     {
-        $wpc_u725 = esc_attr(esc_url($wpc_page725['url']));
-        if ($wpc_page725['crit_on']) {
-            if ($wpc_page725['inflight']) {
-                $wpc_dot725 = 'busy';
-                $wpc_txt725 = __('Optimizing this page…', WPS_IC_TEXTDOMAIN);
-                $wpc_tip725 = __('A fresh optimization is being generated — it applies automatically when it lands.', WPS_IC_TEXTDOMAIN);
-            } elseif ($wpc_page725['has'] && !$wpc_page725['stale']) {
-                $wpc_dot725 = 'ok';
-                $wpc_txt725 = __('This page is optimized', WPS_IC_TEXTDOMAIN);
-                $wpc_tip725 = __('Served with optimized CSS and cached HTML.', WPS_IC_TEXTDOMAIN);
-            } elseif ($wpc_page725['has']) {
-                $wpc_dot725 = 'busy';
-                $wpc_txt725 = __('Optimized — update on the way', WPS_IC_TEXTDOMAIN);
-                $wpc_tip725 = __('The current version keeps serving until the refreshed one lands automatically.', WPS_IC_TEXTDOMAIN);
+        $page_url_attr = esc_attr(esc_url($page_context['url']));
+        if ($page_context['crit_on']) {
+            if ($page_context['inflight']) {
+                $status_dot = 'busy';
+                $status_text = __('Optimizing this page…', WPS_IC_TEXTDOMAIN);
+                $status_tip = __('A fresh optimization is being generated — it applies automatically when it lands.', WPS_IC_TEXTDOMAIN);
+            } elseif ($page_context['has'] && !$page_context['stale']) {
+                $status_dot = 'ok';
+                $status_text = __('This page is optimized', WPS_IC_TEXTDOMAIN);
+                $status_tip = __('Served with optimized CSS and cached HTML.', WPS_IC_TEXTDOMAIN);
+            } elseif ($page_context['has']) {
+                $status_dot = 'busy';
+                $status_text = __('Optimized — update on the way', WPS_IC_TEXTDOMAIN);
+                $status_tip = __('The current version keeps serving until the refreshed one lands automatically.', WPS_IC_TEXTDOMAIN);
             } else {
-                $wpc_dot725 = 'off';
-                $wpc_txt725 = __('Not optimized yet', WPS_IC_TEXTDOMAIN);
-                $wpc_tip725 = __('This page optimizes automatically on its next visits — or use Rebuild This Page.', WPS_IC_TEXTDOMAIN);
+                $status_dot = 'off';
+                $status_text = __('Not optimized yet', WPS_IC_TEXTDOMAIN);
+                $status_tip = __('This page optimizes automatically on its next visits — or use Rebuild This Page.', WPS_IC_TEXTDOMAIN);
             }
             $admin_bar->add_menu(['id' => 'wp-compress-status', 'parent' => 'wp-compress',
-                'title' => '<span class="wpc-bar-dot wpc-bar-dot-' . $wpc_dot725 . '"></span>' . esc_html($wpc_txt725),
-                'href' => '#', 'meta' => ['title' => $wpc_tip725, 'target' => '_self', 'class' => 'wp-compress-bar-status'],]);
+                'title' => '<span class="wpc-bar-dot wpc-bar-dot-' . $status_dot . '"></span>' . esc_html($status_text),
+                'href' => '#', 'meta' => ['title' => $status_tip, 'target' => '_self', 'class' => 'wp-compress-bar-status'],]);
         }
 
         $admin_bar->add_menu(['id' => 'wp-compress-refresh-page', 'parent' => 'wp-compress',
-            'title' => '<span class="wpc-bar-label" data-wpc-url="' . $wpc_u725 . '">' . esc_html__('Refresh This Page', WPS_IC_TEXTDOMAIN) . '</span><span class="wpc-bar-sub">' . esc_html__('Serve the newest version — instant, nothing re-optimizes', WPS_IC_TEXTDOMAIN) . '</span>',
+            'title' => '<span class="wpc-bar-label" data-wpc-url="' . $page_url_attr . '">' . esc_html__('Refresh This Page', WPS_IC_TEXTDOMAIN) . '</span><span class="wpc-bar-sub">' . esc_html__('Serve the newest version — instant, nothing re-optimizes', WPS_IC_TEXTDOMAIN) . '</span>',
             'href' => '#', 'meta' => ['title' => __('Drops this page\'s cached copy and prepares a fresh one. Use after an edit that isn\'t showing.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-refresh-page wpc-bar-2line'],]);
 
-        if ($wpc_page725['crit_on']) {
-            $wpc_rsub725 = $wpc_page725['inflight']
+        if ($page_context['crit_on']) {
+            $rebuild_sub = $page_context['inflight']
                 ? __('Already rebuilding — the new version lands automatically', WPS_IC_TEXTDOMAIN)
                 : __('Regenerate this page\'s optimized CSS — about a minute', WPS_IC_TEXTDOMAIN);
             $admin_bar->add_menu(['id' => 'wp-compress-rebuild-page', 'parent' => 'wp-compress',
-                'title' => '<span class="wpc-bar-label" data-wpc-url="' . $wpc_u725 . '">' . esc_html__('Rebuild This Page', WPS_IC_TEXTDOMAIN) . '</span><span class="wpc-bar-sub">' . esc_html($wpc_rsub725) . '</span>',
-                'href' => '#', 'meta' => ['title' => __('Only needed when this page looks wrong. The page switches to plain theme styling right away, and the optimized version returns automatically once rebuilt (about a minute).', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-rebuild-page wpc-bar-2line' . ($wpc_page725['inflight'] ? ' wpc-bar-inflight' : ''),]]);
+                'title' => '<span class="wpc-bar-label" data-wpc-url="' . $page_url_attr . '">' . esc_html__('Rebuild This Page', WPS_IC_TEXTDOMAIN) . '</span><span class="wpc-bar-sub">' . esc_html($rebuild_sub) . '</span>',
+                'href' => '#', 'meta' => ['title' => __('Only needed when this page looks wrong. The page switches to plain theme styling right away, and the optimized version returns automatically once rebuilt (about a minute).', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-rebuild-page wpc-bar-2line' . ($page_context['inflight'] ? ' wpc-bar-inflight' : ''),]]);
         }
     }
 
-    
-    
-    
-    
-    
-    
-    private function wpc_add_purge_menu_641($admin_bar, $options)
+    // v7.10.725 — site-wide controls ALL live under Advanced (kept builder name for suite
+    // continuity). The primary surface is per-page (wpc_add_admin_bar_page_items): every
+    // legitimate site-wide trigger is a hookable event we already automate, so site-wide
+    // purging is the escape hatch, not the front door — cache hit rate and service gens
+    // are the resources the menu shape protects. Handler ids/classes are unchanged, so
+    // existing JS and support flows keep working.
+    private function wpc_add_admin_bar_purge_menu($admin_bar, $options)
     {
-        $wpc_crit641 = !empty($options['critical']['css']) && $options['critical']['css'] == '1';
-        $wpc_cdn641 = false;
-        foreach (array('css', 'js', ['serve', 'jpg'], ['serve', 'png'], ['serve', 'gif'], ['serve', 'svg']) as $wpc_cond641) {
-            $wpc_opt641 = is_array($wpc_cond641)
-                ? (isset($options[$wpc_cond641[0]][$wpc_cond641[1]]) ? $options[$wpc_cond641[0]][$wpc_cond641[1]] : '')
-                : (isset($options[$wpc_cond641]) ? $options[$wpc_cond641] : '');
-            if ($wpc_opt641 == '1') {
-                $wpc_cdn641 = true;
+        $crit_on = !empty($options['critical']['css']) && $options['critical']['css'] == '1';
+        $cdn_on = false;
+        foreach (array('css', 'js', ['serve', 'jpg'], ['serve', 'png'], ['serve', 'gif'], ['serve', 'svg']) as $setting_path) {
+            $setting_value = is_array($setting_path)
+                ? (isset($options[$setting_path[0]][$setting_path[1]]) ? $options[$setting_path[0]][$setting_path[1]] : '')
+                : (isset($options[$setting_path]) ? $options[$setting_path] : '');
+            if ($setting_value == '1') {
+                $cdn_on = true;
                 break;
             }
         }
@@ -252,16 +244,16 @@ class wps_ic_menu extends wps_ic
 
         $admin_bar->add_menu(['id' => 'wp-compress-purge-html-cache', 'parent' => 'wp-compress-advanced', 'title' => __('Purge & Preload All Pages', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Drop every cached page and re-warm them. Critical CSS and the image CDN are not touched.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-purge-html-cache'],]);
 
-        
-        
-        
-        if ($wpc_crit641) {
+        // v7.10.516 — ONE primary intent. Rebuild does the whole correct sequence and is
+        // situational: it purges only layers that are actually stale, and never the
+        // image CDN (re-optimization + origin bandwidth is not collateral we can spend).
+        if ($crit_on) {
             $admin_bar->add_menu(['id' => 'wp-compress-pull-latest', 'parent' => 'wp-compress-advanced', 'title' => __('Pull Latest Optimizations', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Re-fetch the newest cloud artifacts (critical, fonts, used-CSS) without purging. Automation does this on its own — use it to skip the wait.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-pull-latest'],]);
             $admin_bar->add_menu(['id' => 'wp-compress-rebuild', 'parent' => 'wp-compress-advanced', 'title' => __('Rebuild All Optimizations', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Fetch fresh optimizations for the whole site and drop stale cached pages. Images and the CDN are not touched.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-rebuild'],]);
             $admin_bar->add_menu(['id' => 'wp-compress-purge-critical-css', 'parent' => 'wp-compress-advanced', 'title' => __('Purge Critical CSS', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Mark every page\'s Critical CSS for regeneration. The current version keeps serving until each fresh one lands — pages never render unstyled.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-purge-critical-css'],]);
             $admin_bar->add_menu(['id' => 'wp-compress-remove-critical-css', 'parent' => 'wp-compress-advanced', 'title' => __('Remove Critical CSS', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Remove Critical CSS from every page now. Pages render with full theme CSS (correct but slower) until fresh versions land automatically.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-remove-critical-css'],]);
         }
-        if ($wpc_cdn641) {
+        if ($cdn_on) {
             $admin_bar->add_menu(['id' => 'wp-compress-clear-cache', 'parent' => 'wp-compress-advanced', 'title' => __('Purge CDN Images', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Rarely needed. Re-fetches every optimized image from origin — only use this if IMAGES are wrong, not CSS or HTML', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-clear-cache'],]);
         }
     }
@@ -301,33 +293,33 @@ class wps_ic_menu extends wps_ic
     {
 
 
-        $wpc_menu_opts107 = get_option(WPS_IC_OPTIONS);
-        if (!empty($wpc_menu_opts107['status']['top_level_menu']) && $wpc_menu_opts107['status']['top_level_menu'] == '1') {
-            $wpc_menu_icon107 = 'data:image/svg+xml;base64,' . base64_encode(
+        $plugin_options = get_option(WPS_IC_OPTIONS);
+        if (!empty($plugin_options['status']['top_level_menu']) && $plugin_options['status']['top_level_menu'] == '1') {
+            $menu_icon = 'data:image/svg+xml;base64,' . base64_encode(
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="#a7aaad" d="M349.4 44.6c5.9-13.7 1.5-29.7-10.6-38.5s-28.6-8-39.9 1.8l-256 224c-10 8.8-13.6 22.9-8.9 35.3S50.7 288 64 288H175.5L98.6 467.4c-5.9 13.7-1.5 29.7 10.6 38.5s28.6 8 39.9-1.8l256-224c10-8.8 13.6-22.9 8.9-35.3s-16.6-20.7-30-20.7H272.5L349.4 44.6z"/></svg>'
             );
 
 
-            $wpc_menu_name113 = get_option('wpc_wl_menu_name');
-            if (!is_string($wpc_menu_name113) || $wpc_menu_name113 === '') {
-                $wpc_menu_name113 = function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : __('WP Compress', WPS_IC_TEXTDOMAIN);
+            $menu_name = get_option('wpc_wl_menu_name');
+            if (!is_string($menu_name) || $menu_name === '') {
+                $menu_name = function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : __('WP Compress', WPS_IC_TEXTDOMAIN);
             }
-            $hook = add_menu_page($wpc_menu_name113, $wpc_menu_name113, 'manage_wpc_settings', $this::$slug, [$this, 'render_admin_page_v4'], $wpc_menu_icon107, 80);
+            $hook = add_menu_page($menu_name, $menu_name, 'manage_wpc_settings', $this::$slug, [$this, 'render_admin_page_v4'], $menu_icon, 80);
             add_action('admin_init', [$this, 'top_menu_redirect_shim']);
         } else {
-            $wpc_menu_name113 = function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : __('WP Compress', WPS_IC_TEXTDOMAIN);
-            $hook = add_submenu_page('options-general.php', $wpc_menu_name113, $wpc_menu_name113, 'manage_wpc_settings', $this::$slug, [$this, 'render_admin_page_v4']);
+            $menu_name = function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : __('WP Compress', WPS_IC_TEXTDOMAIN);
+            $hook = add_submenu_page('options-general.php', $menu_name, $menu_name, 'manage_wpc_settings', $this::$slug, [$this, 'render_admin_page_v4']);
 
-            
-            $wpc_slug113 = $this::$slug;
-            add_action('admin_menu', function () use ($wpc_slug113) {
+            // AFTER registration; persist the final label so top-level mode shows the same brand.
+            $plugin_slug = $this::$slug;
+            add_action('admin_menu', function () use ($plugin_slug) {
                 global $submenu;
                 if (isset($submenu['options-general.php'])) {
-                    foreach ($submenu['options-general.php'] as $wpc_it113) {
-                        if (isset($wpc_it113[2]) && $wpc_it113[2] === $wpc_slug113 && !empty($wpc_it113[0])) {
-                            $wpc_nm113 = wp_strip_all_tags($wpc_it113[0]);
-                            if ($wpc_nm113 !== '' && get_option('wpc_wl_menu_name') !== $wpc_nm113) {
-                                update_option('wpc_wl_menu_name', $wpc_nm113, false);
+                    foreach ($submenu['options-general.php'] as $submenu_item) {
+                        if (isset($submenu_item[2]) && $submenu_item[2] === $plugin_slug && !empty($submenu_item[0])) {
+                            $item_label = wp_strip_all_tags($submenu_item[0]);
+                            if ($item_label !== '' && get_option('wpc_wl_menu_name') !== $item_label) {
+                                update_option('wpc_wl_menu_name', $item_label, false);
                             }
                             break;
                         }
@@ -353,13 +345,13 @@ class wps_ic_menu extends wps_ic
         if (!isset($_GET['page']) || $_GET['page'] !== $this::$slug) {
             return;
         }
-        $wpc_args107 = [];
-        foreach ((array) $_GET as $wpc_k107 => $wpc_v107) {
-            if (is_scalar($wpc_v107)) {
-                $wpc_args107[sanitize_key($wpc_k107)] = sanitize_text_field((string) $wpc_v107);
+        $query_args = [];
+        foreach ((array) $_GET as $arg_name => $arg_value) {
+            if (is_scalar($arg_value)) {
+                $query_args[sanitize_key($arg_name)] = sanitize_text_field((string) $arg_value);
             }
         }
-        wp_safe_redirect(add_query_arg($wpc_args107, admin_url('admin.php')));
+        wp_safe_redirect(add_query_arg($query_args, admin_url('admin.php')));
         exit;
     }
 
@@ -406,16 +398,16 @@ class wps_ic_menu extends wps_ic
     }
 
 
-    
+    // Add custom menu items under 'My Sites -> Network Admin'
     public function addCustomMUMenuItem($wp_admin_bar)
     {
-        
+        // Check if the current user has the capability to manage the network
         if (!is_user_logged_in() || !is_multisite() || !current_user_can('manage_network')) {
             return;
         }
 
 
-        
+        // Add the custom menu item
         $wp_admin_bar->add_menu(array(
             'parent' => 'network-admin',
             'id' => 'network-admin-child',
@@ -446,16 +438,16 @@ class wps_ic_menu extends wps_ic
     {
         global $wps_ic;
 
-        
-
-
+        /**
+         * Reset Debug Log
+         */
         if (!empty($_GET['reset_debug_log']) && isset($wps_ic->log) && is_object($wps_ic->log) && method_exists($wps_ic->log, 'reset')) {
             $wps_ic->log->reset();
         }
 
-        
-
-
+        /**
+         * View Debug Log
+         */
         if (!empty($_GET['view_debug_log']) && isset($wps_ic->log) && is_object($wps_ic->log) && method_exists($wps_ic->log, 'view')) {
             $wps_ic->log->view();
             die();
@@ -471,7 +463,7 @@ class wps_ic_menu extends wps_ic
             if (!empty($_GET['showAdvanced'])) {
                 $this->templates->get_admin_page('advanced_settings_v4');
             } else {
-                
+                // Lite Version
                 if(get_option('wps_ic_url_changed')){
                     $this->templates->get_admin_page('connect/lite-url-changed');
                 } else {
@@ -491,6 +483,9 @@ class wps_ic_menu extends wps_ic
                         break;
                     case 'bulk':
                         $this->templates->get_admin_page('bulk');
+                        break;
+                    case 'missing-files':
+                        $this->templates->get_admin_page('missing_files');
                         break;
                     default:
                         $this->templates->get_admin_page('advanced_settings_v4');

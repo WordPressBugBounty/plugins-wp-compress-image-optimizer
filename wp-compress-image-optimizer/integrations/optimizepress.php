@@ -1,14 +1,6 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: integrations/optimizepress.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 class wps_ic_optimizepress extends wps_ic_integrations {
@@ -32,7 +24,7 @@ class wps_ic_optimizepress extends wps_ic_integrations {
 				'priority' => 10,
 				'args'     => 2
 			]
-			
+			// ... add other frontend hooks if any
 		];
 	}
 
@@ -43,7 +35,7 @@ class wps_ic_optimizepress extends wps_ic_integrations {
 				'priority' => '',
 				'args'     => ''
 			]
-
+// ... add other admin hooks if any
 		];
 	}
 

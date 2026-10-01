@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-wake.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 if (!defined('ABSPATH')) {
@@ -19,7 +11,7 @@ if (!function_exists('wpc_v2_wake_register_route')) {
         register_rest_route('wpc/v2', '/wake', [
             'methods'             => 'POST',
             'callback'            => 'wpc_v2_wake_handler',
-            'permission_callback' => '__return_true',  
+            'permission_callback' => '__return_true',  // HMAC is the auth
         ]);
     }
 }
@@ -45,9 +37,9 @@ if (!function_exists('wpc_v2_wake_record_auth_failure')) {
         $counter_key = 'wpc_wake_rl_' . $ip_hash;
         $count = (int) get_transient($counter_key);
         $count++;
-        set_transient($counter_key, $count, 300);  
+        set_transient($counter_key, $count, 300);  // 5min counter window
 
-        
+        // After 3 failures, install hard-block for 5min
         if ($count >= 3) {
             $throttle_key = 'wpc_wake_thr_' . $ip_hash;
             set_transient($throttle_key, 1, 300);
@@ -69,8 +61,20 @@ if (!function_exists('wpc_v2_wake_clear_auth_failures')) {
 }
 
 
+if (!function_exists('wpc_v2_wake_failed')) {
+    /**
+     * Rule: every way the wake cannot run leaves image-wake-failed {reason}. Observed failure:
+     * a refused or undispatchable wake answered with an error_log line only, so a site whose
+     * wakes never reached the drain looked, from the receipts, like a site that got none.
+     */
+    function wpc_v2_wake_failed($reason)
+    {
+        wpc_cache_first_log('image-wake-failed', '', '', ['reason' => (string) $reason]);
+    }
+}
+
 if (!function_exists('wpc_v2_wake_note')) {
-    
+    // Remote wake observability: record the last wake's outcome on the healthcheck.
 
 
     function wpc_v2_wake_note($outcome, $extra = [])
@@ -89,10 +93,11 @@ if (!function_exists('wpc_v2_wake_handler')) {
             ? trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0])
             : (isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '0.0.0.0');
 
-        
+        // Hard-block by IP if previously rate-limited
 
 
         if (wpc_v2_wake_is_rate_limited($ip)) {
+            wpc_v2_wake_failed('rate-limited');
             return new WP_REST_Response(['error' => 'rate_limited'], 429);
         }
 
@@ -100,19 +105,23 @@ if (!function_exists('wpc_v2_wake_handler')) {
         $sig_header = $request->get_header('X-WPC-Sig');
 
 
-        $verify = wpc_v2_verify_hmac($sig_header, $raw_body, 300);
+        $verify = wpc_v2_inbound_verify('wake', $sig_header, $raw_body, ['window' => 300, 'auth_status' => 401]);
         if (!$verify['ok']) {
+            wpc_v2_wake_failed((string) $verify['reason']);
+            if ($verify['reason'] !== 'bad-signature') {
+                return new WP_REST_Response(['error' => $verify['reason']], (int) $verify['status']);
+            }
             wpc_v2_wake_record_auth_failure($ip);
             error_log(sprintf(
                 '[WPC Wake] hmac_fail ip_hash=%s reason=%s',
                 substr(hash('sha256', $ip), 0, 16),
-                isset($verify['reason']) ? $verify['reason'] : 'unknown'
+                isset($verify['detail']) ? $verify['detail'] : 'unknown'
             ));
 
             return new WP_REST_Response(['error' => 'hmac_fail'], 401);
         }
 
-        
+        // Auth success — clear any previous failure counter for this IP
         wpc_v2_wake_clear_auth_failures($ip);
 
 
@@ -129,11 +138,11 @@ if (!function_exists('wpc_v2_wake_handler')) {
             wpc_v2_wake_note('self_heal_pull_enabled');
         }
 
-        
-        
+        // T2 capture for cross-system race verification.
+        //
 
 
-        
+        //
 
 
         $body_parsed = !empty($raw_body) ? json_decode($raw_body, true) : null;
@@ -155,12 +164,12 @@ if (!function_exists('wpc_v2_wake_handler')) {
         } elseif (is_array($body_parsed) && (isset($body_parsed['imageID']) || isset($body_parsed['sizeLabel']))) {
             $wake_items[] = $norm_item($body_parsed);
         }
-        
+        // T2 telemetry reads the first item (back-compat with the prior single-event log line).
         $t2_imageID    = !empty($wake_items) ? $wake_items[0]['imageID']   : '';
         $t2_sizeLabel  = !empty($wake_items) ? $wake_items[0]['sizeLabel'] : '';
         $t2_format     = !empty($wake_items) ? $wake_items[0]['format']    : '';
         $t2_trace_id   = !empty($wake_items) ? $wake_items[0]['trace_id']  : '';
-        $t2_wake_ms    = (int) (microtime(true) * 1000);  
+        $t2_wake_ms    = (int) (microtime(true) * 1000);  // T2 — wall-clock at handler arrival
         $t2_orch_trace = $request->get_header('X-Orch-Trace');
 
 
@@ -176,32 +185,35 @@ if (!function_exists('wpc_v2_wake_handler')) {
         if (function_exists('wpc_v2_pull_drain_fire')) {
             $dispatched = (bool) wpc_v2_pull_drain_fire($wake_items);
         }
+        if (!$dispatched && function_exists('wpc_v2_pull_enabled') && !wpc_v2_pull_enabled()) {
+            wpc_v2_wake_failed('pull-disabled');
+        }
         wpc_v2_wake_note('ok', ['dispatched' => $dispatched, 'items' => is_array($wake_items) ? count($wake_items) : 0]);
-        if (function_exists('wpc_policy23_schedule_resync')) {
-            wpc_policy23_schedule_resync(5);
+        if (function_exists('wpc_policy_schedule_resync')) {
+            wpc_policy_schedule_resync(5);
         }
 
 
-        
-        
+        // $dispatched (= the fsockopen self-POST was at least WRITTEN), but on a host where fsockopen can't
+        // open the loopback socket AT ALL, $dispatched is false — so the fallback meant to cover a dead
 
 
         if (function_exists('wpc_v2_pull_drain_loop_handler')) {
             $wpc_wake_items_for_inline = $wake_items;
             add_action('shutdown', function () use ($wpc_wake_items_for_inline) {
                 if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
-                    wpc_finish_request39();
+                    wpc_finish_request();
                 } elseif (function_exists('litespeed_finish_request')) {
                     @litespeed_finish_request();
                 }
 
 
-                if (function_exists('wpc_policy23_resync') && !get_transient('wpc_policy23_resync_inline')) {
+                if (function_exists('wpc_policy_resync') && !get_transient('wpc_policy23_resync_inline')) {
                     set_transient('wpc_policy23_resync_inline', 1, 60);
                     @ignore_user_abort(true);
-                    $GLOBALS['wpc_signed_wake14'] = true;
-                    wpc_policy23_resync();
-                    unset($GLOBALS['wpc_signed_wake14']);
+                    $GLOBALS['wpc_signed_wake_request'] = true;
+                    wpc_policy_resync();
+                    unset($GLOBALS['wpc_signed_wake_request']);
                 }
                 if (get_transient('wpc_v2_inline_drain_pending')) {
                     return;
@@ -216,6 +228,7 @@ if (!function_exists('wpc_v2_wake_handler')) {
                 error_log('[WPC Wake] loopback_worker_never_started — running drain inline');
                 $apikey_inline = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
                 if ($apikey_inline === '') {
+                    wpc_v2_wake_failed('no-apikey');
                     return;
                 }
                 $_POST['t']   = (string) time();
@@ -232,15 +245,15 @@ if (!function_exists('wpc_v2_wake_handler')) {
 
         $wall_ms = (int) round((microtime(true) - $start_t) * 1000);
 
-        
+        // Legacy summary line — keep for back-compat with any log scraping
         error_log(sprintf(
             '[WPC Wake] ok dispatched=%d wall_ms=%d',
             $dispatched ? 1 : 0, $wall_ms
         ));
 
 
-        
-        
+        // T1 (write completion). Diff(T2 - T1) is the cross-system race
+        // window. If T2 < T1 anywhere, the await was bypassed.
         error_log(sprintf(
             '[WPC Wake] T2 wake_ms=%d trace_id=%s imageID=%s sizeLabel=%s format=%s dispatched=%d orch_trace_hdr=%s items=%d%s',
             $t2_wake_ms,

@@ -1,14 +1,6 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: integrations/nginx_helper.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 class wps_ic_nginx_helper extends wps_ic_integrations {
@@ -18,11 +10,11 @@ class wps_ic_nginx_helper extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        
+        // No specific checks needed
     }
 
     public function fix_setting($setting) {
-        
+        // No specific fixes needed
     }
 
     public function add_admin_hooks() {

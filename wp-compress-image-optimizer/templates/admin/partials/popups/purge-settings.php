@@ -4,15 +4,7 @@
         <div class="cdn-popup-loading">
             <div class="wpc-popup-saving-logo-container">
                 <div class="wpc-popup-saving-preparing-logo">
-                    <img src="<?php
-
-
-
-
-
-
-
- echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg" class="wpc-ic-popup-logo-saving"/>
+                    <img src="<?php echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg" class="wpc-ic-popup-logo-saving"/>
                     <div class="wpc-ic-popup-logo-saving-loader" aria-hidden="true"></div>
                 </div>
             </div>
@@ -83,7 +75,7 @@ update_option_tag_base
 wp_update_nav_menu
 permalink_structure_changed
 customize_save
-<?php echo 'update_option_theme_mods_' . get_option('stylesheet') . "\n"; ?>elementor/core/files/clear_cache
+<?php echo 'update_option_theme_mods_' . get_option('stylesheet') . "\n"; ?>
 uagb_delete_uag_asset_dir
 uagb_delete_page_assets
 et_core_static_resources_removed

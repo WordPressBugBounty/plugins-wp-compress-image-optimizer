@@ -1963,6 +1963,102 @@ label[for="wpc-cf-token"] {
     }
   }
 
+  // v7.21.312 — visitor time-saved clock strip (ticks live; real beacons pulse into the feed)
+  .wpc-vitals-saved {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: @color-bg-frost;
+    border: 1px solid @color-border;
+    border-radius: @radius-lg;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+  }
+
+  .wpc-vitals-saved-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .wpc-vitals-saved-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: @font-semibold;
+    font-size: 12px;
+    color: @color-text-secondary;
+  }
+
+  .wpc-vitals-saved-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: @font-semibold;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: @color-success;
+
+    i {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: @color-success;
+      animation: wpcVpSavedPulse 2s ease-in-out infinite;
+    }
+  }
+
+  .wpc-vitals-saved-clock {
+    font-family: @font-bold;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+    color: @color-text-dark;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+  }
+
+  .wpc-vitals-saved-sub {
+    font-family: @font-regular;
+    font-size: 12px;
+    color: @color-text-secondary;
+  }
+
+  .wpc-vitals-saved-feed {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-wrap: wrap;
+    max-width: 40%;
+
+    .wpc-vp-saved-pt {
+      font-family: @font-semibold;
+      font-size: 11.5px;
+      color: @color-blue-deep;
+      background: @color-ice-deep;
+      border-radius: @radius-pill;
+      padding: 3px 9px;
+      animation: wpcVpSavedLand 4s ease-out forwards;
+
+      &.is-m { color: @color-blue-vivid; }
+    }
+  }
+
+  @keyframes wpcVpSavedPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  @keyframes wpcVpSavedLand {
+    0% { opacity: 0; transform: translateY(6px) scale(0.9); }
+    8% { opacity: 1; transform: none; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
   .wpc-vitals-legend {
     display: flex;
     justify-content: flex-end;

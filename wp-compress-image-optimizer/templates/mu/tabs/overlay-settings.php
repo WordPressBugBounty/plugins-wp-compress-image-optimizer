@@ -5,15 +5,7 @@
       <div class="wpc-ic-mu-site-left-side">
         <div class="wpc-ic-mu-site-name">
           <span class="wpc-ic-mu-site-status-circle"></span>
-          <h3><?php
-
-
-
-
-
-
-
- echo 'Default Settings'; ?></h3>
+          <h3><?php echo 'Default Settings'; ?></h3>
           <h5><?php echo 'setup your default configuration'; ?></h5>
         </div>
         <div style="display: inline-block;vertical-align: middle;margin-left:20px;">
@@ -299,18 +291,6 @@
                     <input type="checkbox" value="1" name="wp-ic-setting[external-url]" data-setting_name="external-urls" data-setting_value="1" <?php echo checked($settings['external-url'], '1'); ?>/>
                     <div>
                       <label for="external-url-toggle" class="external-url-toggle"></label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="setting-option">
-                <div class="setting-label">Remove Render Blocking</div>
-                <div class="setting-value ic-custom-tooltip" title="Remove render blocking on crucial assets.">
-                  <div class="checkbox-container-v3 wps-ic-ajax-checkbox" style="display: inline-block;">
-                    <input type="checkbox" id="remove-render-blocking-toggle" value="1" name="wp-ic-setting[remove-render-blocking]" data-setting_name="remove-render-blocking" data-setting_value="1" <?php echo checked($settings['remove-render-blocking'], '1'); ?>/>
-                    <div>
-                      <label for="remove-render-blocking-toggle" class="remove-render-blocking-toggle"></label>
                     </div>
                   </div>
                 </div>

@@ -45,7 +45,7 @@ jQuery(document).ready(function ($) {
             var cname_field = $('[name="custom-cdn"]', popupData).val();
 
             if (cname_field == '') {
-                
+                //wps-ic-mu-popup-empty-cname
                 $('[name="custom-cdn"]', popupData).addClass('empty');
                 $(form).prepend('<p class="error">You must fill out the CNAME.</p>');
                 return false;

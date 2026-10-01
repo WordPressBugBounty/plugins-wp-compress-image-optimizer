@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-lazy-cdn.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 if (!function_exists('wpc_v2_att')) {
     function wpc_v2_att($u)
     {
@@ -22,12 +14,12 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-
-
-
-
-
-
+/**
+ * Sha256 dedup transient. The same variant can arrive via push (bg_swap_single)
+ * AND pull (manifest); a short-TTL transient keyed on the sha256 prefix gives us
+ * single-process semantics across both. 10-minute window matches the LS contract.
+ * (Transients route to Redis when an object cache is present, else wp_options.)
+ */
 if (!function_exists('wpc_v2_sha256_dedup_seen')) {
     function wpc_v2_sha256_dedup_seen($sha256)
     {
@@ -83,11 +75,11 @@ if (!function_exists('wpc_v2_adaptive_variant_suffix')) {
 }
 
 if (!function_exists('wpc_v2_lazy_purge_enqueue')) {
-    
-    
+    // Coalesced variant-landed CDN purge. Each landed URL is enqueued; on shutdown the
+    // queue flushes as ONE deduped, chunked, BLOCKING wpc_customer_purge — replacing ~22
 
 
-    
+    // $flush=true drains+fires; otherwise pass a URL to enqueue.
     function wpc_v2_lazy_purge_enqueue($url = null, $flush = false)
     {
         static $queue  = [];
@@ -103,13 +95,13 @@ if (!function_exists('wpc_v2_lazy_purge_enqueue')) {
             if ($key === '') {
                 return;
             }
-            if (function_exists('wpc_landed_purge_spool_add88')) {
-                wpc_landed_purge_spool_add88($urls);
-                if (function_exists('wpc_landed_purge_detach28')) {
-                    wpc_landed_purge_detach28();
+            if (function_exists('wpc_landed_purge_spool_add')) {
+                wpc_landed_purge_spool_add($urls);
+                if (function_exists('wpc_landed_purge_drain_on_shutdown')) {
+                    wpc_landed_purge_drain_on_shutdown();
                 }
-                if (function_exists('wpc_landed_purge_drain88')) {
-                    wpc_landed_purge_drain88();
+                if (function_exists('wpc_landed_purge_drain')) {
+                    wpc_landed_purge_drain();
                 }
                 return;
             }
@@ -130,47 +122,47 @@ if (!function_exists('wpc_v2_lazy_purge_enqueue')) {
         $queue[] = $url;
         if (!$hooked && function_exists('add_action')) {
             $hooked = true;
-            
-            
+            // Priority 9 so it runs before the late drain-stat/option writers; the drain has
+            // finished its disk work by shutdown anyway.
             add_action('shutdown', function () { wpc_v2_lazy_purge_enqueue(null, true); }, 9);
         }
     }
 }
 
-if (!function_exists('wpc_landed_purge_lock88')) {
-    function wpc_landed_purge_lock88()
+if (!function_exists('wpc_landed_purge_acquire_lock')) {
+    function wpc_landed_purge_acquire_lock()
     {
         if (!function_exists('add_option')) {
             return true;
         }
         for ($i = 0; $i < 6; $i++) {
-            if (add_option('wpc_landed_purge_lock88', time(), '', 'no')) {
+            if (add_option(WPC_LANDED_PURGE_LOCK_OPTION, time(), '', 'no')) {
                 return true;
             }
-            $held = (int) get_option('wpc_landed_purge_lock88', 0);
+            $held = (int) get_option(WPC_LANDED_PURGE_LOCK_OPTION, 0);
             if ($held > 0 && time() - $held > 30) {
-                delete_option('wpc_landed_purge_lock88');
+                delete_option(WPC_LANDED_PURGE_LOCK_OPTION);
                 continue;
             }
             usleep(50000);
         }
         return false;
     }
-    function wpc_landed_purge_unlock88()
+    function wpc_landed_purge_release_lock()
     {
         if (function_exists('delete_option')) {
-            delete_option('wpc_landed_purge_lock88');
+            delete_option(WPC_LANDED_PURGE_LOCK_OPTION);
         }
     }
 }
 
-if (!function_exists('wpc_landed_purge_spool_add88')) {
-    function wpc_landed_purge_spool_add88($urls)
+if (!function_exists('wpc_landed_purge_spool_add')) {
+    function wpc_landed_purge_spool_add($urls)
     {
         if (!apply_filters('wpc_landed_purge_spool88', true)) {
             return 0;
         }
-        $locked = wpc_landed_purge_lock88();
+        $locked = wpc_landed_purge_acquire_lock();
         $spool = get_option('wpc_landed_purge_spool88', []);
         if (!is_array($spool)) {
             $spool = [];
@@ -198,60 +190,60 @@ if (!function_exists('wpc_landed_purge_spool_add88')) {
         }
         update_option('wpc_landed_purge_spool88', $spool, false);
         if ($locked) {
-            wpc_landed_purge_unlock88();
+            wpc_landed_purge_release_lock();
         }
-        if ($added > 0 && get_transient('wpc_landed_purge_draining88') && function_exists('wpc_landed_purge_schedule88')) {
-            wpc_landed_purge_schedule88(60);
+        if ($added > 0 && get_transient('wpc_landed_purge_draining88') && function_exists('wpc_landed_purge_schedule_drain')) {
+            wpc_landed_purge_schedule_drain(60);
         }
         return $added;
     }
 }
 
-if (!function_exists('wpc_landed_purge_detach28')) {
-    function wpc_landed_purge_detach28()
+if (!function_exists('wpc_landed_purge_drain_on_shutdown')) {
+    function wpc_landed_purge_drain_on_shutdown()
     {
-        static $armed28 = false;
-        if ($armed28 || !function_exists('add_action') || !function_exists('wpc_landed_purge_drain88')) {
+        static $shutdown_armed = false;
+        if ($shutdown_armed || !function_exists('add_action') || !function_exists('wpc_landed_purge_drain')) {
             return false;
         }
-        $armed28 = true;
+        $shutdown_armed = true;
         add_action('shutdown', function () {
-            if (function_exists('wpc_finish_request39') && empty($GLOBALS['wpc_released39'])) {
-                wpc_finish_request39();
+            if (function_exists('wpc_finish_request') && empty($GLOBALS['wpc_response_released'])) {
+                wpc_finish_request();
             }
             @ignore_user_abort(true);
-            $GLOBALS['wpc_signed_wake14'] = true;
-            wpc_landed_purge_drain88();
-            unset($GLOBALS['wpc_signed_wake14']);
+            $GLOBALS['wpc_signed_wake_request'] = true;
+            wpc_landed_purge_drain();
+            unset($GLOBALS['wpc_signed_wake_request']);
         }, 98);
         return true;
     }
 }
-if (!function_exists('wpc_landed_purge_schedule88')) {
-    function wpc_landed_purge_schedule88($delay = 60)
+if (!function_exists('wpc_landed_purge_schedule_drain')) {
+    function wpc_landed_purge_schedule_drain($delay = 60)
     {
-        if (!function_exists('wp_next_scheduled') || wp_next_scheduled('wpc_landed_purge_drain88')) {
+        if (!function_exists('wp_next_scheduled') || wp_next_scheduled(WPC_LANDED_PURGE_DRAIN_HOOK)) {
             return false;
         }
-        if (function_exists('wpc_pl_sched') && wpc_pl_sched(time() + (int) $delay, 'wpc_landed_purge_drain88')) {
+        if (function_exists('wpc_pl_sched') && wpc_pl_sched(time() + (int) $delay, WPC_LANDED_PURGE_DRAIN_HOOK)) {
             return true;
         }
         if (function_exists('wp_schedule_single_event')) {
-            wp_schedule_single_event(time() + (int) $delay, 'wpc_landed_purge_drain88');
+            wp_schedule_single_event(time() + (int) $delay, WPC_LANDED_PURGE_DRAIN_HOOK);
             return true;
         }
         return false;
     }
 }
 
-if (!function_exists('wpc_landed_purge_drain88')) {
-    function wpc_landed_purge_drain88()
+if (!function_exists('wpc_landed_purge_drain')) {
+    function wpc_landed_purge_drain()
     {
         if (!apply_filters('wpc_landed_purge_spool88', true)) {
             return 0;
         }
-        if (function_exists('wpc_render_guard39_active') && wpc_render_guard39_active()) {
-            wpc_landed_purge_schedule88(60);
+        if (function_exists('wpc_render_guard_active') && wpc_render_guard_active()) {
+            wpc_landed_purge_schedule_drain(60);
             return 0;
         }
         if (!function_exists('wpc_customer_purge') || !function_exists('wpc_v2_get_apikey')) {
@@ -262,7 +254,7 @@ if (!function_exists('wpc_landed_purge_drain88')) {
             return 0;
         }
         if (get_transient('wpc_landed_purge_draining88')) {
-            wpc_landed_purge_schedule88(60);
+            wpc_landed_purge_schedule_drain(60);
             return 0;
         }
         set_transient('wpc_landed_purge_draining88', 1, 120);
@@ -298,7 +290,7 @@ if (!function_exists('wpc_landed_purge_drain88')) {
             error_log('[WPC LazyCDN] landed purge deferred urls=' . count($chunk) . ' http=' . $http . ' spool=' . count($spool));
             break;
         }
-        $locked = wpc_landed_purge_lock88();
+        $locked = wpc_landed_purge_acquire_lock();
         $fresh = get_option('wpc_landed_purge_spool88', []);
         if (!is_array($fresh)) {
             $fresh = [];
@@ -308,20 +300,20 @@ if (!function_exists('wpc_landed_purge_drain88')) {
         }
         update_option('wpc_landed_purge_spool88', $fresh, false);
         if ($locked) {
-            wpc_landed_purge_unlock88();
+            wpc_landed_purge_release_lock();
         }
         delete_transient('wpc_landed_purge_draining88');
         if (!empty($fresh)) {
-            wpc_landed_purge_schedule88(60);
+            wpc_landed_purge_schedule_drain(60);
         }
         return $sent;
     }
-    add_action('wpc_landed_purge_drain88', 'wpc_landed_purge_drain88');
-    add_action('wpc_v2_pull_cron', 'wpc_landed_purge_drain88', 25);
+    add_action(WPC_LANDED_PURGE_DRAIN_HOOK, 'wpc_landed_purge_drain');
+    add_action('wpc_v2_pull_cron', 'wpc_landed_purge_drain', 25);
 }
 
-if (!function_exists('wpc_v2_keep_smallest31')) {
-    function wpc_v2_keep_smallest31($abs_path, $twin_len)
+if (!function_exists('wpc_v2_find_smaller_sibling')) {
+    function wpc_v2_find_smaller_sibling($abs_path, $twin_len)
     {
         $twin_len = (int) $twin_len;
         if ($twin_len <= 0 || !apply_filters('wpc_keep_smallest', true) || !preg_match('/\.(avif|webp)$/i', (string) $abs_path, $m)) {
@@ -351,24 +343,24 @@ if (!function_exists('wpc_v2_enqueue_landed_purge')) {
             : (string) wp_parse_url($up['baseurl'], PHP_URL_PATH);
         $rel = $base_rel . substr($abs_path, strlen($up['basedir']));
         if ($rel === '' || !preg_match('/\.(avif|webp|jpe?g|png)$/i', $rel)) return;
-        
-        
+        // The landed file + the next-gen format siblings of the same -WxH (the negotiated URL the
+        // browser hits). Same-ext jpg/png is unaffected by an avif/webp landing, so it's left alone.
         $targets = [$rel];
         foreach (['avif', 'webp'] as $ext) {
             $sib = preg_replace('/\.(avif|webp|jpe?g|png)$/i', '.' . $ext, $rel);
             if ($sib && $sib !== $rel) $targets[] = $sib;
         }
-        $wpc_src31 = '';
-        foreach (['jpg', 'jpeg', 'png'] as $wpc_se31) {
-            if (@is_file(preg_replace('/\.(avif|webp|jpe?g|png)$/i', '.' . $wpc_se31, (string) $abs_path))) {
-                $wpc_src31 = $wpc_se31;
+        $source_ext = '';
+        foreach (['jpg', 'jpeg', 'png'] as $candidate_ext) {
+            if (@is_file(preg_replace('/\.(avif|webp|jpe?g|png)$/i', '.' . $candidate_ext, (string) $abs_path))) {
+                $source_ext = $candidate_ext;
                 break;
             }
         }
-        if ($wpc_src31 !== '') {
-            foreach ($targets as $wpc_t31) {
-                if (preg_match('/\.(avif|webp)$/i', $wpc_t31)) {
-                    $targets[] = $wpc_t31 . '?src=' . $wpc_src31;
+        if ($source_ext !== '') {
+            foreach ($targets as $target) {
+                if (preg_match('/\.(avif|webp)$/i', $target)) {
+                    $targets[] = $target . '?src=' . $source_ext;
                 }
             }
         }
@@ -385,17 +377,17 @@ if (!function_exists('wpc_v2_lazy_resolve_attachment')) {
     {
         if (!function_exists('attachment_url_to_postid')) return 0;
         $clean = preg_replace('/\?.*$/', '', (string) $origin_url);
-        $wpc_memo896 = class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_att_id');
-        $id = $wpc_memo896 ? (int) wps_rewriteLogic::wpc_att_id($clean) : wpc_v2_att($clean);
+        $use_memoized_lookup = class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_att_id');
+        $id = $use_memoized_lookup ? (int) wps_rewriteLogic::wpc_att_id($clean) : wpc_v2_att($clean);
         if ($id > 0) return $id;
-        
+        // -scaled counterpart (WP stores -scaled as the attached file when scaled at upload)
         $scaled = preg_replace('/\.(jpe?g|png)$/i', '-scaled.$1', $clean);
         if ($scaled !== $clean) {
-            $id = $wpc_memo896 ? (int) wps_rewriteLogic::wpc_att_id($scaled) : wpc_v2_att($scaled);
+            $id = $use_memoized_lookup ? (int) wps_rewriteLogic::wpc_att_id($scaled) : wpc_v2_att($scaled);
             if ($id > 0) return $id;
         }
-        
-        
+        // Direct query on _wp_attached_file (the canonical stored relative path) — robust
+        // where url_to_postid's guid/cache path misses. Also try the -scaled relative.
         global $wpdb;
         if (isset($wpdb) && is_object($wpdb) && $relative !== '') {
             $rel_clean = preg_replace('/\?.*$/', '', $relative);
@@ -464,20 +456,20 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
             return ['ok' => false, 'reason' => 'no_upload_basedir'];
         }
 
-        
+        // Parse origin_url → relative path under site
         $parsed = wp_parse_url($origin_url);
         if (empty($parsed['path'])) {
             return ['ok' => false, 'reason' => 'unparsable_origin_url'];
         }
 
-        
-        
+        // Verify host belongs to this site OR the CDN zone (defends against a forged
+        // origin_url). The cdn-zone host is legitimate: rewriteLogic emits picture-source
 
 
         $site_host   = wp_parse_url(site_url(), PHP_URL_HOST);
         $origin_host = isset($parsed['host']) ? (string) $parsed['host'] : '';
         if ($origin_host !== '' && $site_host !== '' && strcasecmp($origin_host, $site_host) !== 0) {
-            
+            // Accept ALL of this site's zone identities, not either-or: a custom cname can
 
 
             $zone_ok = false;
@@ -510,23 +502,23 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
 
 
             $origin_url = preg_replace('#^https?://[^/]+#', rtrim(site_url(), '/'), $origin_url);
-            
+            // Re-parse so $parsed reflects the swap (only $parsed['path'] is used below).
             $parsed = wp_parse_url($origin_url);
             if (empty($parsed['path'])) {
                 return ['ok' => false, 'reason' => 'unparsable_origin_url_post_normalize'];
             }
         }
 
-        
+        // Place the file under basedir, mirroring the URL path after baseurl's path.
         $baseurl_path = (string) wp_parse_url($upload['baseurl'], PHP_URL_PATH);
-        $baseurl_path = trim($baseurl_path, '/');  
-        $url_path     = trim((string) $parsed['path'], '/');  
+        $baseurl_path = trim($baseurl_path, '/');  // e.g. "wp-content/uploads"
+        $url_path     = trim((string) $parsed['path'], '/');  // e.g. "wp-content/uploads/2025/01/foo.jpg"
 
 
         if ($baseurl_path !== '' && strpos($url_path, $baseurl_path) !== 0) {
             return ['ok' => false, 'reason' => 'origin_outside_uploads'];
         }
-        
+        // Strip the baseurl prefix → "2025/01/foo.jpg"
         $relative = $baseurl_path !== ''
             ? ltrim(substr($url_path, strlen($baseurl_path)), '/')
             : $url_path;
@@ -535,13 +527,13 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
             return ['ok' => false, 'reason' => 'empty_relative_path'];
         }
 
-        
+        // Reject path traversal (defense-in-depth; wp_parse_url should already normalize this)
         if (strpos($relative, '..') !== false || strpos($relative, "\0") !== false) {
             return ['ok' => false, 'reason' => 'path_traversal_attempt'];
         }
 
-        
-        $dir      = ltrim(dirname($relative), '/.');  
+        // Split into dir + basename(no-ext)
+        $dir      = ltrim(dirname($relative), '/.');  // "" if no subdir
         $basename = basename($relative);
         $base_no_ext = preg_replace('/\.[^.]+$/', '', $basename);
         if ($base_no_ext === '' || $base_no_ext === null) {
@@ -566,7 +558,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
             if ($stem === $base_no_ext) {
                 $rem = '';
             } elseif ($base_no_ext !== '' && strpos($stem, $base_no_ext . '-') === 0) {
-                $rem = substr($stem, strlen($base_no_ext)); 
+                $rem = substr($stem, strlen($base_no_ext)); // e.g. "-1024x448"
             }
             if ($candidate !== ''
                 && strpos($candidate, '..') === false
@@ -585,7 +577,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
         $out_ext = ($format === 'jpeg') ? 'jpg' : $format;
 
 
-        
+        // Rides the explicit-filename lane so the common compose + basedir checks still apply.
         if ($explicit_filename === ''
             && preg_match('/-(\d{2,4})x(\d{2,4})$/', $base_no_ext, $szm)
             && is_string($size_label)
@@ -597,7 +589,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
         if ($explicit_filename !== '') {
             $filename = $explicit_filename;
         } else {
-            
+            // Derive the dimensions suffix from sizeLabel (shapes documented on the function).
             $suffix = '';
             $label_lc = is_string($size_label) ? strtolower(trim($size_label)) : '';
             if ($label_lc === '' || $label_lc === 'original') {
@@ -619,7 +611,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
                 }
                 $resolved = false;
                 if (is_array($meta)) {
-                    
+                    // Match against main file (scaled or original)
                     if (isset($meta['width'], $meta['height']) && (int) $meta['width'] === $w && (int) $meta['height'] === $h) {
                         $main_file = isset($meta['file']) ? basename((string) $meta['file']) : '';
                         if ($main_file && stripos($main_file, '-scaled.') !== false) {
@@ -628,7 +620,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
 
                         $resolved = true;
                     }
-                    
+                    // Match against sub-sizes
                     if (!$resolved && isset($meta['sizes']) && is_array($meta['sizes'])) {
                         foreach ($meta['sizes'] as $sz) {
                             if (!is_array($sz) || empty($sz['file']) || empty($sz['width']) || empty($sz['height'])) continue;
@@ -646,7 +638,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
                     }
 
 
-                    
+                    // WRITE == READ, not an unservable literal -{W}x{H} the READ path never derives.
                     if (!$resolved && isset($meta['width'], $meta['height'])
                         && (int) $meta['width'] > 0 && (int) $meta['height'] > 0
                         && ($w >= (int) $meta['width'] || $h >= (int) $meta['height'])) {
@@ -656,29 +648,29 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
                     }
                 }
                 if (!$resolved) {
-                    
-                    
+                    // Adaptive {W}x{H}: derive H from W via the shared helper (NOT the label's own
+                    // height), so it matches the READ side, which only ever has the width descriptor.
 
 
                     $meta = wpc_v2_lazy_ensure_dims($meta, $upload['basedir'] . '/' . $relative);
                     $suffix = wpc_v2_adaptive_variant_suffix($w, $meta);
                 }
             } elseif (preg_match('/^w(\d+)$/i', $size_label, $m) || preg_match('/^(\d+)w$/i', $size_label, $m)) {
-                
+                // Width-only descriptor (browser srcset format). Accept both suffix-w (`1887w`)
 
 
                 $width = (int) $m[1];
                 $attachment_id = wpc_v2_lazy_resolve_attachment($origin_url, $relative);
                 $meta = $attachment_id > 0 ? wp_get_attachment_metadata($attachment_id) : false;
-                
-                
+                // Disk-dims fallback (see {W}x{H} branch): un-resolvable attachment → populate
+                // dims so the main-width match names the full image naturally; sub-sizes → helper.
                 if (!is_array($meta)) {
                     $dd = wpc_v2_lazy_ensure_dims([], $upload['basedir'] . '/' . $relative);
                     $meta = !empty($dd['width']) ? $dd : false;
                 }
                 $resolved = false;
                 if (is_array($meta)) {
-                    
+                    // Match against the main file's width (scaled or original)
                     if (isset($meta['width']) && (int) $meta['width'] === $width) {
                         $main_file = isset($meta['file']) ? basename((string) $meta['file']) : '';
                         if ($main_file && stripos($main_file, '-scaled.') !== false) {
@@ -686,7 +678,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
                         }
                         $resolved = true;
                     }
-                    
+                    // Match against sub-sizes
                     if (!$resolved && isset($meta['sizes']) && is_array($meta['sizes'])) {
                         foreach ($meta['sizes'] as $sz) {
                             if (!is_array($sz) || empty($sz['file']) || empty($sz['width'])) continue;
@@ -719,7 +711,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
                     $suffix = wpc_v2_adaptive_variant_suffix($width, $meta);
                 }
             } elseif (preg_match('/^[a-z][a-z0-9_]*$/i', $size_label)) {
-                
+                // WP sub-size name (medium, large, thumbnail, medium_large, 1536x1536-ish stripped)
                 $attachment_id = 0;
                 if (function_exists('attachment_url_to_postid')) {
                     $attachment_id = wpc_v2_att(preg_replace('/\?.*$/', '', $origin_url));
@@ -738,7 +730,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
                     return ['ok' => false, 'reason' => 'unknown_sub_size_name'];
                 }
             } else {
-                
+                // Truly unparsable — reject with diagnostic
                 return ['ok' => false, 'reason' => 'unparsable_size_label', 'sizeLabel' => (string) $size_label];
             }
 
@@ -749,7 +741,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
             $filename = $base_no_ext . $suffix . '.' . $out_ext;
         }
 
-        
+        // Degenerate-dimension write floor. A w:1 transform (the JS clamps sliders/logos/
 
 
         if (preg_match('/-(\d+)x(\d+)\.[a-z0-9]+$/i', $filename, $degm)
@@ -757,11 +749,11 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
             return ['ok' => false, 'reason' => 'degenerate_variant_dimensions', 'filename' => $filename];
         }
 
-        
+        // Compose the final path with basedir as the root of trust.
         $abs_path = rtrim($upload['basedir'], '/\\') . '/' . ($dir !== '' ? $dir . '/' : '') . $filename;
 
-        
-        
+        // Security boundary: the composed path must start with basedir's realpath. The dest
+        // file doesn't exist yet, so check the dir's realpath instead.
         $basedir_real = realpath($upload['basedir']);
         if ($basedir_real !== false) {
             $abs_real_prefix = rtrim($basedir_real, '/\\');
@@ -776,11 +768,11 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
     }
 }
 
-
-
-
-
-
+/**
+ * Multisite guard — single-site only for now (multisite path resolution for
+ * /wp-content/uploads/sites/N/... isn't handled yet). Returns true on multisite
+ * so the caller acks and drains the entry; retrying it would never help.
+ */
 if (!function_exists('wpc_v2_lazy_cdn_should_skip_multisite')) {
     function wpc_v2_lazy_cdn_should_skip_multisite()
     {
@@ -792,7 +784,7 @@ if (!function_exists('wpc_v2_lazy_cdn_should_skip_multisite')) {
 if (!function_exists('wpc_v2_lazy_cdn_write_postmeta')) {
     function wpc_v2_lazy_cdn_write_postmeta($origin_url, $abs_path, $size_bytes, $format, $attachment_id = 0)
     {
-        if (!function_exists('wpc_v2_merge_variant') || !function_exists('wpc_v2_variant_key')) {
+        if (!function_exists('wpc_v2_variant_key')) {
             return false;
         }
         $attachment_id = (int) $attachment_id;
@@ -819,7 +811,7 @@ if (!function_exists('wpc_v2_lazy_cdn_write_postmeta')) {
         $source_jpg_path = '';
 
         if (is_array($meta)) {
-            
+            // (1) Match main file (scaled or un-scaled original)
             if (!empty($meta['file'])) {
                 $main_no_ext = preg_replace('/\.[^.]+$/', '', basename((string) $meta['file']));
                 if ($main_no_ext === $saved_no_ext) {
@@ -830,7 +822,7 @@ if (!function_exists('wpc_v2_lazy_cdn_write_postmeta')) {
                         : '';
                 }
             }
-            
+            // (2) Match a WP sub-size's basename
             if ($resolved_label === '' && !empty($meta['sizes']) && is_array($meta['sizes'])) {
                 $upload_dir_meta = wp_get_upload_dir();
                 $main_dir = !empty($meta['file']) ? dirname((string) $meta['file']) : '';
@@ -848,7 +840,7 @@ if (!function_exists('wpc_v2_lazy_cdn_write_postmeta')) {
                 }
             }
         }
-        
+        // (3) Adaptive-maximized fallback
         if ($resolved_label === '' && $saved_no_ext !== '') {
             if (preg_match('/-(\d+)w$/', $saved_no_ext, $sm)) {
                 $resolved_label = $sm[1] . 'w';
@@ -877,7 +869,7 @@ if (!function_exists('wpc_v2_lazy_cdn_write_postmeta')) {
                 $best_file = '';
                 $largest_w = 0;
                 $largest_file = '';
-                
+                // Iterate WP sub-sizes
                 if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
                     foreach ($meta['sizes'] as $sz_data) {
                         if (empty($sz_data['file']) || empty($sz_data['width'])) continue;
@@ -892,7 +884,7 @@ if (!function_exists('wpc_v2_lazy_cdn_write_postmeta')) {
                         }
                     }
                 }
-                
+                // Also consider main file (scaled or un-scaled) as candidate
                 if (!empty($meta['file']) && !empty($meta['width'])) {
                     $sw = (int) $meta['width'];
                     $f  = basename((string) $meta['file']);
@@ -905,7 +897,7 @@ if (!function_exists('wpc_v2_lazy_cdn_write_postmeta')) {
                         $largest_file = $f;
                     }
                 }
-                
+                // Prefer best (smallest ≥ target); fall back to largest available.
                 $pick_file = $best_file !== '' ? $best_file : $largest_file;
                 if ($pick_file !== '') {
                     $sub_rel = ($main_dir !== '' && $main_dir !== '.')
@@ -951,30 +943,10 @@ if (!function_exists('wpc_v2_lazy_cdn_write_postmeta')) {
             }
         }
 
-        wpc_v2_merge_variant($attachment_id, $variant_key, $variant_entry);
-        if (function_exists('wpc_twin_bytes29')) {
-            wpc_twin_bytes29((int) $size_bytes);
-        }
-
-        if (function_exists('wpc_v2_recompute_savings')) {
-            wpc_v2_recompute_savings($attachment_id);
-        }
-
-
-        $current_status = get_post_meta($attachment_id, 'ic_status', true);
-        if ($current_status !== 'compressed') {
-            $current_compressing = get_post_meta($attachment_id, 'ic_compressing', true);
-            $compressing_status  = (is_array($current_compressing) && !empty($current_compressing['status']))
-                ? (string) $current_compressing['status']
-                : '';
-            if ($compressing_status !== 'optimizing' && $compressing_status !== 'queueing') {
-                update_post_meta($attachment_id, 'ic_status', 'compressed');
-                
-                if (function_exists('wpc_invalidate_local_cache')) wpc_invalidate_local_cache();
-                if ($compressing_status !== 'compressed') {
-                    update_post_meta($attachment_id, 'ic_compressing', ['status' => 'compressed']);
-                }
-            }
+        // The owner promotes the image (any landed variant counts on this lane).
+        wps_ic_image_variants::record($attachment_id, [$variant_key => $variant_entry], 'lazy-cdn', ['any_variant' => true]);
+        if (function_exists('wpc_add_twin_bytes')) {
+            wpc_add_twin_bytes((int) $size_bytes);
         }
 
         return true;
@@ -982,16 +954,16 @@ if (!function_exists('wpc_v2_lazy_cdn_write_postmeta')) {
 }
 
 
-
-
+// Record the LAST ingest failure for the healthcheck debug block — shell-less sites
+// can't read error_log, so this surfaces the reason in the browser.
 if (!function_exists('wpc_v2_lazy_fail_note')) {
     function wpc_v2_lazy_fail_note($reason, $detail = '')
     {
 
 
         $GLOBALS['wpc_v2_lif_mem'] = ['t' => time(), 'reason' => (string) $reason, 'detail' => substr((string) $detail, 0, 120)];
-        
-        
+        // DIAGNOSTIC copy for the healthcheck: OFF by default (this was 522 UPDATEs / 2min into the
+        // binlog on wpcompress.com's stuck drain — pure debug breadcrumb, nothing functional reads it).
         if (function_exists('wpc_v2_ingest_diag_on') && wpc_v2_ingest_diag_on()
             && (!function_exists('wpc_v2_telemetry_throttle') || wpc_v2_telemetry_throttle('ingest_fail', 15))) {
             update_option('wpc_v2_last_ingest_fail', $GLOBALS['wpc_v2_lif_mem'], false);
@@ -1005,11 +977,11 @@ if (!function_exists('wpc_v2_lazy_cdn_ingest')) {
 
 
         if (function_exists('wpc_v2_get_lazy_enabled') && !wpc_v2_get_lazy_enabled()) {
-            
-            
+            // Consumer-aware decline. Under negotiated delivery (nd) the on-disk next-gen
+            // variants ARE the serving source, so an unconditional decline here silently
 
 
-            
+            // "consumed"). So decline ONLY when no consumer exists (neither lazy_cdn nor nd).
             $wpc_nd_consumes = class_exists('WPC_Negotiated_Delivery')
                 && method_exists('WPC_Negotiated_Delivery', 'is_active')
                 && WPC_Negotiated_Delivery::is_active();
@@ -1091,12 +1063,12 @@ if (!function_exists('wpc_v2_lazy_cdn_ingest')) {
                 isset($entry['imageID']) ? (string) $entry['imageID'] : '(missing)',
                 is_array($entry) ? implode(',', array_keys($entry)) : 'not-array'
             ));
-            
+            // Name the failure so last_ingest_fail isn't silent (a drain can fail with no reason).
             wpc_v2_lazy_fail_note('missing_required_fields', sprintf('origin=%s fmt=%s fetch=%s', $origin_url === '' ? 'missing' : 'set', $format === '' ? 'missing' : $format, $fetch_url === '' ? 'missing' : 'set'));
             return false;
         }
 
-        
+        // Pass full $entry so the derive can prefer entry['filename'] over size_label parsing.
         $derived = wpc_v2_lazy_cdn_derive_abs_path($origin_url, $size_label, $format, $entry);
         if (empty($derived['ok'])) {
             error_log(sprintf(
@@ -1104,8 +1076,8 @@ if (!function_exists('wpc_v2_lazy_cdn_ingest')) {
                 isset($derived['reason']) ? $derived['reason'] : 'unknown',
                 $origin_url, $size_label, $format
             ));
-            
-            
+            // Surface the derive reason (host_mismatch / origin_outside_uploads / ...) into
+            // last_ingest_fail so a stuck drain is diagnosable from the healthcheck, not just log.
             wpc_v2_lazy_fail_note('derive_' . (isset($derived['reason']) ? $derived['reason'] : 'failed'), $origin_url);
             return false;
         }
@@ -1153,8 +1125,8 @@ if (!function_exists('wpc_v2_lazy_cdn_ingest')) {
             }
         }
 
-        
-        
+        // Ensure the dest dir exists (a sub-size whose dir isn't created yet — rare, but
+        // possible on fresh uploads).
         $dest_dir = dirname($abs_path);
         if (!is_dir($dest_dir)) {
             if (!wp_mkdir_p($dest_dir)) {
@@ -1171,7 +1143,7 @@ if (!function_exists('wpc_v2_lazy_cdn_ingest')) {
             return true;
         }
 
-        
+        // Fetch bytes from LS staging
         $resp = wp_remote_get($fetch_url, [
             'timeout'   => 30,
             'sslverify' => true,
@@ -1203,14 +1175,14 @@ if (!function_exists('wpc_v2_lazy_cdn_ingest')) {
             return false;
         }
 
-        
-        
+        // Atomic write: temp file + rename. Matches the pattern in
+        // v2-callback.php / v2-direct-entry.php so we get consistent disk
 
-        $wpc_keep31 = function_exists('wpc_v2_keep_smallest31') ? wpc_v2_keep_smallest31($abs_path, strlen($bytes)) : '';
-        if ($wpc_keep31 !== '') {
-            $GLOBALS['wpc_kept_original31'][$sha256] = $wpc_keep31;
+        $smaller_sibling = function_exists('wpc_v2_find_smaller_sibling') ? wpc_v2_find_smaller_sibling($abs_path, strlen($bytes)) : '';
+        if ($smaller_sibling !== '') {
+            $GLOBALS['wpc_kept_original_by_sha256'][$sha256] = $smaller_sibling;
             if (function_exists('wpc_cache_first_log')) {
-                wpc_cache_first_log('kept-original', basename($abs_path), '', ['twin' => strlen($bytes), 'vs' => $wpc_keep31]);
+                wpc_cache_first_log('kept-original', basename($abs_path), '', ['twin' => strlen($bytes), 'vs' => $smaller_sibling]);
             }
             wpc_v2_lazy_outcome('kept_original');
             return true;
@@ -1287,8 +1259,8 @@ if (!function_exists('wpc_v2_lazy_cdn_ingest')) {
 
 
         if (function_exists('wpc_v2_enqueue_landed_purge') && function_exists('wpc_v2_get_apikey') && (string) wpc_v2_get_apikey() !== '') {
-            
-            
+            // Purges the landed file AND its -WxH format siblings (the negotiated URL the browser
+            // actually hits) so the on-disk variant serves on the NEXT request, not after the edge TTL.
             wpc_v2_enqueue_landed_purge($abs_path);
         }
 
@@ -1296,8 +1268,8 @@ if (!function_exists('wpc_v2_lazy_cdn_ingest')) {
         if ($attachment_id > 0 && function_exists('wpc_v2_purge_html_for_attachment')) {
             wpc_v2_purge_html_for_attachment($attachment_id, 'lazy-cdn-ingest');
         } elseif ($attachment_id <= 0) {
-            
-            
+            // No matching attachment — variant landed for an external image
+            // or URL outside the uploads dir. Skip purge (nothing to invalidate).
             error_log('[WPC LazyCDN] purge_skip no_attachment_for_origin=' . substr($clean_origin, -80));
         }
 

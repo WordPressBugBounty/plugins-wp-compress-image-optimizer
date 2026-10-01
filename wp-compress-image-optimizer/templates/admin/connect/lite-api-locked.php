@@ -1,12 +1,4 @@
 <?php
-
-
-
-
-
-
-
-
 global $wps_ic;
 ?>
 <div class="wps-ic-lite-locked-form" style="display: none;">

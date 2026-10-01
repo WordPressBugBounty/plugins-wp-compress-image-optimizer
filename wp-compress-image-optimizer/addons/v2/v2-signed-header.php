@@ -1,24 +1,16 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-signed-header.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
 if (!function_exists('wpc_v2_cf_header_injection_enabled')) {
-    
-
-
-
-
-
+    /**
+     * Master flag for the whole feature. Default OFF (scaffold). Option is the primary control;
+     * the filter lets ops/QA force it without a DB write.
+     *
+     * @return bool
+     */
     function wpc_v2_cf_header_injection_enabled()
     {
         $opt = get_option('wpc_v2_cf_header_injection', false);
@@ -93,7 +85,7 @@ if (!function_exists('wpc_v2_apply_signed_header')) {
             return false;
         }
 
-        
+        // Need a connected CF zone + token (same option the cache integration uses) and the SDK class.
         $cf = get_option(WPS_IC_CF);
         if (empty($cf['zone']) || empty($cf['token']) || !class_exists('WPC_CloudflareAPI')) {
             return false;
@@ -105,8 +97,8 @@ if (!function_exists('wpc_v2_apply_signed_header')) {
             return true;
         }
 
-        
-        
+        // A failed refresh backs off for 15 minutes: without this every admin_init on a site whose
+        // orchestrator or CF API is down re-paid a 15s blocking fetch on every backend page view.
         if (!$force && get_transient('wpc_v2_signed_header_bk50')) {
             return false;
         }
@@ -133,9 +125,9 @@ if (!function_exists('wpc_v2_apply_signed_header')) {
 }
 
 if (!function_exists('wpc_v2_signed_header_cron')) {
-    
-
-
+    /**
+     * Daily refresh — force a re-fetch ahead of signature rotation. Self-disarms when the flag is off.
+     */
     function wpc_v2_signed_header_cron()
     {
         if (!wpc_v2_cf_header_injection_enabled()) {
@@ -147,11 +139,11 @@ if (!function_exists('wpc_v2_signed_header_cron')) {
 add_action('wpc_v2_signed_header_refresh', 'wpc_v2_signed_header_cron');
 
 if (!function_exists('wpc_v2_signed_header_boot')) {
-    
-
-
-
-
+    /**
+     * Arm/disarm the feature on admin load. Flag OFF → ensure the cron is unscheduled and stop (no
+     * network, no CF calls). Flag ON → ensure the daily cron exists and opportunistically top up
+     * (rate-limited by the expiry gate inside wpc_v2_apply_signed_header()).
+     */
     function wpc_v2_signed_header_boot()
     {
         $scheduled = wp_next_scheduled('wpc_v2_signed_header_refresh');

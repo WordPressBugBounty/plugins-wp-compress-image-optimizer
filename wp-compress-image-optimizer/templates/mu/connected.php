@@ -1,33 +1,25 @@
 <?php
-
-
-
-
-
-
-
-
 global $wpc_siteID;
-
+// Change Active Blog
 switch_to_blog($wpc_siteID);
 $current_blog_details = get_blog_details(['blog_id' => $wpc_siteID]);
 
-
-
-
-
+/**
+ * Fetch settings, or if save is triggered save them.
+ * - If no settings are saved (bug, deleted options..) regenerate recommended
+ */
 $settings = get_option(WPS_IC_SETTINGS);
 
-
-
-
+/**
+ * Quick fix for PHP undefined notices
+ */
 $wps_ic_active_settings['optimization']['lossless']    = '';
 $wps_ic_active_settings['optimization']['intelligent'] = '';
 $wps_ic_active_settings['optimization']['ultra']       = '';
 
-
-
-
+/**
+ * Decides which setting is active
+ */
 if ( ! empty($settings['optimization'])) {
 	if ($settings['optimization'] == 'lossless') {
 		$wps_ic_active_settings['optimization']['lossless'] = 'class="current"';
@@ -368,18 +360,6 @@ else {
                     <input type="checkbox" id="external-url-toggle" value="1" name="wp-ic-setting[external-url]" data-setting_name="external-urls" data-setting_value="1" <?php echo checked($settings['external-url'], '1'); ?>/>
                     <div>
                       <label for="external-url-toggle" class="external-url-toggle"></label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="setting-option">
-                <div class="setting-label">Remove Render Blocking</div>
-                <div class="setting-value ic-custom-tooltip" title="Remove render blocking on crucial assets.">
-                  <div class="checkbox-container-v3 wps-ic-ajax-checkbox" style="display: inline-block;">
-                    <input type="checkbox" id="render-blocking-toggle" value="1" name="wp-ic-setting[remove-render-blocking]" data-setting_name="remove-render-blocking" data-setting_value="1" <?php echo checked($settings['remove-render-blocking'], '1'); ?>/>
-                    <div>
-                      <label for="render-blocking-toggle" class="render-blocking-toggle"></label>
                     </div>
                   </div>
                 </div>

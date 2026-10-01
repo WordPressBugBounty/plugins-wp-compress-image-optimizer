@@ -1,17 +1,9 @@
 <?php
+
+
 /**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: classes/options.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
+ * Class - Options
  */
-
-
-
-
-
-
 class wps_ic_options
 {
 
@@ -40,8 +32,6 @@ class wps_ic_options
             'fonts' => ['critical'],
             'critical' => ['css' => ['critical']],
             'background-sizing' => ['critical'],
-            'css_minify' => ['combine'],
-            'css_combine' => ['combine'],
             'js_combine' => ['combine'],
             'js_minify' => ['combine'],
             'delay-js' => ['combine'],
@@ -53,7 +43,7 @@ class wps_ic_options
 
 
             'fetchpriority-high' => ['html'],
-            'speculation-rules'  => ['html'], 
+            'speculation-rules'  => ['html'], // tag rides cached HTML — flip must remint
             'lazySkipCount'      => ['html'],
             'lazy-load'          => ['html'],
             'native-lazy'        => ['html'],
@@ -63,8 +53,8 @@ class wps_ic_options
             'avif-natural-source' => ['html'],
             'force-natural'      => ['html'],
             'static-serve'       => ['html'],
-            'fold-split'         => ['html'], 
-            'single-url-image-format' => ['html'], 
+            'fold-split'         => ['html'], // flipping it re-caches pages wrapped/unwrapped
+            'single-url-image-format' => ['html'], // Regime B: flipping it rewrites every single-URL image href
             'optimize-lcp'       => ['html'],
             'lazy-auto-sizes'    => ['html'],
             'adaptive'           => ['html'],
@@ -95,7 +85,7 @@ class wps_ic_options
 
 
             'avif-natural-source' => 1,
-            'single-url-image-format' => 'auto', 
+            'single-url-image-format' => 'auto', // Regime B default
             'lazy' => 1,
             'nativeLazy' => 1,
             'remove-srcset' => 0,
@@ -121,9 +111,6 @@ class wps_ic_options
             'fontawesome-lazy' => 1,
             'icon-font-display' => 'block',
             'critical' => ['css' => 1],
-            'css_minify' => 0,
-            'css_combine' => 0,
-            'inline-css' => 0,
             'js_combine' => 0,
             'js_minify' => 0,
             'js_defer' => 0,
@@ -160,7 +147,7 @@ class wps_ic_options
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
             'eu-routing' => '0',
-            
+            // Local optimization defaults (Smart Optimization preset)
             'picture_avif' => 1,
             'backup' => 'local',
             'maxWidth' => '2560',
@@ -189,14 +176,14 @@ class wps_ic_options
 
 
             'avif-natural-source' => '0',
-            'single-url-image-format' => 'same-ext', 
+            'single-url-image-format' => 'same-ext', // Safe forces the single-URL floor (consistent with avif-natural-source off)
             'fetchpriority-high' => '0',
             'speculation-rules' => '0',
             'lazy' => '0',
             'remove-srcset' => '0',
             'background-sizing' => '0',
-            'optimize-lcp' => '0', 
-            'modern_image_delivery' => '0', 
+            'optimize-lcp' => '0', // BETA: device-independent LCP srcset, available since 7.00.08
+            'modern_image_delivery' => '0', // BETA: native <picture> + srcset, JS-free, available since 7.01.0
             'modern_delivery_prefer_local' => '0',
             'qualityLevel' => '1',
             'optimization' => 'lossless',
@@ -214,9 +201,6 @@ class wps_ic_options
             'iframe-lazy' => '0',
             'video-preload-none' => 0,
             'critical' => ['css' => '0'],
-            'css_minify' => '0',
-            'css_combine' => '0',
-            'inline-css' => '0',
             'js_combine' => '0',
             'js_minify' => '0',
             'js_defer' => '0',
@@ -251,14 +235,14 @@ class wps_ic_options
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
             'eu-routing' => '0',
-            
+            // Local optimization defaults (Smart Optimization preset)
             'backup' => 'local',
             'maxWidth' => '2560',
             'local_qualityLevel' => '0',
         ];
 
         $this::$liteSettings = [
-            'imagesPreset' => '1',
+            'imagesPreset' => '0',
             'cdnAll' => '0',
             'live-cdn' => '0',
             'serve' => [
@@ -270,24 +254,24 @@ class wps_ic_options
             'css' => '0',
             'js' => '0',
             'fonts' => '0',
-            'generate_adaptive' => '1',
-            'generate_webp' => '1',
-            'picture_webp' => '1',
-            'picture_avif' => '1',
-            'retina' => '1',
+            'generate_adaptive' => '0',
+            'generate_webp' => '0',
+            'picture_webp' => '0',
+            'picture_avif' => '0',
+            'retina' => '0',
             'retina-in-srcset' => '0',
             'avif-natural-source' => 1,
-            'single-url-image-format' => 'auto', 
+            'single-url-image-format' => 'auto', // Regime B default
             'nativeLazy' => '1',
             'lazy' => '1',
             'remove-srcset' => '0',
             'background-sizing' => '0',
-            'optimize-lcp' => '0', 
-            'modern_image_delivery' => '0', 
+            'optimize-lcp' => '0', // BETA: device-independent LCP srcset, available since 7.00.08
+            'modern_image_delivery' => '0', // BETA: native <picture> + srcset, JS-free, available since 7.01.0
             'modern_delivery_prefer_local' => '0',
             'qualityLevel' => '1',
             'optimization' => 'lossless',
-            'on-upload' => 1,
+            'on-upload' => 0,
             'emoji-remove' => 0,
             'remove-duplicated-fontawesome' => 0,
             'disable-oembeds' => 0,
@@ -302,10 +286,7 @@ class wps_ic_options
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
             'icon-font-display' => 'block',
-            'critical' => ['css' => '1'],
-            'css_minify' => '0',
-            'css_combine' => '0',
-            'inline-css' => '0',
+            'critical' => ['css' => '0'],
             'js_combine' => '0',
             'js_minify' => '0',
             'js_defer' => '0',
@@ -341,8 +322,8 @@ class wps_ic_options
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
             'eu-routing' => '0',
-            
-            'picture_avif' => 1,
+            // Local optimization defaults (Smart Optimization preset)
+            'picture_avif' => 0,
             'backup' => 'local',
             'maxWidth' => '2560',
             'local_qualityLevel' => '0',
@@ -371,7 +352,7 @@ class wps_ic_options
             'retina' => 1,
             'retina-in-srcset' => 1,
             'avif-natural-source' => 1,
-            'single-url-image-format' => 'auto', 
+            'single-url-image-format' => 'auto', // Regime B default
             'lazy' => 1,
             'nativeLazy' => 1,
             'remove-srcset' => 0,
@@ -395,9 +376,6 @@ class wps_ic_options
             'fontawesome-lazy' => 1,
             'icon-font-display' => 'block',
             'critical' => ['css' => 1],
-            'css_minify' => 0,
-            'css_combine' => 0,
-            'inline-css' => 0,
             'js_combine' => 0,
             'js_minify' => 0,
             'js_defer' => 0,
@@ -435,7 +413,7 @@ class wps_ic_options
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
             'eu-routing' => '0',
-            
+            // Local optimization defaults (Smart Optimization preset)
             'picture_avif' => 1,
             'backup' => 'local',
             'maxWidth' => '2560',
@@ -461,7 +439,6 @@ class wps_ic_options
                 'permalink_structure_changed',
                 'customize_save',
                 'update_option_theme_mods_' . get_option('stylesheet', ''),
-                'elementor/core/files/clear_cache',
                 'uagb_delete_uag_asset_dir',
 				'uagb_delete_page_assets',
                 'et_core_static_resources_removed',
@@ -531,8 +508,6 @@ class wps_ic_options
 
         $preloadSettings = $settings;
         $preloadSettings['critical']['css'] = 1;
-        $preloadSettings['css_combine'] = 0;
-        $preloadSettings['inline-css'] = 0;
         $preloadSettings['delay-js'] = 0;
         $preloadSettings['delay-js-v2'] = 0;
         $preloadSettings['inline-js'] = 0;
@@ -561,6 +536,32 @@ class wps_ic_options
     }
 
 
+    /**
+     * The settings whose change can change what the critical CSS should contain: the purgeList
+     * entries tagged 'critical', named the way a save's changed_keys names them (a nested key as
+     * 'parent,child'). The settings screen reads the purgeList itself; the batch save and the
+     * agency relay read this, so both sides mark crit stale for the same keys.
+     */
+    public function criticalPurgeKeys()
+    {
+        $keys = [];
+        foreach ($this->purgeList as $key => $rule) {
+            $isNested = is_array($rule) && array_keys($rule) !== range(0, count($rule) - 1);
+            if (!$isNested) {
+                if (in_array('critical', (array) $rule, true)) {
+                    $keys[] = (string) $key;
+                }
+                continue;
+            }
+            foreach ($rule as $subKey => $subRule) {
+                if (in_array('critical', (array) $subRule, true)) {
+                    $keys[] = $key . ',' . $subKey;
+                }
+            }
+        }
+        return $keys;
+    }
+
     public function getPurgeList($settings)
     {
         $currentSettings = get_option(WPS_IC_SETTINGS);
@@ -568,16 +569,16 @@ class wps_ic_options
         foreach ($settings as $option_key => $option_value) {
             if (is_array($option_value)) {
                 foreach ($option_value as $sub_key => $sub_value) {
-                    
+                    // Check if the current setting exists and has changed
                     if (isset($currentSettings[$option_key][$sub_key]) && $currentSettings[$option_key][$sub_key] != $sub_value) {
-                        
+                        // Check if the change is relevant for purging
                         if (isset($this->purgeList[$option_key][$sub_key])) {
                             $whatToPurge = array_merge($whatToPurge, $this->purgeList[$option_key][$sub_key]);
                         }
                     }
                 }
             } else {
-                
+                // For non-array options, check if the setting has changed and is relevant for purging
                 if (isset($currentSettings[$option_key]) && $currentSettings[$option_key] != $option_value && isset($this->purgeList[$option_key])) {
                     $whatToPurge = array_merge($whatToPurge, $this->purgeList[$option_key]);
                 }
@@ -587,9 +588,9 @@ class wps_ic_options
     }
 
 
-    
-
-
+    /**
+     * Save settings
+     */
     public function save_settings()
     {
         if (!empty($_POST)) {
@@ -662,7 +663,7 @@ class wps_ic_options
                 }
             }
 
-            
+            // Sanitize
             foreach ($_POST['wp-ic-setting'] as $key => $value) {
                 $_POST['wp-ic-setting'][$key] = $value;
             }
@@ -672,10 +673,10 @@ class wps_ic_options
     }
 
 
-    
-
-
-
+    /**
+     * Get compress stats (total images, total saved)
+     * @return mixed|void
+     */
     public function get_stats()
     {
         global $wpdb;
@@ -687,9 +688,9 @@ class wps_ic_options
     }
 
 
-    
-
-
+    /**
+     * Update stats
+     */
     public function update_stats($attachment_ID = 1, $saved = '', $action = 'add')
     {
         global $wpdb;
@@ -701,15 +702,15 @@ class wps_ic_options
             $query = $wpdb->prepare("INSERT INTO " . $wpdb->prefix . "ic_compressed (created, attachment_ID, saved, count) VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE created=%s, count=count+1, restored=0", current_time('mysql'), $attachment_ID, $saved, current_time('mysql'), '1');
             $wpdb->query($query);
         } else {
-            
+            //
         }
     }
 
 
-    
-
-
-
+    /**
+     * Get various settings for WP Compress
+     * @return mixed|void
+     */
     public function get_settings()
     {
         $settings = get_option(WPS_IC_SETTINGS);
@@ -723,16 +724,16 @@ class wps_ic_options
     }
 
 
-    
-
-
+    /**
+     * Set recommended options
+     */
     public function set_recommended_options()
     {
-        $wpc_rec67 = self::$recommendedSettings;
-        if (function_exists('wpc_preset_cache_gate67')) {
-            $wpc_rec67 = wpc_preset_cache_gate67($wpc_rec67);
+        $recommended = self::$recommendedSettings;
+        if (function_exists('wpc_drop_preset_advanced_cache_if_foreign')) {
+            $recommended = wpc_drop_preset_advanced_cache_if_foreign($recommended);
         }
-        update_option(WPS_IC_SETTINGS, $wpc_rec67);
+        update_option(WPS_IC_SETTINGS, $recommended);
 
 
         update_option('wpc_settings_initialized', '1', false);
@@ -759,12 +760,12 @@ class wps_ic_options
     }
 
 
-    
-
-
-
-
-
+    /**
+     * Set option with key and value
+     *
+     * @param $key
+     * @param $value
+     */
     public function set_option($key, $value)
     {
         $options = get_option(WPS_IC_OPTIONS);
@@ -772,9 +773,9 @@ class wps_ic_options
         update_option(WPS_IC_OPTIONS, $options);
     }
 
-    
-
-
+    /**
+     * Setup default settings
+     */
     public function set_defaults()
     {
         $this->set_recommended_options();

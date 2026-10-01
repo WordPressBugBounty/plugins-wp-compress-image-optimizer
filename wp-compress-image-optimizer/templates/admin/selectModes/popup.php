@@ -1,12 +1,4 @@
-<?php
-
-
-
-
-
-
-
- if (!defined('WPS_IC_TEXTDOMAIN')) return; ?>
+<?php if (!defined('WPS_IC_TEXTDOMAIN')) return; ?>
 <div id="select-mode" style="display: none;">
     <div id="select-mode-popup-inner" class="ajax-settings-popup bottom-border">
 
@@ -170,29 +162,29 @@
                                 <?php
                                  ?>
                                 <?php
-                                $wpc_set41 = get_option(WPS_IC_SETTINGS);
-                                $wpc_cdn_on41 = !is_array($wpc_set41) || !isset($wpc_set41['live-cdn']);
-                                if (!$wpc_cdn_on41 && !empty($wpc_set41['live-cdn']) && $wpc_set41['live-cdn'] == '1') {
-                                    $wpc_cdn_on41 = true;
+                                $modeSettings = get_option(WPS_IC_SETTINGS);
+                                $cdnOn = !is_array($modeSettings) || !isset($modeSettings['live-cdn']);
+                                if (!$cdnOn && !empty($modeSettings['live-cdn']) && $modeSettings['live-cdn'] == '1') {
+                                    $cdnOn = true;
                                 }
-                                if (!$wpc_cdn_on41 && !empty($wpc_set41['serve']) && is_array($wpc_set41['serve'])) {
-                                    foreach ($wpc_set41['serve'] as $wpc_sv41) {
-                                        if ($wpc_sv41 == '1') { $wpc_cdn_on41 = true; break; }
+                                if (!$cdnOn && !empty($modeSettings['serve']) && is_array($modeSettings['serve'])) {
+                                    foreach ($modeSettings['serve'] as $serveValue) {
+                                        if ($serveValue == '1') { $cdnOn = true; break; }
                                     }
                                 }
-                                foreach (['css', 'js', 'fonts'] as $wpc_k41) {
-                                    if (!$wpc_cdn_on41 && !empty($wpc_set41[$wpc_k41]) && $wpc_set41[$wpc_k41] == '1') {
-                                        $wpc_cdn_on41 = true;
+                                foreach (['css', 'js', 'fonts'] as $cdnSettingKey) {
+                                    if (!$cdnOn && !empty($modeSettings[$cdnSettingKey]) && $modeSettings[$cdnSettingKey] == '1') {
+                                        $cdnOn = true;
                                     }
                                 }
                                 ?>
                                 <div class="wpc-cdn-mode-enabled">
                                     <input class="form-check-input checkbox mt-0" data-for-div-id="mode-options"
                                            type="checkbox" value="1" id="mode-options" name="mode-options"
-                                           <?php echo $wpc_cdn_on41 ? 'checked="checked"' : ''; ?>>
+                                           <?php echo $cdnOn ? 'checked="checked"' : ''; ?>>
                                     <label class="with-label" for="mode-options"><span></span></label>
                                 </div>
-                                <?php ?>
+                                <?php #} ?>
                             </div>
                         </div>
                     </div>

@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-pull-manifest.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 if (!defined('ABSPATH')) {
@@ -17,7 +9,7 @@ if (!defined('ABSPATH')) {
 if (!function_exists('wpc_v2_pull_enabled')) {
     function wpc_v2_pull_enabled()
     {
-        if (function_exists('wpc_policy23_land') && wpc_policy23_land() === 'off') {
+        if (function_exists('wpc_policy_land') && wpc_policy_land() === 'off') {
             return (bool) apply_filters('wpc_v2_pull_enabled', false);
         }
         $opt = get_site_option('wpc_v2_pull_enabled', null);
@@ -36,19 +28,13 @@ if (!function_exists('wpc_v2_manifest_sign_get')) {
             'apikey=%s&since=%d&limit=%d&wait_ms=%d',
             (string) $apikey, (int) $since, (int) $limit, (int) $wait_ms
         );
-        return [
-            'X-WPC-Sig'       => hash_hmac('sha256', $canonical, (string) $apikey),
-            'X-WPC-Timestamp' => (string) time(),
-        ];
+        return wpc_v2_service_sign($apikey, $canonical);
     }
 }
 if (!function_exists('wpc_v2_manifest_sign_body')) {
     function wpc_v2_manifest_sign_body($apikey, $body_raw)
     {
-        return [
-            'X-WPC-Sig'       => hash_hmac('sha256', (string) $body_raw, (string) $apikey),
-            'X-WPC-Timestamp' => (string) time(),
-        ];
+        return wpc_v2_service_sign($apikey, (string) $body_raw);
     }
 }
 
@@ -83,20 +69,20 @@ if (!function_exists('wpc_v2_pull_manifest_fetch')) {
         $since_ms = max(0, (int) $since_ms);
         $limit    = max(1, min(500, (int) $limit));
 
-        
-        
+        // 0 = short-poll. Capped at 25s to stay under the shared-host 30s
+        // max_execution_time default.
         $wait_ms  = max(0, min(25000, (int) $wait_ms));
 
         $all_variants  = [];
         $high_water    = $since_ms;
         $pages_fetched = 0;
         $next_since    = $since_ms;
-        
-        
+        // Safety cap on the paginated walk (20 pages × 500 = 10K/tick). More
+        // than one tick should ever drain; the rest waits for next tick.
         $max_pages     = 20;
 
         while ($pages_fetched < $max_pages) {
-            
+            // Only the first page long-polls; later pages drain immediately
 
             $page_wait_ms = ($pages_fetched === 0) ? $wait_ms : 0;
 
@@ -107,7 +93,7 @@ if (!function_exists('wpc_v2_pull_manifest_fetch')) {
                  . '&limit='   . $limit
                  . '&wait_ms=' . $page_wait_ms;
 
-            
+            // Timeout = wait_ms + 5s transport buffer; floor 8s for short-poll.
             $http_timeout = $page_wait_ms > 0
                 ? (int) ceil(($page_wait_ms + 5000) / 1000)
                 : 8;
@@ -127,17 +113,17 @@ if (!function_exists('wpc_v2_pull_manifest_fetch')) {
             }
             $code = (int) wp_remote_retrieve_response_code($resp);
             if ($code !== 200) {
-                
+                // Honor 429 with backoff — without it the drain self-chain
 
-                
+                // Set a cool-off lock; honor Retry-After if sent (clamped 10-300s).
                 if ($code === 429) {
                     $retry_after = 60;
                     $hdr = wp_remote_retrieve_header($resp, 'retry-after');
                     if ($hdr !== '' && is_numeric($hdr)) {
                         $retry_after = max(10, min(300, (int) $hdr));
                     }
-                    
-                    
+                    // Extending the drain-running transient's TTL pauses all
+                    // drain dispatches (wpc_v2_pull_drain_fire checks it).
                     set_transient('wpc_v2_drain_running', time(), $retry_after);
                     error_log(sprintf(
                         '[WPC PullManifest] http_429_backoff retry_after=%ds since=%d',
@@ -166,8 +152,8 @@ if (!function_exists('wpc_v2_pull_manifest_fetch')) {
                 $high_water = (int) $body['cursor_high_water_ms'];
             }
 
-            
-            
+            // Page via next_cursor_ms (oldest completed_at_ms in this page,
+            // since entries are newest-first); continue only while has_more.
             if (empty($body['has_more']) || empty($body['next_cursor_ms'])) {
                 break;
             }
@@ -196,23 +182,23 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
             return ['queued' => 0, 'skipped_dedup' => 0, 'skipped_invalid' => 0, 'imageIDs' => []];
         }
 
-        
+        // Bucket by imageID. Each bucket becomes one journal file.
         $by_image        = [];
         $skipped_dedup   = 0;
         $skipped_invalid = 0;
 
-        
-        
+        // Lazy-CDN ingest stats — separate from journal counts because lazy_cdn
+        // entries skip the journal (direct disk write, no postmeta).
         $lazycdn_acked   = [];
         $lazycdn_failed  = 0;
         $lazycdn_ingested = 0;
 
 
         $min_failed_ms   = 0;
-        $failed_entries197 = [];
-        $fail197 = function ($v, $reason) use (&$failed_entries197) {
-            if (count($failed_entries197) >= 50) return;
-            $failed_entries197[] = [
+        $failed_entries = [];
+        $record_failure = function ($v, $reason) use (&$failed_entries) {
+            if (count($failed_entries) >= 50) return;
+            $failed_entries[] = [
                 'imageID'   => isset($v['imageID'])   ? (string) $v['imageID']   : '',
                 'sizeLabel' => isset($v['sizeLabel']) ? (string) $v['sizeLabel'] : '',
                 'format'    => isset($v['format'])    ? (string) $v['format']    : '',
@@ -245,8 +231,8 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
                 $entry_source = 'lazycdn';
             }
             if ($entry_source === 'lazycdn') {
-                
-                
+                // Hoist origin_url + origin_host to top-level — the ingest
+                // function reads them from top-level only.
                 if (!isset($v['origin_url']) && isset($v['tags']['origin_url'])) {
                     $v['origin_url'] = (string) $v['tags']['origin_url'];
                 }
@@ -272,7 +258,7 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
 
                     } else {
                         $lazycdn_failed++;
-                        $fail197($v, 'lazycdn_ingest_failed');
+                        $record_failure($v, 'lazycdn_ingest_failed');
 
                         $f_ms = isset($v['completed_at_ms']) ? (int) $v['completed_at_ms'] : 0;
 
@@ -340,12 +326,12 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
                     $dbg_invalid_dumped++;
                 }
                 $skipped_invalid++;
-                $fail197($v, 'invalid_entry');
+                $record_failure($v, 'invalid_entry');
                 continue;
             }
 
-            
-            
+            // Already on disk (matching sha256)? The pull would be idempotent
+            // but skipping it saves the bandwidth + round trip.
             if (wpc_v2_pull_manifest_already_on_disk($imageID, $size, $format, $sha256)) {
                 $skipped_dedup++;
                 continue;
@@ -355,7 +341,7 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
             $abs_parent = get_attached_file($imageID);
             if (!$abs_parent) {
                 $skipped_invalid++;
-                $fail197($v, 'no_attached_file');
+                $record_failure($v, 'no_attached_file');
                 continue;
             }
             $dest_dir = dirname($abs_parent);
@@ -378,8 +364,8 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
                 'dest_dir'     => $dest_dir,
                 'originalSize' => isset($v['originalSize']) ? (int) $v['originalSize'] : 0,
                 'ms'           => isset($v['completed_at_ms']) ? (int) $v['completed_at_ms'] : (int) round(microtime(true) * 1000),
-                
-                
+                // Surfaced so journal-drain telemetry can split push vs
+                // lazy_first_render vs backfill in logs.
                 'delivery_method' => isset($v['delivery_method']) ? (string) $v['delivery_method'] : 'push',
                 'source'       => 'pull_manifest',
             ];
@@ -389,7 +375,7 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
 
         $queued    = 0;
         $imageIDs  = [];
-        
+        // Track sha256s whose journal write failed so the caller can EXCLUDE
 
 
         $journal_failed_sha256s = [];
@@ -401,14 +387,14 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
                 $queued     += count($group['entries']);
                 $imageIDs[]  = $imageID;
             } else {
-                
+                // Journal write failed — mark all entries' sha256s do-not-ack.
                 foreach ($group['entries'] as $entry) {
 
-                    $fail197(['imageID' => $imageID, 'sizeLabel' => $entry['sizeLabel'] ?? '', 'format' => $entry['format'] ?? ''], 'journal_write_failed');
+                    $record_failure(['imageID' => $imageID, 'sizeLabel' => $entry['sizeLabel'] ?? '', 'format' => $entry['format'] ?? ''], 'journal_write_failed');
                     if (!empty($entry['bytes_sha256'])) {
                         $journal_failed_sha256s[(string) $entry['bytes_sha256']] = true;
                     }
-                    
+                    // Retry-eligible failure: keep the cursor below it.
                     $f_ms = isset($entry['ms']) ? (int) $entry['ms'] : 0;
                     if ($f_ms > 0 && ($min_failed_ms === 0 || $f_ms < $min_failed_ms)) $min_failed_ms = $f_ms;
                 }
@@ -432,17 +418,17 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
             'skipped_dedup'   => $skipped_dedup,
             'skipped_invalid' => $skipped_invalid,
             'imageIDs'        => $imageIDs,
-            
-            
+            // Lazy-CDN ack-allowlist: caller acks ONLY entries whose sha256 is
+            // in lazycdn_acked_sha256s (ingest succeeded). Failed ones stay
 
             'lazycdn_ingested'      => $lazycdn_ingested,
             'lazycdn_failed'        => $lazycdn_failed,
             'lazycdn_acked_sha256s' => array_values(array_unique($lazycdn_acked)),
-            
+            // Journal-write failures (same pattern) — caller excludes from ack.
             'journal_failed_sha256s' => array_keys($journal_failed_sha256s),
-            
+            // Oldest retry-eligible failure ms (0 = none); caller clamps cursor below.
             'min_failed_completed_ms' => $min_failed_ms,
-            'failed_entries197'       => $failed_entries197,
+            'failed_entries197'       => $failed_entries,
         ];
     }
 }
@@ -458,7 +444,7 @@ if (!function_exists('wpc_v2_pull_manifest_already_on_disk')) {
         if (!is_array($variants) || empty($variants)) {
             return false;
         }
-        
+        // Canonical key (jpeg = no suffix, all sizes). Must match wpc_v2_variant_key().
         $key = function_exists('wpc_v2_variant_key')
             ? wpc_v2_variant_key($size, $format)
             : ($format === 'jpeg' || $format === 'jpg' ? $size : $size . '-' . $format);
@@ -483,13 +469,13 @@ if (!function_exists('wpc_v2_pull_manifest_ack')) {
             return false;
         }
 
-        
-        
-        $wpc_body197 = ['acks' => array_values($acks)];
+        // HMAC body signing — build the JSON once and sign those exact bytes;
+        // re-encoding after signing would break the HMAC.
+        $ack_body = ['acks' => array_values($acks)];
         if (!empty($receipt)) {
-            $wpc_body197['receipt'] = $receipt;
+            $ack_body['receipt'] = $receipt;
         }
-        $body_raw = wp_json_encode($wpc_body197);
+        $body_raw = wp_json_encode($ack_body);
         $sig_headers = wpc_v2_manifest_sign_body($apikey, $body_raw);
 
         $url = rtrim($orch_url, '/') . '/optimize-v2/manifest/ack?apikey=' . rawurlencode($apikey);
@@ -553,14 +539,14 @@ if (!function_exists('wpc_v2_pull_drain_fire')) {
             if (wpc_v2_ingest_diag_on()) update_option('wpc_v2_last_drain_skip', ['t'=>time(),'reason'=>'pull_disabled'], false);
             return false;
         }
-        
+        // Honor the rate-limit cool-off the drain loop sets on 429.
         if (($cooloff_ts = (int) get_transient('wpc_v2_pull_cooloff')) > 0) {
             error_log(sprintf('[WPC DrainFire] skip reason=cooloff_active until=%d', $cooloff_ts));
             if (wpc_v2_ingest_diag_on()) update_option('wpc_v2_last_drain_skip', ['t'=>time(),'reason'=>'cooloff_active','until'=>$cooloff_ts], false);
             return false;
         }
-        
-        
+        // Skip if another drain worker is already running. Short TTL (15s)
+        // ensures a queued/dropped worker doesn't permanently block.
         if (($lock_ts = (int) get_transient('wpc_v2_drain_running')) > 0) {
 
 
@@ -636,69 +622,30 @@ if (!function_exists('wpc_v2_pull_drain_fire')) {
                 if ($pd_sock) { $fp = $pd_sock; break; }
             }
         }
+        // Every drain start leaves image-drain-fire {dispatched, items}: the cron, the wake route
+        // and the drain's own continuation are its only callers, so a receipt from a visitor's
+        // request is the per-request trigger coming back.
         if (!$fp) {
 
             delete_transient('wpc_v2_drain_running');
             error_log('[WPC PullDrain] fsockopen_failed errno=' . $errno . ' err=' . $errstr);
+            wpc_cache_first_log('image-drain-fire', '', '', ['dispatched' => 0, 'items' => is_array($wake_items) ? count($wake_items) : 0]);
             return false;
         }
         @stream_set_timeout($fp, 0, 100000);
         @fwrite($fp, $req);
         @fclose($fp);
-        
-        
+        // Fresh worker dispatched — it covers any wake flagged while a previous
+        // worker held the lock.
         delete_transient('wpc_v2_redrain_pending');
+        wpc_cache_first_log('image-drain-fire', '', '', ['dispatched' => 1, 'items' => is_array($wake_items) ? count($wake_items) : 0]);
         return true;
     }
 }
 
 
-if (!function_exists('wpc_v2_deferred_pull_drain_fire')) {
-    function wpc_v2_deferred_pull_drain_fire()
-    {
-        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
-            wpc_finish_request39();
-        } elseif (function_exists('litespeed_finish_request')) {
-            @litespeed_finish_request();
-        }
-        if (function_exists('wpc_v2_pull_drain_fire')) {
-            wpc_v2_pull_drain_fire();
-        }
-
-
-        wp_cache_delete('wpc_v2_drain_alive_until_ms', 'options');
-        $wpc_drain_window_open = ((int) get_option('wpc_v2_drain_alive_until_ms', 0) > (int) round(microtime(true) * 1000));
-        if ($wpc_drain_window_open && function_exists('wpc_v2_pull_drain_loop_handler')) {
-            @ignore_user_abort(true);
-            @set_time_limit(150);
-            wpc_diag_sleep(3, 'pull-drain');
-            if (!get_transient('wpc_v2_drain_worker_started')) {
-                $apikey_inline = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
-                if ($apikey_inline !== '') {
-                    error_log('[WPC PageLoadDrain] loopback_worker_never_started — running drain inline');
-                    $_POST['t']   = (string) time();
-                    $_POST['sig'] = hash_hmac('sha256', 'wpc_v2_pull_drain.' . $_POST['t'], $apikey_inline);
-                    wpc_v2_pull_drain_loop_handler();
-                }
-            }
-        }
-    }
-}
-if (!function_exists('wpc_v2_register_deferred_pull_drain')) {
-    function wpc_v2_register_deferred_pull_drain()
-    {
-        static $registered = false;
-        if ($registered) {
-            return;
-        }
-        $registered = true;
-        register_shutdown_function('wpc_v2_deferred_pull_drain_fire');
-    }
-}
-
-
-
-
+// The deadline (drain_alive_until_ms) was meant to end the chain, but every chained worker
+// RE-ARMS it (self-arm below), and needs_continuation() stays true forever on one stuck
 
 
 if (!function_exists('wpc_v2_pull_state_file')) {
@@ -771,7 +718,7 @@ if (!function_exists('wpc_v2_pull_failcount')) {
         if (!is_dir($dir) && function_exists('wp_mkdir_p')) { @wp_mkdir_p($dir); }
         return is_dir($dir) ? $dir . '/.pull_failcounts' : '';
     }
-    
+    // $delta: +1 = record a failure (returns new count); 0 = clear on success (returns 0).
     function wpc_v2_pull_failcount($sha, $delta) {
         $f = wpc_v2_pull_failcount_file();
         if ($f === '' || (string) $sha === '') { return 0; }
@@ -796,7 +743,7 @@ if (!function_exists('wpc_v2_pull_failcount')) {
 if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
     function wpc_v2_pull_drain_loop_handler()
     {
-        
+        // HMAC auth — matches journal drain pattern.
         $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
         $ts     = isset($_POST['t']) ? (int) $_POST['t'] : 0;
         $sig    = isset($_POST['sig']) ? (string) $_POST['sig'] : '';
@@ -823,13 +770,13 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
             'ua'  => isset($_SERVER['HTTP_USER_AGENT']) ? substr((string) $_SERVER['HTTP_USER_AGENT'], 0, 40) : '',
         ], false);
 
-        
+        // Close client connection immediately — work runs in background.
         if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
             http_response_code(200);
             echo 'queued';
-            wpc_finish_request39();
+            wpc_finish_request();
         }
-        
+        // For non-FPM hosts, ignore_user_abort lets us continue past client close.
         @ignore_user_abort(true);
         @set_time_limit(60);
 
@@ -845,8 +792,8 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
 
 
         $wake_items_raw = isset($_POST['items']) ? wp_unslash((string) $_POST['items']) : '';
-        
-        
+        // Guard the raw length before decoding + clamp the count (mirror the
+        // send-side cap) so a bloated sender can't force an unbounded decode.
         $wake_decoded   = ($wake_items_raw !== '' && strlen($wake_items_raw) <= 65536) ? json_decode($wake_items_raw, true) : null;
         $wake_expect    = is_array($wake_decoded) ? min(count($wake_decoded), 50) : 0;
 
@@ -867,7 +814,7 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
             wp_cache_delete('wpc_v2_drain_alive_until_ms', 'options');
             $deadline_ms = (int) get_option('wpc_v2_drain_alive_until_ms', 0);
             if ($deadline_ms > 0 && $now_ms >= $deadline_ms) {
-                
+                // Deadline reached — exit clean, no self-chain.
                 error_log(sprintf(
                     '[WPC PullDrain] deadline_reached iter=%d queued_total=%d wall_ms=%d',
                     $polls, $total_queued, (int) round((microtime(true) - $started) * 1000)
@@ -878,8 +825,8 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
 
             $polls++;
 
-            
-            
+            // Honor bulk STOP (hard) — stand down and clear the deadline so
+            // nothing re-fires.
             if (get_transient('wpc_bulk_stop_signal')) {
                 error_log('[WPC PullDrain] stop_signal — standing down (bulk stopped)');
                 delete_option('wpc_v2_drain_alive_until_ms');
@@ -888,22 +835,22 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
             }
 
             $restoring = wpc_v2_active_restore_count();
-            
+            // Yield FPM workers to an active restore (soft): a throttle cap
 
-            
-            
+            // Defer the drain entirely while a restore runs, but BUMP the deadline
+            // +60s so the pipeline resumes once restore clears (the next tick re-fires).
             if ($restoring > 0) {
                 update_option('wpc_v2_drain_alive_until_ms', (int) (microtime(true) * 1000) + 60000, false);
                 error_log(sprintf('[WPC PullDrain] yield_to_restore restoring=%d queued_total=%d — defer (deadline bumped)', $restoring, $total_queued));
                 delete_transient('wpc_v2_drain_running');
                 exit;
             }
-            
-            
-            
-            
-            
-            
+            // v7.21.363 — the box belongs to the visitor too. .360 sheds the kick lane
+            // under pressure; this lane was never gated and held a worker 26-29s with
+            // 20-34 outbound calls while load1 sat at 30 (rosariospadaro, bulk media run).
+            // Yield exactly the way a restore does — bump the deadline so the bulk run
+            // RESUMES when the box cools. Deferred, never dropped. Checked every
+            // iteration, so a drain that starts cool and heats up still lets go.
             if (apply_filters('wpc_drain_pressure_gate', true)
                 && function_exists('wpc_under_pressure') && wpc_under_pressure()) {
                 update_option('wpc_v2_drain_alive_until_ms', (int) (microtime(true) * 1000) + 60000, false);
@@ -939,7 +886,7 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
             $wake_ingested += isset($tick['lazycdn_ingested']) ? (int) $tick['lazycdn_ingested'] : 0;
 
             if ($queued_this > 0) {
-                
+                // Variants landed — extend deadline 30s from now.
                 $new_deadline = $now_ms + 30000;
                 if ($new_deadline > $deadline_ms) {
                     update_option('wpc_v2_drain_alive_until_ms', $new_deadline, false);
@@ -973,7 +920,7 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
                 }
             }
 
-            
+            // Refresh running marker each iteration (15s TTL).
             set_transient('wpc_v2_drain_running', time(), 15);
         }
 
@@ -1018,14 +965,14 @@ if (!function_exists('wpc_v2_active_restore_count')) {
 
 
 if (!function_exists('wpc_v2_pending_live_count')) {
-    
-
-
-
-
-
-
-
+    /**
+     * v7.10.834 — csuithoorn: the drain self-chained every ~5 minutes on queued_total=0 for
+     * days, 27% of the site's own traffic. Root cause: the pending checks did a raw LIKE on
+     * _transient_wpc_v2_pending_% rows, and EXPIRED transients keep their rows until a keyed
+     * fetch garbage-collects them — a graveyard from one failed-connectivity window reads as
+     * "work pending" forever. This validates each candidate through get_transient (which GCs
+     * the corpse as a side effect), bounded at 8 rows per call.
+     */
     function wpc_v2_pending_live_count($cap = 8)
     {
         global $wpdb;
@@ -1051,14 +998,14 @@ if (!function_exists('wpc_v2_pull_drain_needs_continuation')) {
         if (wpc_v2_pending_live_count(8) > 0) {
             return true;
         }
-        
-        
-        
+        // ic_compressing meta has no expiry — a crashed bulk leaves it forever. Only trust it
+        // while the bulk machinery itself says a run is active; a stale marker alone must not
+        // keep the drain alive (same forever-true class as the expired transients).
         wp_cache_delete('wps_ic_bulk_process', 'options');
-        $wpc_bp834 = get_option('wps_ic_bulk_process');
-        $wpc_bulk834 = is_array($wpc_bp834) && isset($wpc_bp834['status'])
-            && in_array((string) $wpc_bp834['status'], ['queueing', 'optimizing', 'restoring'], true);
-        if (!$wpc_bulk834) {
+        $bulk_process = get_option('wps_ic_bulk_process');
+        $bulk_active = is_array($bulk_process) && isset($bulk_process['status'])
+            && in_array((string) $bulk_process['status'], ['queueing', 'optimizing', 'restoring'], true);
+        if (!$bulk_active) {
             return false;
         }
         $active = $wpdb->get_var(
@@ -1085,12 +1032,12 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
             return ['ok' => false, 'reason' => 'flag_off'];
         }
 
-        
+        // Honor bulk STOP (hard): don't fetch/queue/drain after Stop.
         if (get_transient('wpc_bulk_stop_signal')) {
             return ['ok' => false, 'reason' => 'bulk_stopped'];
         }
-        
-        
+        // Yield to an active restore (soft): skip the FPM-heavy fetch+
+        // drain while a restore runs, but keep the deadline alive so the pipeline
 
         if (wpc_v2_active_restore_count() > 0) {
             update_option('wpc_v2_drain_alive_until_ms', (int) (microtime(true) * 1000) + 60000, false);
@@ -1105,8 +1052,8 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
 
         $t_fetch_ms = (int) round((microtime(true) - $started) * 1000);
         if (empty($fetch['ok'])) {
-            
-            
+            // Forward retry_after so the drain loop can set
+            // its cool-off lock with the right TTL.
             $ret = [
                 'ok'      => false,
                 'reason'  => isset($fetch['error']) ? $fetch['error'] : 'fetch_failed',
@@ -1121,7 +1068,7 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
         $variants = $fetch['variants'];
         if (empty($variants)) {
 
-            
+            // Prevents re-asking the same range every tick when nothing is new.
             if (!empty($fetch['cursor_high_water_ms'])) {
                 wpc_v2_pull_set_cursor((int) $fetch['cursor_high_water_ms']);
             }
@@ -1147,7 +1094,7 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
             wpc_v2_pull_set_cursor($cursor_to);
         }
 
-        
+        // Ack every variant we attempted (queued OR dedup-skipped).
 
 
         $lazycdn_ack_set = [];
@@ -1156,7 +1103,7 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
                 $lazycdn_ack_set[(string) $s] = true;
             }
         }
-        
+        // Journal-write-failure exclude set. Entries that failed
 
 
         $journal_failed_set = [];
@@ -1169,12 +1116,12 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
         foreach ($variants as $v) {
             if (!is_array($v) || empty($v['sha256'])) continue;
             $sha = (string) $v['sha256'];
-            
+            // Check three shapes (see queue_for_drain comment for details).
             $is_lazycdn_entry = (isset($v['source']) && $v['source'] === 'lazycdn')
                              || (isset($v['tags']['source']) && $v['tags']['source'] === 'lazycdn')
                              || (isset($v['imageID']) && is_string($v['imageID']) && strpos($v['imageID'], 'lazycdn') === 0);
             if ($is_lazycdn_entry) {
-                
+                // Only ack if ingest succeeded
                 if (!isset($lazycdn_ack_set[$sha])) continue;
 
 
@@ -1183,42 +1130,42 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
                     'sizeLabel' => isset($v['sizeLabel']) ? (string) $v['sizeLabel'] : '',
                     'format'    => isset($v['format'])    ? (string) $v['format']    : '',
                     'sha256'    => $sha,
-                ] + (!empty($GLOBALS['wpc_kept_original31'][$sha]) ? ['reason' => 'kept_original'] : []);
+                ] + (!empty($GLOBALS['wpc_kept_original_by_sha256'][$sha]) ? ['reason' => 'kept_original'] : []);
                 continue;
             }
-            
+            // Standard (non-lazy_cdn) ack path
             if (empty($v['imageID'])) continue;
 
-            
+            // 8d manifest TTL gives plenty of retry window.
             if (isset($journal_failed_set[$sha])) continue;
             $acks[] = [
                 'imageID'   => (int) $v['imageID'],
                 'sizeLabel' => isset($v['sizeLabel']) ? (string) $v['sizeLabel'] : '',
                 'format'    => isset($v['format'])    ? (string) $v['format']    : '',
                 'sha256'    => $sha,
-            ] + (!empty($GLOBALS['wpc_kept_original31'][$sha]) ? ['reason' => 'kept_original'] : []);
+            ] + (!empty($GLOBALS['wpc_kept_original_by_sha256'][$sha]) ? ['reason' => 'kept_original'] : []);
         }
-        $wpc_failed197 = isset($queue['failed_entries197']) && is_array($queue['failed_entries197'])
+        $failed_entries = isset($queue['failed_entries197']) && is_array($queue['failed_entries197'])
             ? $queue['failed_entries197'] : [];
-        $wpc_rejected_all197 = (count($variants) > 0
+        $rejected_all = (count($variants) > 0
             && (int) $queue['skipped_invalid'] === count($variants)
             && (int) $queue['queued'] === 0
             && (int) ($queue['lazycdn_ingested'] ?? 0) === 0);
-        if ($wpc_rejected_all197 && count($wpc_failed197) < 50) {
-            $wpc_failed197[] = ['imageID' => '', 'sizeLabel' => '', 'format' => '', 'reason' => 'all_variants_rejected_cursor_advanced'];
+        if ($rejected_all && count($failed_entries) < 50) {
+            $failed_entries[] = ['imageID' => '', 'sizeLabel' => '', 'format' => '', 'reason' => 'all_variants_rejected_cursor_advanced'];
         }
-        $wpc_receipt197 = [
+        $ack_receipt = [
             'seen'     => count($variants),
             'ingested' => (int) $queue['queued'] + (int) ($queue['lazycdn_ingested'] ?? 0),
-            'failed'   => $wpc_failed197,
+            'failed'   => $failed_entries,
         ];
         $t_a0 = microtime(true);
-        if ((!empty($acks) || !empty($wpc_failed197)) && function_exists('wpc_v2_pull_manifest_ack')) {
-            wpc_v2_pull_manifest_ack($acks, $wpc_receipt197);
+        if ((!empty($acks) || !empty($failed_entries)) && function_exists('wpc_v2_pull_manifest_ack')) {
+            wpc_v2_pull_manifest_ack($acks, $ack_receipt);
         }
         $t_ack_ms = (int) round((microtime(true) - $t_a0) * 1000);
 
-        
+        // Kick the drain. Fast loopback so this AJAX returns immediately.
         if ($queue['queued'] > 0 && function_exists('wpc_v2_journal_fire_loopback_fast')) {
             wpc_v2_journal_fire_loopback_fast();
         }
@@ -1275,54 +1222,230 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
 }
 
 
-if (!function_exists('wpc_v2_pull_reconcile_tick')) {
-    function wpc_v2_pull_reconcile_tick()
+if (!function_exists('wpc_v2_status_watch_add')) {
+    /**
+     * Put an image on the status watch: the service still owes it the variants its Phase A
+     * answer left pending. The watch is [imageID => time added]; only the status poll reads it
+     * and removes entries from it.
+     */
+    function wpc_v2_status_watch_add($imageID)
     {
-
-
-        if (is_admin() || (function_exists('wp_doing_ajax') && wp_doing_ajax())) {
-            return;
+        $imageID = (int) $imageID;
+        if ($imageID <= 0) return;
+        $watch = get_option('wpc_v2_status_watch', []);
+        if (!is_array($watch)) $watch = [];
+        $watch[$imageID] = time();
+        // Bounded: a site whose cron stopped must not grow the row without end. The oldest go
+        // first; their pending state has expired with the service's job state by then.
+        if (count($watch) > 500) {
+            asort($watch);
+            $watch = array_slice($watch, -500, null, true);
         }
-        if (!function_exists('wpc_v2_pull_enabled') || !wpc_v2_pull_enabled()) {
-            return;
-        }
-        
-        
-        if (get_transient('wpc_v2_pull_reconcile_throttle')) {
-            return;
-        }
-        if (function_exists('wpc_pressure_bounded28') ? wpc_pressure_bounded28('drain') : (function_exists('wpc_under_pressure') && wpc_under_pressure())) {
-            return;
-        }
-
-        
-        $wpc_prt5 = (int) get_option('wpc_v2_pull_reconcile_at');
-        if (time() - $wpc_prt5 < 5 * MINUTE_IN_SECONDS) {
-            return;
-        }
-        update_option('wpc_v2_pull_reconcile_at', time(), false);
-        set_transient('wpc_v2_pull_reconcile_throttle', time(), 5 * MINUTE_IN_SECONDS);
-
-
-        if (function_exists('wpc_v2_register_deferred_pull_drain')) {
-            wpc_v2_register_deferred_pull_drain();
-        } elseif (function_exists('wpc_v2_pull_drain_fire')) {
-            wpc_v2_pull_drain_fire();
-        }
+        update_option('wpc_v2_status_watch', $watch, false);
     }
-    add_action('shutdown', 'wpc_v2_pull_reconcile_tick', 5);
+}
+
+if (!function_exists('wpc_v2_status_poll')) {
+    /**
+     * The cron's first step: ask the service for the state of every watched image whose Phase B
+     * is still pending after a minute, and land what it answers delivered.
+     *
+     * Rule: a variant the service marks delivered is landed from the file its delivery wrote,
+     * through the variant-set owner, with the receipt image-recovered {id, via:status}. Observed
+     * failure: the callback answered 2xx (bytes on disk, journaled) and the worker died before
+     * the merge, so the image showed "Optimizing" until its pending state expired while the
+     * service had finished. A delivered variant whose bytes are not on this site is left to the
+     * manifest pull, the one fetch path. A variant the service failed for good leaves the pending
+     * list; an expired job (410) clears the pending state.
+     *
+     * @return array{polled:int, recovered:int}
+     */
+    function wpc_v2_status_poll()
+    {
+        $out = ['polled' => 0, 'recovered' => 0];
+        $watch = get_option('wpc_v2_status_watch', []);
+        if (!is_array($watch) || empty($watch)) return $out;
+        $now = time();
+        $cap = (int) apply_filters('wpc_v2_status_poll_max', 20);
+        $client = null;
+        foreach ($watch as $imageID => $since) {
+            $imageID = (int) $imageID;
+            $pending = get_transient('wpc_v2_pending_' . $imageID);
+            if (!is_array($pending) || empty($pending['pending'])) {
+                // The callbacks landed everything, or the pending state expired: nothing is owed.
+                unset($watch[$imageID]);
+                continue;
+            }
+            if ($now - (int) $since < 60) continue;
+            $jobId = isset($pending['jobId']) ? (string) $pending['jobId'] : '';
+            if ($jobId === '') {
+                // The service answers 400 without a jobId: there is nothing to ask.
+                unset($watch[$imageID]);
+                continue;
+            }
+            if ($out['polled'] >= $cap) break;
+            if ($client === null) {
+                $apikey = function_exists('wpc_v2_get_apikey') ? (string) wpc_v2_get_apikey() : '';
+                $orch = function_exists('wpc_v2_orchestrator_url') ? (string) wpc_v2_orchestrator_url() : '';
+                if ($apikey === '' || $orch === '' || !class_exists('WPS_LocalV2')) {
+                    wpc_cache_first_log('image-status-poll-skipped', '', '', ['reason' => $apikey === '' ? 'no-apikey' : 'no-client']);
+                    break;
+                }
+                $client = new WPS_LocalV2($apikey, $orch);
+            }
+            $out['polled']++;
+            $st = $client->get_status($imageID, $jobId);
+            if (empty($st['ok'])) {
+                if (($st['error'] ?? '') === 'gc_expired') {
+                    delete_transient('wpc_v2_pending_' . $imageID);
+                    unset($watch[$imageID]);
+                }
+                // 403 apikey_mismatch: the job was sent under another key and this key will never
+                // read it; asking every tick until the pending state expires only fills the log.
+                // The callbacks and the manifest still land whatever the service delivers.
+                if (($st['error'] ?? '') === 'apikey_mismatch') {
+                    unset($watch[$imageID]);
+                }
+                wpc_cache_first_log('image-status-poll-failed', '', '', ['id' => $imageID, 'error' => (string) ($st['error'] ?? ''), 'http' => (int) ($st['http_code'] ?? 0)]);
+                continue;
+            }
+            $out['recovered'] += wpc_v2_status_land($imageID, (array) $st['parsed']);
+            $left = get_transient('wpc_v2_pending_' . $imageID);
+            if (!is_array($left) || empty($left['pending'])) {
+                unset($watch[$imageID]);
+            }
+        }
+        update_option('wpc_v2_status_watch', $watch, false);
+        return $out;
+    }
+}
+
+if (!function_exists('wpc_v2_status_land')) {
+    /** Lands one status answer (see wpc_v2_status_poll); answers how many variants it recorded. */
+    function wpc_v2_status_land($imageID, array $answer)
+    {
+        $imageID = (int) $imageID;
+        $parent = get_attached_file($imageID);
+        if (!$parent || !class_exists('wps_ic_image_variants')) return 0;
+        $set = wps_ic_image_variants::get($imageID);
+        $up = wp_get_upload_dir();
+        $basedir = rtrim((string) ($up['basedir'] ?? ''), '/\\');
+        $baseurl = rtrim((string) ($up['baseurl'] ?? ''), '/');
+        $entries = [];
+        $settled = [];
+        // Rule: an answer this function cannot read says so. Observed: an unreadable shape landed
+        // nothing, logged nothing, and the image was polled again every tick until the job
+        // expired (review 2026-09-26, finding 7).
+        // The contract (OPTIMIZE_V2_CONTRACT.md, status poll) names the file of every delivered
+        // entry; the deployed service (v3.24.141, read 2026-09-27) answers `filename: null` for a
+        // variant it delivered inline or by mirror. This site does not guess the name: such an
+        // entry is reported here, and the gap is the service's to close (ticket 12006,
+        // finde-online.de: every entry of 10 images skipped as `answer-shape`).
+        $unreadable = 0;
+        if (!isset($answer['delivered']) || !is_array($answer['delivered'])) {
+            $unreadable = 1;
+        }
+        foreach ((array) ($answer['delivered'] ?? []) as $v) {
+            if (!is_array($v)) {
+                $unreadable++;
+                continue;
+            }
+            $size = (string) ($v['sizeLabel'] ?? '');
+            $format = strtolower((string) ($v['format'] ?? ''));
+            $file = basename((string) ($v['filename'] ?? ''));
+            // Rule: a delivered entry the service settled without bytes (`status: no_improvement`,
+            // `bumped: source_already_optimal`, its size floor) is recorded as no improvement and
+            // leaves the pending list. Observed: its `filename` names a file the service never
+            // sent, so the entry was looked for on disk, never found, and the image stayed
+            // "Optimizing" and was polled every tick until its pending state expired
+            // (orchestrator v3.24.143 (I), lib/statusAnswer.js bucketVariants).
+            if ($size !== '' && $format !== '' && (($v['status'] ?? '') === 'no_improvement' || ($v['bumped'] ?? '') === 'source_already_optimal')) {
+                if (empty($set[wpc_v2_variant_key($size, $format)]['size'])) {
+                    wpc_v2_record_no_improvement($imageID, $size, $format, (string) ($v['bumped'] ?? 'source_already_optimal'), []);
+                }
+                $settled[] = [$size, $format];
+                continue;
+            }
+            // Delivered through the pull manifest (`via: pull_manifest`): the manifest drain
+            // fetches and lands it; an entry that does not name its file is not unreadable.
+            if ($size !== '' && $format !== '' && $file === '' && ($v['via'] ?? '') === 'pull_manifest') {
+                continue;
+            }
+            if ($size === '' || $format === '' || $file === '') {
+                $unreadable++;
+                continue;
+            }
+            $key = wpc_v2_variant_key($size, $format);
+            if (!empty($set[$key]['size'])) {
+                // A callback landed it; only its pending entry was left behind.
+                $settled[] = [$size, $format];
+                continue;
+            }
+            $path = dirname($parent) . '/' . $file;
+            if (!wpc_v2_is_dest_ext_allowed($path) || !is_file($path) || (int) filesize($path) <= 0) continue;
+            // A jpeg/png variant replaces the WordPress file of that name: the file on disk cannot
+            // tell a landed variant from the original, so it is left to the manifest pull.
+            if (function_exists('wpc_v2_variant_disk_rival') && wpc_v2_variant_disk_rival($path) === $path) continue;
+            $raw = (string) file_get_contents($path);
+            if (!wpc_v2_inbound_image_ok($raw, $format, $imageID, 'status')) continue;
+            // Through the one writer, so a variant no smaller than the WordPress file of that size
+            // is settled as no improvement (variant-larger-refused) instead of recorded.
+            $stored = wpc_v2_store_bytes($raw, $path, ['variant' => ['id' => $imageID, 'size' => $size, 'fmt' => $format, 'src' => 'status']]);
+            if (empty($stored['ok'])) continue;
+            $entry = [
+                'size'          => strlen($raw),
+                'url'           => $baseurl . '/' . ltrim(str_replace($basedir, '', $path), '/\\'),
+                'local'         => true,
+                'skipped'       => false,
+                'phase_b_v2'    => true,
+                'recovered_via' => 'status',
+            ];
+            if (isset($v['kb'])) $entry['kb_reported'] = (float) $v['kb'];
+            if (isset($v['butter'])) $entry['butter'] = (float) $v['butter'];
+            $entries[$key] = $entry;
+            $settled[] = [$size, $format];
+        }
+        foreach ((array) ($answer['failed'] ?? []) as $v) {
+            if (is_array($v) && empty($v['willRetry']) && !empty($v['sizeLabel'])) {
+                $settled[] = [(string) $v['sizeLabel'], strtolower((string) ($v['format'] ?? ''))];
+            }
+        }
+        if ($unreadable > 0) {
+            wpc_cache_first_log('image-recover-skipped', '', '', ['id' => $imageID, 'reason' => 'answer-shape', 'keys' => implode(',', array_slice(array_map('strval', array_keys($answer)), 0, 12)), 'n' => $unreadable]);
+        }
+        if (!empty($entries)) {
+            wps_ic_image_variants::record($imageID, $entries, 'status');
+            wpc_cache_first_log('image-recovered', '', '', ['id' => $imageID, 'via' => 'status', 'n' => count($entries)]);
+        }
+        foreach ($settled as $k) {
+            wpc_v2_remove_pending($imageID, $k[0], $k[1]);
+        }
+        return count($entries);
+    }
 }
 
 
 if (!function_exists('wpc_v2_pull_cron_run')) {
+    /**
+     * The 5-minute cron, the one scheduled drain: the status poll first, then the manifest
+     * drain. The wake route is the service's push into the same drain; no visitor request
+     * runs either.
+     */
     function wpc_v2_pull_cron_run()
     {
         if (!function_exists('wpc_v2_pull_enabled')) {
-            
+            // Under DOING_CRON the v2 stack isn't bootstrapped — self-load it.
             if (defined('WPS_IC_DIR') && @is_file(WPS_IC_DIR . 'addons/v2/v2-bootstrap.php')) {
                 include_once WPS_IC_DIR . 'addons/v2/v2-bootstrap.php';
             }
         }
+        // Keep the service's declared limits cached (24 h; one GET a day, or every tick while the
+        // probe fails): the dispatch's inline cap and the inbound body cap read that cache and
+        // nothing else refreshes it.
+        if (function_exists('wpc_probe_orchestrator_capabilities')) {
+            wpc_probe_orchestrator_capabilities();
+        }
+        wpc_v2_status_poll();
         if (!function_exists('wpc_v2_pull_enabled') || !wpc_v2_pull_enabled()) {
             return;
         }
@@ -1339,8 +1462,10 @@ add_filter('cron_schedules', function ($schedules) {
     return $schedules;
 });
 add_action('init', function () {
-    if (!function_exists('wpc_v2_pull_enabled') || !wpc_v2_pull_enabled()) {
-        
+    // The cron also carries the status poll, so it stays scheduled while an image is watched.
+    $wpc_status_watch = get_option('wpc_v2_status_watch', []);
+    if ((!function_exists('wpc_v2_pull_enabled') || !wpc_v2_pull_enabled()) && empty($wpc_status_watch)) {
+        // Pull off and nothing watched → make sure no stale event lingers.
         if (function_exists('wp_next_scheduled') && wp_next_scheduled('wpc_v2_pull_cron')) {
             wp_clear_scheduled_hook('wpc_v2_pull_cron');
         }
@@ -1348,7 +1473,7 @@ add_action('init', function () {
     }
     if (function_exists('wp_next_scheduled') && !wp_next_scheduled('wpc_v2_pull_cron')) {
 
-        
+        // 5-min drain cron at the same wall-clock second (thundering herd of manifest GETs
 
 
         $wpc_cron_jit = 0;

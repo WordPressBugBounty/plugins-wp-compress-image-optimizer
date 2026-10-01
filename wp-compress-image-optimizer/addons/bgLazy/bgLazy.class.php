@@ -1,19 +1,11 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/bgLazy/bgLazy.class.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 class wps_ic_bgLazy {
 
 
   public function __construct() {
-    
+    #add_action( 'elementor/frontend/section/before_render', array($this, 'Elementor_addBgLazy') );
   }
 
 

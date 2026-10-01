@@ -19,18 +19,18 @@ function checkMobile() {
 
 checkMobile();
 
-
-
-
-
-
-
-
-
-
-
-
-
+/**
+ * v7.21.197 — RE-ARM FOR DOM-INJECTED MARKUP.
+ * Every lane in these bundles snapshots its images at DOMContentLoaded (and at best once
+ * more on the first scroll — onScroll removes itself). Markup injected LATER by a "Load
+ * More", an infinite scroll, an AJAX filter or any partial re-render was therefore never
+ * processed, and its images sat on the rewriter's placeholder forever. Field receipt:
+ * harmonytree.net/our-work, where Responsive Lightbox's Load More injects a fully rendered
+ * page of parked <img>. Sibling of the quiet-wire re-arm in cdn-rewrite.php (wpc-qw-restore).
+ * Each bundle calls this once with its own rescan entry point; that entry point must be safe
+ * to re-run, since it is called again for every injected batch.
+ * childList only + the match test means a lane's own src writes cannot re-enter the callback.
+ */
 var wpcInjectedObserver = null;
 
 function wpcWatchInjected(rescan, sel) {
@@ -255,15 +255,15 @@ function runAdaptive() {
     if (adaptiveImages.length === 0) {
         return;
     }
-    var wpcWinW116 = window.innerWidth || 1;
-    var wpcMeasured116 = adaptiveImages.map((function(img) {
+    var viewportWidth = window.innerWidth || 1;
+    var measuredWidths = adaptiveImages.map((function(img) {
         try {
             return Math.round(parseInt(window.getComputedStyle(img).width)) || 0;
         } catch (e) {
             return 0;
         }
     }));
-    adaptiveImages.forEach((function(entry, wpcIdx116) {
+    adaptiveImages.forEach((function(entry, imageIndex) {
         var adaptiveImage = entry;
         if (adaptiveImage.hasAttribute("data-excluded-adaptive")) {
             return;
@@ -311,9 +311,9 @@ function runAdaptive() {
         if (ngf298gh738qwbdh0s87v_vars.adaptive_enabled == "false" || adaptiveImage.classList.toString().includes("logo")) {
             imgWidth = 1;
         } else {
-            imgWidth = wpcMeasured116[wpcIdx116];
+            imgWidth = measuredWidths[imageIndex];
             if (typeof imgWidth == "undefined" || !imgWidth || imgWidth == 0 || isNaN(imgWidth)) {
-                imgWidth = wpcWinW116;
+                imgWidth = viewportWidth;
             }
             if (listHas(adaptiveImage.classList, "slide")) {
                 imgWidth = 1;
@@ -348,7 +348,7 @@ function runAdaptive() {
                 adaptiveImage.srcset = adaptiveImage.dataset.srcset;
             }
         }
-        var wpcBoxW = wpcMeasured116[wpcIdx116];
+        var wpcBoxW = measuredWidths[imageIndex];
         if (wpcBoxW > 1 && !adaptiveImage.classList.contains("wpc-excluded-adaptive") && typeof adaptiveImage.srcset === "string" && /\d+w(\s|,|$)/.test(adaptiveImage.srcset)) {
             adaptiveImage.sizes = wpcBoxW + "px";
         }
@@ -384,15 +384,15 @@ document.addEventListener("WPCContentLoaded", (function() {
 
 wpcWatchInjected(runAdaptiveWhenStyled, "img[data-wpc-loaded='true']");
 
-var wpcScrollQueued116 = false;
+var wpcAdaptiveScrollQueued = false;
 
 function onScroll() {
-    if (wpcScrollQueued116) {
+    if (wpcAdaptiveScrollQueued) {
         return;
     }
-    wpcScrollQueued116 = true;
+    wpcAdaptiveScrollQueued = true;
     requestAnimationFrame((function() {
-        wpcScrollQueued116 = false;
+        wpcAdaptiveScrollQueued = false;
         runAdaptiveWhenStyled();
     }));
 }

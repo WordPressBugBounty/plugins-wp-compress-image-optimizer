@@ -1,12 +1,4 @@
 <?php
-/**
- * WP Compress — Instant Performance & Speed Optimization.
- * File: addons/v2/v2-fast-404.php
- *
- * @package wp-compress-image-optimizer
- * @version 7.24.04
- */
-
 
 
 if (!defined('ABSPATH')) {
@@ -64,56 +56,55 @@ if (defined('WPC_FAST404_OFF') && WPC_FAST404_OFF) { return; }
     // Section-6-bg.avif?src=png -> our own fast-404 answered while Section-6-bg.png sat beside
     // it). src= names the source; unhinted falls down jpg/jpeg/png. Bounded: two stat calls max
     // per ext, only for avif/webp, only when the parent dir is real.
-    if (preg_match('~\.(avif|webp)$~i', $rel, $xm273)) {
-        $stemA273 = preg_replace('~\.(avif|webp)$~i', '', $abs);
-        $relA273  = preg_replace('~\.(avif|webp)$~i', '', $path);
+    if (preg_match('~\.(avif|webp)$~i', $rel, $variantExtMatch)) {
+        $rungStem = preg_replace('~\.(avif|webp)$~i', '', $abs);
         // Nearest-rung first: disk holds sized {base}-WxH twins (AVIF naming law), never the
         // bare full -- serve the largest same-format rung (19KB avif beats a 455KB png source).
-        $best273 = ''; $bw273 = 0;
-        foreach ((array) @glob($stemA273 . '-*.' . strtolower($xm273[1])) as $c273) {
-            if (preg_match('~-(\d+)x\d+\.' . strtolower($xm273[1]) . '$~i', (string) $c273, $wm273) && (int) $wm273[1] > $bw273) {
-                $bw273 = (int) $wm273[1]; $best273 = (string) $c273;
+        $bestRung = ''; $bestRungWidth = 0;
+        foreach ((array) @glob($rungStem . '-*.' . strtolower($variantExtMatch[1])) as $candidate) {
+            if (preg_match('~-(\d+)x\d+\.' . strtolower($variantExtMatch[1]) . '$~i', (string) $candidate, $widthMatch) && (int) $widthMatch[1] > $bestRungWidth) {
+                $bestRungWidth = (int) $widthMatch[1]; $bestRung = (string) $candidate;
             }
         }
-        if ($best273 !== '') {
+        if ($bestRung !== '') {
             // v7.21.274 -- serve the rung's bytes DIRECTLY (200): no redirect hop, and the
             // response is cacheable under the requested URL, so edges/browsers absorb the
             // cost. Never materialized to disk: a bare copy would be an orphan the optimizer
             // does not manage (stale after re-optimization). ETag from mtime-size so a
             // regenerated rung revalidates.
-            $sz274 = (int) @filesize($best273);
-            if ($sz274 > 0) {
+            $rungSize = (int) @filesize($bestRung);
+            if ($rungSize > 0) {
                 if (!headers_sent()) {
-                    $proto274 = (isset($_SERVER['SERVER_PROTOCOL']) && strpos((string) $_SERVER['SERVER_PROTOCOL'], 'HTTP/') === 0) ? (string) $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.1';
-                    $et274 = '"' . dechex((int) @filemtime($best273)) . '-' . dechex($sz274) . '"';
-                    if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim((string) $_SERVER['HTTP_IF_NONE_MATCH']) === $et274) {
-                        header($proto274 . ' 304 Not Modified', true, 304);
-                        header('ETag: ' . $et274);
+                    $rungProto = (isset($_SERVER['SERVER_PROTOCOL']) && strpos((string) $_SERVER['SERVER_PROTOCOL'], 'HTTP/') === 0) ? (string) $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.1';
+                    $etag = '"' . dechex((int) @filemtime($bestRung)) . '-' . dechex($rungSize) . '"';
+                    if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim((string) $_SERVER['HTTP_IF_NONE_MATCH']) === $etag) {
+                        header($rungProto . ' 304 Not Modified', true, 304);
+                        header('ETag: ' . $etag);
                         exit;
                     }
-                    header($proto274 . ' 200 OK', true, 200);
-                    header('Content-Type: image/' . strtolower($xm273[1]));
-                    header('Content-Length: ' . $sz274);
-                    header('ETag: ' . $et274);
+                    header($rungProto . ' 200 OK', true, 200);
+                    header('Content-Type: image/' . strtolower($variantExtMatch[1]));
+                    header('Content-Length: ' . $rungSize);
+                    header('ETag: ' . $etag);
                     header('Cache-Control: public, max-age=86400');
                     header('X-WPC-Fast-404: rung');
                 }
-                @readfile($best273);
+                @readfile($bestRung);
                 exit;
             }
         }
-        $q273 = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
-        $exts273 = array();
-        if (preg_match('~(?:^|&)src=(jpe?g|png|gif)(?:&|$)~i', $q273, $m273)) { $exts273[] = strtolower($m273[1]); }
-        foreach (array('jpg', 'jpeg', 'png') as $e273) { if (!in_array($e273, $exts273, true)) { $exts273[] = $e273; } }
-        $stem273 = preg_replace('~\.(avif|webp)$~i', '', $abs);
-        $relStem273 = preg_replace('~\.(avif|webp)$~i', '', $path);
-        foreach ($exts273 as $e273) {
-            if (@is_file($stem273 . '.' . $e273)) {
+        $query = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
+        $sourceExts = array();
+        if (preg_match('~(?:^|&)src=(jpe?g|png|gif)(?:&|$)~i', $query, $srcMatch)) { $sourceExts[] = strtolower($srcMatch[1]); }
+        foreach (array('jpg', 'jpeg', 'png') as $ext) { if (!in_array($ext, $sourceExts, true)) { $sourceExts[] = $ext; } }
+        $sourceStem = preg_replace('~\.(avif|webp)$~i', '', $abs);
+        $relSourceStem = preg_replace('~\.(avif|webp)$~i', '', $path);
+        foreach ($sourceExts as $ext) {
+            if (@is_file($sourceStem . '.' . $ext)) {
                 if (!headers_sent()) {
-                    $proto273 = (isset($_SERVER['SERVER_PROTOCOL']) && strpos((string) $_SERVER['SERVER_PROTOCOL'], 'HTTP/') === 0) ? (string) $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.1';
-                    header($proto273 . ' 302 Found', true, 302);
-                    header('Location: ' . $relStem273 . '.' . $e273);
+                    $redirectProto = (isset($_SERVER['SERVER_PROTOCOL']) && strpos((string) $_SERVER['SERVER_PROTOCOL'], 'HTTP/') === 0) ? (string) $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.1';
+                    header($redirectProto . ' 302 Found', true, 302);
+                    header('Location: ' . $relSourceStem . '.' . $ext);
                     header('X-WPC-Fast-404: 302');
                     header('Cache-Control: no-store, max-age=0');
                 }
@@ -147,10 +138,10 @@ if (!function_exists('wpc_v2_fast404_remove')) {
 }
 
 if (!function_exists('wpc_v2_fast404_sync')) {
-    
-
-
-
+    /**
+     * Write/refresh the mu-plugin when missing or stale (version drift), or remove it when disabled.
+     * Best-effort: a read-only mu-plugins dir just leaves the in-WP early-404 handler as the fallback.
+     */
     function wpc_v2_fast404_sync()
     {
         $file = wpc_v2_fast404_file();
@@ -166,8 +157,8 @@ if (!function_exists('wpc_v2_fast404_sync')) {
 
         $existing = @is_file($file) ? (string) @file_get_contents($file) : '';
         if ($existing === $body) {
-            
-            
+            // .277 — bytes current but the OPCODE may not be (validate_timestamps=0 hosts):
+            // force-invalidate on every sync so a stale compile never outlives an update.
             if (function_exists('opcache_invalidate')) { @opcache_invalidate($file, true); }
             return;
         }
@@ -182,8 +173,8 @@ if (!function_exists('wpc_v2_fast404_sync')) {
     }
 }
 
-
-
+// Self-install / keep-fresh on admin loads (re-writes on version drift) + on activation; remove on
+// deactivation. All guarded + best-effort.
 add_action('admin_init', 'wpc_v2_fast404_sync');
 if (defined('WPC_CC_PLUGIN_FILE')) {
     register_activation_hook(WPC_CC_PLUGIN_FILE, 'wpc_v2_fast404_sync');
