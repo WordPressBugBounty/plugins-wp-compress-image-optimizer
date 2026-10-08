@@ -28,11 +28,16 @@
  * Every lane that lands image variant bytes writes through here: the REST callbacks (bg_swap,
  * the batch, the lazy-CDN single), the journal drain (pull manifest), the direct-entry files
  * and the Phase A parent. The lazy-CDN pull (v2-lazy-cdn.php) writes on its own and keeps its
- * own smaller-sibling rule (wpc_v2_find_smaller_sibling, next-gen only, 95 %).
+ * own smaller-sibling rule (wpc_v2_find_smaller_sibling, next-gen only, 95 %) and asks the same
+ * identity question (v2-variant-identity.php) before its own write.
  */
 
 if (!defined('ABSPATH')) {
     exit;
+}
+
+if (@is_file(__DIR__ . '/v2-variant-identity.php')) {
+    require_once __DIR__ . '/v2-variant-identity.php';
 }
 
 if (!function_exists('wpc_v2_store_bytes')) {
@@ -43,6 +48,26 @@ if (!function_exists('wpc_v2_store_bytes')) {
     function wpc_v2_store_default_exts()
     {
         return ['jpg', 'jpeg', 'webp', 'avif', 'png', 'gif'];
+    }
+
+    /**
+     * What the service says about a delivery: the hash and size of the source it encoded from and
+     * the 16x16 grid of the variant it sent (fields and encoding at the top of
+     * v2-variant-identity.php). Answers ['sha256', 'size', 'grid'] for the parts that are well
+     * formed, or []. It rides `variant.claim` into the store.
+     */
+    function wpc_v2_variant_claim($from)
+    {
+        return function_exists('wpc_v2_variant_claim_parse') ? wpc_v2_variant_claim_parse($from) : [];
+    }
+
+    /**
+     * The well-formed claim fields of a delivery under their canonical names, for a journal entry
+     * that carries them to the drain (which reads them back through wpc_v2_variant_claim).
+     */
+    function wpc_v2_variant_claim_wire($from)
+    {
+        return function_exists('wpc_v2_variant_claim_wire_fields') ? wpc_v2_variant_claim_wire_fields($from) : [];
     }
 
     /**
@@ -102,6 +127,11 @@ if (!function_exists('wpc_v2_store_bytes')) {
             if ($refused !== null) {
                 return $refused;
             }
+        }
+
+        $refused = wpc_v2_variant_identity_refusal($bytes, $dest, $ext, isset($opts['variant']) && is_array($opts['variant']) ? $opts['variant'] : []);
+        if ($refused !== null) {
+            return $refused;
         }
 
         // Atomic placement: a partially written file is never visible under $dest.
@@ -173,15 +203,10 @@ if (!function_exists('wpc_v2_store_bytes')) {
         if ($disk <= 0 || $new < $disk) {
             return null;
         }
+        $settled = wpc_v2_variant_settle($variant, 'larger_than_disk');
         $id = (int) ($variant['id'] ?? 0);
         $size = (string) ($variant['size'] ?? '');
         $fmt = strtolower((string) ($variant['fmt'] ?? ''));
-        $recorded = false;
-        if ($id > 0 && $size !== '' && $fmt !== '' && function_exists('wpc_v2_record_no_improvement')) {
-            wpc_v2_record_no_improvement($id, $size, $fmt, 'larger_than_disk', []);
-            $recorded = true;
-        }
-        $drain_complete = ($recorded && function_exists('wpc_v2_remove_pending')) ? (bool) wpc_v2_remove_pending($id, $size, $fmt) : false;
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('variant-larger-refused', '', '', [
                 'id'         => $id,
@@ -200,8 +225,69 @@ if (!function_exists('wpc_v2_store_bytes')) {
             'msg'            => $new . '>=' . $disk,
             'bytes'          => $new,
             'disk_bytes'     => $disk,
-            'recorded'       => $recorded,
-            'drain_complete' => $drain_complete,
+            'settled'        => true,
+            'recorded'       => $settled['recorded'],
+            'drain_complete' => $settled['drain_complete'],
         ];
     }
+
+    /**
+     * Settles a refused variant: recorded as no improvement under `$reason` and taken out of
+     * pending, so nothing retries it. Answers ['recorded' => bool, 'drain_complete' => bool];
+     * `recorded` is false where the recorder is not loaded (the direct-entry files run under
+     * SHORTINIT) and the caller journals the entry the drain records.
+     */
+    function wpc_v2_variant_settle(array $variant, $reason)
+    {
+        $id = (int) ($variant['id'] ?? 0);
+        $size = (string) ($variant['size'] ?? '');
+        $fmt = strtolower((string) ($variant['fmt'] ?? ''));
+        $recorded = false;
+        if ($id > 0 && $size !== '' && $fmt !== '' && function_exists('wpc_v2_record_no_improvement')) {
+            wpc_v2_record_no_improvement($id, $size, $fmt, (string) $reason, []);
+            $recorded = true;
+        }
+        $drain_complete = ($recorded && function_exists('wpc_v2_remove_pending')) ? (bool) wpc_v2_remove_pending($id, $size, $fmt) : false;
+        return ['recorded' => $recorded, 'drain_complete' => $drain_complete];
+    }
+
+    /**
+     * Answers null when the bytes may land, or the store's settled refusal (error
+     * `identity_mismatch`) when they are a picture of another file than the one $dest stands for
+     * (wpc_v2_variant_identity). Image extensions only: every other caller is untouched. Skipped
+     * when $dest already holds these exact bytes (a re-sync of what landed: nothing new lands).
+     * The answer a REST caller gives the service is the one it gives for `larger_than_disk`: HTTP
+     * 200 {ok:true, kind:no_improvement, reason:identity_mismatch}, the shape that ends the job
+     * (a 4xx/5xx would be retried, and the service would resend the same bytes).
+     */
+    function wpc_v2_variant_identity_refusal($bytes, $dest, $ext, array $variant)
+    {
+        if (!function_exists('wpc_v2_variant_identity') || !in_array($ext, wpc_v2_variant_identity_exts(), true)) {
+            return null;
+        }
+        if (@is_file($dest) && (int) @filesize($dest) === strlen((string) $bytes) && @hash_file('sha256', $dest) === hash('sha256', (string) $bytes)) {
+            return null;
+        }
+        $claim = isset($variant['claim']) && is_array($variant['claim']) ? $variant['claim'] : [];
+        $identity = wpc_v2_variant_identity((string) $bytes, $dest, $claim);
+        if ($identity['verdict'] !== 'mismatch') {
+            return null;
+        }
+        wpc_v2_variant_identity_refuse($identity, $dest, (string) ($variant['src'] ?? 'store'), [
+            'id'   => (int) ($variant['id'] ?? 0),
+            'size' => (string) ($variant['size'] ?? ''),
+            'fmt'  => (string) ($variant['fmt'] ?? ''),
+        ]);
+        $settled = wpc_v2_variant_settle($variant, 'identity_mismatch');
+        return [
+            'ok'             => false,
+            'error'          => 'identity_mismatch',
+            'msg'            => (string) ($identity['reason'] ?? '') . ':' . (string) ($identity['distance'] ?? ''),
+            'bytes'          => strlen((string) $bytes),
+            'settled'        => true,
+            'recorded'       => $settled['recorded'],
+            'drain_complete' => $settled['drain_complete'],
+        ];
+    }
+
 }

@@ -49,22 +49,10 @@ if (!defined('WPC_ERROR_CAPTURE_DISABLED')) {
 
 if (!function_exists('wpc_url_matches_pattern')) {
     function wpc_url_matches_pattern($url, $pattern) {
-        $pattern = trim($pattern);
-        if ($pattern === '' || $pattern[0] === '#') return false;
-
-        // Strip leading slash for normalization (URL has host prefix, patterns may not)
-        $pattern = ltrim($pattern, '/');
-
-        // Wildcard pattern → build regex
-        if (strpos($pattern, '*') !== false || strpos($pattern, '?') !== false) {
-            // Escape regex meta chars first, then convert wildcards back
-            $regex = preg_quote($pattern, '#');
-            $regex = str_replace(['\\*\\*', '\\*', '\\?'], ['.*', '[^/]*', '.'], $regex);
-            return (bool) @preg_match('#' . $regex . '#i', $url);
+        if (!class_exists('wps_ic_url_key') && defined('WPS_IC_DIR') && is_readable(WPS_IC_DIR . 'traits/url_key.php')) {
+            include_once WPS_IC_DIR . 'traits/url_key.php';
         }
-
-        // No wildcards → case-insensitive substring match
-        return stripos($url, $pattern) !== false;
+        return class_exists('wps_ic_url_key') && wps_ic_url_key::excludeMatch($pattern, $url, wps_ic_url_key::homePath());
     }
 }
 
@@ -73,11 +61,243 @@ if (!function_exists('wpc_url_is_excluded')) {
         if (empty($patterns) || !is_array($patterns)) return false;
         foreach ($patterns as $pattern) {
             if (wpc_url_matches_pattern($currentUrl, $pattern)) {
-                return $pattern; // Return matched pattern for logging
+                return $pattern;
             }
         }
         return false;
     }
+}
+
+if (!function_exists('wpc_request_carries_site_key')) {
+    /**
+     * True when the request's `apikey` (POST or GET) equals the site's stored, non-empty API key.
+     * Such a request comes from the service or the agency portal, and the service doors answer it
+     * whatever the Exclude from Plugin list holds.
+     */
+    function wpc_request_carries_site_key() {
+        $candidates = [];
+        foreach ([$_POST, $_GET] as $source) {
+            if (isset($source['apikey']) && is_string($source['apikey']) && $source['apikey'] !== '') {
+                $candidates[] = $source['apikey'];
+            }
+        }
+        if (!$candidates || !function_exists('get_option') || !defined('WPS_IC_OPTIONS')) {
+            return false;
+        }
+        $options = get_option(WPS_IC_OPTIONS);
+        $siteKey = (is_array($options) && isset($options['api_key']) && is_string($options['api_key'])) ? $options['api_key'] : '';
+        if ($siteKey === '') {
+            return false;
+        }
+        foreach ($candidates as $candidate) {
+            if (hash_equals($siteKey, $candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+if (!function_exists('wpc_request_excluded_from_plugin')) {
+    function wpc_request_excluded_from_plugin() {
+        static $memo = [];
+        if ((function_exists('is_admin') && is_admin())
+            || (function_exists('wp_doing_ajax') && wp_doing_ajax())
+            || (defined('DOING_CRON') && DOING_CRON)
+            || (defined('WP_CLI') && WP_CLI)
+            || (defined('REST_REQUEST') && REST_REQUEST)
+            || isset($_GET['rest_route'])) {
+            return false;
+        }
+        $opt = function_exists('get_option') ? get_option('wpc-url-excludes') : [];
+        $patterns = (is_array($opt) && !empty($opt['exclude-url-from-all']) && is_array($opt['exclude-url-from-all'])) ? $opt['exclude-url-from-all'] : [];
+        if (!$patterns) {
+            return false;
+        }
+        if (wpc_request_carries_site_key()) {
+            return false;
+        }
+        if (!class_exists('wps_ic_url_key') && defined('WPS_IC_DIR') && is_readable(WPS_IC_DIR . 'traits/url_key.php')) {
+            include_once WPS_IC_DIR . 'traits/url_key.php';
+        }
+        if (!class_exists('wps_ic_url_key')) {
+            return false;
+        }
+        $hostPath = wps_ic_url_key::requestHostPath();
+        $path = (string) substr($hostPath, strcspn($hostPath, '/'));
+        if (preg_match('#^/(?:wp-admin|wp-includes|wp-content|wp-json)(?:/|$)|^/(?:wp-login|xmlrpc|wp-cron|wp-signup|wp-activate)\.php#i', $path)) {
+            return false;
+        }
+        $key = $hostPath . "\n" . implode("\n", array_map('strval', array_filter($patterns, 'is_scalar')));
+        if (!array_key_exists($key, $memo)) {
+            $memo[$key] = wps_ic_url_key::excludedBy($patterns, $hostPath);
+        }
+        return $memo[$key];
+    }
+}
+
+if (!function_exists('wpc_exclude_entries_meaning_home')) {
+    /**
+     * The Exclude from Plugin entries that name this site's homepage the short way: "/", or the
+     * site's host (www either way, the home path after it on a subdirectory install) with no
+     * scheme. Each matches the homepage only; until 7.25.09 each matched every page.
+     */
+    function wpc_exclude_entries_meaning_home($patterns) {
+        if (!is_array($patterns) || !function_exists('home_url')) {
+            return [];
+        }
+        if (!class_exists('wps_ic_url_key') && defined('WPS_IC_DIR') && is_readable(WPS_IC_DIR . 'traits/url_key.php')) {
+            include_once WPS_IC_DIR . 'traits/url_key.php';
+        }
+        if (!class_exists('wps_ic_url_key')) {
+            return [];
+        }
+        $homeHost = wps_ic_url_key::excludeHost((string) parse_url((string) home_url('/'), PHP_URL_HOST));
+        $homePath = rtrim(wps_ic_url_key::homePath(), '/');
+        $hits = [];
+        foreach ($patterns as $pattern) {
+            if (!is_scalar($pattern)) {
+                continue;
+            }
+            $entry = trim((string) $pattern);
+            if ($entry === '/') {
+                $hits[] = $entry;
+                continue;
+            }
+            if ($entry === '' || $entry[0] === '#' || $homeHost === '' || preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//#i', $entry)) {
+                continue;
+            }
+            $bare = rtrim($entry, '/');
+            $cut = strcspn($bare, '/');
+            $host = (string) substr($bare, 0, $cut);
+            $path = strtolower(rtrim((string) substr($bare, $cut), '/'));
+            if (strpos($host, '.') !== false && wps_ic_url_key::excludeHost($host) === $homeHost
+                && ($path === '' || $path === strtolower($homePath))) {
+                $hits[] = $entry;
+            }
+        }
+        return $hits;
+    }
+}
+
+if (!function_exists('wpc_exclude_home_notice_sync')) {
+    /**
+     * Raises the administrator-only state notice that names those entries and says how to
+     * exclude every page, and clears it once the list holds none. A dismissal holds until then.
+     */
+    function wpc_exclude_home_notice_sync() {
+        if (!function_exists('wpc_set_state_notice') || (function_exists('wp_doing_ajax') && wp_doing_ajax())) {
+            return;
+        }
+        $opt = get_option('wpc-url-excludes');
+        $entries = wpc_exclude_entries_meaning_home((is_array($opt) && isset($opt['exclude-url-from-all'])) ? $opt['exclude-url-from-all'] : []);
+        if (!$entries) {
+            wpc_clear_state_notice('exclude_home_only');
+            return;
+        }
+        $quoted = implode(', ', array_map(function ($entry) { return '"' . $entry . '"'; }, $entries));
+        $text = sprintf(
+            /* translators: %s: the Exclude from Plugin entries, quoted and comma-separated */
+            _n('Exclude from Plugin: %s now excludes the homepage only, not every page (since 7.25.09). To exclude every page, enter /** instead.',
+                'Exclude from Plugin: %s now exclude the homepage only, not every page (since 7.25.09). To exclude every page, enter /** instead.',
+                count($entries), 'wp-compress-image-optimizer'),
+            $quoted
+        );
+        wpc_set_state_notice('exclude_home_only', 'warning', $text, function_exists('wpc_settings_page_url') ? wpc_settings_page_url() : '',
+            __('Review exclusions', 'wp-compress-image-optimizer'), 'manage_options');
+    }
+}
+
+if (!function_exists('wpc_callback_file')) {
+    function wpc_callback_file($fn) {
+        try {
+            if ($fn instanceof \Closure) {
+                $r = new \ReflectionFunction($fn);
+            } elseif (is_string($fn)) {
+                if (strpos($fn, '::') !== false) {
+                    $r = new \ReflectionMethod($fn);
+                } elseif (function_exists($fn)) {
+                    $r = new \ReflectionFunction($fn);
+                } else {
+                    return '';
+                }
+            } elseif (is_array($fn) && count($fn) === 2 && isset($fn[0], $fn[1]) && is_string($fn[1]) && (is_object($fn[0]) || is_string($fn[0]))) {
+                $r = new \ReflectionMethod($fn[0], $fn[1]);
+            } elseif (is_object($fn) && method_exists($fn, '__invoke')) {
+                $r = new \ReflectionMethod($fn, '__invoke');
+            } else {
+                return '';
+            }
+            $file = $r->getFileName();
+            return is_string($file) ? str_replace('\\', '/', $file) : '';
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+}
+
+if (!function_exists('wpc_excluded_url_output_hooks')) {
+    function wpc_excluded_url_output_hooks() {
+        return [
+            'template_redirect', 'template_include', 'do_redirect_guess_404_permalink', 'do_faviconico',
+            'wp_head', 'wp_body_open', 'wp_footer', 'wp_enqueue_scripts', 'wp_print_scripts', 'wp_print_styles',
+            'wp_print_footer_scripts', 'wp_default_scripts', 'wp_default_styles', 'script_loader_tag', 'style_loader_tag',
+            'script_loader_src', 'style_loader_src', 'script_module_loader_src', 'wp_script_attributes',
+            'wp_inline_script_attributes', 'wp_resource_hints', 'wp_preload_resources', 'wp_speculation_rules_configuration',
+            'emoji_svg_url', 'the_content', 'the_excerpt', 'widget_text', 'widget_block_content', 'render_block',
+            'post_thumbnail_html', 'get_avatar', 'wp_get_attachment_url', 'wp_get_attachment_image_src',
+            'wp_get_attachment_image_attributes', 'wp_get_attachment_image', 'image_downsize', 'wp_calculate_image_srcset',
+            'wp_calculate_image_sizes', 'wp_content_img_tag', 'wp_img_tag_add_loading_attr', 'wp_lazy_loading_enabled',
+            'embed_oembed_html', 'embed_oembed_discover', 'oembed_dataparse', 'body_class', 'admin_bar_menu',
+            'wp_before_admin_bar_render', 'woocommerce_available_variation', 'woocommerce_single_product_image_thumbnail_html',
+        ];
+    }
+}
+
+if (!function_exists('wpc_excluded_url_unhook')) {
+    function wpc_excluded_url_unhook() {
+        if (wpc_request_excluded_from_plugin() === false || !defined('WPS_IC_DIR')) {
+            return 0;
+        }
+        global $wp_filter;
+        if (!is_array($wp_filter) || !function_exists('remove_filter')) {
+            return 0;
+        }
+        $roots = array_unique(array_filter([
+            str_replace('\\', '/', WPS_IC_DIR),
+            str_replace('\\', '/', (string) realpath(WPS_IC_DIR)) . '/',
+        ], function ($r) { return strlen($r) > 1; }));
+        $outputHooks = wpc_excluded_url_output_hooks();
+        $removed = 0;
+        foreach ($wp_filter as $hook => $wpHook) {
+            if ((!in_array($hook, $outputHooks, true) && strpos((string) $hook, 'elementor/frontend/') !== 0)
+                || !is_object($wpHook) || !isset($wpHook->callbacks) || !is_array($wpHook->callbacks)) {
+                continue;
+            }
+            foreach ($wpHook->callbacks as $priority => $callbacks) {
+                foreach ((array) $callbacks as $callback) {
+                    if (!isset($callback['function'])) {
+                        continue;
+                    }
+                    $file = wpc_callback_file($callback['function']);
+                    if ($file === '') {
+                        continue;
+                    }
+                    foreach ($roots as $root) {
+                        if (strpos($file, $root) === 0) {
+                            remove_filter($hook, $callback['function'], $priority);
+                            $removed++;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        return $removed;
+    }
+}
+if (function_exists('add_action')) {
+    add_action('template_redirect', 'wpc_excluded_url_unhook', PHP_INT_MIN);
 }
 
 /**
@@ -1550,7 +1770,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '7.25.00';
+        self::$version = '7.26.00';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -2483,6 +2703,9 @@ class wps_ic
                     ];
 
                     update_option('wps_ic_url_changed_log', $logs, false);
+                    if (function_exists('wpc_record_key_removal')) {
+                        wpc_record_key_removal('url-changed', ['site_url' => $site_url, 'api_url' => $api_url]);
+                    }
 
                     // Disconnect, prompt url changed msg
                     $options = get_option(WPS_IC_OPTIONS);
@@ -3310,7 +3533,7 @@ class wps_ic
                             + '<span class="tooltip-text">This will just turn off the plugin. All your settings and cloud-connected images will be saved for when you reactivate.</span>'
                             + '</div>'
                             + '<div class="tooltip-container align-right">'
-                            + '<a id="wps-ic-delete" class="" ' + 'href="' + updatedDeactivateHref + '" style="font-size: 10px;">Disconnect & Deactivate</a>'
+                            + '<a id="wps-ic-delete" class="" ' + 'href="' + updatedDeactivateHref + '">Disconnect & Deactivate</a>'
                             + '<span class="tooltip-text">This will turn off the plugin, disconnect your site from our service, and may remove your backups from the cloud.</span>'
                             + '</div>'
                             + '</div>',
@@ -3335,8 +3558,8 @@ class wps_ic
 
                     // Apply width after opening
                     jQuery('.wp-pointer').css({
-                        width: '440px',
-                        maxWidth: '440px'
+                        width: '540px',
+                        maxWidth: 'calc(100vw - 40px)'
                     });
 
                     jQuery('.wp-pointer').addClass('wpc-custom-pointer');
@@ -3452,10 +3675,20 @@ class wps_ic
 
         //Display notice if site url changed
         add_action('admin_init', function () {
+            // A stored key means the site is connected, so a URL-changed flag left from an
+            // earlier wipe is stale. Only connectWithKey cleared it, so a key restored any
+            // other way kept the flag, and a later unrelated disconnect showed "your site URL
+            // has changed" (amamiespresso.com: flag from 2026-07-23, key lost again in September).
+            $wpc_options = get_option(WPS_IC_OPTIONS);
+            if (is_array($wpc_options) && !empty($wpc_options['api_key']) && get_option('wps_ic_url_changed')) {
+                delete_option('wps_ic_url_changed');
+            }
             if (!function_exists('wpc_set_state_notice')) { return; }
             if (!get_option('wps_ic_url_changed')) { wpc_clear_state_notice('url_changed'); return; }
             wpc_set_state_notice('url_changed', 'error', __('Your site address changed. Reconnect with a new API key to resume optimization.', 'wp-compress-image-optimizer'), wpc_settings_page_url(), __('Reconnect', 'wp-compress-image-optimizer'));
         }, 30);
+        add_action('admin_init', ['wps_ic_users', 'syncDroppedGrantsNotice'], 30);
+        add_action('admin_init', 'wpc_exclude_home_notice_sync', 30);
 
         // Critical API
         $this->fetchCritical();
@@ -3751,7 +3984,7 @@ class wps_ic
 
             if (is_admin()) {
                 $this->inAdmin();
-            } else {
+            } elseif (wpc_request_excluded_from_plugin() === false) {
                 // Add Elementor Bg Lazy
                 $bgLazy = new wps_ic_bgLazy();
                 $this->inFrontEnd();
@@ -4107,7 +4340,8 @@ class wps_ic
                                         . ' ur=' . ($wpc_sur !== '' ? $wpc_sur : '(none)')
                                         . ' rr=' . ($wpc_srr !== '' ? $wpc_srr : '(NONE)');
                                     if ($wpc_srr !== '' && $wpc_sur !== '') {
-                                        $wpc_rr_map[strtolower($wpc_sfam) . '|' . $wpc_swt . '|' . $wpc_sst] = $wpc_srr;
+                                        $autoRangeKey = function_exists('wpc_font_remote_range_auto_key') ? wpc_font_remote_range_auto_key($wpc_sfe) : '';
+                                        $wpc_rr_map[$autoRangeKey !== '' ? $autoRangeKey : strtolower($wpc_sfam) . '|' . $wpc_swt . '|' . $wpc_sst] = $wpc_srr;
                                     }
 
 
@@ -4798,8 +5032,6 @@ class wps_ic
 
         if ((!empty($initial) && $initial === 'true') || (empty($initialPageSpeedScore) && empty($initialTestRunning))) {
 
-            $apikey = $options['api_key'];
-
             // Set the flag that test is ran
             set_transient('wpc_initial_test', 'true', 24 * 60 * 60);
 
@@ -4820,22 +5052,8 @@ class wps_ic
             delete_option(WPC_WARMUP_LOG_SETTING);
             delete_option('wpc_psi_insights');
 
-            $requests = new wps_ic_requests();
-
-
-            $psiUuid = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : bin2hex(random_bytes(8));
-            set_transient('wpc_psi_uuid', $psiUuid, 30 * 60);
-
-            // Test
-            $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'uuid' => $psiUuid, 'hash' => $psiUuid, 'apikey' => $apikey];
-            $args['features'] = self::getActiveFeatures();
-
-
-            if (apply_filters('wpc_psi_clean_after', true)) {
-                $args['clean_after'] = 1;
-            }
             // Fire-and-forget dispatch; the plugin PULLS get-results/{uuid} (no push callback exists).
-            $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 2, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
+            wpc_psi_dispatch();
         }
     }
 
@@ -5449,8 +5667,18 @@ function wpc_purge_redirect_cache($old_value, $new_value) {
     }
 }
 
-function wpc_purge_all_html_cache() {
-    wps_ic_cache_integrations::purgeCacheFiles();
+function wpc_purge_all_html_cache($purge_mode = null) {
+    if ($purge_mode !== 'hard') {
+        wps_ic_cache_integrations::purgeCacheFiles();
+        return;
+    }
+    $noCoalesce = function () { return 0; };
+    add_filter('wpc_purge_all_coalesce_window', $noCoalesce, 999);
+    try {
+        wps_ic_cache_integrations::purgeCacheFiles(false, false, 'hard');
+    } finally {
+        remove_filter('wpc_purge_all_coalesce_window', $noCoalesce, 999);
+    }
 }
 
 function wpcUninstall()
@@ -5997,6 +6225,46 @@ add_action('update_option_' . WPS_IC_SETTINGS, function ($old, $new) {
 
 
 /**
+ * The error rows of the Delay JS report that still describe this build: seen within 14 days, by
+ * this plugin version or a newer one. The handler reads the log through this and writes back only
+ * what it returns, so a row from a fixed bug, a rolled-back build or a long-quiet page never
+ * reaches the tuner.
+ */
+function wpc_delay_v3_errors_live($log)
+{
+    $live = [];
+    if (!is_array($log)) {
+        return $live;
+    }
+    $oldest = time() - (int) apply_filters('wpc_delay_v3_error_ttl', 14 * DAY_IN_SECONDS);
+    $current = defined('WPC_PLUGIN_VERSION') ? (string) WPC_PLUGIN_VERSION : '';
+    foreach ($log as $key => $row) {
+        if (!is_array($row) || (int) ($row['t'] ?? 0) < $oldest) {
+            continue;
+        }
+        $built_by = isset($row['v']) ? (string) $row['v'] : '';
+        if ($built_by === '' || ($current !== '' && version_compare($built_by, $current, '<'))) {
+            continue;
+        }
+        $live[$key] = $row;
+    }
+    return $live;
+}
+
+/**
+ * The script basenames the measured manifest promoted to eager, as the Delay JS report handler
+ * sees them: none while the promotion kill switch is on.
+ */
+function wpc_delay_v3_promoted_names()
+{
+    if (get_option('wpc_delay_v3_manifest_off')) {
+        return [];
+    }
+    $names = get_option('wpc_delay_v3_promoted', []);
+    return is_array($names) ? array_values($names) : [];
+}
+
+/**
  * The Delay JS report beacon (admin-ajax `wpc_delay_v3_report`, open to visitors): what the delay
  * loader and the LCP tracer saw in a real browser. It tunes this site's delay lane (manifest off,
  * Delay JS excludes, the timer demote) and keeps the LCP and replay-duration telemetry.
@@ -6275,10 +6543,7 @@ function wpc_delay_v3_report_handler()
             wp_send_json_success('lcpmx');
         }
     }
-    $log = get_option('wpc_delay_v3_errors', []);
-    if (!is_array($log)) {
-        $log = [];
-    }
+    $log = wpc_delay_v3_errors_live(get_option('wpc_delay_v3_errors', []));
     $url = isset($data['u']) ? sanitize_text_field(substr((string) $data['u'], 0, 120)) : '';
     foreach (array_slice($data['e'], 0, 10) as $e) {
         if (!is_array($e)) {
@@ -6290,7 +6555,12 @@ function wpc_delay_v3_report_handler()
             continue;
         }
         $key = md5($msg . '|' . $file);
-        $log[$key] = ['t' => time(), 'm' => $msg, 'f' => $file, 'u' => $url, 'n' => isset($log[$key]['n']) ? (int) $log[$key]['n'] + 1 : 1];
+        $previous_why = isset($log[$key]['why']) ? $log[$key]['why'] : '';
+        $log[$key] = ['t' => time(), 'm' => $msg, 'f' => $file, 'u' => $url, 'n' => isset($log[$key]['n']) ? (int) $log[$key]['n'] + 1 : 1,
+            'v' => defined('WPC_PLUGIN_VERSION') ? (string) WPC_PLUGIN_VERSION : ''];
+        if ($previous_why !== '') {
+            $log[$key]['why'] = $previous_why;
+        }
     }
     update_option('wpc_delay_v3_errors', array_slice($log, -30, null, true), false);
 
@@ -6306,12 +6576,8 @@ function wpc_delay_v3_report_handler()
     }
 
 
-    $wpc_promoted = get_option('wpc_delay_v3_promoted', []);
-    if (!is_array($wpc_promoted)) {
-        $wpc_promoted = [];
-    }
-    if (!empty($wpc_promoted) && !get_option('wpc_delay_v3_manifest_off')
-        && apply_filters('wpc_delay_v3_autotune', true)) {
+    $wpc_promoted = wpc_delay_v3_promoted_names();
+    if (!empty($wpc_promoted) && apply_filters('wpc_delay_v3_autotune', true)) {
         foreach ($log as $entry) {
             if (empty($entry['f']) || (int) $entry['n'] < 2) {
                 continue;
@@ -6331,6 +6597,18 @@ function wpc_delay_v3_report_handler()
                 continue;
             }
             update_option('wpc_delay_v3_manifest_off', time(), false);
+            if (class_exists('wps_ic_js_delay_v3')) {
+                wps_ic_js_delay_v3::wpc_promotion_clear();
+            } else {
+                delete_option('wpc_delay_v3_promoted');
+            }
+            $wpc_promoted = [];
+            foreach ($log as $wpc_row_key => $wpc_row) {
+                if (basename((string) parse_url((string) ($wpc_row['f'] ?? ''), PHP_URL_PATH)) === $wpc_pb) {
+                    unset($log[$wpc_row_key]);
+                }
+            }
+            update_option('wpc_delay_v3_errors', array_slice($log, -30, null, true), false);
             set_transient('wpc_delay_v3_manifest_notice', $wpc_pb, WEEK_IN_SECONDS);
             $wpc_purge_page($wpc_report_path, 'delay-manifest-off');
             // A script the manifest promoted to eager throws "is not defined" twice: its keep list
@@ -6349,7 +6627,7 @@ function wpc_delay_v3_report_handler()
             $tuned = [];
         }
         if (count($tuned) < 5) {
-            foreach ($log as $entry) {
+            foreach ($log as $log_key => $entry) {
                 if ((int) $entry['n'] < 3 || empty($entry['f'])) {
                     continue;
                 }
@@ -6382,43 +6660,73 @@ function wpc_delay_v3_report_handler()
                     continue;
                 }
 
-                // "excluding" one here would run it at parse, which IS the failing state.
-                if (in_array($base, $wpc_promoted, true)) {
-                    continue;
+                $targets = [$base];
+                $keptAs = '';
+                $missing = class_exists('wps_ic_js_delay_v3') ? wps_ic_js_delay_v3::wpc_missing_symbol((string) $entry['m']) : null;
+                if ($missing !== null) {
+                    $keep = wps_ic_js_delay_v3::wpc_missing_symbol_keep($missing, (string) $entry['f']);
+                    $targets = $keep['patterns'];
+                    $keptAs = $keep['as'];
+                    if (empty($targets)) {
+                        if (($entry['why'] ?? '') !== 'provider-not-found') {
+                            $log[$log_key]['why'] = 'provider-not-found';
+                            update_option('wpc_delay_v3_errors', array_slice($log, -30, null, true), false);
+                            if (function_exists('wpc_cache_first_log')) {
+                                wpc_cache_first_log('delay-autotune-skipped', '', $wpc_report_path_logged, [
+                                    'why' => 'provider-not-found',
+                                    'symbol' => substr($missing['name'], 0, 60),
+                                    'errors' => (int) $entry['n'],
+                                ]);
+                            }
+                        }
+                        continue;
+                    }
                 }
-                if (isset($tuned[$base])) {
-                    continue;
+
+                $tuned_now = false;
+                foreach ($targets as $target) {
+                    // "excluding" a promoted one here would run it at parse, which IS the failing state.
+                    if (count($tuned) >= 5 || in_array($target, $wpc_promoted, true) || isset($tuned[$target])) {
+                        continue;
+                    }
+                    $ex = get_option('wpc-excludes', []);
+                    if (!is_array($ex)) {
+                        $ex = [];
+                    }
+                    // Into the one Delay JS exclude list (`delay_js_v3`), where both boxes show it and
+                    // a removal from either box removes it. It wrote `delay_js_v2`, which only the old
+                    // union reader served and the site's own box never showed.
+                    $ex = wpc_delay_excludes_fold($ex);
+                    if (empty($ex['delay_js_v3']) || !is_array($ex['delay_js_v3'])) {
+                        $ex['delay_js_v3'] = [];
+                    }
+                    $autotuneAdded = !in_array($target, $ex['delay_js_v3'], true);
+                    if ($autotuneAdded) {
+                        $ex['delay_js_v3'][] = $target;
+                        update_option('wpc-excludes', $ex);
+                        set_transient('wpc_delay_v3_autotune_notice', $target, WEEK_IN_SECONDS);
+                        $wpc_purge_page($wpc_report_path, 'delay-autotune');
+                    }
+                    // A same-site script that errors three times under replay joins the Delay JS
+                    // excludes (at most five); the replay breaks it and nothing predicts which. When
+                    // the error says a name is missing, the script that defines the name joins instead,
+                    // or the thrower when no script on record defines it and it is not already kept.
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('delay-autotune-excluded', '', $wpc_report_path_logged, [
+                            'script' => substr($target, 0, 80),
+                            'errors' => (int) $entry['n'],
+                            'added' => $autotuneAdded ? 1 : 0,
+                            'for' => $missing !== null ? substr($missing['name'], 0, 60) : '',
+                            'as' => $keptAs,
+                        ]);
+                    }
+                    $tuned[$target] = time();
+                    update_option('wpc_delay_v3_autotuned', $tuned, false);
+                    $tuned_now = true;
                 }
-                $ex = get_option('wpc-excludes', []);
-                if (!is_array($ex)) {
-                    $ex = [];
+                if ($tuned_now) {
+                    break;
                 }
-                // Into the one Delay JS exclude list (`delay_js_v3`), where both boxes show it and
-                // a removal from either box removes it. It wrote `delay_js_v2`, which only the old
-                // union reader served and the site's own box never showed.
-                $ex = wpc_delay_excludes_fold($ex);
-                if (empty($ex['delay_js_v3']) || !is_array($ex['delay_js_v3'])) {
-                    $ex['delay_js_v3'] = [];
-                }
-                $autotuneAdded = !in_array($base, $ex['delay_js_v3'], true);
-                if ($autotuneAdded) {
-                    $ex['delay_js_v3'][] = $base;
-                    update_option('wpc-excludes', $ex);
-                    set_transient('wpc_delay_v3_autotune_notice', $base, WEEK_IN_SECONDS);
-                    $wpc_purge_page($wpc_report_path, 'delay-autotune');
-                }
-                // A same-site script that errors three times under replay joins the Delay JS
-                // excludes (at most five); the replay breaks it and nothing predicts which.
-                if (function_exists('wpc_cache_first_log')) {
-                    wpc_cache_first_log('delay-autotune-excluded', '', $wpc_report_path_logged, [
-                        'script' => substr($base, 0, 80),
-                        'errors' => (int) $entry['n'],
-                        'added' => $autotuneAdded ? 1 : 0,
-                    ]);
-                }
-                $tuned[$base] = time();
-                update_option('wpc_delay_v3_autotuned', $tuned, false);
-                break;
             }
         }
     }
@@ -6588,6 +6896,60 @@ add_action('admin_init', function () {
 }, 20);
 
 
+/**
+ * The one PageSpeed dispatch. pagespeed.zapwp.net keys the run on the `uuid` we send and
+ * answers get-results/{uuid}; saveBenchmark() polls the uuid stashed here. The Retest button
+ * used to dispatch with no uuid and wait for a `jobId` the service never returns, so the poll
+ * read an older stashed uuid, got 404 "Results not found", and stored NULL scores as a result
+ * (centralmotelgi.com.au, 2026-10-07: the run finished on the service, the card spun forever).
+ * Blocking: returns the uuid only when the service answered accepted; otherwise ''.
+ */
+function wpc_psi_dispatch($blocking = false)
+{
+    $opts = get_option(WPS_IC_OPTIONS);
+    if (empty($opts['api_key'])) {
+        return '';
+    }
+    $uuid = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : bin2hex(random_bytes(8));
+    set_transient('wpc_psi_uuid', $uuid, 30 * 60);
+    $args = [
+        'url'            => home_url(),
+        'uuid'           => $uuid,
+        'hash'           => $uuid,
+        'apikey'         => $opts['api_key'],
+        'version'        => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
+        'plugin_version' => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
+    ];
+    if (class_exists('wps_ic') && method_exists('wps_ic', 'getActiveFeatures')) {
+        $args['features'] = wps_ic::getActiveFeatures();
+    }
+    if (apply_filters('wpc_psi_clean_after', true)) {
+        $args['clean_after'] = 1;
+    }
+    try {
+        $requests = new wps_ic_requests();
+        $response = $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => $blocking ? 5 : 2, 'blocking' => (bool) $blocking, 'headers' => ['Content-Type' => 'application/json']]);
+    } catch (\Throwable $e) {
+        $response = null;
+    }
+    // First poll ~60 s out (a run took ~70 s on centralmotelgi); saveBenchmark re-arms it while
+    // the service answers running, up to the wpc_psi_poll cap.
+    if (class_exists('wps_ic_url_key') && function_exists('wp_schedule_single_event')) {
+        $urlKey = (new wps_ic_url_key())->setup(home_url());
+        wp_schedule_single_event(time() + 60, 'wpc_psi_poll', [$urlKey, $uuid]);
+    }
+    if (!$blocking) {
+        return $uuid;
+    }
+    $data = is_array($response) ? json_decode(wp_remote_retrieve_body($response), true) : null;
+    if (is_array($data) && ($data['uuid'] ?? '') === $uuid) {
+        return $uuid;
+    }
+    delete_transient('wpc_psi_uuid');
+    return '';
+}
+
+
 if (!function_exists('wpc_first_run_psi_now')) {
     function wpc_first_run_psi_now()
     {
@@ -6615,20 +6977,7 @@ if (!function_exists('wpc_first_run_psi_now')) {
             return;
         }
         // No uuid stashed → dispatch a fresh run keyed on a plugin uuid (pull-recoverable next cycle).
-        $uuid = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : bin2hex(random_bytes(8));
-        set_transient('wpc_psi_uuid', $uuid, 30 * 60);
-        try {
-            $requests = new wps_ic_requests();
-            $args = [
-                'url'            => home_url(),
-                'uuid'           => $uuid,
-                'hash'           => $uuid,
-                'apikey'         => $opts['api_key'],
-                'version'        => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
-                'plugin_version' => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
-            ];
-            $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 2, 'blocking' => false, 'headers' => ['Content-Type' => 'application/json']]);
-        } catch (\Throwable $e) {}
+        wpc_psi_dispatch();
     }
 }
 add_action('admin_init', function () {

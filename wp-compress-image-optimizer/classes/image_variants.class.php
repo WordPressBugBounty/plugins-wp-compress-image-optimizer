@@ -17,6 +17,7 @@
  *   note_provisional_savings(...)         a saving announced before its bytes are in the set
  *   mark_compressed($id, $src)            ic_status = compressed (a promotion with no bytes to record)
  *   clear($id, $reason)                   drop the set, its savings and its journal files (restore, purge)
+ *   forget($id, $keys, $src)              drop entries whose file left the disk, then the savings of what is left
  *
  * THE MERGE RULE. An entry merges over the one stored under its key (array_merge: fields the new
  * entry does not carry are kept). With `first` set (the dispatch's own Phase A answer) an entry
@@ -196,6 +197,51 @@ class wps_ic_image_variants
             }
         }
         return $journal_dropped;
+    }
+
+    /**
+     * Take entries out of the set under the image's meta lock: variants whose file was removed from
+     * the disk (the renderer emits a <source> for a recorded entry, and a recorded entry no file
+     * backs would 404 where the origin serves it). The savings are re-derived from what is left.
+     * Answers how many entries went.
+     */
+    public static function forget($id, array $keys, $src)
+    {
+        $id = (int) $id;
+        if ($id <= 0 || empty($keys)) {
+            return 0;
+        }
+        $lock = 'wpc_bg_meta_' . $id;
+        $locked = function_exists('wpc_worker_lock') ? wpc_worker_lock($lock) : false;
+        $gone = 0;
+        try {
+            $set = self::get($id);
+            foreach ($keys as $key) {
+                if (isset($set[$key])) {
+                    unset($set[$key]);
+                    $gone++;
+                }
+            }
+            if ($gone > 0) {
+                foreach (self::SAVINGS_KEYS as $savings_key) {
+                    delete_post_meta($id, $savings_key);
+                }
+                if (empty($set)) {
+                    delete_post_meta($id, 'ic_local_variants');
+                } else {
+                    update_post_meta($id, 'ic_local_variants', $set);
+                    self::write_savings($id, $set);
+                }
+            }
+        } finally {
+            if ($locked) {
+                wpc_worker_unlock($lock);
+            }
+        }
+        if ($gone > 0 && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('image-variants-forgotten', (string) $id, '', ['id' => $id, 'src' => (string) $src, 'n' => $gone]);
+        }
+        return $gone;
     }
 
     private static function write_savings($id, array $set)

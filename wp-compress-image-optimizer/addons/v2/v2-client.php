@@ -696,10 +696,10 @@ class WPS_LocalV2
             // (the attached file for `scaled`, the original for `original`) and records it as no
             // improvement; that is an intentional skip, not a failure.
             $dest = $dest_dir . '/' . $filename;
-            $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $parent_size_label, 'fmt' => $fmt, 'src' => 'phase_a']]);
-            if (($put['error'] ?? '') === 'larger_than_disk') {
+            $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $parent_size_label, 'fmt' => $fmt, 'src' => 'phase_a', 'claim' => wpc_v2_variant_claim($entry)]]);
+            if (!empty($put['settled'])) {
                 if (empty($put['recorded'])) {
-                    $this->record_no_improvement_variant($imageID, $parent_size_label, $fmt, 'larger_than_disk', $entry);
+                    $this->record_no_improvement_variant($imageID, $parent_size_label, $fmt, (string) $put['error'], $entry);
                 }
                 $intentional_skip_count++;
                 continue;

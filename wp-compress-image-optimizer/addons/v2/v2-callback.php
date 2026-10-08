@@ -380,6 +380,7 @@ function wpc_v2_handle_healthcheck(WP_REST_Request $request)
             'last_drain_skip'     => get_option('wpc_v2_last_drain_skip', null),
             'last_extdrain'       => get_option('wpc_v2_last_extdrain', null),
             'ingest_outcomes'     => get_option('wpc_v2_ingest_outcomes', null),
+            'variant_identity'    => function_exists('wpc_v2_variant_identity_report') ? wpc_v2_variant_identity_report() : null,
             'last_ingest_trace'   => get_option('wpc_v2_last_ingest_trace', null),
             'bytes_egress'         => (static function () {
                 $r_eg = wp_remote_head('https://' . wpc_v2_variants_host() . '/', ['timeout' => 5, 'sslverify' => false]);
@@ -787,9 +788,9 @@ function wpc_v2_handle_bg_swap(WP_REST_Request $request)
         return wpc_v2_respond(400, ['error' => 'bad_extension']);
     }
 
-    $store_result = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $size_label, 'fmt' => $format, 'src' => 'bg_swap']]);
-    if (($store_result['error'] ?? '') === 'larger_than_disk') {
-        return wpc_v2_respond(200, ['ok' => true, 'kind' => 'no_improvement', 'reason' => 'larger_than_disk']);
+    $store_result = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $size_label, 'fmt' => $format, 'src' => 'bg_swap', 'claim' => wpc_v2_variant_claim($body)]]);
+    if (!empty($store_result['settled'])) {
+        return wpc_v2_respond(200, ['ok' => true, 'kind' => 'no_improvement', 'reason' => (string) $store_result['error']]);
     }
     if (empty($store_result['ok'])) {
         error_log(sprintf(
@@ -1444,6 +1445,7 @@ function wpc_v2_handle_bg_swap_batch(WP_REST_Request $request)
             ];
             if (isset($v['q']))      $je['q']      = (int) $v['q'];
             if (isset($v['bumped'])) $je['bumped'] = sanitize_text_field((string) $v['bumped']);
+            $je += wpc_v2_variant_claim_wire($v);
             $journal_entries[] = $je;
 
             if (wpc_v2_remove_pending($imageID, $sz, $fmt)) {
@@ -1529,12 +1531,12 @@ function wpc_v2_handle_bg_swap_batch(WP_REST_Request $request)
 
         // Log silent disk-write failures in the batch path (same rationale
         // as the single-variant path).
-        $store_result = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $sz, 'fmt' => $fmt, 'src' => 'bg_swap_batch']]);
-        if (($store_result['error'] ?? '') === 'larger_than_disk') {
+        $store_result = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $sz, 'fmt' => $fmt, 'src' => 'bg_swap_batch', 'claim' => wpc_v2_variant_claim($v)]]);
+        if (!empty($store_result['settled'])) {
             if (!empty($store_result['drain_complete'])) {
                 $any_drain_complete = true;
             }
-            $results[] = ['ok' => true, 'kind' => 'no_improvement', 'reason' => 'larger_than_disk', 'sizeLabel' => $sz, 'format' => $fmt];
+            $results[] = ['ok' => true, 'kind' => 'no_improvement', 'reason' => (string) $store_result['error'], 'sizeLabel' => $sz, 'format' => $fmt];
             $persisted_count++;
             continue;
         }
@@ -2298,10 +2300,10 @@ function wpc_v2_handle_bg_swap_single(WP_REST_Request $request)
 
     // Disk write — atomic via temp+rename.
     $write_start = microtime(true);
-    $store_result = wpc_v2_store_bytes($bytes, $output_path, ['variant' => ['id' => $imageID, 'size' => $sizeLabel, 'fmt' => $format, 'src' => 'bg_swap_single']]);
-    if (($store_result['error'] ?? '') === 'larger_than_disk') {
-        wpc_v2_record_lazy_cdn_outcome('larger_than_disk', $arrival_t, ['image_id' => $imageID]);
-        return wpc_v2_respond(200, ['ok' => true, 'kind' => 'no_improvement', 'reason' => 'larger_than_disk']);
+    $store_result = wpc_v2_store_bytes($bytes, $output_path, ['variant' => ['id' => $imageID, 'size' => $sizeLabel, 'fmt' => $format, 'src' => 'bg_swap_single', 'claim' => wpc_v2_variant_claim($body)]]);
+    if (!empty($store_result['settled'])) {
+        wpc_v2_record_lazy_cdn_outcome((string) $store_result['error'], $arrival_t, ['image_id' => $imageID]);
+        return wpc_v2_respond(200, ['ok' => true, 'kind' => 'no_improvement', 'reason' => (string) $store_result['error']]);
     }
     if (empty($store_result['ok'])) {
         wpc_v2_record_lazy_cdn_outcome('disk_' . (string) $store_result['error'], $arrival_t, [

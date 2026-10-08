@@ -44,6 +44,7 @@ if (!function_exists('wpc_v2_selfcheck_required_functions')) {
             'wpc_v2_handle_bg_swap_batch'  => 'v2-callback.php',
             'wpc_v2_verify_hmac'           => 'v2-inbound.php',
             'wpc_v2_store_bytes'        => 'v2-store.php',
+            'wpc_v2_variant_identity'   => 'v2-variant-identity.php',
             'wpc_v2_get_apikey'            => 'v2-capabilities.php',
         ] as $fn => $file) {
             if (!function_exists($fn)) {

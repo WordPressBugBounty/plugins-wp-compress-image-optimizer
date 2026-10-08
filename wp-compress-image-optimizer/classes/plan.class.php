@@ -186,7 +186,7 @@ class wps_ic_plan
         }
         $apikey = self::lite_apikey(true);
         if ($apikey === '') {
-            return ['state' => 'error', 'code' => 'api-issue', 'msg' => __('We could not reach WP Compress. Try again in a moment.', 'wp-compress-image-optimizer')];
+            return ['state' => 'error', 'code' => 'api-issue', 'msg' => __('We could not reach the optimization service. Try again in a moment.', 'wp-compress-image-optimizer')];
         }
         $r = self::keys_post('liteClaim', [
             'apikey'         => $apikey,
@@ -213,9 +213,9 @@ class wps_ic_plan
             ], false);
             self::strip('pending', $email);
             self::receipt('lite-claim-sent', ['state' => 'pending', 'request' => isset($d['request_id']) ? (string) $d['request_id'] : '']);
-            return ['state' => 'pending', 'code' => 'pending', 'msg' => sprintf(__('Check %s for a link from WP Compress.', 'wp-compress-image-optimizer'), self::mask_email($email))];
+            return ['state' => 'pending', 'code' => 'pending', 'msg' => sprintf(__('Check %s for the link we sent.', 'wp-compress-image-optimizer'), self::mask_email($email))];
         }
-        return ['state' => 'error', 'code' => 'api-issue', 'msg' => __('We could not reach WP Compress. Try again in a moment.', 'wp-compress-image-optimizer')];
+        return ['state' => 'error', 'code' => 'api-issue', 'msg' => __('We could not reach the optimization service. Try again in a moment.', 'wp-compress-image-optimizer')];
     }
 
     /** Asks the keys endpoint whether the pending link landed. */
@@ -257,7 +257,7 @@ class wps_ic_plan
         }
         $req['next_poll'] = time() + max(10, (int) (isset($d['poll_after']) ? $d['poll_after'] : self::backoff($req['attempts'])));
         update_option(self::REQUEST_OPTION, $req, false);
-        return ['state' => 'pending', 'code' => 'pending', 'msg' => sprintf(__('Check %s for a link from WP Compress.', 'wp-compress-image-optimizer'), (string) $req['email'])];
+        return ['state' => 'pending', 'code' => 'pending', 'msg' => sprintf(__('Check %s for the link we sent.', 'wp-compress-image-optimizer'), (string) $req['email'])];
     }
 
     /** The pending request as the settings page needs it, or null. */
@@ -328,7 +328,7 @@ class wps_ic_plan
     {
         $version = self::apply_payload($d, $source);
         if ($version === false) {
-            return ['state' => 'error', 'code' => 'api-issue', 'msg' => __('WP Compress answered without a plan. Try again in a moment.', 'wp-compress-image-optimizer')];
+            return ['state' => 'error', 'code' => 'api-issue', 'msg' => __('The optimization service answered without a plan. Try again in a moment.', 'wp-compress-image-optimizer')];
         }
         if ($version !== 'lite' && class_exists('wps_ic_connect')) {
             $connect = new wps_ic_connect();
@@ -401,7 +401,7 @@ class wps_ic_plan
             'token-used'     => __('This link was already used. Get a new one from Add site.', 'wp-compress-image-optimizer'),
             'token-expired'  => __('This link expired. Links last 15 minutes. Get a new one from Add site.', 'wp-compress-image-optimizer'),
             'rate-limited'   => __('Try again in a few minutes.', 'wp-compress-image-optimizer'),
-            'api-issue'      => __('We could not reach WP Compress. Try again in a moment.', 'wp-compress-image-optimizer'),
+            'api-issue'      => __('We could not reach the optimization service. Try again in a moment.', 'wp-compress-image-optimizer'),
         ];
         if ($code === 'domain-bound' && !empty($r['data']['owner'])) {
             $msgs['domain-bound'] = sprintf(__('This site is already on an account (%s). Ask that owner, or use a key from your dashboard.', 'wp-compress-image-optimizer'), sanitize_text_field((string) $r['data']['owner']));
@@ -418,10 +418,12 @@ class wps_ic_plan
         $page = self::settings_url();
         switch ($state) {
             case 'pending':
-                wpc_set_state_notice('claim', 'info', sprintf(__('Check %s for a link from WP Compress to finish linking this site.', 'wp-compress-image-optimizer'), self::mask_email($email)), '#wpc-claim-resend', __('Send again', 'wp-compress-image-optimizer'));
+                wpc_set_state_notice('claim', 'info', sprintf(__('Check %s for the link we sent to finish linking this site.', 'wp-compress-image-optimizer'), self::mask_email($email)), '#wpc-claim-resend', __('Send again', 'wp-compress-image-optimizer'));
                 break;
             case 'linked':
-                wpc_set_state_notice('claim', 'success', __('This site is linked to your WP Compress account.', 'wp-compress-image-optimizer'), '', '');
+                if (function_exists('wpc_clear_state_notice')) {
+                    wpc_clear_state_notice('claim');
+                }
                 break;
             case 'expired':
                 wpc_set_state_notice('claim', 'warning', __('The link to finish linking this site expired.', 'wp-compress-image-optimizer'), '#wpc-claim-resend', __('Send a new one', 'wp-compress-image-optimizer'));

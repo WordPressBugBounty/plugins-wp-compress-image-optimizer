@@ -981,9 +981,8 @@ class wps_ic_preload_warmup
 		    }
 
         $excludes = get_option('wpc-excludes');
-        $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-        if (!empty($excludes) && !empty($excludes['cache'])) {
-            if (in_array($url, $excludes['cache'])) {
+        if (!empty($excludes) && !empty($excludes['cache']) && class_exists('wps_ic_url_key')) {
+            if (wps_ic_url_key::excludedBy($excludes['cache'], wps_ic_url_key::requestHostPath()) !== false) {
                 return 'excluded';
             }
         }

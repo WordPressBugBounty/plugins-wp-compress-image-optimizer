@@ -368,7 +368,7 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
                 // lazy_first_render vs backfill in logs.
                 'delivery_method' => isset($v['delivery_method']) ? (string) $v['delivery_method'] : 'push',
                 'source'       => 'pull_manifest',
-            ];
+            ] + wpc_v2_variant_claim_wire($v);
 
             $by_image[$imageID]['entries'][] = $entry;
         }

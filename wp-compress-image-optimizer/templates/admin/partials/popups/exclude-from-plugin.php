@@ -43,6 +43,8 @@
                 <p><span class="wpc-example-chip">/my-account</span> <?php echo esc_html__('would bypass plugin on account pages and all sub-pages', WPS_IC_TEXTDOMAIN); ?></p>
                 <p><span class="wpc-example-chip">/offer/di-premium</span> <?php echo esc_html__('would bypass plugin on that offer page and any sub-pages', WPS_IC_TEXTDOMAIN); ?></p>
                 <p><span class="wpc-example-chip">cart</span> <?php echo __('would bypass plugin on any URL containing &quot;cart&quot;', WPS_IC_TEXTDOMAIN); ?></p>
+                <p><span class="wpc-example-chip">https://example.com/contact/</span> <?php echo esc_html__('a full address works too: that page and any sub-pages', WPS_IC_TEXTDOMAIN); ?></p>
+                <p><span class="wpc-example-chip">/</span> <?php echo esc_html__('would bypass plugin on the homepage only', WPS_IC_TEXTDOMAIN); ?></p>
             </div>
         </div>
       </div>

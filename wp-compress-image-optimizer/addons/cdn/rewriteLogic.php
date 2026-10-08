@@ -3378,7 +3378,7 @@ class wps_rewriteLogic
     /** $isAmp is the render's AMP verdict ($ctx->isAmp), handed down by stage_external_urls. */
     public function externalUrls($html, $isAmp)
     {
-        $html = preg_replace_callback('/https?:[^)\s]+\.(jpg|jpeg|png|gif|svg|css|js|ico|icon)(?![^.\w]*\.[^.\w]*)/i', function ($image) use ($isAmp) {
+        $html = preg_replace_callback('/https?:[^)\s"\'<>]+\.(jpg|jpeg|png|gif|svg|css|js|ico|icon)(?![^.\w]*\.[^.\w]*)/i', function ($image) use ($isAmp) {
             return $this->cdnExternalUrls($image, $isAmp);
         }, $html);
 
@@ -4827,11 +4827,11 @@ SCRIPT;
 
 
                 if (self::wpc_combined_crit_on()) {
-                    $output .= self::wpc_cls_reserve_style(dirname($criticalCSSExists['desktop']), true);
+                    $output .= self::wpc_cls_reserve_style(dirname($criticalCSSExists['desktop']), true, $html);
                     $output .= str_replace('id="wpc-cls-reserve"', 'id="wpc-cls-reserve-d"',
-                        self::wpc_cls_reserve_style(dirname($criticalCSSExists['desktop']), false));
+                        self::wpc_cls_reserve_style(dirname($criticalCSSExists['desktop']), false, $html));
                 } else {
-                    $output .= self::wpc_cls_reserve_style(dirname($criticalCSSExists['desktop']), $this->isMobile());
+                    $output .= self::wpc_cls_reserve_style(dirname($criticalCSSExists['desktop']), $this->isMobile(), $html);
                 }
             }
             if (file_exists($criticalCSSExists['desktop']) && file_exists($criticalCSSExists['mobile'])) {
@@ -5362,6 +5362,10 @@ SCRIPT;
                                     $headerTokens = self::wpc_header_markup_tokens($html);
                                     $headerSliceMobile = wpc_header_css_slice($usedCssMobilePath, $headerTokens);
                                     $headerSliceDesktop = wpc_header_css_slice($usedCssDesktopPath, $headerTokens);
+                                    if (function_exists('wpc_css_isolate_sheet')) {
+                                        $headerSliceMobile = wpc_css_isolate_sheet((string) $headerSliceMobile);
+                                        $headerSliceDesktop = wpc_css_isolate_sheet((string) $headerSliceDesktop);
+                                    }
                                     $headerSliceCss  = ($headerSliceMobile !== '' ? '@media (max-width: 767.98px){' . $headerSliceMobile . '}' : '')
                                         . ($headerSliceDesktop !== '' ? '@media (min-width: 768px){' . $headerSliceDesktop . '}' : '');
                                     if ($headerSliceCss !== '') {
@@ -5620,15 +5624,13 @@ SCRIPT;
                                 && method_exists('wps_cdn_rewrite', 'wpc_font_subset_families'))
                                 ? wps_cdn_rewrite::wpc_font_subset_families() : [];
                             if (!empty($remoteFontRanges)) {
-                                $lateFaces = (string) preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($fm) use ($remoteFontRanges, $subsetFontFamilies) {
+                                $lateFaces = (string) preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($fm) use ($subsetFontFamilies) {
                                     $blk = $fm[0];
                                     if (stripos($blk, 'data:') !== false) { return $blk; }
                                     if (!preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $blk, $fa)) { return $blk; }
-                                    $wt = preg_match('/font-weight\s*:\s*(\d{2,4})/i', $blk, $wm) ? (int) $wm[1] : 400;
-                                    $st = preg_match('/font-style\s*:\s*italic/i', $blk) ? 'italic' : 'normal';
                                     $familyName = strtolower(trim($fa[1], " \t\"'"));
-                                    $k  = $familyName . '|' . $wt . '|' . $st;
-                                    if (empty($remoteFontRanges[$k])) { return $blk; }
+                                    $rangeGate = wps_cdn_rewrite::font_face_range_gate($familyName, $blk);
+                                    if ($rangeGate === null) { return $blk; }
                                     // v7.10.759 — icon-font families are never range-gated (their
                                     // glyphs come from content:"" rules no census sees; the
                                     // complement forbids exactly those codepoints). Family is in
@@ -5659,7 +5661,12 @@ SCRIPT;
                                         $blk = (string) preg_replace('/\s*;?\s*unicode-range\s*:\s*[^;}]+;?/i', '', $blk);
                                         return (string) preg_replace('/;\s*\}/', '}', $blk);
                                     }
-                                    $want = 'unicode-range:' . $remoteFontRanges[$k];
+                                    // A weightless face of a variable font gets the subset's weight range too
+                                    // (see font_face_range_gate: without it the 400 text falls to the fallback).
+                                    if ($rangeGate['weight'] !== null) {
+                                        $blk = (string) preg_replace('/\}\s*$/', ';font-weight:' . $rangeGate['weight'] . '}', $blk, 1);
+                                    }
+                                    $want = 'unicode-range:' . $rangeGate['range'];
                                     if (preg_match('/unicode-range\s*:\s*[^;}]+/i', $blk)) {
                                         return (string) preg_replace('/unicode-range\s*:\s*[^;}]+/i', $want, $blk, 1);
                                     }
@@ -5789,12 +5796,17 @@ SCRIPT;
 
                         $wpc_mb = self::wpc_note_conceal_guard($criticalCSSContent_Mobile);
                         $wpc_db = self::wpc_note_conceal_guard($criticalCSSContent_Desktop);
-                        $wpc_mo = substr_count($wpc_mb, '{') - substr_count($wpc_mb, '}');
-                        $wpc_do = substr_count($wpc_db, '{') - substr_count($wpc_db, '}');
-
-
-                        if (substr_count($wpc_mb, '/*') > substr_count($wpc_mb, '*/')) { $wpc_mb .= '*/'; }
-                        if (substr_count($wpc_db, '/*') > substr_count($wpc_db, '*/')) { $wpc_db .= '*/'; }
+                        if (function_exists('wpc_css_isolate_sheet')) {
+                            $wpc_mb = wpc_css_isolate_sheet($wpc_mb);
+                            $wpc_db = wpc_css_isolate_sheet($wpc_db);
+                            $wpc_mo = 0;
+                            $wpc_do = 0;
+                        } else {
+                            $wpc_mo = substr_count($wpc_mb, '{') - substr_count($wpc_mb, '}');
+                            $wpc_do = substr_count($wpc_db, '{') - substr_count($wpc_db, '}');
+                            if (substr_count($wpc_mb, '/*') > substr_count($wpc_mb, '*/')) { $wpc_mb .= '*/'; }
+                            if (substr_count($wpc_db, '/*') > substr_count($wpc_db, '*/')) { $wpc_db .= '*/'; }
+                        }
                         if ($wpc_mo >= 0 && $wpc_mo <= 64 && $wpc_do >= 0 && $wpc_do <= 64) {
                             if ($wpc_mo > 0) { $wpc_mb .= str_repeat('}', $wpc_mo); }
                             if ($wpc_do > 0) { $wpc_db .= str_repeat('}', $wpc_do); }
@@ -7509,7 +7521,7 @@ SCRIPT;
     public static function wpc_consent_family($s)
     {
         $consentTokens = ['cmplz', 'complianz', 'cookieyes', 'cky-consent', 'cky-style', 'cookie-law-info',
-            'cookiebot', 'borlabs', 'iubenda', 'onetrust', 'usercentrics', 'surecookie',
+            'cookiebot', 'borlabs', 'iubenda', 'onetrust', 'usercentrics', 'surecookie', 'ccm19', 'consentmanager.net', 'cookiefirst', 'cookiehub', 'cookie-script.com', 'cookieinformation',
             'cookie-notice', 'cookie-consent', 'moove_gdpr', 'moove-gdpr', 'osano', 'termly',
             'tarteaucitron', 'quantcast', 'consently', 'didomi', 'wpl_cookie_consent'];
         if (function_exists('apply_filters')) {
@@ -7586,7 +7598,226 @@ SCRIPT;
         return false;
     }
 
-    public static function wpc_cls_reserve_style($critDir, $isMobile)
+    /**
+     * The page with every comment and the bodies of its script, style, template and textarea
+     * elements blanked to spaces: offsets still match the page, and markup written inside them
+     * is not read as elements.
+     */
+    public static function wpc_page_inert_blanked($html)
+    {
+        $html = (string) $html;
+        if ($html === '' || !preg_match_all('#<!--|<(script|style|template|textarea)\b[^>]*>#i', $html, $openers, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $pieces = [];
+        $cursor = 0;
+        $length = strlen($html);
+        foreach ($openers[0] as $n => $opener) {
+            if ($opener[1] < $cursor) {
+                continue;
+            }
+            if ($opener[0] === '<!--') {
+                $blankFrom = $opener[1];
+                $close = strpos($html, '-->', $blankFrom + 4);
+                $blankTo = $close === false ? $length : $close + 3;
+            } else {
+                $blankFrom = $opener[1] + strlen($opener[0]);
+                $close = stripos($html, '</' . $openers[1][$n][0], $blankFrom);
+                $blankTo = $close === false ? $length : $close;
+            }
+            $pieces[] = substr($html, $cursor, $blankFrom - $cursor);
+            $pieces[] = str_repeat(' ', $blankTo - $blankFrom);
+            $cursor = $blankTo;
+        }
+        $pieces[] = (string) substr($html, $cursor);
+        return implode('', $pieces);
+    }
+
+    /**
+     * Where the one element a simple selector names sits in $page (a wpc_page_inert_blanked()
+     * copy): [start of its start tag, end of its start tag, start of its end tag, tag name].
+     * Null when the selector is not one compound of an optional tag, classes and at most one id,
+     * when it names no element or more than one, when a '<' before one of its tokens cannot be
+     * read as a start tag, or when the element's end tag cannot be found.
+     */
+    public static function wpc_page_element_span($sel, $page)
+    {
+        $sel = trim((string) $sel);
+        $page = (string) $page;
+        if ($sel === '' || $page === '' || strlen($sel) > 200
+            || !preg_match('/^([a-zA-Z][a-zA-Z0-9]*)?((?:[.#]-?[A-Za-z_][A-Za-z0-9_-]*)+)$/', $sel, $parts)) {
+            return null;
+        }
+        $tagName = strtolower((string) $parts[1]);
+        preg_match_all('/([.#])(-?[A-Za-z_][A-Za-z0-9_-]*)/', $parts[2], $tokens, PREG_SET_ORDER);
+        $wantId = null;
+        $wantClasses = [];
+        foreach ($tokens as $token) {
+            if ($token[1] === '#') {
+                if ($wantId !== null) {
+                    return null;
+                }
+                $wantId = $token[2];
+            } else {
+                $wantClasses[] = $token[2];
+            }
+        }
+        $needle = (string) $wantId;
+        foreach ($wantClasses as $wantClass) {
+            if (strlen($wantClass) > strlen($needle)) {
+                $needle = $wantClass;
+            }
+        }
+        $startTag = '#\G<([a-zA-Z][a-zA-Z0-9-]*)(?=[\s/>])((?:[^>"\']|"[^"]*"|\'[^\']*\')*)>#';
+        $match = null;
+        $checkedStarts = [];
+        $tokenHits = 0;
+        $offset = 0;
+        while (($at = strpos($page, $needle, $offset)) !== false) {
+            $offset = $at + strlen($needle);
+            if (preg_match('/[\w-]/', ($at > 0 ? $page[$at - 1] : ' ') . (isset($page[$offset]) ? $page[$offset] : ' '))) {
+                continue;
+            }
+            if (++$tokenHits > 200) {
+                return null;
+            }
+            $lt = strrpos($page, '<', $at - strlen($page));
+            if ($lt === false || isset($checkedStarts[$lt])) {
+                continue;
+            }
+            $checkedStarts[$lt] = 1;
+            if (!preg_match($startTag, $page, $tag, 0, $lt)) {
+                if (!isset($page[$lt + 1]) || $page[$lt + 1] !== '/') {
+                    return null;
+                }
+                continue;
+            }
+            if ($lt + strlen($tag[0]) <= $at || ($tagName !== '' && strtolower($tag[1]) !== $tagName)) {
+                continue;
+            }
+            preg_match_all('#\s([^\s=/>"\']+)(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+)))?#', $tag[2], $attributes, PREG_SET_ORDER);
+            $attributeValues = [];
+            foreach ($attributes as $attribute) {
+                $attributeName = strtolower($attribute[1]);
+                if (!isset($attributeValues[$attributeName])) {
+                    $attributeValues[$attributeName] = (string) (isset($attribute[4]) ? $attribute[4] : (isset($attribute[3]) && $attribute[3] !== '' ? $attribute[3] : (isset($attribute[2]) ? $attribute[2] : '')));
+                }
+            }
+            if ($wantId !== null && (!isset($attributeValues['id']) || trim($attributeValues['id']) !== $wantId)) {
+                continue;
+            }
+            $hasClasses = isset($attributeValues['class']) ? preg_split('/\s+/', trim($attributeValues['class'])) : [];
+            if (array_diff($wantClasses, $hasClasses)) {
+                continue;
+            }
+            if ($match !== null) {
+                return null;
+            }
+            $match = [$lt, $lt + strlen($tag[0]), strtolower($tag[1])];
+        }
+        if ($match === null) {
+            return null;
+        }
+        if (preg_match('/^(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/', $match[2])) {
+            return [$match[0], $match[1], $match[1], $match[2]];
+        }
+        $edgePattern = '#<(/?)' . preg_quote($match[2], '#') . '(?=[\s/>])#i';
+        $depth = 1;
+        $cursor = $match[1];
+        for ($steps = 0; $steps < 20000 && preg_match($edgePattern, $page, $edge, PREG_OFFSET_CAPTURE, $cursor); $steps++) {
+            $depth += $edge[1][0] === '/' ? -1 : 1;
+            if ($depth === 0) {
+                return [$match[0], $match[1], $edge[0][1], $match[2]];
+            }
+            $cursor = $edge[0][1] + 2;
+        }
+        return null;
+    }
+
+    /**
+     * Whether $page between $from and $to is static text: it holds text, and every tag in it is a
+     * text or layout tag that carries nothing but class, id, a style without url(), title, href,
+     * target, rel, lang, dir, role, datetime or aria-*. Nothing in such markup loads, so it holds
+     * no media now and none arrives later.
+     */
+    public static function wpc_page_span_is_static_text($page, $from, $to)
+    {
+        if ($to <= $from || $to - $from > 65536) {
+            return false;
+        }
+        $span = (string) substr((string) $page, $from, $to - $from);
+        if (!preg_match_all('#<([a-zA-Z][a-zA-Z0-9-]*)((?:[^>"\']|"[^"]*"|\'[^\']*\')*)>#', $span, $tags, PREG_SET_ORDER)) {
+            return false;
+        }
+        foreach ($tags as $tag) {
+            if (!preg_match('/^(?:div|section|article|aside|header|footer|main|nav|span|p|a|strong|b|em|i|u|s|small|sub|sup|mark|abbr|cite|code|kbd|q|blockquote|br|hr|h[1-6]|ul|ol|li|dl|dt|dd|pre|time|address|del|ins|wbr|figcaption)$/i', $tag[1])) {
+                return false;
+            }
+            preg_match_all('#\s([^\s=/>"\']+)(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+)))?#', $tag[2], $attributes, PREG_SET_ORDER);
+            foreach ($attributes as $attribute) {
+                $attributeName = strtolower($attribute[1]);
+                if ($attributeName === 'style') {
+                    if (stripos(implode('', array_slice($attribute, 2)), 'url(') !== false) {
+                        return false;
+                    }
+                    continue;
+                }
+                if (!preg_match('/^(?:class|id|title|href|target|rel|lang|dir|role|datetime|aria-[a-z-]+)$/', $attributeName)) {
+                    return false;
+                }
+            }
+        }
+        return trim(preg_replace('/&(?:nbsp|#160|#xa0);/i', ' ', strip_tags($span))) !== '';
+    }
+
+    /**
+     * What in the artifact or the page contradicts a reserve-rect prescription, or [] when nothing
+     * does. Read off the page's own markup, so only for selectors that resolve to one element:
+     *  - ancestor-shorter: at the same measured width another prescription's element, a block
+     *    container measured at 24 px or more, holds this one and was measured shorter than this
+     *    reserve;
+     *  - no-media: an unsized-media prescription whose element is static text.
+     * $spans memoises resolved selectors for one page; past 24 resolutions nothing more resolves.
+     */
+    public static function wpc_presc_reserve_contradiction(array $prescription, $reservePx, array $prescriptions, $page, array &$spans)
+    {
+        $locate = function ($sel) use ($page, &$spans) {
+            $sel = trim((string) $sel);
+            if (!array_key_exists($sel, $spans)) {
+                $spans[$sel] = count($spans) < 24 ? self::wpc_page_element_span($sel, $page) : null;
+            }
+            return $spans[$sel];
+        };
+        $span = $locate(isset($prescription['fix']['payload']['sel']) ? $prescription['fix']['payload']['sel'] : '');
+        if ($span === null) {
+            return [];
+        }
+        $prescriptionId = strtolower((string) (isset($prescription['id']) ? $prescription['id'] : ''));
+        if (isset($prescription['width']) && is_numeric($prescription['width'])) {
+            foreach ($prescriptions as $other) {
+                if (!is_array($other) || strtolower((string) (isset($other['id']) ? $other['id'] : '')) === $prescriptionId
+                    || !isset($other['width']) || !is_numeric($other['width']) || (int) $other['width'] !== (int) $prescription['width']
+                    || !isset($other['evidence']['final_box']['h']) || !is_numeric($other['evidence']['final_box']['h'])
+                    || (float) $other['evidence']['final_box']['h'] < 24
+                    || (float) $other['evidence']['final_box']['h'] + 2 >= (float) $reservePx) {
+                    continue;
+                }
+                $otherSpan = $locate(isset($other['fix']['payload']['sel']) ? $other['fix']['payload']['sel'] : (isset($other['selector']) ? $other['selector'] : ''));
+                if ($otherSpan !== null && $otherSpan[0] < $span[0] && $span[2] <= $otherSpan[2]
+                    && preg_match('/^(?:div|section|article|main|header|footer|aside|nav|figure|form|ul|ol|li|dl|dd|blockquote)$/', $otherSpan[3])) {
+                    return ['why' => 'ancestor-shorter', 'anc' => strtolower((string) $other['id']),
+                        'anc_h' => (int) round((float) $other['evidence']['final_box']['h'])];
+                }
+            }
+        }
+        if (strtolower((string) (isset($prescription['class']) ? $prescription['class'] : '')) === 'unsized-media'
+            && self::wpc_page_span_is_static_text($page, $span[0], $span[2])) {
+            return ['why' => 'no-media'];
+        }
+        return [];
+    }
+
+    public static function wpc_cls_reserve_style($critDir, $isMobile, $html = '')
     {
         if (!apply_filters('wpc_cls_reserve', true)) {
             return '';
@@ -7713,7 +7944,7 @@ SCRIPT;
                 // address would be the most damaging of the legs: the owner hands out only boxes
                 // whose selector the service proved unique (`sel_unique: true`).
                 $ch = (int) round($ch);
-                if ($ch < 10 || $ch > 2000) {
+                if ($ch < 10 || $ch > 600) {
                     continue;
                 }
                 // v7.21.281 — SPEC-cls-reserve-transparent-header: a height pin on a header
@@ -7744,6 +7975,7 @@ SCRIPT;
         // 12 cap): verdict-verified work must not compete with heuristic legs for slots.
         // A3: only verified_unique:true emits; the inline guard below is uniqueness count #2.
         $prescriptionRules = [];
+        $refusedReserves = [];
         $prescriptionsRaw = @is_readable($dir . 'prescriptions.json') ? (string) @file_get_contents($dir . 'prescriptions.json') : '';
         // Artifact tag: the runtime not-unique gate is honored only when the mark's av
         // matches THIS file's av (a purge-and-refetch of identical bytes keeps the same
@@ -7769,12 +8001,14 @@ SCRIPT;
                             $o = [];
                             if (is_array($j)) {
                                 foreach ($j as $k => $v) {
-                                    if (is_array($v) && (string) ($v['skipped'] ?? '') === 'not-unique') { $o[strtolower((string) $k)] = 1; }
+                                    if (is_array($v) && in_array((string) ($v['skipped'] ?? ''), ['not-unique', 'implausible'], true)) { $o[strtolower((string) $k)] = 1; }
                                 }
                             }
                             return $o;
                         })(function_exists('get_option') ? get_option('wpc_presc_journal') : null);
                 }
+                $plausibilityPage = null;
+                $plausibilitySpans = [];
                 foreach ($prescriptionsJson['prescriptions'] as $prescription) {
                     if (count($prescriptionRules) >= 8) {
                         break;
@@ -7796,7 +8030,7 @@ SCRIPT;
                     }
                     if (isset($notUniqueIds[$prescriptionId])
                         && ($notUniqueIds[$prescriptionId] === 1 || (string) $notUniqueIds[$prescriptionId] === $artifactVersionTag)) {
-                        continue; // runtime-recount verdict for THIS artifact: not unique
+                        continue; // a runtime verdict for THIS artifact: not unique, or implausible
                         // (===1 is the journal-fallback sentinel when warm.php is absent)
                     }
                     $reserveSelector = isset($prescription['fix']['payload']['sel']) ? trim((string) $prescription['fix']['payload']['sel']) : '';
@@ -7816,12 +8050,26 @@ SCRIPT;
                     if (isset($seenSelectors[strtolower($reserveSelector)])) {
                         continue; // first-leg-wins across all four legs
                     }
+                    if ($plausibilityPage === null) {
+                        $plausibilityPage = ((string) $html !== '' && strlen((string) $html) <= 3000000) ? self::wpc_page_inert_blanked($html) : '';
+                    }
+                    $contradiction = $plausibilityPage !== ''
+                        ? self::wpc_presc_reserve_contradiction($prescription, $reserveHeightPx, $prescriptionsJson['prescriptions'], $plausibilityPage, $plausibilitySpans)
+                        : [];
+                    if (!empty($contradiction)) {
+                        $refusedReserves[] = array_merge(['id' => $prescriptionId, 'h' => $reserveHeightPx], $contradiction);
+                        continue;
+                    }
                     $seenSelectors[strtolower($reserveSelector)] = 1;
-                    $prescriptionRules[] = ['i' => $prescriptionId, 's' => $reserveSelector, 'r' => $reserveSelector . '{min-height:' . $reserveHeightPx . 'px}'];
+                    $prescriptionRules[] = ['i' => $prescriptionId, 's' => $reserveSelector, 'r' => $reserveSelector . '{min-height:' . $reserveHeightPx . 'px}',
+                        'h' => $reserveHeightPx, 'w' => (isset($prescription['width']) && is_numeric($prescription['width'])) ? (int) $prescription['width'] : 0];
                 }
             }
         }
 
+        if (!empty($refusedReserves) && function_exists('wpc_belt_receipt')) {
+            wpc_belt_receipt('presc-reserve-refused', ['dev' => $device, 'refused' => array_slice($refusedReserves, 0, 8)], false, basename(rtrim($dir, '/')));
+        }
         if (empty($rules) && empty($prescriptionRules)) {
             return '';
         }
@@ -7843,23 +8091,45 @@ SCRIPT;
                 // strip + beacon (true non-unique); 0 = strip quietly (variant page —
                 // never demote the prescription); selector throw = leave the rule (the
                 // CSS parser drops it anyway).
-                . '<script id="wpc-presc-guard-' . ($isMobile ? 'm' : 'd') . '">(function(){var T=Date.now(),L=T,O=null;'
-                . 'try{O=new MutationObserver(function(){L=Date.now()});O.observe(document.documentElement,{childList:!0,subtree:!0})}catch(e){}'
-                . 'var F=function(){try{'
+                // Plausibility (P): 1.5s after the delayed scripts have run (or after the
+                // quiet window when there is no loader), once the document is complete and no
+                // stylesheet is parked or still loading, and every img/video inside is loaded,
+                // with no iframe/embed/object, at a viewport within 0.75–1.5× the measured
+                // width, a reserve taller than 1.5 × the element's own height + 48px on two
+                // readings 1.5s apart (the same own height both times) is stripped and
+                // beaconed implausible. Each reading disables the sheet in one synchronous pass.
+                . '<script id="wpc-presc-guard-' . ($isMobile ? 'm' : 'd') . '">(function(){var T=Date.now(),L=T,O=null,s,N=0,H=null,'
+                . 'Q=' . wp_json_encode($media) . ','
+                . 'm=' . wp_json_encode(array_map(function ($rule) {
+                    return ['i' => $rule['i'], 's' => $rule['s'], 'h' => $rule['h'], 'w' => $rule['w']];
+                }, array_values($prescriptionRules))) . ','
+                . 'A=function(){return!window.matchMedia||matchMedia(Q).matches},'
+                . 'C=function(){var l=document.querySelectorAll("link[rel~=stylesheet]"),i;if(document.readyState!="complete"||document.querySelector(\'[rel^="wpc-"][rel$="stylesheet"],[type^="wpc-"][type$="stylesheet"],link[media="print"][onload],link[data-wpc-tm][media="print"]\'))return!1;for(i=0;i<l.length;i++)if(!l[i].sheet)return!1;return!0},'
+                . 'B=function(a,k){var b=[],x;for(x=0;x<a.length&&x<4;x++)b.push(a[x].i);'
+                . 'try{navigator.sendBeacon(' . wp_json_encode($ajaxUrl) . ',new URLSearchParams({action:"wpc_presc_seen",id:b.join(","),skipped:k,av:' . wp_json_encode($artifactVersionTag) . '}))}catch(e){}},'
+                . 'W=function(k){var c="",j;for(j=0;j<k.length;j++)c+=k[j].s+"{min-height:"+k[j].h+"px}";s.textContent=c?"@media "+Q+"{"+c+"}":"";m=k},'
+                . 'P=function(){try{var e=[],h=[],k=[],x=[],G={},i,j,q,n,t,ok,w=innerWidth;if(!C()){++N<30&&setTimeout(P,1e3);return}if(!A())return;'
+                . 's.disabled=!0;try{for(i=0;i<m.length;i++){try{e[i]=document.querySelector(m[i].s)}catch(z){}h[i]=e[i]?e[i].offsetHeight:0}}finally{s.disabled=!1}'
+                . 'for(i=0;i<m.length;i++){q=e[i];G[m[i].i]=h[i];ok=q&&h[i]>0&&w>=m[i].w*.75&&w<=m[i].w*1.5&&m[i].h>1.5*h[i]+48&&(!H||H[m[i].i]===h[i]);'
+                . 'n=ok?q.querySelectorAll("img,video,iframe,embed,object,script,noscript,[data-src],[data-lazy-src],[data-srcset],[data-bg],[data-wpc-src]"):[];'
+                . 'for(j=-1;ok&&j<n.length;j++){t=j<0?q:n[j];'
+                . 'ok=/^(SCRIPT|NOSCRIPT)$/.test(t.tagName)||t.hasAttribute("data-src")||t.hasAttribute("data-lazy-src")||t.hasAttribute("data-srcset")||t.hasAttribute("data-bg")||t.hasAttribute("data-wpc-src")?!1:'
+                . 't.tagName=="IMG"?t.complete&&t.naturalWidth>0&&!/^data:/.test(t.currentSrc||t.src):t.tagName=="VIDEO"?t.readyState>0:!/^(IFRAME|EMBED|OBJECT)$/.test(t.tagName)}'
+                . '(ok?x:k).push(m[i])}'
+                . 'if(!x.length)return;if(!H){H=G;setTimeout(P,1500);return}W(k);B(x,"implausible")}catch(z){}},'
+                . 'F=function(){try{'
                 . 'if(Date.now()-T>12e3){O&&O.disconnect();return}'
                 . 'if(!document.body||Date.now()-L<600){setTimeout(F,700);return}'
                 . 'O&&O.disconnect();'
-                . 'var s=document.getElementById(' . wp_json_encode($prescriptionStyleId) . ');if(!s)return;'
-                . 'if(window.matchMedia&&!window.matchMedia(' . wp_json_encode($media) . ').matches)return;'
-                . 'var m=' . wp_json_encode(array_values($prescriptionRules)) . ',keep=[],bad=[],i,c;'
+                . 's=document.getElementById(' . wp_json_encode($prescriptionStyleId) . ');if(!s||!A())return;'
+                . 'var keep=[],bad=[],i,c;'
                 . 'for(i=0;i<m.length;i++){try{c=document.querySelectorAll(m[i].s).length}catch(e){c=1}'
                 . 'if(c>1)bad.push(m[i]);else if(c!==0)keep.push(m[i])}'
-                . 'if(keep.length===m.length)return;'
-                . 'var css="",j;for(j=0;j<keep.length;j++)css+=keep[j].r;'
-                . 's.textContent=css?"@media "+' . wp_json_encode($media) . '+"{"+css+"}":"";'
-                . 'if(bad.length){var bi=[],k;for(k=0;k<bad.length&&k<4;k++)bi.push(bad[k].i);'
-                . 'try{navigator.sendBeacon&&navigator.sendBeacon(' . wp_json_encode($ajaxUrl) . ',new URLSearchParams({action:"wpc_presc_seen",id:bi.join(","),skipped:"not-unique",av:' . wp_json_encode($artifactVersionTag) . '}))}catch(e){}}'
+                . 'if(keep.length<m.length){W(keep);bad.length&&B(bad,"not-unique")}'
+                . 'if(!window.wpcStartDelayed||window.wpcScriptsLoadedAt)setTimeout(P,1500);'
+                . 'else addEventListener("wpc-scripts-loaded",function(){setTimeout(P,1500)})'
                 . '}catch(e){}};'
+                . 'try{O=new MutationObserver(function(){L=Date.now()});O.observe(document.documentElement,{childList:!0,subtree:!0})}catch(e){}'
                 . 'setTimeout(F,2500)})();</script>';
         }
         return $reserveMarkup;
@@ -8720,7 +8990,7 @@ SCRIPT;
             // v7.21.261 — bgp261 salt: the combined file is now bg-parked at write, so the
             // derived artifact's content changed and the key must change with it (a stale
             // cmb under the old key would serve unparked bgs forever).
-            $bundleKey = md5($lane . '|bgp261|' . implode('|', $partSignatures));
+            $bundleKey = md5($lane . '|bgp261|iso|' . implode('|', $partSignatures));
             $bundleDir = rtrim(WPS_IC_CRITICAL, '/') . '/combined/';
             $bundleFile = $bundleDir . 'cmb-' . $bundleKey . '.css';
             $keptParts = [];
@@ -8754,7 +9024,7 @@ SCRIPT;
                     if (!is_string($partCss)) {
                         return $html;
                     }
-                    $bundleCss .= $partCss . "\n";
+                    $bundleCss .= (function_exists('wpc_css_isolate_sheet') ? wpc_css_isolate_sheet($partCss) : $partCss) . "\n";
                 }
                 if (count($parts) - count($keptParts) < $minSheets) {
                     return $html;

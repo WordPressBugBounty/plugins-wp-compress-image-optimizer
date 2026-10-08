@@ -121,7 +121,22 @@
             return n;
         };
         var sidecar = function(u) {
-            return fetch(u, { credentials: "omit", priority: "low" }).then(function(res) {
+            var key = /\/(r-[0-9a-f]{32})\.js(?:[?#]|$)/.exec(u);
+            if (key) {
+                return new Promise(function(ok, fail) {
+                    var s = document.createElement("script");
+                    s.src = u;
+                    s.async = true;
+                    s.setAttribute("data-wpc-registry", "1");
+                    s.onload = function() {
+                        var j = window.wpcRegistrySidecar && window.wpcRegistrySidecar[key[1]];
+                        j && j.b ? ok(j.b) : fail(new Error("registry sidecar shape"));
+                    };
+                    s.onerror = function() { fail(new Error("registry sidecar load")); };
+                    (document.head || document.documentElement).appendChild(s);
+                });
+            }
+            return fetch(u, { credentials: "same-origin", priority: "low" }).then(function(res) {
                 if (!res.ok) throw new Error("registry sidecar " + res.status);
                 return res.json();
             }).then(function(j) {
@@ -330,6 +345,91 @@
     function a(e) {
         return e && e.tagName && ("SCRIPT" === e.tagName || "LINK" === e.tagName);
     }
+    function wpcIsEmbed(e) {
+        var t = e && e.tagName;
+        return "IFRAME" === t || "FRAME" === t || "OBJECT" === t || "EMBED" === t;
+    }
+    function wpcSameOrigin(w) {
+        if (!w || /^(about|javascript):/i.test(w)) return !0;
+        try {
+            return new URL(w, location.href).origin === location.origin;
+        } catch (x) {
+            return !1;
+        }
+    }
+    function wpcLoaded(e) {
+        var t = e.tagName;
+        if ("IMG" === t) return !(!e.complete || !e.currentSrc && !e.getAttribute("src"));
+        if (!wpcIsEmbed(e)) return !0;
+        if (!1 === e.isConnected || e.hasAttribute("data-wpc-src")) return !1;
+        var u = e.getAttribute("src") || "", w = e.src || e.data || "";
+        if (wpcSameOrigin(w)) try {
+            var d = e.contentDocument;
+            if (d) return "complete" === d.readyState && !("about:blank" === d.URL && "" !== u && "about:blank" !== u && 0 !== u.indexOf("javascript:"));
+        } catch (x) {}
+        var m = wpcHeadLoads || wpcEmbedSeen;
+        if (!m) return null;
+        if (m.has(e)) return m.get(e) === w;
+        if (wpcHeadLoads && !(wpcHeadBefore && wpcHeadBefore.has(e)) || !wpcEmbedAtBoot.has(e)) return !1;
+        try {
+            if (w && !wpcRtFull && !performance.getEntriesByName(w).length && !performance.getEntriesByName(w.split("#")[0]).length) return !1;
+        } catch (x) {}
+        return null;
+    }
+    function wpcElementLoadListener(e, t, r) {
+        if (!e.nodeType) return y.call(e, "load", t, r);
+        var n = {
+            target: e,
+            listener: t,
+            options: r,
+            cap: "boolean" == typeof r ? r : !(!r || !r.capture),
+            fired: !1,
+            held: !c
+        };
+        y.call(e, "load", t, r), n.held && f.call(e, "load", t, r);
+        var g = r && "object" == typeof r ? r.signal : null;
+        if (g) {
+            if (g.aborted) return;
+            y.call(g, "abort", function() {
+                n.removed = !0;
+            });
+        }
+        y.call(e, "load", function() {
+            n.fired = !0;
+        }, {
+            once: !0
+        }), p.load.push(n);
+    }
+    function wpcFireLoad(t) {
+        try {
+            var r = new Event("load");
+            try {
+                Object.defineProperty(r, "target", {
+                    value: t.target === window ? window : t.target,
+                    writable: !1
+                });
+            } catch (e) {}
+            "function" == typeof t.listener ? t.listener.call(t.target, r) : t.listener && "function" == typeof t.listener.handleEvent && t.listener.handleEvent(r);
+        } catch (t) {
+            e("load listener error:", t);
+        }
+    }
+    function wpcElementReplay(t) {
+        if (!t.removed) {
+            var k = !(!t.options || !t.options.once), g = t.fired && !(wpcIsEmbed(t.target) && t.target.hasAttribute("data-wpc-src")) ? t.held : wpcLoaded(t.target), z = function() {
+                if (k) try {
+                    f.call(t.target, "load", t.listener, t.options);
+                } catch (x) {}
+                wpcFireLoad(t);
+            };
+            if (t.held && !(g && k)) try {
+                y.call(t.target, "load", t.listener, t.options);
+            } catch (x) {}
+            null === g ? setTimeout(function() {
+                t.removed || t.fired || z();
+            }, 2e3) : g && (t.held ? wpcFireLoad(t) : z());
+        }
+    }
     // Zone failover: delayed srcs may ride the CDN host (cfg.cdnHost). Natural-form zone URLs
     // carry the origin path verbatim, so recovery is a host swap; legacy /a: URLs embed the
     // origin outright. One executed-script error flips the whole session to origin-first.
@@ -397,6 +497,18 @@
         pageshow: [],
         visibilitychange: []
     }, y = EventTarget.prototype.addEventListener, f = EventTarget.prototype.removeEventListener, h = EventTarget.prototype.dispatchEvent;
+    var wpcHeadLoads = "function" == typeof WeakMap && window.wpcEmbedLoads instanceof WeakMap ? window.wpcEmbedLoads : null, wpcHeadBefore = wpcHeadLoads && "function" == typeof WeakSet && window.wpcEmbedBefore instanceof WeakSet ? window.wpcEmbedBefore : null, wpcEmbedSeen = "function" == typeof WeakMap && "function" == typeof WeakSet ? new WeakMap : null, wpcEmbedAtBoot = wpcEmbedSeen ? new WeakSet : null, wpcRtFull = !1;
+    try {
+        wpcEmbedSeen && (y.call(document, "load", function(e) {
+            var t = e && e.target;
+            wpcIsEmbed(t) && wpcEmbedSeen.set(t, t.src || t.data || "");
+        }, !0), [].forEach.call(document.querySelectorAll("iframe,frame,object,embed"), function(e) {
+            wpcEmbedAtBoot.add(e);
+        }));
+        wpcRtFull = performance.getEntriesByType("resource").length >= 250, y.call(performance, "resourcetimingbufferfull", function() {
+            wpcRtFull = !0;
+        });
+    } catch (x) {}
     document.readyState;
     // v7.21.170 — NEVER REPORT A STAGE EARLIER THAN THE NATIVE ONE (customer-diagnosed,
     // twice, to the exact getter). .162's "truth until replay" INVERTED the race: the
@@ -449,10 +561,55 @@
         } catch (t) {
             e("jQuery ready promise resolve error:", t);
         }
+        wpcReplayJqueryReadyEvent();
+    }
+    function wpcMarkJqueryReadyHandlersRan(jq) {
         try {
-            g(document).trigger("ready");
+            var ev = jq && jq._data ? jq._data(document, "events") : null, l = ev && ev.ready ? ev.ready : [];
+            for (var i = 0; i < l.length; i++) {
+                if (l[i]) { l[i].wpcReadyRan = 1; }
+            }
+        } catch (z) {}
+    }
+    function wpcArmJqueryReadyEventOnInstance(jq) {
+        try {
+            if (!jq || !jq.fn || !jq.fn.on || !jq._data || jq.wpcReadyEventArmed) { return; }
+            jq.wpcReadyEventArmed = 1;
+            if (jq.isReady && !(jq.readyWait > 0)) {
+                wpcMarkJqueryReadyHandlersRan(jq);
+                if (parseInt(jq.fn.jquery, 10) < 3 || jq.migrateVersion) { jq.wpcReadyEventFired = 1; }
+            }
+            var sentinel = function() {
+                jq.wpcReadyEventFired = 1;
+                wpcMarkJqueryReadyHandlersRan(jq);
+            };
+            sentinel.wpcIsReadySentinel = 1;
+            jq(document).on("ready", sentinel);
+        } catch (z) {}
+    }
+    function wpcReplayJqueryReadyEvent() {
+        try {
+            if (!g || !g._data || !g.event || !g.wpcReadyEventFired) { return; }
+            var ev = g._data(document, "events"), l = ev && ev.ready ? ev.ready : [], due = !1;
+            for (var i = 0; i < l.length; i++) {
+                if (l[i] && !l[i].wpcReadyRan && !(l[i].handler && l[i].handler.wpcIsReadySentinel)) { due = !0; }
+            }
+            if (!due) { return; }
+            var sp = g.event.special.ready || (g.event.special.ready = {}),
+                had = Object.prototype.hasOwnProperty.call(sp, "handle"), prev = sp.handle;
+            sp.handle = function(evt) {
+                var h = evt && evt.handleObj;
+                if (!h || h.wpcReadyRan || (h.handler && h.handler.wpcIsReadySentinel)) { return; }
+                h.wpcReadyRan = 1;
+                return h.handler.apply(this, arguments);
+            };
+            try {
+                g(document).triggerHandler("ready");
+            } finally {
+                if (had) { sp.handle = prev; } else { delete sp.handle; }
+            }
         } catch (t) {
-            e("jQuery trigger error:", t);
+            e("jQuery ready event replay error:", t);
         }
     }
     if (window.WPC_STRICT_ORDER = !!window.WPC_STRICT_ORDER, function() {
@@ -464,6 +621,7 @@
         } catch (e) {}
     }(), EventTarget.prototype.addEventListener = function(t, r, n) {
         if (("load" === t || "error" === t) && a(this)) return y.call(this, t, r, n);
+        if ("load" === t && !s && null != this && this !== window && this !== document) return wpcElementLoadListener(this, r, n);
         var o = !1;
         return ("DOMContentLoaded" !== t || d) && ("load" !== t || s) ? "readystatechange" === t && "complete" !== l ? o = !0 : ("pageshow" === t || "visibilitychange" === t) && !eventsReplayed && (o = !0) : o = !0,
         o && t in p ? (e("Intercepting event listener for:", t), void p[t].push({
@@ -471,6 +629,9 @@
             listener: r,
             options: n
         })) : y.call(this, t, r, n);
+    }, EventTarget.prototype.removeEventListener = function(t, r, n) {
+        if ("load" === t && null != this && this !== window && this !== document) for (var o = "boolean" == typeof n ? n : !(!n || !n.capture), i = 0; i < p.load.length; i++) "held" in p.load[i] && p.load[i].target === this && p.load[i].listener === r && p.load[i].cap === o && (p.load[i].removed = !0);
+        return f.call(this, t, r, n);
     }, EventTarget.prototype.dispatchEvent = function(t) {
         return "load" !== t.type && "error" !== t.type || !a(this) ? (-1 !== [ "load", "DOMContentLoaded", "readystatechange", "pageshow" ].indexOf(t.type) && (u.push({
             type: t.type,
@@ -752,7 +913,7 @@
             return;
         }
         if (e("Replaying captured events and restoring prototypes"), eventsReplayed = !0,
-        EventTarget.prototype.removeEventListener = f, EventTarget.prototype.dispatchEvent = h,
+        EventTarget.prototype.dispatchEvent = h,
         "loading" === l) {
             l = "interactive";
             var r = new Event("readystatechange");
@@ -823,20 +984,13 @@
                     var wpcReplayLoadListenersAfterPaint = function() {
                         p.load.forEach((function(t) {
                             try {
-                                var r = new Event("load");
-                                try {
-                                    Object.defineProperty(r, "target", {
-                                        value: t.target === window ? window : t.target,
-                                        writable: !1
-                                    });
-                                } catch (e) {}
-                                t.listener.call(t.target, r);
-                            } catch (t) {
-                                e("load listener error:", t);
+                                "held" in t ? wpcElementReplay(t) : wpcFireLoad(t);
+                            } catch (x) {
+                                e("load listener error:", x);
                             }
                         }));
                     setTimeout((function() {
-                        EventTarget.prototype.addEventListener = y;
+                        EventTarget.prototype.addEventListener = y, EventTarget.prototype.removeEventListener = f;
                         var r = new Event("pageshow");
                         h.call(window, r), p.pageshow.forEach((function(t) {
                             try {
@@ -1322,7 +1476,17 @@
                     jq(window).on("elementor/frontend/init", sent);
                 } catch (z) {}
             };
-            if (window.jQuery) { reg(window.jQuery); }
+            wpcOnJqueryArrival("elementorInit", reg);
+        } catch (z) {}
+    }
+    var wpcJqueryArrivalNames = [], wpcJqueryArrivalArms = [];
+    function wpcOnJqueryArrival(name, arm) {
+        try {
+            if (wpcJqueryArrivalNames.indexOf(name) === -1) {
+                wpcJqueryArrivalNames.push(name);
+                wpcJqueryArrivalArms.push(arm);
+            }
+            if (window.jQuery) { arm(window.jQuery); }
             if (window.wpcJqueryAccessorTrapInstalled) { return; }
             var d = Object.getOwnPropertyDescriptor(window, "jQuery");
             if (!d || d.configurable) {
@@ -1332,7 +1496,13 @@
                     configurable: true,
                     enumerable: true,
                     get: function() { return cur; },
-                    set: function(v) { cur = v; reg(v); try { if (c) { wpcInstallJqueryReadyTrap(); } } catch (x) {} }
+                    set: function(v) {
+                        cur = v;
+                        for (var i = 0; i < wpcJqueryArrivalArms.length; i++) {
+                            try { wpcJqueryArrivalArms[i](v); } catch (x) {}
+                        }
+                        try { if (c) { wpcInstallJqueryReadyTrap(); } } catch (x) {}
+                    }
                 });
             }
         } catch (z) {}
@@ -1501,6 +1671,7 @@
             "complete" === document.readyState ? start() : y.call(window, "load", start, { once: true });
         } catch (z) {}
     }
+    wpcOnJqueryArrival("readyEvent", wpcArmJqueryReadyEventOnInstance);
     wpcHealElementorAtBoot();
     function D() {
         if (window.wpcJqueryDeferMarker && !window.wpcJqueryDeferMarker.r) {
@@ -1516,7 +1687,7 @@
         c ? e("Loading already started, ignoring duplicate call") : (O && (clearTimeout(O),
         O = null), c = !0, window.__wpcParkedSrcReleased = 1, window.wpcFlushParkedScriptSrcs && window.wpcFlushParkedScriptSrcs(), window.wpcFlushHeavyEmbeds && window.wpcFlushHeavyEmbeds(),
         window.wpcRestoreHeldVideoSources && window.wpcRestoreHeldVideoSources(),
-        e("Triggered resource loading"), wpcSnapshotElementorInitHandlers(), wpcArmElementorInitCapture(), wpcInstallJqueryReadyTrap(), wpcFlushDomContentLoadedQueue(), wpcRunJqueryReadyAtReplayStart(), async function() {
+        e("Triggered resource loading"), wpcSnapshotElementorInitHandlers(), wpcArmElementorInitCapture(), wpcArmJqueryReadyEventOnInstance(window.jQuery), wpcMarkJqueryReadyHandlersRan(window.jQuery), wpcInstallJqueryReadyTrap(), wpcFlushDomContentLoadedQueue(), wpcRunJqueryReadyAtReplayStart(), async function() {
             if (i) e("Already loading resources, ignoring duplicate call"); else {
                 i = !0;
                 try {
@@ -1844,6 +2015,23 @@
     // so the first tap was neither held nor replayed and the mobile menu simply did nothing.
     // Verified identical markup across Elementor sites.
     var menuToggleSelector = ".menu-item-has-children > a, li[aria-haspopup] > a, a[aria-haspopup], a[aria-expanded], .elementor-menu-toggle, [role=button][aria-expanded], button[aria-expanded], .menu-toggle, .navbar-toggler";
+    var heldActionSelector = "a.ajax_add_to_cart, a[href='#'], a[href^='#'][role=button]";
+    var wpcClickAlreadyBound = function(el) {
+        if (el.getAttribute("onclick")) { return true; }
+        var jq = window.jQuery;
+        if (!jq || typeof jq._data !== "function") { return false; }
+        for (var n = el; n && n.nodeType === 1 || n === document; n = n === document ? null : (n.parentNode || document)) {
+            var evs = null;
+            try { evs = jq._data(n, "events"); } catch (e) {}
+            var list = evs && evs.click;
+            if (!list) { continue; }
+            for (var h = 0; h < list.length; h++) {
+                if (!list[h].selector) { if (n === el) { return true; } continue; }
+                try { if (el.matches(list[h].selector)) { return true; } } catch (e) { return true; }
+            }
+        }
+        return false;
+    };
     // v7.10.616 — the replay's success observable. aria-expanded alone misses handlers that
     // toggle only classes, inline styles or hidden on the panel. JS-writable attributes ONLY:
     // computed styles are excluded because used-css media flips change them in exactly this
@@ -1862,7 +2050,7 @@
         return s;
     };
     document.addEventListener("click", (function(ev) {
-        if (done || ev.__wpcReplay) {
+        if (done || ev.__wpcReplay || ev.isTrusted === false) {
             return;
         }
         // Modified clicks are the user addressing the BROWSER (new tab, download, save) —
@@ -1880,14 +2068,32 @@
         // presence proves nothing about binding. Record the VALUE and decide later on whether it
         // CHANGED — an outcome test, not a capability test.
         var ariaExpandedAtClick = tog ? tog.getAttribute("aria-expanded") : null;
-        if (!tog && t.closest("a[href], input, textarea, select, label, [contenteditable]")) {
+        var act = null;
+        if (!tog && !scriptsLoadedDone) {
+            try { act = t.closest(heldActionSelector); } catch (e) {}
+            if (act && wpcClickAlreadyBound(act)) { act = null; }
+        }
+        if (!tog && !act && t.closest("a[href], input, textarea, select, label, [contenteditable]")) {
             return;
         }
-        if (tog) {
+        if (tog || act) {
             ev.preventDefault();
         }
+        if (act) {
+            setTimeout(function() {
+                if (done || !pending || pending.t !== act) { return; }
+                done = true;
+                pending = null;
+                if ((act.getAttribute("href") || "").charAt(0) === "#") { return; }
+                try {
+                    var late = new MouseEvent("click", { bubbles: true, cancelable: true, view: window, clientX: ev.clientX, clientY: ev.clientY });
+                    late.__wpcReplay = true;
+                    act.dispatchEvent(late);
+                } catch (e) {}
+            }, 12000);
+        }
         pending = {
-            t: tog || t,
+            t: tog || act || t,
             x: ev.clientX,
             y: ev.clientY,
             tog: tog ? 1 : 0,
@@ -2984,16 +3190,38 @@ if (!window.__wpcEngaged) {
             // dependent; runReadyTrigger re-construct measured NOT to repaint). The belt is
             // the lib's own paint verbatim: fill only what is still empty — native wins
             // every race, pixel parity by construction.
+            var wpcGalleryThumbObserver = null;
+            var wpcPaintGalleryThumb = function(el) {
+                try {
+                    var bg = getComputedStyle(el).backgroundImage;
+                    if (bg && bg !== "none") { return; }
+                    var th = el.getAttribute("data-thumbnail");
+                    if (!th || !/^https?:/i.test(th)) { return; }
+                    el.style.backgroundImage = 'url("' + th.replace(/"/g, '%22') + '")';
+                    el.classList.add("e-gallery-image-loaded");
+                } catch (e) {}
+            };
             var wpcFillUnpaintedGalleryThumbs = function() {
                 try {
+                    if (!wpcGalleryThumbObserver && typeof window.IntersectionObserver === "function") {
+                        wpcGalleryThumbObserver = new IntersectionObserver(function(entries) {
+                            entries.forEach(function(en) {
+                                if (en.isIntersecting) {
+                                    wpcGalleryThumbObserver.unobserve(en.target);
+                                    wpcPaintGalleryThumb(en.target);
+                                }
+                            });
+                        });
+                    }
+                    var vh = window.innerHeight || 800;
                     [].slice.call(document.querySelectorAll(".e-gallery-image[data-thumbnail]")).forEach(function(el) {
                         try {
                             var bg = getComputedStyle(el).backgroundImage;
                             if (bg && bg !== "none") { return; }
-                            var th = el.getAttribute("data-thumbnail");
-                            if (!th || !/^https?:/i.test(th)) { return; }
-                            el.style.backgroundImage = 'url("' + th.replace(/"/g, '%22') + '")';
-                            el.classList.add("e-gallery-image-loaded");
+                            var r = el.getBoundingClientRect();
+                            if (r.width > 0 && r.bottom >= 0 && r.top <= vh) { wpcPaintGalleryThumb(el); }
+                            else if (wpcGalleryThumbObserver) { wpcGalleryThumbObserver.observe(el); }
+                            else { wpcPaintGalleryThumb(el); }
                         } catch (e) {}
                     });
                 } catch (e) {}
@@ -3162,6 +3390,53 @@ if (!window.__wpcEngaged) {
             setTimeout(function() { clearInterval(iv); wpcOwnRootClass("wpc-css-live"); }, 4000);
         } catch (e) { wpcOwnRootClass("wpc-css-live"); }
     }
+    function wpcRestRetireReady() {
+        var parked = [].slice.call(document.querySelectorAll('link[rel^="wpc-"],style[type^="wpc-"],style[type^="wpc/"],link[data-wpc-tm],link[data-wpc-lf]'));
+        for (var i = 0; i < parked.length; i++) {
+            var el = parked[i];
+            if (el.hasAttribute("data-wpc-ucss") || el.hasAttribute("data-wpc-ucss-rest")) { continue; }
+            if (el.tagName.toLowerCase() === "link" && /^wpc-/.test(el.getAttribute("rel") || "") === false) {
+                if (el.hasAttribute("data-wpc-lf") && el.getAttribute("href") && el.getAttribute("media") !== "print") { continue; }
+                if (el.hasAttribute("data-wpc-tm") && !el.hasAttribute("data-wpc-lf") && el.getAttribute("media") !== "print") { continue; }
+            }
+            return false;
+        }
+        var live = [].slice.call(document.querySelectorAll('link[rel="stylesheet"]'));
+        for (var j = 0; j < live.length; j++) {
+            var l = live[j];
+            if (l.hasAttribute("data-wpc-ucss") || l.hasAttribute("data-wpc-ucss-rest") || !l.getAttribute("href")) { continue; }
+            if (l.getAttribute("media") === "print" && l.hasAttribute("data-wpc-flip")) { return false; }
+            if (!l.sheet) { return false; }
+        }
+        return true;
+    }
+    function wpcRetireRestWhenOriginalsLive() {
+        if (wpcRetireRestWhenOriginalsLive.armed) { return; }
+        wpcRetireRestWhenOriginalsLive.armed = 1;
+        var started = Date.now();
+        var attempt = function() {
+            try {
+                var rest = [].slice.call(document.querySelectorAll("link[data-wpc-ucss-rest]")).filter(function(r) {
+                    var q = r.getAttribute("data-wpc-ucss-rest") || "all";
+                    if (q === "all" || !window.matchMedia) { return true; }
+                    try { return window.matchMedia(q).matches; } catch (e) { return true; }
+                });
+                if (!rest.length) { return true; }
+                if (document.readyState !== "complete") { return false; }
+                for (var k = 0; k < rest.length; k++) {
+                    if (!rest[k].getAttribute("href") || rest[k].getAttribute("media") === "print" || !rest[k].sheet) { return false; }
+                }
+                if (!wpcRestRetireReady()) { return false; }
+                rest.forEach(function(r) { r.setAttribute("media", "not all"); r.setAttribute("data-wpc-rest-retired", "1"); });
+                return true;
+            } catch (e) { return true; }
+        };
+        if (attempt()) { return; }
+        var iv = setInterval(function() {
+            if (attempt() || Date.now() - started > 3e4) { clearInterval(iv); }
+        }, 250);
+    }
+    window.wpcRetireRestWhenOriginalsLive = wpcRetireRestWhenOriginalsLive;
     // v7.21.282 — CAPTURED, NOT LIVE-QUERIED: the rest-boot consumes its link markers
     // after arming, so a live querySelector here went false post-load and the 2.5s
     // barrier timer restored the parked css + fonts with zero interaction (staging FL
@@ -3362,8 +3637,35 @@ if (!window.__wpcEngaged) {
             }
         } catch (e) {}
     }
+    function wpcReleaseFontSheets() {
+        try {
+            var fontSheet = /\/\/(?:fonts\.googleapis\.com\/css|fonts\.bunny\.net\/css|use\.typekit\.net\/)|\/omgf\/|\/google-fonts\/css\//i;
+            document.querySelectorAll('link[rel="wpc-stylesheet"],link[rel="wpc-mobile-stylesheet"]').forEach(function(l) {
+                if (fontSheet.test(l.getAttribute("href") || "")) { l.setAttribute("rel", "stylesheet"); }
+            });
+        } catch (e) {}
+    }
+    function wpcSheetFallbackAt(el, l2) {
+        var p = el.parentNode;
+        if (!p || el.hasAttribute("data-wpc-ucss") || el.hasAttribute("data-wpc-ucss-rest")) {
+            (document.head || document.documentElement).appendChild(l2);
+            return;
+        }
+        var m = el.__wpcRealMedia || el.getAttribute("data-wpc-tm") || el.getAttribute("media") || "";
+        if (m === "print" && /media/.test(el.getAttribute("onload") || "")) {
+            m = "";
+        }
+        if (m !== "" && m !== "all") {
+            l2.setAttribute("media", m);
+            if (m === "print") {
+                l2.removeAttribute("data-wpc-flip");
+            }
+        }
+        p.insertBefore(l2, el.nextSibling);
+    }
     function swapStyles() {
         if (wpcRestoreNeedsGesture()) {
+            wpcReleaseFontSheets();
             wpcReleaseTrailingCarrier();
             wpcOnFirstGesture(swapStyles);
             return;
@@ -3381,6 +3683,7 @@ if (!window.__wpcEngaged) {
             // (wpcompress.com/upgrade: popup opened logically, visibility:hidden won). The
             // restore lane owns the release: nothing parked here = css already live.
             wpcMarkCssLiveWhenRestAttached();
+            wpcRetireRestWhenOriginalsLive();
             if (document.querySelector("link[data-wpc-ucss]")) {
                 wpcCritSweep();
             }
@@ -3472,7 +3775,7 @@ if (!window.__wpcEngaged) {
                                 }), {
                                     once: true
                                 });
-                                (document.head || document.documentElement).appendChild(l2);
+                                wpcSheetFallbackAt(el, l2);
                                 return;
                             }
                         }
@@ -3500,6 +3803,7 @@ if (!window.__wpcEngaged) {
                     } else if (!el.__wpcMediaFlip) {
                         el.__wpcMediaFlip = 1;
                         var wpcRealMedia = el.getAttribute("media") || "all";
+                        el.__wpcRealMedia = wpcRealMedia;
                         el.setAttribute("media", "print");
                         if (wpcAtomic) {
                             wpcHeld.push([ el, wpcRealMedia ]);
@@ -3540,6 +3844,7 @@ if (!window.__wpcEngaged) {
             // the same task is one recalc, and a sheet must never stay inert because the gate failed.
             wpcRestoreAll();
             wpcMarkCssLiveWhenRestAttached();
+            wpcRetireRestWhenOriginalsLive();
             // Inline <style> entries never fire load and dilute okCount below the floor;
             // when used.css links exist THEY are the authority on when crit may leave.
             if (document.querySelector("link[data-wpc-ucss]") || okCount >= Math.ceil(total * .5)) {
@@ -3555,6 +3860,40 @@ if (!window.__wpcEngaged) {
             }
         }
         return false;
+    }
+    // Once the visitor has engaged, a parked frame on the heavy list is released within one viewport
+    // of the screen. GoHighLevel form frames are released at the replay's end; with no
+    // IntersectionObserver every heavy frame is.
+    function holdsToViewport(el, u) {
+        return !!window.IntersectionObserver && isHeavyEmbed(u) && !el.hasAttribute("data-wpc-form-frame");
+    }
+    function frameMargin() {
+        return Math.max(400, window.innerHeight || 0);
+    }
+    function frameNear(el) {
+        var r = el.getBoundingClientRect(), m = frameMargin(),
+            vh = window.innerHeight || document.documentElement.clientHeight || 0, vw = window.innerWidth || document.documentElement.clientWidth || 0;
+        return r.width > 0 && r.height > 0 && r.bottom > -m && r.top < vh + m && r.right > -m && r.left < vw + m;
+    }
+    var viewportIO = null;
+    function viewportObserve(el) {
+        if (!viewportIO) {
+            viewportIO = new IntersectionObserver((function(entries) {
+                entries.forEach((function(en) {
+                    if (!en.isIntersecting) {
+                        return;
+                    }
+                    var el = en.target, u = el.getAttribute("data-wpc-src");
+                    viewportIO.unobserve(el);
+                    if (u && u.trim()) {
+                        restoreFrame(el, u.trim());
+                    }
+                }));
+            }), {
+                rootMargin: frameMargin() + "px"
+            });
+        }
+        viewportIO.observe(el);
     }
     var ambientQ = [], ambientArmed = false, ambientHuman = false;
     function isAmbientMedia(el) {
@@ -3652,7 +3991,7 @@ if (!window.__wpcEngaged) {
             window.wpcVideoRestore && window.wpcVideoRestore();
         } catch (x) {}
     };
-    function frames(heavyOnly) {
+    function frames(heavyOnly, viewportOnly) {
         [].slice.call(document.querySelectorAll(".wpc-iframe-delay")).forEach((function(el) {
             var u = el.getAttribute("data-wpc-src");
             if (!u || !u.trim()) {
@@ -3662,9 +4001,22 @@ if (!window.__wpcEngaged) {
             if (isHeavyEmbed(u) !== !!heavyOnly) {
                 return;
             }
-            restoreFrame(el, u);
+            if (holdsToViewport(el, u)) {
+                if (frameNear(el)) {
+                    restoreFrame(el, u);
+                } else {
+                    viewportObserve(el);
+                }
+                return;
+            }
+            if (!viewportOnly) {
+                restoreFrame(el, u);
+            }
         }));
     }
+    window.wpcWakeViewportFrames = function() {
+        frames(true, true);
+    };
     // Heavy frames a real visitor scrolls toward restore ahead of boot — a
     // below-fold booking widget loads as they approach (400px margin), while a
     // no-scroll measurement pass never triggers it. Visible-at-load frames
@@ -4173,7 +4525,7 @@ if (!window.__wpcEngaged) {
                                 var l2 = document.createElement("link");
                                 l2.rel = "stylesheet";
                                 l2.href = origin;
-                                (document.head || document.documentElement).appendChild(l2);
+                                wpcSheetFallbackAt(el, l2);
                             }
                         }
                     } catch (e) {}
@@ -4399,7 +4751,8 @@ if (!window.__wpcEngaged) {
                     l.media = "all";
                 }));
             };
-            if (wpcRestoreNeedsGesture()) { wpcOnFirstGesture(wpcAttachLateFontLinks); } else { wpcAttachLateFontLinks(); }
+            var wpcFaceBlock = document.getElementById("wpc-font-faces");
+            if (wpcRestoreNeedsGesture() && wpcFaceBlock && (wpcFaceBlock.textContent || "").indexOf("data:font") !== -1) { wpcOnFirstGesture(wpcAttachLateFontLinks); } else { wpcAttachLateFontLinks(); }
             document.querySelectorAll('link[data-wpc-ucss]').forEach((function(l) {
                 if (l.media === "print") {
                     l.media = l.getAttribute("data-wpc-ucss") || "all";
@@ -4682,6 +5035,9 @@ if (!window.__wpcEngaged) {
             return;
         }
         fired = true;
+        try {
+            window.wpcWakeViewportFrames && window.wpcWakeViewportFrames();
+        } catch (e) {}
         wpcPinHeights();
         requestAnimationFrame((function() {
             requestAnimationFrame((function() {

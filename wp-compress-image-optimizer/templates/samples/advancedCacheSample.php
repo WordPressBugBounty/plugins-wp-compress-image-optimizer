@@ -39,6 +39,10 @@ define('WPC_URL_EXCLUDES', false);
 define('WPC_CACHE_EXCLUDES', false);
 #WPC_CACHE_EXCLUDES_END
 
+#WPC_HOME_PATH_START
+define('WPC_HOME_PATH', false);
+#WPC_HOME_PATH_END
+
 #WPC_TIER_CACHE_START
 define('WPC_TIER_CACHE', false);
 #WPC_TIER_CACHE_END
@@ -138,7 +142,11 @@ if (isset($_SERVER['HTTP_CRITICALCOMBINE']) || isset($_SERVER['HTTP_DISABLEWPC']
 $check_url = ($_SERVER['HTTP_HOST'] ?? '') . ($_SERVER['REQUEST_URI'] ?? '');
 $check_url = explode('?', $check_url)[0];
 
-$wpc_match_pattern = function ($url, $pattern) {
+$wpc_home_path = (defined('WPC_HOME_PATH') && is_string(WPC_HOME_PATH) && WPC_HOME_PATH !== '') ? WPC_HOME_PATH : '/';
+$wpc_match_pattern = function ($url, $pattern) use ($wpc_home_path) {
+    if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'excludeMatch')) {
+        return wps_ic_url_key::excludeMatch($pattern, $url, $wpc_home_path);
+    }
     $pattern = trim($pattern);
     if ($pattern === '' || $pattern[0] === '#') return false;
     $pattern = ltrim($pattern, '/');
@@ -190,12 +198,13 @@ if (defined('DONOTCACHEPAGE') && DONOTCACHEPAGE){
 $prefix = '';
 $cache = new wps_advancedCache();
 
-$mobile = $cache->is_mobile();
-$webp = (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'image/webp') !== false);
-
-if ($mobile && $webp) $prefix = 'mobile-webp';
-elseif ($mobile) $prefix = 'mobile';
-elseif ($webp) $prefix = 'webp';
+// The copy name is the device alone, the same name saveCache writes. Since 7.10.522 the writer
+// stores no webp_ copy (wpc_webp_cache_variant, off by default, and this file runs before any
+// filter could be read), so a prefix taken from Accept never found a file: every browser that
+// sends image/webp (Chrome, Edge, PageSpeed) fell through to WordPress and was served the same
+// copy from inside it. Observed on hawkeye.design (7.25.21, 2026-10-08): 0.85-0.91 s TTFB for
+// a Chrome request against 0.29 s for the same request without image/webp in Accept.
+if ($cache->is_mobile()) $prefix = 'mobile';
 
 if (!$cache->byPass() && $cache->cacheExists($prefix)) {
   $isCacheExpired = $cache->cacheExpired();

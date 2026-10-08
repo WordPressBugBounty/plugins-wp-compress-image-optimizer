@@ -3045,6 +3045,61 @@ if (!function_exists('wpc_used_css_process_body')) {
         return $body;
     }
 }
+if (!function_exists('wpc_css_isolate_sheet')) {
+    function wpc_css_isolate_sheet($css)
+    {
+        if (!is_string($css) || $css === '') {
+            return is_string($css) ? $css : '';
+        }
+        $n = strlen($css);
+        $depth = 0;
+        $quote = '';
+        $tail = 0;
+        $comment = false;
+        for ($i = 0; $i < $n; $i++) {
+            $c = $css[$i];
+            if ($quote !== '') {
+                if ($c === '\\') { $i++; continue; }
+                if ($c === $quote || $c === "\n") { $quote = ''; }
+                continue;
+            }
+            if ($c === '\\') { $i++; continue; }
+            if ($c === '/' && $i + 1 < $n && $css[$i + 1] === '*') {
+                $e = strpos($css, '*/', $i + 2);
+                if ($e === false) { $comment = true; break; }
+                $i = $e + 1;
+                continue;
+            }
+            if ($c === '"' || $c === "'") { $quote = $c; continue; }
+            if ($c === '{') { $depth++; continue; }
+            if ($c === '}') {
+                if ($depth > 0) {
+                    $depth--;
+                    if ($depth === 0) { $tail = $i + 1; }
+                }
+                continue;
+            }
+            if ($c === ';' && $depth === 0) {
+                $stmt = ltrim((string) preg_replace('~/\*.*?\*/~s', '', substr($css, $tail, $i - $tail)));
+                if ($stmt !== '' && $stmt[0] === '@') { $tail = $i + 1; }
+            }
+        }
+        $close = '';
+        if ($comment) {
+            $close .= '*/';
+        } elseif ($quote !== '') {
+            $close .= $quote;
+        }
+        if ($depth > 0) {
+            return $css . $close . str_repeat('}', $depth);
+        }
+        $rest = trim((string) preg_replace('~/\*.*?(?:\*/|$)~s', '', substr($css, $tail) . $close));
+        if ($rest === '') {
+            return $css . $close;
+        }
+        return $css . $close . ($rest[0] === '@' ? ';' : '{}');
+    }
+}
 if (!function_exists('wpc_park_used_css_backgrounds')) {
     // v7.21.255 - CSS IMAGES OFF THE WIRE. Stored used-css carried background url()s and a
     // no-gesture load fetched every one at sheet-land (13 rows on bestexteriorsinc, dup-
@@ -3063,6 +3118,7 @@ if (!function_exists('wpc_park_used_css_backgrounds')) {
         for ($j = $i; $j < $n; $j++) {
             $c = $css[$j];
             if ($q !== '') { if ($c === '\\') { $j++; continue; } if ($c === $q) { $q = ''; } continue; }
+            if ($c === '\\') { $j++; continue; }
             if ($c === "'" || $c === '"') { $q = $c; continue; }
             if ($c === '/' && isset($css[$j + 1]) && $css[$j + 1] === '*') {
                 $e = strpos($css, '*/', $j + 2);
@@ -3168,6 +3224,7 @@ if (!function_exists('wpc_park_used_css_backgrounds')) {
             if (!is_string($css) || $css === '' || stripos($css, 'url(') === false) { return $css; }
             if (!apply_filters('wpc_used_css_bg_park', true)) { return $css; }
             if (strpos($css, '.wpc-bgl255') !== false) { return $css; }
+            if (function_exists('wpc_css_isolate_sheet')) { $css = wpc_css_isolate_sheet($css); }
             // v7.21.269 — the delay-class gate was the BYPASS: background lands (cron/kick)
             // run without the delay classes loaded, so class_exists failed and the store
             // re-landed UNPARKED (bestexteriorsinc: 6 bg rows back on the wire, tpl with 0
@@ -3678,7 +3735,12 @@ if (!function_exists('wpc_set_state_notice')) {
         $s = get_option('wpc_states81', []);
         return is_array($s) ? $s : [];
     }
-    function wpc_set_state_notice($id, $level, $text, $cta_url = '', $cta_label = '')
+    /**
+     * Raises (or refreshes) state notice $id on the plugin's settings screens. $cap, when given,
+     * is the capability a user needs to see and dismiss it; without one, anyone who may manage
+     * the plugin does. A dismissal holds until the notice is cleared.
+     */
+    function wpc_set_state_notice($id, $level, $text, $cta_url = '', $cta_label = '', $cap = '')
     {
         $id = sanitize_key((string) $id);
         if ($id === '' || (string) $text === '') {
@@ -3691,6 +3753,7 @@ if (!function_exists('wpc_set_state_notice')) {
             'text'      => (string) $text,
             'cta'       => (string) $cta_url,
             'cta_label' => (string) $cta_label,
+            'cap'       => (string) $cap,
             'since'     => isset($prev['since']) ? (int) $prev['since'] : time(),
             'seen'      => time(),
             'dismissed' => isset($prev['dismissed']) ? (int) $prev['dismissed'] : 0,
@@ -3698,7 +3761,8 @@ if (!function_exists('wpc_set_state_notice')) {
         if (count($s) > 20) {
             $s = array_slice($s, -20, null, true);
         }
-        if (empty($prev) || (string) $prev['text'] !== (string) $text || (time() - (int) $prev['seen']) > HOUR_IN_SECONDS) {
+        if (empty($prev) || (string) $prev['text'] !== (string) $text || (string) ($prev['cap'] ?? '') !== (string) $cap
+            || (time() - (int) $prev['seen']) > HOUR_IN_SECONDS) {
             update_option('wpc_states81', $s, false);
         }
         if (function_exists('wpc_cache_first_log') && function_exists('wpc_is_admin_lane_held') && !wpc_is_admin_lane_held('wpc_state81_' . $id)) {
@@ -3728,7 +3792,8 @@ if (!function_exists('wpc_set_state_notice')) {
         }
         $out = '';
         foreach (wpc_state_notices_list() as $id => $st) {
-            if (!is_array($st) || !empty($st['dismissed']) || empty($st['text'])) {
+            if (!is_array($st) || !empty($st['dismissed']) || empty($st['text'])
+                || (!empty($st['cap']) && !current_user_can((string) $st['cap']))) {
                 continue;
             }
             $lvl = isset($st['level']) ? (string) $st['level'] : 'info';
@@ -3746,15 +3811,29 @@ if (!function_exists('wpc_set_state_notice')) {
         echo '<style>.wpc-states{margin:12px 0 4px}.wpc-state{padding:10px 14px;border-radius:6px;background:#f6f7f7;border-left:3px solid #8c8f94;margin:6px 0;font-size:13px;line-height:1.5}.wpc-state--error{border-left-color:#d63638}.wpc-state--warning{border-left-color:#dba617}.wpc-state--success{border-left-color:#00a32a}.wpc-state-cta{margin-left:8px;font-weight:600}.wpc-state-dismiss{float:right;text-decoration:none;color:#8c8f94;font-size:16px;line-height:1}</style>'
             . '<div class="wpc-states">' . $out . '</div>';
     }
-    add_action('admin_post_wpc_state_notice_dismiss', function () {
-        $id = isset($_GET['id']) ? sanitize_key((string) $_GET['id']) : '';
-        if ($id === '' || !current_user_can('manage_wpc_settings') || !wp_verify_nonce($_GET['_wpnonce'] ?? '', 'wpc_state81_' . $id)) {
-            wp_die('Forbidden');
+    /**
+     * Dismisses state notice $id for the current user's request: needs the nonce, the plugin's
+     * settings capability, and the notice's own capability when it names one. False when refused.
+     */
+    function wpc_dismiss_state_notice($id, $nonce)
+    {
+        $id = sanitize_key((string) $id);
+        if ($id === '' || !current_user_can('manage_wpc_settings') || !wp_verify_nonce((string) $nonce, 'wpc_state81_' . $id)) {
+            return false;
         }
         $s = wpc_state_notices_list();
         if (isset($s[$id]) && is_array($s[$id])) {
+            if (!empty($s[$id]['cap']) && !current_user_can((string) $s[$id]['cap'])) {
+                return false;
+            }
             $s[$id]['dismissed'] = time();
             update_option('wpc_states81', $s, false);
+        }
+        return true;
+    }
+    add_action('admin_post_wpc_state_notice_dismiss', function () {
+        if (!wpc_dismiss_state_notice(isset($_GET['id']) ? (string) $_GET['id'] : '', isset($_GET['_wpnonce']) ? (string) $_GET['_wpnonce'] : '')) {
+            wp_die('Forbidden');
         }
         wp_safe_redirect(wp_get_referer() ?: admin_url());
         exit;
@@ -5100,6 +5179,49 @@ if (!function_exists('wpc_compute_tpl_key')) {
 }
 
 
+if (!function_exists('wpc_browser_accept')) {
+    /**
+     * The Accept header a current browser sends when it fetches a subresource of this kind:
+     * 'image', 'style' or 'font'. A warm request to the zone sends the same, so the copy it stores
+     * is the one a browser's request reads.
+     */
+    function wpc_browser_accept($kind)
+    {
+        if ($kind === 'image') {
+            return 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8';
+        }
+        if ($kind === 'style') {
+            return 'text/css,*/*;q=0.1';
+        }
+        return '*/*';
+    }
+}
+
+if (!function_exists('wpc_site_cdn_hosts')) {
+    /**
+     * The hosts this site's CDN serves its files from: the Cloudflare CNAME, the custom CNAME and
+     * the zone, lower-case, port and trailing dot dropped, as a set (host => 1).
+     */
+    function wpc_site_cdn_hosts()
+    {
+        $hosts = [];
+        if (!function_exists('get_option')) {
+            return $hosts;
+        }
+        foreach ([defined('WPS_IC_CF_CNAME') ? WPS_IC_CF_CNAME : 'wps-ic-cf-cname', 'ic_custom_cname', 'ic_cdn_zone_name'] as $option) {
+            $host = strtolower(trim((string) get_option($option)));
+            if (strpos($host, '://') !== false) {
+                $host = strtolower((string) parse_url($host, PHP_URL_HOST));
+            }
+            $host = rtrim((string) preg_replace('/:\d+$/', '', $host), '.');
+            if ($host !== '') {
+                $hosts[$host] = 1;
+            }
+        }
+        return $hosts;
+    }
+}
+
 if (!function_exists('wpc_land_second_wave')) {
     function wpc_land_second_wave($url)
     {
@@ -5176,10 +5298,12 @@ if (!function_exists('wpc_land_second_wave')) {
                 return;
             }
             $targets = [];
+            $kinds = [];
 
             if (preg_match('/<link[^>]*id="wpc-lcp-bg-preload"[^>]*href="([^"]+)"/i', $html, $m)
                 || preg_match('/<link[^>]*href="([^"]+)"[^>]*id="wpc-lcp-bg-preload"/i', $html, $m)) {
                 $targets[] = $m[1];
+                $kinds[$m[1]] = 'image';
             }
 
             if (preg_match_all('/<link[^>]*rel="preload"[^>]*as="font"[^>]*href="([^"]+)"/i', $html, $mm)) {
@@ -5199,25 +5323,31 @@ if (!function_exists('wpc_land_second_wave')) {
             }
             if (preg_match('/<link[^>]*id="wpc-used-css"[^>]*href="([^"]+)"/i', $html, $m)) {
                 $targets[] = $m[1];
+                $kinds[$m[1]] = 'style';
             }
 
             if (preg_match_all('/<link[^>]*type=["\'](?:wpc-stylesheet|wpc-mobile-stylesheet)["\'][^>]*href="([^"]+)"/i', $html, $mm)) {
-                $targets = array_merge($targets, array_slice($mm[1], 0, 3));
+                foreach (array_slice($mm[1], 0, 3) as $sheet) {
+                    $targets[] = $sheet;
+                    $kinds[$sheet] = 'style';
+                }
             }
 
             $home_host = (string) parse_url(home_url(), PHP_URL_HOST);
+            $cdn_hosts = wpc_site_cdn_hosts();
             $fired     = 0;
             foreach (array_unique($targets) as $t) {
                 if ($fired >= 8) {
                     break;
                 }
+                $kind = isset($kinds[$t]) ? $kinds[$t] : 'font';
                 $t = html_entity_decode((string) $t);
                 $h = (string) parse_url($t, PHP_URL_HOST);
-                if ($h === '' || ($h !== $home_host && stripos($h, 'zapwp.com') === false
+                if ($h === '' || ($h !== $home_host && stripos($h, 'zapwp.com') === false && !isset($cdn_hosts[strtolower($h)])
                     && !apply_filters('wpc_land_prewarm_host_ok', false, $h))) {
                     continue;
                 }
-                wp_remote_get($t, ['blocking' => false, 'timeout' => 3, 'redirection' => 2]);
+                wp_remote_get($t, ['blocking' => false, 'timeout' => 3, 'redirection' => 2, 'headers' => ['Accept' => wpc_browser_accept($kind)]]);
                 $fired++;
             }
             if (function_exists('wpc_cache_first_log')) {
@@ -5992,13 +6122,20 @@ if (!function_exists('wpc_repull_kick_now')) {
     /**
      * Admit one kick. $source names the caller on the fire side ('render', 'stale', 'watchdog',
      * 'kick' …) or 'receiver' on the receive side, where the request's own token decides whether
-     * it is a loopback already counted or a beacon counted now. True = go ahead.
+     * it is a loopback already counted or a beacon counted now. A request reached through a host
+     * that is not the site's own (wpc_request_host_is_home) sends and receives no kick. True = go
+     * ahead.
      */
     function wpc_kick_admit($urlKey, $source = 'kick')
     {
         try {
             $urlKey = (string) $urlKey;
             if ($urlKey === '') { return false; }
+            if (function_exists('wpc_request_host_is_home') && !wpc_request_host_is_home()) {
+                wpc_kick_refused_note($urlKey, 'foreign-host', $source,
+                    ['host' => substr(strtolower((string) (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '')), 0, 80)], 3600);
+                return false;
+            }
             $receiving = ($source === 'receiver');
             // Every refusal leaves a receipt: a dead mark once refused every kick of two pages for
             // a whole evening with nothing in the log but the renders that asked.
@@ -6710,6 +6847,89 @@ if (!function_exists('wpc_repull_kick_now')) {
         }
         $GLOBALS['wpc_kick_asked_in_request'][$askedKey] = (string) $source;
         return wpc_repull_kick_now($urlKey, false, $source);
+    }
+
+    /**
+     * False only when this request names a public host (Host or X-Forwarded-Host) and none of the
+     * hosts it names is the site's own: the home host or the WordPress host, www-insensitive, port
+     * ignored, or a subdomain of either that is not one of the site's CDN hosts (Cloudflare CNAME,
+     * custom CNAME, zone). A request that names internal hosts only (wpc_host_is_internal: a
+     * reverse proxy that rewrote Host) is the site's own.
+     */
+    function wpc_request_host_is_home()
+    {
+        if (!function_exists('home_url') || !function_exists('wpc_canon_is_same_host')) {
+            return true;
+        }
+        $named = [];
+        foreach (['HTTP_HOST', 'HTTP_X_FORWARDED_HOST'] as $header) {
+            if (empty($_SERVER[$header])) { continue; }
+            foreach (explode(',', (string) $_SERVER[$header]) as $host) {
+                $host = strtolower(trim($host));
+                if ($host !== '') { $named[] = $host; }
+            }
+        }
+        if (!$named) {
+            return true;
+        }
+        $own = [(string) home_url('/')];
+        if (function_exists('site_url')) {
+            $own[] = (string) site_url('/');
+        }
+        $apexes = [];
+        foreach ($own as $ownUrl) {
+            $ownHost = strtolower((string) parse_url($ownUrl, PHP_URL_HOST));
+            if (strpos($ownHost, 'www.') === 0) {
+                $ownHost = substr($ownHost, 4);
+            }
+            if ($ownHost !== '') {
+                $apexes[$ownHost] = 1;
+            }
+        }
+        $cdnHosts = function_exists('wpc_site_cdn_hosts') ? wpc_site_cdn_hosts() : [];
+        $public = false;
+        foreach ($named as $host) {
+            foreach ($own as $ownUrl) {
+                if (wpc_canon_is_same_host('https://' . $host . '/', $ownUrl)) {
+                    return true;
+                }
+            }
+            $name = rtrim((string) preg_replace('/:\d+$/', '', $host), '.');
+            $bare = strpos($name, 'www.') === 0 ? substr($name, 4) : $name;
+            if ($name !== '' && !isset($cdnHosts[$name]) && !isset($cdnHosts[$bare]) && !isset($cdnHosts['www.' . $bare])) {
+                foreach (array_keys($apexes) as $apex) {
+                    $tail = '.' . $apex;
+                    if (strlen($name) > strlen($tail) && substr($name, -strlen($tail)) === $tail) {
+                        return true;
+                    }
+                }
+            }
+            if (!wpc_host_is_internal($host)) {
+                $public = true;
+            }
+        }
+        return !$public;
+    }
+
+    /**
+     * Whether a Host value names a machine rather than a public site: an IP literal, a single-label
+     * name (localhost, backend), or a name under .internal, .local, .lan, .localhost or
+     * .localdomain. A port is ignored.
+     */
+    function wpc_host_is_internal($host)
+    {
+        $host = strtolower(trim((string) $host));
+        if ($host === '') {
+            return false;
+        }
+        if ($host[0] === '[') {
+            return true;
+        }
+        $name = rtrim((string) preg_replace('/:\d+$/', '', $host), '.');
+        if ($name === '' || filter_var($name, FILTER_VALIDATE_IP) !== false || strpos($name, '.') === false) {
+            return true;
+        }
+        return preg_match('/\.(?:internal|local|lan|localhost|localdomain)$/', $name) === 1;
     }
 
     /** Whether a render-path asker of this request already asked for $urlKey. */
@@ -9162,8 +9382,9 @@ if (!function_exists('wpc_presc_known_classes')) {
         wpc_presc_journal_merge([(string) $id => $row]);
     }
 
-    /** A3 gate-2 STICKY store: ids the runtime re-count found non-unique on the served
-     *  DOM. Kept OUT of the churny journal so a forced re-apply cannot re-arm them and
+    /** A3 gate-2 STICKY store: ids the inline guard refuted on the served DOM (the re-count
+     *  found them non-unique, or the plausibility pass found the reserve implausible).
+     *  Kept OUT of the churny journal so a forced re-apply cannot re-arm them and
      *  eviction cannot drop the gate state. Each mark is STAMPED with the 12-hex artifact
      *  tag (av = md5(prescriptions body)[:12]) it was computed against, so a mark is
      *  honored only while that exact artifact is live — a republish, a purge-and-refetch,
@@ -9243,6 +9464,7 @@ if (!function_exists('wpc_presc_known_classes')) {
         // every re-apply — a forced refetch of an unchanged file must not re-arm them
         // (the oscillation class). A genuine service rewrite clears them (see fetch).
         $notUniq = function_exists('wpc_presc_notuniq_get') ? wpc_presc_notuniq_get() : [];
+        $journalBefore = get_option('wpc_presc_journal');
         // Same selector alphabet the render leg enforces — land and render must agree,
         // or 'armed' receipts describe rules that never emit.
         $selRx = '/^[A-Za-z0-9 _\-#.:\[\]=>+~()]+$/';
@@ -9285,7 +9507,8 @@ if (!function_exists('wpc_presc_known_classes')) {
                     // runtime re-count refuted this id FOR THIS artifact version — do not
                     // re-arm (render suppresses it too). A different av (republish) is not
                     // a hit, so a genuinely re-published/fixed id arms again.
-                    $rows[$id] = $base + ['status' => 'skipped', 'skipped' => 'not-unique'];
+                    $rows[$id] = $base + ['status' => 'skipped',
+                        'skipped' => (is_array($journalBefore) && (string) ($journalBefore[$id]['skipped'] ?? '') === 'implausible') ? 'implausible' : 'not-unique'];
                     continue;
                 }
                 $armed++;
@@ -9631,29 +9854,34 @@ if (!function_exists('wpc_presc_known_classes')) {
 
 
 if (!function_exists('wpc_presc_seen_handler')) {
-    /** A3 runtime re-count beacon (loader disagrees with the verdict at apply time).
-     *  font_seen shape: accept filter, lock, strict input caps, bounded queue, deferred
-     *  consume — zero blocking work on the beacon request. */
+    /** A3 runtime beacon from the inline guard: `not-unique` (the re-count found the
+     *  selector on more than one element) or `implausible` (the reserve is far taller than
+     *  the element it holds, measured in the browser). font_seen shape: accept filter, a
+     *  lock per verdict, strict input caps, bounded queue, deferred consume — zero blocking
+     *  work on the beacon request. */
     function wpc_presc_seen_handler()
     {
         try {
             if (!apply_filters('wpc_presc_seen_accept', true)) {
                 wp_die('', '', 204);
             }
-            if (get_transient('wpc_presc_seen_lock')) {
+            $sk  = isset($_POST['skipped']) ? trim((string) wp_unslash($_POST['skipped'])) : '';
+            if (!in_array($sk, ['not-unique', 'implausible'], true)) {
                 wp_die('', '', 204);
             }
-            set_transient('wpc_presc_seen_lock', 1, 30);
-            // One beacon per pageload carries up to 4 comma-joined ids (the 30s lock
-            // would drop a second same-visitor beacon).
+            // One beacon per verdict per pageload carries up to 4 comma-joined ids (the 30s
+            // lock would drop a second beacon of the same verdict).
+            $lock = $sk === 'not-unique' ? 'wpc_presc_seen_lock' : 'wpc_presc_seen_lock_' . $sk;
+            if (get_transient($lock)) {
+                wp_die('', '', 204);
+            }
+            set_transient($lock, 1, 30);
             $idr = isset($_POST['id']) ? strtolower(trim((string) wp_unslash($_POST['id']))) : '';
-            $sk  = isset($_POST['skipped']) ? trim((string) wp_unslash($_POST['skipped'])) : '';
             // av = the artifact tag the verdict was computed against; a mark is honored
             // only while that av is live, so a stale in-flight beacon can't suppress a
             // freshly re-published id.
             $av  = isset($_POST['av']) ? strtolower(trim((string) wp_unslash($_POST['av']))) : '';
-            if ($idr === '' || strlen($idr) > 180 || !in_array($sk, ['not-unique'], true)
-                || !preg_match('/^[a-f0-9]{6,32}$/', $av)) {
+            if ($idr === '' || strlen($idr) > 180 || !preg_match('/^[a-f0-9]{6,32}$/', $av)) {
                 wp_die('', '', 204);
             }
             $ids = array_slice(array_filter(array_map('trim', explode(',', $idr))), 0, 4);
@@ -9667,7 +9895,7 @@ if (!function_exists('wpc_presc_seen_handler')) {
                     continue;
                 }
                 if (!isset($q[$id]) && count($q) < 10) {
-                    $q[$id] = $av;
+                    $q[$id] = $sk === 'not-unique' ? $av : ['av' => $av, 'skipped' => $sk];
                     $qd = true;
                 }
             }
@@ -9693,12 +9921,31 @@ if (!function_exists('wpc_presc_seen_handler')) {
                 return;
             }
             $mark = [];
-            foreach ($q as $id => $av) {
-                wpc_presc_journal_put((string) $id, ['status' => 'skipped', 'skipped' => 'not-unique', 'via' => 'runtime-recount']);
-                if (preg_match('/^[a-f0-9]{6,32}$/', (string) $av)) {
-                    $mark[(string) $id] = (string) $av; // id => artifact tag
+            $votes = get_option('wpc_presc_implausible_votes', []);
+            $votes = is_array($votes) ? $votes : [];
+            $need = max(1, (int) apply_filters('wpc_presc_implausible_votes', 3));
+            foreach ($q as $id => $queued) {
+                $av = is_array($queued) ? (string) ($queued['av'] ?? '') : (string) $queued;
+                $skipped = (is_array($queued) && ($queued['skipped'] ?? '') === 'implausible') ? 'implausible' : 'not-unique';
+                if ($skipped === 'implausible') {
+                    $prior = isset($votes[$id]) && is_array($votes[$id]) && (string) ($votes[$id]['av'] ?? '') === $av ? (int) ($votes[$id]['n'] ?? 0) : 0;
+                    $votes[$id] = ['av' => $av, 'n' => $prior + 1, 't' => time()];
+                    if ($prior + 1 < $need) {
+                        continue;
+                    }
+                    unset($votes[$id]);
+                }
+                wpc_presc_journal_put((string) $id, ['status' => 'skipped', 'skipped' => $skipped,
+                    'via' => $skipped === 'implausible' ? 'runtime-plausibility' : 'runtime-recount']);
+                if (preg_match('/^[a-f0-9]{6,32}$/', $av)) {
+                    $mark[(string) $id] = $av; // id => artifact tag
                 }
             }
+            if (count($votes) > 200) {
+                uasort($votes, function ($a, $b) { return (int) ($b['t'] ?? 0) - (int) ($a['t'] ?? 0); });
+                $votes = array_slice($votes, 0, 200, true);
+            }
+            update_option('wpc_presc_implausible_votes', $votes, false);
             // Sticky gate: survives journal eviction AND forced re-applies; the av stamp
             // makes a stale-artifact verdict self-invalidate.
             if (!empty($mark) && function_exists('wpc_presc_notuniq_mark')) {
@@ -11485,7 +11732,8 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
                     $wpc_rr_v   = preg_replace('/[^0-9A-Fa-fUu+,\- ]/', '', (string) $fe['remote_range']);
                     if ($wpc_rr_fam !== '' && $wpc_rr_wt !== '' && $wpc_rr_v !== '') {
                         if (!isset($remote_ranges)) { $remote_ranges = []; }
-                        $remote_ranges[$wpc_rr_fam . '|' . $wpc_rr_wt . '|' . $wpc_rr_st] = $wpc_rr_v;
+                        $autoRangeKey = function_exists('wpc_font_remote_range_auto_key') ? wpc_font_remote_range_auto_key($fe) : '';
+                        $remote_ranges[$autoRangeKey !== '' ? $autoRangeKey : $wpc_rr_fam . '|' . $wpc_rr_wt . '|' . $wpc_rr_st] = $wpc_rr_v;
                     }
                 }
                 // v7.10.398 remote_dup {hosts, css_links}: the service's authoritative "our
@@ -12899,73 +13147,180 @@ if (!empty($_GET['autoload'])) {
 
 if (!function_exists('wpc_premint_upload_sizes')) {
     /**
-     * v7.20.15 — upload-hook pre-mint (service contract: the natural URL IS the pre-mint
-     * endpoint). When an upload's sizes land, fire non-blocking GETs at each emitted
-     * size's next-gen zone URL with its origin-ext hint: the edge mints and caches, the
-     * first visitor lands on warm keys. Bounded: full + WP sizes x2 formats, 12-URL cap,
-     * blocking=false + 2s timeout, image mimes only, standalone from compress-on-upload
-     * (fires even with auto-optimize off). Kill filter wpc_upload_premint.
+     * Upload-hook pre-mint (service contract: the natural URL IS the pre-mint endpoint). When an
+     * upload's sizes land, each emitted size's next-gen zone URL is requested once with its
+     * origin-ext hint: the edge mints and caches, the first visitor lands on warm keys. Bounded:
+     * full + WP sizes x2 formats, 12 URLs per image, 8 images per request, image mimes only,
+     * standalone from compress-on-upload (runs with auto-optimize off). Kill filter
+     * wpc_upload_premint.
+     *
+     * The hook makes no request, it records the attachment id. The requests run after the
+     * response is released, one parallel batch per image, or in one cron event where the
+     * response cannot be released.
      */
     function wpc_premint_upload_sizes($data, $attachment_id)
     {
         try {
-            if (!is_array($data) || !apply_filters('wpc_upload_premint', true)
-                || !function_exists('wp_remote_get') || !function_exists('wp_get_attachment_url')
-                || !class_exists('wps_rewriteLogic') || !method_exists('wps_rewriteLogic', 'src_hint_qs')) {
-                return $data;
-            }
-            if (function_exists('wpc_get_optimization_mode') && wpc_get_optimization_mode() === 'lazy_cdn') {
-                return $data;
-            }
-            $zone = trim((string) get_option('ic_cdn_zone_name', ''));
-            if ($zone === ''
-                || (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed())) {
-                return $data;
-            }
-            $url   = (string) wp_get_attachment_url($attachment_id);
-            $clean = (string) preg_replace('/[?#].*$/', '', $url);
-            $ext   = strtolower((string) pathinfo($clean, PATHINFO_EXTENSION));
-            if (!in_array($ext, array('jpg', 'jpeg', 'png', 'webp'), true)) {
-                return $data;
-            }
-            $site = rtrim((string) site_url(), '/');
-            if (strpos($clean, $site) !== 0) {
-                return $data;
-            }
-            $base = 'https://' . $zone . substr($clean, strlen($site));
-            $hint = wps_rewriteLogic::src_hint_qs($ext);
-            $dir  = substr($base, 0, strrpos($base, '/') + 1);
-            $mk   = function ($fileBase) use ($hint, $ext) {
-                $out = array();
-                foreach (array('webp', 'avif') as $f) {
-                    $u = (string) preg_replace('/\.(?:jpe?g|png|webp)$/i', '.' . $f, $fileBase);
-                    if ($u === $fileBase && $f === $ext) { $out[] = $u; continue; }
-                    $out[] = $u . ($hint !== '' ? $hint : '');
-                }
-                return $out;
-            };
-            $urls = $mk($base);
-            if (isset($data['sizes']) && is_array($data['sizes'])) {
-                foreach ($data['sizes'] as $sz) {
-                    if (count($urls) >= 12) { break; }
-                    if (empty($sz['file']) || !is_string($sz['file'])) { continue; }
-                    foreach ($mk($dir . $sz['file']) as $u) {
-                        if (count($urls) >= 12) { break; }
-                        $urls[] = $u;
-                    }
-                }
-            }
-            foreach ($urls as $u) {
-                wp_remote_get($u, array('blocking' => false, 'timeout' => 2, 'redirection' => 0, 'sslverify' => true));
-            }
-            if (function_exists('wpc_cache_first_log')) {
-                wpc_cache_first_log('upload-premint', '', '', array('n' => count($urls), 'id' => (int) $attachment_id));
+            if (is_array($data) && wpc_premint_upload_zone() !== '') {
+                wpc_premint_upload_record((int) $attachment_id);
             }
         } catch (\Throwable $e) {
         }
         return $data;
     }
+
+    /** The zone host a pre-mint goes to, or '' when this site pre-mints nothing. */
+    function wpc_premint_upload_zone()
+    {
+        if (!apply_filters('wpc_upload_premint', true) || !function_exists('wp_get_attachment_url')) {
+            return '';
+        }
+        if (!class_exists('wps_rewriteLogic') && defined('WPS_IC_DIR') && is_readable(WPS_IC_DIR . 'addons/cdn/rewriteLogic.php')) {
+            include_once WPS_IC_DIR . 'addons/cdn/rewriteLogic.php';
+        }
+        if (!class_exists('wps_rewriteLogic') || !method_exists('wps_rewriteLogic', 'src_hint_qs')) {
+            return '';
+        }
+        if (function_exists('wpc_get_optimization_mode') && wpc_get_optimization_mode() === 'lazy_cdn') {
+            return '';
+        }
+        $zone = trim((string) get_option('ic_cdn_zone_name', ''));
+        if ($zone === '' || (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed())) {
+            return '';
+        }
+        return $zone;
+    }
+
+    /** Remembers an attachment for this request's pre-mint and arms its one shutdown handler. */
+    function wpc_premint_upload_record($attachment_id)
+    {
+        if ($attachment_id <= 0) {
+            return;
+        }
+        if (!isset($GLOBALS['wpc_premint_ids']) || !is_array($GLOBALS['wpc_premint_ids'])) {
+            $GLOBALS['wpc_premint_ids'] = [];
+        }
+        if (count($GLOBALS['wpc_premint_ids']) < 8) {
+            $GLOBALS['wpc_premint_ids'][$attachment_id] = $attachment_id;
+        }
+        if (empty($GLOBALS['wpc_premint_armed'])) {
+            $GLOBALS['wpc_premint_armed'] = true;
+            add_action('shutdown', 'wpc_premint_upload_shutdown', PHP_INT_MAX);
+        }
+    }
+
+    /** Releases the response, then pre-mints; with no way to release it, one cron event does. */
+    function wpc_premint_upload_shutdown()
+    {
+        try {
+            $ids = isset($GLOBALS['wpc_premint_ids']) && is_array($GLOBALS['wpc_premint_ids']) ? array_values($GLOBALS['wpc_premint_ids']) : [];
+            $GLOBALS['wpc_premint_ids'] = [];
+            if (!$ids) {
+                return;
+            }
+            if (!(function_exists('wpc_finish_request') && wpc_finish_request())) {
+                if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+                    && !wp_next_scheduled('wpc_premint_upload_run', [$ids])) {
+                    wp_schedule_single_event(time(), 'wpc_premint_upload_run', [$ids]);
+                }
+                return;
+            }
+            @ignore_user_abort(true);
+            @set_time_limit(60);
+            wpc_premint_upload_run($ids, 'shutdown');
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** The URLs one attachment pre-mints, from its saved sizes: [] when it is not a local image. */
+    function wpc_premint_upload_urls($attachment_id, $zone)
+    {
+        $data  = wp_get_attachment_metadata($attachment_id);
+        $url   = (string) wp_get_attachment_url($attachment_id);
+        $clean = (string) preg_replace('/[?#].*$/', '', $url);
+        $ext   = strtolower((string) pathinfo($clean, PATHINFO_EXTENSION));
+        if (!in_array($ext, array('jpg', 'jpeg', 'png', 'webp'), true)) {
+            return array();
+        }
+        $site = rtrim((string) site_url(), '/');
+        if (strpos($clean, $site) !== 0) {
+            return array();
+        }
+        $base = 'https://' . $zone . substr($clean, strlen($site));
+        $hint = wps_rewriteLogic::src_hint_qs($ext);
+        $dir  = substr($base, 0, strrpos($base, '/') + 1);
+        $mk   = function ($fileBase) use ($hint, $ext) {
+            $out = array();
+            foreach (array('webp', 'avif') as $f) {
+                $u = (string) preg_replace('/\.(?:jpe?g|png|webp)$/i', '.' . $f, $fileBase);
+                if ($u === $fileBase && $f === $ext) { $out[] = $u; continue; }
+                $out[] = $u . ($hint !== '' ? $hint : '');
+            }
+            return $out;
+        };
+        $urls = $mk($base);
+        if (is_array($data) && isset($data['sizes']) && is_array($data['sizes'])) {
+            foreach ($data['sizes'] as $sz) {
+                if (count($urls) >= 12) { break; }
+                if (empty($sz['file']) || !is_string($sz['file'])) { continue; }
+                foreach ($mk($dir . $sz['file']) as $u) {
+                    if (count($urls) >= 12) { break; }
+                    $urls[] = $u;
+                }
+            }
+        }
+        return $urls;
+    }
+
+    /**
+     * Requests every recorded image's pre-mint URLs, one parallel batch per image. Each request
+     * carries the Accept header a current browser sends for an image, so the copy the zone mints
+     * is stored under the Accept class browsers read.
+     */
+    function wpc_premint_upload_run($ids, $via = 'cron')
+    {
+        try {
+            $accept = wpc_browser_accept('image');
+            $zone = wpc_premint_upload_zone();
+            $requests_class = '\WpOrg\Requests\Requests';
+            if ($zone === '' || !class_exists($requests_class)) {
+                return;
+            }
+            $started = microtime(true);
+            foreach (array_slice(array_unique(array_map('intval', (array) $ids)), 0, 8) as $id) {
+                if ($id <= 0 || microtime(true) - $started > 15) {
+                    continue;
+                }
+                $urls = wpc_premint_upload_urls($id, $zone);
+                $batch = array();
+                foreach ($urls as $u) {
+                    if (class_exists('WP_Http') && (new WP_Http())->block_request($u)) {
+                        continue;
+                    }
+                    $batch[] = array('url' => $u, 'headers' => array('Accept' => $accept), 'data' => array(), 'type' => 'GET');
+                }
+                if (!$batch) {
+                    continue;
+                }
+                $verify = apply_filters('https_ssl_verify', true, $batch[0]['url']);
+                $bundle = defined('ABSPATH') && defined('WPINC') ? ABSPATH . WPINC . '/certificates/ca-bundle.crt' : '';
+                $requests_class::request_multiple($batch, array(
+                    'timeout'          => 3,
+                    'connect_timeout'  => 2,
+                    'follow_redirects' => false,
+                    'verify'           => $verify ? ($bundle !== '' && is_readable($bundle) ? $bundle : true) : false,
+                    'verifyname'       => (bool) $verify,
+                    'useragent'        => apply_filters('http_headers_useragent', 'WordPress/' . get_bloginfo('version') . '; ' . get_bloginfo('url'), $batch[0]['url']),
+                ));
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('upload-premint', '', '', array('n' => count($batch), 'id' => $id, 'via' => (string) $via, 'ms' => (int) round((microtime(true) - $started) * 1000)));
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+    }
     add_filter('wp_generate_attachment_metadata', 'wpc_premint_upload_sizes', PHP_INT_MAX - 1, 2);
+    add_action('wpc_premint_upload_run', 'wpc_premint_upload_run');
 }
 
 if (!function_exists('wpc_rum_census_receiver')) {
@@ -13586,13 +13941,18 @@ if (!function_exists('wpc_auto_mode_on')) {
                             $phases[] = $phase . ':' . $since_start_ms($phase);
                         }
                     }
-                    if (($ms - $waived_ms) >= (int) apply_filters('wpc_render_breaker_trip_ms', 20000)
-                        && class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_render_breaker_trip')) {
-                        wps_cdn_rewrite::wpc_render_breaker_trip((int) ($ms - $waived_ms), 'slow-render');
+                    // The breaker judges the plugin's own render time, not this request's wall time
+                    // (wps_cdn_rewrite::wpc_render_own_ms says why: hawkeye.design, 2026-10-08).
+                    $render_own_ms = (class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_render_own_ms'))
+                        ? wps_cdn_rewrite::wpc_render_own_ms() : 0;
+                    if ($render_own_ms >= (int) apply_filters('wpc_render_breaker_trip_ms', 20000)
+                        && method_exists('wps_cdn_rewrite', 'wpc_render_breaker_trip')) {
+                        wps_cdn_rewrite::wpc_render_breaker_trip($render_own_ms, 'slow-render');
                     }
                     wpc_auto_journal('slow-render', [
                         'ms'      => $ms,
                         'waived'  => $waived_ms,
+                        'own'     => $render_own_ms,
                         'uri'     => substr((string) ($_SERVER['REQUEST_URI'] ?? ''), 0, 80),
                         'boot'    => $since_start_ms('init'),
                         'tpl'     => $since_start_ms(function_exists('is_admin') && is_admin() ? 'adm' : 'tpl'),
@@ -13676,6 +14036,13 @@ if (!function_exists('wpc_auto_mode_on')) {
     }
     function wpc_auto_journal($event, $data = [])
     {
+        if (is_array($data)) {
+            foreach (['uri', 'url'] as $addressKey) {
+                if (isset($data[$addressKey]) && is_string($data[$addressKey])) {
+                    $data[$addressKey] = (string) preg_replace('/[?#].*$/s', '', $data[$addressKey]);
+                }
+            }
+        }
         $j = get_option('wpc_auto_mode_journal');
         if (!is_array($j)) { $j = []; }
         $j[] = array_merge(['t' => time(), 'event' => $event], $data);
@@ -14507,7 +14874,6 @@ if (!function_exists('wpc_sitechange_purge')) {
     add_action('deactivated_plugin',      function () { wpc_sitechange_purge('plugin-deactivated'); });
     add_action('upgrader_process_complete', 'wpc_upgrader_purge', 10, 2);
     add_action('upgrader_overwrote_package', 'wpc_upgrader_overwrote_purge', 10, 3);
-    add_action('elementor/core/files/clear_cache', 'wpc_elementor_css_cleared', 10, 0);
     add_action('update_option_sidebars_widgets', function () { wpc_sitechange_purge('widgets'); });
     add_action('edited_term',             function () { wpc_sitechange_purge('term-edited'); });
 }
@@ -14583,6 +14949,9 @@ if (!function_exists('wpc_upgrader_purge')) {
         wpc_hard_html_purge_after_response($type . '-updated', true);
     }
 
+    // The hooks these three own are listed in wpc_builder_file_clear_hooks() (defines.php),
+    // which the generic purge rule and the integration hook consumer read before this
+    // file is included.
     /**
      * Elementor cleared its generated CSS (a plugin update, activation or deactivation, a theme
      * switch, its Regenerate CSS tool, a kit change): the same deleted files, the same hard purge.
@@ -14591,6 +14960,33 @@ if (!function_exists('wpc_upgrader_purge')) {
     function wpc_elementor_css_cleared()
     {
         wpc_hard_html_purge_after_response('elementor-css-clear', false);
+    }
+
+    /**
+     * Beaver Builder deleted every file under uploads/bb-plugin/cache/ (its Clear Cache button,
+     * its own version update, `wp beaver clear-cache`): FLBuilderModel::delete_asset_cache_for_all_posts()
+     * unlinks `<post>-layout*.css|js` for every post and writes each back at that post's next
+     * render. A layout or global setting may have changed, so the crit is marked stale.
+     */
+    function wpc_beaver_cache_cleared()
+    {
+        wpc_hard_html_purge_after_response('beaver-cache-cleared', true);
+    }
+
+    /**
+     * Spectra deleted its whole assets directory (Regenerate Assets in its settings, a template
+     * import): UAGB_Helper::delete_uag_asset_dir() removes uploads/uag-plugin/assets/* and the
+     * per-page files come back at render. Block CSS from the same attributes: crit left alone.
+     * Its per-page `uagb_delete_page_assets` fires on every post save and is not here: the page
+     * it changes is the one that save purges.
+     */
+    function wpc_spectra_assets_cleared()
+    {
+        wpc_hard_html_purge_after_response('spectra-assets-cleared', false);
+    }
+
+    foreach (wpc_builder_file_clear_hooks() as $builderHook => $builderClear) {
+        add_action($builderHook, $builderClear['callback'], 10, 0);
     }
 
     /**
@@ -14620,6 +15016,9 @@ if (!function_exists('wpc_upgrader_purge')) {
         $firstAsk = !$pending['armed'];
         $pending['armed'] = true;
         $GLOBALS['wpc_hard_html_purge'] = $pending;
+        if (function_exists('wpc_missing_asset_audit_kick')) {
+            wpc_missing_asset_audit_kick();
+        }
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('sitechange-purge-deferred', '', '', ['why' => (string) $reason, 'mode' => 'hard']);
         }
@@ -14674,6 +15073,285 @@ if (!function_exists('wpc_upgrader_purge')) {
         } catch (\Throwable $e) {
         }
     }
+}
+
+
+if (!function_exists('wpc_missing_asset_audit')) {
+    /**
+     * Schedules the next audit $delay seconds out (an hour when idle), unless one is already due
+     * sooner; a later one is replaced. A stored record arms it, wpc_hard_html_purge_after_response()
+     * (an update, a builder clearing its files) brings it forward to a minute, and a slice that
+     * stops before the end of the cache arms the next one for a minute on.
+     */
+    function wpc_missing_asset_audit_arm($delay = 3600)
+    {
+        if (!function_exists('wp_next_scheduled') || !function_exists('wp_schedule_single_event')) {
+            return;
+        }
+        $due = time() + max(1, (int) $delay);
+        $next = wp_next_scheduled('wpc_missing_asset_audit');
+        if ($next !== false && (int) $next <= $due) {
+            return;
+        }
+        if ($next !== false && function_exists('wp_unschedule_event')) {
+            wp_unschedule_event($next, 'wpc_missing_asset_audit');
+        }
+        wp_schedule_single_event($due, 'wpc_missing_asset_audit');
+    }
+
+    function wpc_missing_asset_audit_kick()
+    {
+        wpc_missing_asset_audit_arm(60);
+    }
+
+    /**
+     * The page folders one entry of the page cache root holds: the entry itself, or, for a
+     * 32-hex shard, the folders inside it. Relative to $root.
+     */
+    function wpc_copy_page_folders($root, $entry)
+    {
+        $folders = [$entry];
+        if (preg_match('/^[a-f0-9]{32}$/', $entry)) {
+            $folders = [];
+            foreach ((array) @scandir($root . $entry) as $child) {
+                if ($child !== '.' && $child !== '..' && is_dir($root . $entry . '/' . $child)) {
+                    $folders[] = $entry . '/' . $child;
+                }
+            }
+        }
+        return $folders;
+    }
+
+    /**
+     * The links records (wpc_copy_links_record) of the stored copies in one page folder: how many
+     * copy files are there, how many records have a copy beside them, and the tokens those hold.
+     * A record with no copy left beside it is removed.
+     */
+    function wpc_copy_page_records($dir)
+    {
+        $records = ['copies' => 0, 'ledgers' => 0, 'tokens' => []];
+        $dir = rtrim((string) $dir, '/');
+        $names = @scandir($dir);
+        if (!is_array($names)) {
+            return $records;
+        }
+        $have = array_flip($names);
+        foreach ($names as $name) {
+            if (preg_match('/^(?:(?:mobile-webp|mobile|webp)_)?(?:localonly_)?(?:index|stale)\.html(?:_gzip|_br)?$/', $name)) {
+                $records['copies']++;
+            }
+        }
+        foreach ($names as $name) {
+            if (!preg_match('/^((?:(?:mobile-webp|mobile|webp)_)?(?:localonly_)?)links\.txt$/', $name, $kept)) {
+                continue;
+            }
+            $stored = false;
+            foreach (['index.html', 'index.html_gzip', 'index.html_br', 'stale.html', 'stale.html_gzip', 'stale.html_br'] as $copy) {
+                $stored = $stored || isset($have[$kept[1] . $copy]);
+            }
+            if (!$stored) {
+                @unlink($dir . '/' . $name);
+                continue;
+            }
+            $records['ledgers']++;
+            $lines = (string) @file_get_contents($dir . '/' . $name);
+            $end = strrpos($lines, "\n");
+            if ($end === false) {
+                continue;
+            }
+            foreach (explode("\n", substr($lines, 0, $end)) as $token) {
+                if ($token !== '') {
+                    $records['tokens'][] = $token;
+                }
+            }
+        }
+        return $records;
+    }
+
+    /**
+     * What the copies in one page folder link that is gone: the copy files stored, the records
+     * read and the missing link tokens (`c:` and `i:` tokens; a sidecar's `s:` token is its
+     * owner's). A record with no copy left beside it is removed.
+     */
+    function wpc_missing_asset_page_report($dir, array &$known)
+    {
+        $records = wpc_copy_page_records($dir);
+        $report = ['copies' => $records['copies'], 'ledgers' => $records['ledgers'], 'missing' => []];
+        foreach ($records['tokens'] as $token) {
+            if (strpos($token, 's:') !== 0 && wpc_copy_links_missing($token, $known)) {
+                $report['missing'][$token] = true;
+            }
+        }
+        $report['missing'] = array_keys($report['missing']);
+        return $report;
+    }
+
+    /**
+     * The receipt of a slice of the audit that purged: a repair of what the builder hooks and the
+     * purge owners left behind, so a belt receipt, never sampled, one line per slice.
+     */
+    function wpc_missing_asset_repair_receipt($key, array $fields)
+    {
+        return function_exists('wpc_belt_receipt') && wpc_belt_receipt('missing-asset-purge', $fields, false, (string) $key);
+    }
+
+    /**
+     * Whether this process sees the site's files: the WordPress core and the plugin's own file are
+     * there, at least one file the slice recorded is there when it recorded three or more, and no
+     * more than half of the files of a slice of ten or more read missing. A process that cannot see
+     * wp-content (system cron under another user, open_basedir, a network disk away) reads every
+     * recorded file as missing; a regeneration deletes a handful. $why names the check that failed.
+     */
+    function wpc_missing_asset_disk_visible(array $known, &$why = '')
+    {
+        $why = '';
+        $core = defined('ABSPATH') && defined('WPINC') ? rtrim(ABSPATH, '/') . '/' . WPINC . '/version.php' : '';
+        $plugin = defined('WPS_IC_DIR') ? WPS_IC_DIR . 'wp-compress.php' : '';
+        if ($core === '' || !@is_file($core)) {
+            $why = 'core-file';
+        } elseif ($plugin === '' || !@is_file($plugin)) {
+            $why = 'plugin-file';
+        } else {
+            $gone = count(array_filter($known));
+            if (count($known) >= 3 && $gone === count($known)) {
+                $why = 'none-present';
+            } elseif (count($known) >= 10 && $gone * 2 > count($known)) {
+                $why = 'most-missing';
+            }
+        }
+        return $why === '';
+    }
+
+    /**
+     * Whether a page folder belongs to this site: its url.txt names a host this site answers to.
+     * The cache folder is shared by every site of a network, and another site's page cannot be
+     * purged from here. A folder with no url.txt is taken as this site's.
+     */
+    function wpc_missing_asset_page_is_own($dir)
+    {
+        $url = trim((string) @file_get_contents(rtrim((string) $dir, '/') . '/url.txt', false, null, 0, 2048));
+        if ($url === '' || !class_exists('wps_ic_url_key') || !method_exists('wps_ic_url_key', 'sanitizeSameHostUrl')) {
+            return true;
+        }
+        return wps_ic_url_key::sanitizeSameHostUrl($url) !== '';
+    }
+
+    /**
+     * A stored page copy never outlives a file it links. Every copy keeps beside itself the local
+     * stylesheets and scripts it linked that existed when it was stored (wpc_copy_links_record,
+     * the 'links' name of wpc_copy_names). This cron event, one slice of the audit, reads those
+     * records, asks the disk once per distinct file, and purges every page one of whose recorded
+     * files is gone, through the per-URL purge owner, which removes stale copies as well as fresh
+     * ones. A file missing at store time is never recorded, so a page re-rendered with a link that
+     * is still dead is not purged for it again.
+     * One missing file linked by three distinct pages is a regeneration of the site's files: one
+     * site-wide hard purge (reason missing-asset) replaces the per-page ones, at most once an hour.
+     * A slice reads the page folders after the saved cursor, until the time budget (3 s, filter
+     * wpc_missing_asset_audit_budget) or 25 pages with a missing file; only the folders whose
+     * url.txt names this site. It arms the next slice for an hour before it reads anything; one
+     * that stops early brings it forward to a minute, and a finished pass that found no record
+     * cancels it, so a site that stores nothing is not woken. The tally of the pages seen per
+     * missing file is kept across the slices of one pass. A slice that cannot see the site's files
+     * (wpc_missing_asset_disk_visible) purges nothing and writes `missing-asset-audit-blind`. A
+     * network's site purges its own pages one by one: the site-wide purge would empty every site's.
+     */
+    function wpc_missing_asset_audit()
+    {
+        try {
+            if (!defined('WPS_IC_CACHE') || !is_dir(WPS_IC_CACHE) || !function_exists('wpc_copy_links_missing')) {
+                return;
+            }
+            wpc_missing_asset_audit_arm(3600);
+            $started = microtime(true);
+            $budget = (float) apply_filters('wpc_missing_asset_audit_budget', 3.0);
+            $state = get_option('wpc_missing_asset_audit', []);
+            $state = is_array($state) ? $state : [];
+            $after = isset($state['after']) ? (string) $state['after'] : '';
+            $tally = (isset($state['seen']) && is_array($state['seen'])) ? $state['seen'] : [];
+            $ledgers = isset($state['ledgers']) ? (int) $state['ledgers'] : 0;
+            $root = rtrim(WPS_IC_CACHE, '/') . '/';
+            $known = [];
+            $pages = [];
+            $stopped = false;
+            foreach ((array) @scandir($root) as $entry) {
+                if ($entry === '.' || $entry === '..' || strpos($entry, '.') !== false || $entry === 'css' || $entry === 'js'
+                    || ($after !== '' && strcmp($entry, $after) <= 0) || !is_dir($root . $entry)) {
+                    continue;
+                }
+                foreach (wpc_copy_page_folders($root, $entry) as $folder) {
+                    $report = wpc_missing_asset_page_report($root . $folder, $known);
+                    $ledgers += $report['ledgers'];
+                    if ($report['missing'] !== [] && wpc_missing_asset_page_is_own($root . $folder)) {
+                        $pages[$folder] = $report;
+                        foreach ($report['missing'] as $token) {
+                            $tally[$token][$folder] = 1;
+                        }
+                    }
+                }
+                $after = $entry;
+                if (count($pages) >= 25 || (microtime(true) - $started) >= $budget) {
+                    $stopped = true;
+                    break;
+                }
+            }
+            if ($pages !== [] && !wpc_missing_asset_disk_visible($known, $blind)) {
+                wpc_cache_first_log('missing-asset-audit-blind', '', '', ['why' => $blind, 'unique' => count($known), 'missing' => count(array_filter($known)), 'pages' => count($pages)]);
+                delete_option('wpc_missing_asset_audit');
+                return;
+            }
+            $shared = [];
+            foreach ($tally as $token => $seenOn) {
+                if (count($seenOn) >= 3) {
+                    $shared[] = (string) $token;
+                }
+            }
+            if ($shared !== [] && function_exists('wpc_hard_html_purge_after_response')
+                && !(function_exists('is_multisite') && is_multisite())
+                && (time() - (int) get_option('wpc_missing_asset_site_purge_at', 0)) >= 3600) {
+                update_option('wpc_missing_asset_site_purge_at', time(), false);
+                $sharing = [];
+                $sharedCopies = 0;
+                foreach ($shared as $token) {
+                    $sharing += array_fill_keys(array_map('strval', array_keys($tally[$token])), true);
+                }
+                foreach (array_intersect_key($pages, $sharing) as $report) {
+                    $sharedCopies += $report['copies'];
+                }
+                wpc_missing_asset_repair_receipt('', ['pages' => count($sharing), 'keys' => array_slice(array_keys($sharing), 0, 20), 'paths' => array_slice($shared, 0, 20), 'copies' => $sharedCopies, 'site' => 1]);
+                wpc_hard_html_purge_after_response('missing-asset', false);
+                delete_option('wpc_missing_asset_audit');
+                return;
+            }
+            if ($pages !== [] && class_exists('wps_ic_asset_version')) {
+                wps_ic_asset_version::reset();
+            }
+            if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeUrlHtml')) {
+                $paths = [];
+                $copies = 0;
+                foreach ($pages as $folder => $report) {
+                    wps_ic_cache_integrations::purgeUrlHtml((string) $folder, '', ['context' => 'missing-asset', 'warm' => true, 'force' => true]);
+                    $paths += array_fill_keys($report['missing'], true);
+                    $copies += $report['copies'];
+                }
+                if ($pages !== []) {
+                    $keys = array_map('strval', array_keys($pages));
+                    wpc_missing_asset_repair_receipt(count($keys) === 1 ? $keys[0] : '', ['pages' => count($keys), 'keys' => array_slice($keys, 0, 20), 'paths' => array_slice(array_keys($paths), 0, 20), 'copies' => $copies, 'site' => 0]);
+                }
+            }
+            if ($stopped) {
+                update_option('wpc_missing_asset_audit', ['after' => $after, 'seen' => array_slice($tally, 0, 200, true), 'ledgers' => $ledgers], false);
+                wpc_missing_asset_audit_arm(60);
+                return;
+            }
+            delete_option('wpc_missing_asset_audit');
+            if ($ledgers === 0 && function_exists('wp_clear_scheduled_hook')) {
+                wp_clear_scheduled_hook('wpc_missing_asset_audit');
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+    add_action('wpc_missing_asset_audit', 'wpc_missing_asset_audit', 10, 0);
+    add_action('upgrader_process_complete', 'wpc_missing_asset_audit_kick', 20, 0);
 }
 
 
@@ -15177,12 +15855,12 @@ if (!function_exists('wpc_update_window_active')) {
                 return $refuse('personal-cookie');
             }
             $excludes = function_exists('get_option') ? get_option('wpc-excludes') : [];
-            if (!empty($excludes['cache']) && is_array($excludes['cache'])) {
-                $url = rtrim((isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : '')
-                    . (isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : ''), '/');
-                if (in_array($url, $excludes['cache'])) {
-                    return $refuse('cache-exclude');
-                }
+            if (!empty($excludes['cache']) && is_array($excludes['cache']) && class_exists('wps_ic_url_key')
+                && wps_ic_url_key::excludedBy($excludes['cache'], wps_ic_url_key::requestHostPath()) !== false) {
+                return $refuse('cache-exclude');
+            }
+            if (function_exists('wpc_request_excluded_from_plugin') && wpc_request_excluded_from_plugin() !== false) {
+                return $refuse('plugin-exclude');
             }
             $method = isset($_SERVER['REQUEST_METHOD']) ? (string) $_SERVER['REQUEST_METHOD'] : 'GET';
             if ($method === 'POST' || $method === 'PURGE') {
@@ -15425,6 +16103,9 @@ if (!function_exists('wpc_cf_emit_html_tags')) {
     {
         try {
             if (headers_sent() || (function_exists('is_admin') && is_admin())) {
+                return;
+            }
+            if (function_exists('wpc_request_excluded_from_plugin') && wpc_request_excluded_from_plugin() !== false) {
                 return;
             }
             $m = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string) $_SERVER['REQUEST_METHOD']) : 'GET';
@@ -16367,7 +17048,7 @@ if (!function_exists('wpc_sweep_unserved_store_artifacts')) {
                     if ($combine_cap <= 0) { break; }
                     if ($combine_key === '.' || $combine_key === '..') { continue; }
                     $combine_css_dir = $combine_root . '/' . $combine_key . '/css';
-                    if (!@is_dir($combine_css_dir)) { continue; }
+                    if (!@is_dir($combine_css_dir) || wpc_fs_link_below($combine_root, $combine_css_dir)) { continue; }
                     if ((int) @filemtime($combine_css_dir . '/.wpc-live') >= $now - $store_max_age) { continue; }
                     $newest_mtime = 0;
                     $combine_files = [];

@@ -26,6 +26,9 @@ add_action('send_headers', function () {
     if (headers_sent() || !class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) {
         return;
     }
+    if (function_exists('wpc_request_excluded_from_plugin') && wpc_request_excluded_from_plugin() !== false) {
+        return;
+    }
 
 
     $wpc_shared_cache = apply_filters('wpc_has_shared_cache', !(defined('WPC_NO_SHARED_CACHE') && WPC_NO_SHARED_CACHE));

@@ -104,6 +104,104 @@ if (!function_exists('wpc_fs_update')) {
     }
 }
 
+if (!function_exists('wpc_fs_remove_link')) {
+    /** Removes a symbolic link itself, whatever it points at (a directory link on Windows needs rmdir). */
+    function wpc_fs_remove_link($path)
+    {
+        return @unlink($path) || @rmdir($path);
+    }
+}
+
+if (!function_exists('wpc_fs_is_plugin_root')) {
+    /**
+     * Whether $dir is one of the plugin's own root directories (the page cache, critical, combine,
+     * fonts and preload folders). A host may have put one of them elsewhere behind a symbolic link,
+     * so a delete handed one of these follows it; it never follows any other link.
+     */
+    function wpc_fs_is_plugin_root($dir)
+    {
+        $dir = rtrim((string) $dir, '/');
+        $roots = [defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR . '/cache/wp-preload' : ''];
+        foreach (['WPS_IC_CACHE', 'WPS_IC_CRITICAL', 'WPS_IC_COMBINE', 'WPS_IC_FONTS_DIR'] as $constant) {
+            $roots[] = defined($constant) ? (string) constant($constant) : '';
+        }
+        foreach ($roots as $root) {
+            if ($root !== '' && rtrim($root, '/') === $dir) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+if (!function_exists('wpc_fs_link_below')) {
+    /** Whether a component of $path below $root (the root itself not counted) is a symbolic link. */
+    function wpc_fs_link_below($root, $path)
+    {
+        $root = rtrim((string) $root, '/');
+        $path = rtrim((string) $path, '/');
+        if ($root === '' || strpos($path, $root . '/') !== 0) {
+            return false;
+        }
+        $walk = $root;
+        foreach (explode('/', substr($path, strlen($root) + 1)) as $part) {
+            if ($part === '') {
+                continue;
+            }
+            $walk .= '/' . $part;
+            if (@is_link($walk)) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+if (!function_exists('wpc_fs_remove_tree')) {
+    /**
+     * Deletes everything under $dir, then $dir itself once it is empty. Inside a directory that
+     * is being deleted every entry goes, dotfiles included; directly in $dir, entries whose name
+     * starts with a dot stay. A symbolic link inside the tree, to a file or to a directory, is
+     * removed itself: nothing is read or deleted through it. $dir itself a link: with $nested (it
+     * is an entry of a tree being deleted) the link is removed; handed as the root of a delete it
+     * is followed only when it is one of the plugin's own root directories
+     * (wpc_fs_is_plugin_root), otherwise it is left as it is, nothing is deleted, the answer is
+     * false and `purge-link-refused` is journaled once per request. A .purging-* directory is
+     * never entered at any depth. Stops between entries once
+     * $GLOBALS['wpc_tombstone_drain_deadline'] has passed. True when $dir is gone.
+     */
+    function wpc_fs_remove_tree($dir, $nested = false)
+    {
+        static $refusal_logged = false;
+        $dir = rtrim((string) $dir, '/');
+        if ($dir === '') {
+            return false;
+        }
+        if (@is_link($dir) && ($nested || !wpc_fs_is_plugin_root($dir))) {
+            if ($nested) {
+                return wpc_fs_remove_link($dir);
+            }
+            if (!$refusal_logged && function_exists('wpc_cache_first_log')) {
+                $refusal_logged = true;
+                wpc_cache_first_log('purge-link-refused', '', $dir, []);
+            }
+            return false;
+        }
+        foreach ((array) @scandir($dir) as $name) {
+            $name = (string) $name;
+            if ($name === '' || $name === '.' || $name === '..' || strpos($name, '.purging-') === 0 || (!$nested && $name[0] === '.')) {
+                continue;
+            }
+            if (!empty($GLOBALS['wpc_tombstone_drain_deadline']) && microtime(true) > $GLOBALS['wpc_tombstone_drain_deadline']) {
+                return false;
+            }
+            $path = $dir . '/' . $name;
+            is_dir($path) ? wpc_fs_remove_tree($path, true) : @unlink($path);
+        }
+        return @is_dir($dir) ? @rmdir($dir) : true;
+    }
+}
+
 if (!function_exists('wpc_belt_rx_admit')) {
     /**
      * The one sampling gate for belt receipts. Of the sampled receipts in $events that a caller
@@ -234,6 +332,7 @@ if (!function_exists('wpc_copy_family')) {
             'stale_br'   => $base . 'stale.html_br',
             'rewarm'     => $base . 'wpc-rewarm43.txt',
             'reason'     => $base . 'reason.txt',
+            'links'      => $base . 'links.txt',
         ];
     }
 
@@ -338,6 +437,9 @@ if (!function_exists('wpc_cflog_path')) {
     {
         if (is_array($value)) {
             foreach ($value as $name => $item) {
+                if (is_string($name) && is_string($item) && preg_match('/^(?:url|uri|request_uri|ref|referr?er)$/i', $name)) {
+                    $item = (string) preg_replace('/[?#].*$/s', '', $item);
+                }
                 $value[$name] = is_string($name) && preg_match('/^(?:api_?key|ip|server_addr|remote_addr)$/i', $name)
                     && is_scalar($item) && (string) $item !== '' ? '[masked]' : wpc_cflog_mask($item);
             }

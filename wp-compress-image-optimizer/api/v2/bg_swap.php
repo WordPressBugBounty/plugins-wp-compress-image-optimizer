@@ -112,19 +112,19 @@ if (!wpc_v2_inbound_image_ok($raw, $format, $imageID, 'direct_bg_swap')) {
 }
 
 // Atomic disk write
-$persist = wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $size_label, $format, 'direct_bg_swap');
-if (($persist['refused'] ?? '') === 'larger_than_disk') {
-    // No smaller than the file WordPress serves at this size: settled as no improvement, not written.
+$persist = wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $size_label, $format, 'direct_bg_swap', wpc_v2_variant_claim($body));
+if (($persist['refused'] ?? '') !== '') {
+    // Refused by the store (no smaller than the file WordPress serves at this size, or a picture of another file): settled as no improvement, not written.
     $journal_file = wpc_v2_journal_write($imageID, $jobId, [
         'flush_reason' => 'single',
         'received_ms'  => (int) round($entry_t * 1000),
-        'entries'      => [['type' => 'no_improvement', 'sizeLabel' => $size_label, 'format' => $format, 'reason' => 'larger_than_disk', 'baselineKb' => 0.0]],
+        'entries'      => [['type' => 'no_improvement', 'sizeLabel' => $size_label, 'format' => $format, 'reason' => (string) $persist['refused'], 'baselineKb' => 0.0]],
     ]);
     if ($journal_file === false) {
         wpc_v2_direct_respond(503, ['error' => 'journal_unavailable', 'retry_via' => 'rest']);
     }
     register_shutdown_function('wpc_v2_journal_fire_loopback');
-    wpc_v2_direct_respond(200, ['ok' => true, 'kind' => 'no_improvement', 'reason' => 'larger_than_disk', 'direct_entry' => true]);
+    wpc_v2_direct_respond(200, ['ok' => true, 'kind' => 'no_improvement', 'reason' => (string) $persist['refused'], 'direct_entry' => true]);
 }
 if (!$persist['ok']) {
     wpc_v2_direct_respond(500, ['error' => $persist['error']]);

@@ -38,13 +38,7 @@ class wps_ic_breeze extends wps_ic_integrations {
 
         // Full cache clear
         if (defined('BREEZE_VERSION')) {
-            global $wp_filesystem;
-            require_once(ABSPATH . 'wp-admin/includes/file.php');
-
-            WP_Filesystem();
-
-            $cache_path = breeze_get_cache_base_path(is_network_admin(), true);
-            $wp_filesystem->rmdir(untrailingslashit($cache_path), true);
+            wpc_fs_remove_tree(breeze_get_cache_base_path(is_network_admin(), true), true);
 
             if (function_exists('wp_cache_flush')) {
                 if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('breeze'); } else { @wp_cache_flush(); }

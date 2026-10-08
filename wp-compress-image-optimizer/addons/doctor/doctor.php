@@ -26,6 +26,7 @@ require_once __DIR__ . '/context.php';
 require_once __DIR__ . '/compartments/cache.php';
 require_once __DIR__ . '/compartments/crit.php';
 require_once __DIR__ . '/compartments/render.php';
+require_once __DIR__ . '/compartments/assets.php';
 require_once __DIR__ . '/compartments/site.php';
 require_once __DIR__ . '/compartments/logs.php';
 
@@ -41,6 +42,7 @@ if (!function_exists('wpc_doctor_registry')) {
             'cache'  => 'wps_ic_doctor_cache',
             'crit'   => 'wps_ic_doctor_crit',
             'render' => 'wps_ic_doctor_render',
+            'assets' => 'wps_ic_doctor_assets',
             'logs'   => 'wps_ic_doctor_logs',
         ];
     }

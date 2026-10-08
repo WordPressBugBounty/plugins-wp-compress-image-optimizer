@@ -412,7 +412,7 @@ class wps_ic_stats
             return $body;
         } else if (wp_remote_retrieve_response_code($call) == 401) {
 		        $cache = new wps_ic_cache_integrations();
-						$cache->remove_key();
+						$cache->remove_key('settings-stats-401');
 		        return false;
         }
 

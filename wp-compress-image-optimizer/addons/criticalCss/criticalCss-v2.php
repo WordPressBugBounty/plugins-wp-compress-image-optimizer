@@ -880,7 +880,6 @@ $return['mobile_path'] = $mobileFilePath;
 
         $stats = get_option(WPS_IC_TESTS);
         $attempt = 0;
-        $psiPending = false;
 
         $this->debugPageSpeed(WPS_IC_PAGESPEED_RESULTS_HOME . $uuid);
 
@@ -907,15 +906,25 @@ $return['mobile_path'] = $mobileFilePath;
                 break;
             }
 
-
+            // The service answers an unknown or expired uuid with HTTP 404 {"error":"Results not found"}
+            // and no status. Read as complete, that stored NULL scores as a finished result, which
+            // stops every later poll and leaves the card on "Analyzing performance..." for good
+            // (centralmotelgi.com.au, 2026-10-07). The run is lost: drop its uuid so the next
+            // first-run cycle dispatches a fresh one, and store nothing.
             $psiStatus = isset($data['status']) ? (string) $data['status'] : 'complete';
+            if ((int) wp_remote_retrieve_response_code($results) === 404 || isset($data['error'])
+                || in_array($psiStatus, ['failed', 'error'], true)) {
+                $this->forgetPsiUuid($uuid);
+                $jobStatus['benchmark-lost'] = $psiStatus;
+                break;
+            }
+
             if ($psiStatus !== 'complete') {
                 $jobStatus['benchmark-pending'] = $psiStatus;
                 if ($attempt === 0 && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
                     && !wp_next_scheduled('wpc_psi_poll', [$urlKey, $uuid])) {
                     wp_schedule_single_event(time() + 45, 'wpc_psi_poll', [$urlKey, $uuid]);
                 }
-                $psiPending = true;
                 $jobStatus['benchmark-pending-rescheduled'] = true;
                 break;
             }
@@ -948,30 +957,36 @@ $return['mobile_path'] = $mobileFilePath;
 
             $this->debugPageSpeed(print_r($parsedData,true));
 
-            // Check if parsedData was populated
-            if (!empty($parsedData)) {
-                $stats['home'] = $parsedData;
-                update_option(WPS_IC_TESTS, $stats);
-                $jobStatus['benchmark-success'] = true;
-                delete_transient('wpc_initial_test');
+            // A complete answer without four numeric scores is not a result either: storing it is
+            // what pinned the card on the spinner. Same handling as a lost run.
+            $scoresPresent = is_numeric($parsedData['desktop']['before']['performanceScore'])
+                && is_numeric($parsedData['desktop']['after']['performanceScore'])
+                && is_numeric($parsedData['mobile']['before']['performanceScore'])
+                && is_numeric($parsedData['mobile']['after']['performanceScore']);
+            if (!$scoresPresent) {
+                $this->forgetPsiUuid($uuid);
+                $jobStatus['benchmark-lost'] = 'no-scores';
                 break;
             }
 
-            // If parsedData is empty, re-poll via event — never sleep a worker
-            if ($attempt === 0 && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
-                && !wp_next_scheduled('wpc_psi_poll', [$urlKey, $uuid])) {
-                wp_schedule_single_event(time() + 45, 'wpc_psi_poll', [$urlKey, $uuid]);
-            }
-            $jobStatus['benchmark-rescheduled'] = true;
+            $stats['home'] = $parsedData;
+            update_option(WPS_IC_TESTS, $stats);
+            delete_transient('wpc_initial_test');
+            update_option(WPS_IC_LITE_GPS, ['result' => $parsedData, 'failed' => false, 'lastRun' => time()]);
+            $jobStatus['benchmark-success'] = true;
             break;
 
         } while ($attempt <= 3);
 
-
-        if (!$psiPending) {
-            update_option(WPS_IC_LITE_GPS, ['result' => $parsedData, 'failed' => empty($parsedData), 'lastRun' => time()]);
-        }
         return $jobStatus;
+    }
+
+    /** Drop the stashed PageSpeed uuid when it names the run that was just found lost. */
+    private function forgetPsiUuid($uuid)
+    {
+        if ((string) get_transient('wpc_psi_uuid') === (string) $uuid) {
+            delete_transient('wpc_psi_uuid');
+        }
     }
 
 
@@ -2249,17 +2264,7 @@ $return['mobile_path'] = $mobileFilePath;
 
     public static function removeDirectory($path)
     {
-        $path = rtrim($path, '/');
-        $files = glob($path . '/*');
-        if (!empty($files)) {
-            foreach ($files as $file) {
-                is_dir($file) ? self::removeDirectory($file) : unlink($file);
-            }
-        }
-
-        if (is_dir($path)) {
-            rmdir($path);
-        }
+        wpc_fs_remove_tree($path);
     }
 
 }

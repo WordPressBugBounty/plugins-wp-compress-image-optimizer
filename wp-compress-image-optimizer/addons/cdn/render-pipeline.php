@@ -185,6 +185,11 @@ final class wps_ic_font_face_set
         foreach ($blocks[0] as $block) {
             $family = self::familyOf($block);
             if ($family === '') { continue; }
+            $pieces = $this->cutFallbackSpan($block, $family, $origin, $eager);
+            if ($pieces !== null) {
+                foreach ($pieces as $piece) { $taken += $this->add($piece, $origin, $eager); }
+                continue;
+            }
             $base = self::baseKey($block, $family);
             $range = self::rangeOf($block);
             $subset = $range !== '' && self::hasEmbeddedSource($block);
@@ -238,6 +243,64 @@ final class wps_ic_font_face_set
             $taken++;
         }
         return $taken;
+    }
+
+    /** A "<Family> Fallback" stand-in declared over a weight span is held cut around the weights
+     *  the same family and style declares on their own, so each of those weights is matched to its
+     *  own stand-in in every engine and every other weight keeps the span's. Returns the pieces of
+     *  $block when it is such a span, or null. A single weight that arrives after a span cuts the
+     *  span already held; its pieces keep the span's place in the order. */
+    private function cutFallbackSpan($block, $family, $origin, $eager)
+    {
+        if (substr($family, -9) !== ' fallback' || preg_match('/url\(/i', $block)
+            || !preg_match('/font-weight\s*:/i', $block)) { return null; }
+        $span = self::weightSpan($block);
+        if (!$span) { return null; }
+        $style = self::normaliseStyle(self::descriptor($block, 'font-style'));
+        if ($span[0] === $span[1]) {
+            foreach ($this->faces as $key => $face) {
+                if ($face['family'] !== $family || preg_match('/url\(/i', $face['css'])
+                    || self::normaliseStyle(self::descriptor($face['css'], 'font-style')) !== $style) { continue; }
+                $held = self::weightSpan($face['css']);
+                if (!$held || $held[0] === $held[1] || $span[0] < $held[0] || $span[0] > $held[1]) { continue; }
+                unset($this->faces[$key]);
+                foreach (self::weightPieces($face['css'], $held, [$span[0]]) as $piece) {
+                    $this->add($piece, $face['origin'], $face['eager']);
+                    $pieceKey = self::baseKey($piece, $family) . '|' . self::rangeOf($piece);
+                    if (isset($this->faces[$pieceKey])) { $this->faces[$pieceKey]['seq'] = $face['seq']; }
+                }
+            }
+            return null;
+        }
+        $inside = [];
+        foreach ($this->faces as $face) {
+            if ($face['family'] !== $family || preg_match('/url\(/i', $face['css'])
+                || !preg_match('/font-weight\s*:/i', $face['css'])
+                || self::normaliseStyle(self::descriptor($face['css'], 'font-style')) !== $style) { continue; }
+            $held = self::weightSpan($face['css']);
+            if ($held && $held[0] === $held[1] && $held[0] >= $span[0] && $held[0] <= $span[1]) { $inside[] = $held[0]; }
+        }
+        return $inside ? self::weightPieces($block, $span, $inside) : null;
+    }
+
+    /** $css re-declared over the parts of $span that are not in $weights. */
+    private static function weightPieces($css, array $span, array $weights)
+    {
+        $weights = array_values(array_unique($weights));
+        sort($weights);
+        $pieces = [];
+        $from = $span[0];
+        foreach ($weights as $weight) {
+            if ($weight - 1 >= $from) { $pieces[] = [$from, $weight - 1]; }
+            $from = max($from, $weight + 1);
+        }
+        if ($span[1] >= $from) { $pieces[] = [$from, $span[1]]; }
+        $out = [];
+        foreach ($pieces as $piece) {
+            $out[] = (string) preg_replace('/(font-weight\s*:\s*)[^;}]+/i',
+                '${1}' . ($piece[0] === $piece[1] ? $piece[0] : $piece[0] . ' ' . $piece[1]), $css, 1);
+        }
+        return $out;
     }
 
     /** Serve this family's network faces late. One record per family: the first reason sticks. */

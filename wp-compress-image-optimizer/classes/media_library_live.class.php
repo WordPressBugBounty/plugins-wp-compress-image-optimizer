@@ -819,8 +819,8 @@ class wps_ic_media_library_live extends wps_ic
 
         if ($imageStatus && is_array($imageStatus) && !empty($imageStatus['time'])) {
             $age = time() - intval($imageStatus['time']);
-            $inQueue = in_array($imageID, get_option('wpc_compress_queue', []));
-            $workerRunning = (bool) get_transient('wpc_compress_lock');
+            $inQueue = class_exists('wps_local_compress') ? in_array($imageID, wps_local_compress::queue_ids()) : in_array($imageID, (array) get_option('wpc_compress_queue', []));
+            $workerRunning = class_exists('wps_local_compress') && wps_local_compress::queue_worker_running();
             if ($age > 120 && !$inQueue && !$workerRunning) {
                 delete_transient('wps_ic_compress_' . $imageID);
                 delete_transient('wps_ic_queue_' . $imageID);

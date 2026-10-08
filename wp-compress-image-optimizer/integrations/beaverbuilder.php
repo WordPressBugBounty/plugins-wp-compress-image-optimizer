@@ -19,12 +19,10 @@ class wps_ic_beaverbuilder extends wps_ic_integrations {
 
     public function add_admin_hooks() {
         return [
+            // fl_builder_cache_cleared is owned by wpc_beaver_cache_cleared() (warm.php): the
+            // builder deleted the files every stored page links, so the purge is hard. A second
+            // listener here purged soft and kept the copies serving.
             'fl_builder_before_save_layout' => [
-                'callback' => 'purge_cache',
-                'priority' => 10,
-                'args' => 1
-            ],
-            'fl_builder_cache_cleared' => [
                 'callback' => 'purge_cache',
                 'priority' => 10,
                 'args' => 1

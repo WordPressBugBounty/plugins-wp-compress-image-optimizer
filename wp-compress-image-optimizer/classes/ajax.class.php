@@ -1834,6 +1834,14 @@ class wps_ic_ajax extends wps_ic
         // is a lost-update machine. The simple panel moved to wps_ic_ajax_v2_checkbox_batch for
         // exactly that reason; what is left here is the legacy v2 screen, which changes one
         // checkbox per request.
+        if (count($keys) === 2 && $keys[0] === 'permissions') {
+            $granted = class_exists('wps_ic_users') && wps_ic_users::setGrant($keys[1], $value);
+            if ($granted) {
+                new wps_ic_users();
+            }
+            wp_send_json_success(['granted' => $granted ? 1 : 0]);
+        }
+
         $pillar_key = (count($keys) === 2) ? [$keys[0], $keys[1]] : $keys[0];
         if (function_exists('wpc_lite_apply_pillar_riders')) {
             $settings = wpc_lite_apply_pillar_riders($settings, $pillar_key, $value);
@@ -1882,13 +1890,7 @@ class wps_ic_ajax extends wps_ic
     public static function purgeBreeze()
     {
         if (defined('BREEZE_VERSION')) {
-            global $wp_filesystem;
-            require_once(ABSPATH . 'wp-admin/includes/file.php');
-
-            WP_Filesystem();
-
-            $cache_path = breeze_get_cache_base_path(is_network_admin(), true);
-            $wp_filesystem->rmdir(untrailingslashit($cache_path), true);
+            wpc_fs_remove_tree(breeze_get_cache_base_path(is_network_admin(), true), true);
 
             if (function_exists('wp_cache_flush')) {
                 if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('breeze'); } else { @wp_cache_flush(); }
@@ -2179,6 +2181,14 @@ class wps_ic_ajax extends wps_ic
 
         $optionName = explode(',', $optionName);
 
+        if (is_array($optionName) && count($optionName) > 1 && $optionName[0] === 'permissions') {
+            $granted = class_exists('wps_ic_users') && wps_ic_users::setGrant($optionName[1], $optionValue);
+            if ($granted) {
+                new wps_ic_users();
+            }
+            wp_send_json_success(['granted' => $granted ? 1 : 0]);
+        }
+
         // CF settings are stored in WPS_IC_CF['settings'], not WPS_IC_SETTINGS
         if (is_array($optionName) && count($optionName) > 1 && $optionName[0] === 'cf') {
             $cf = get_option(WPS_IC_CF);
@@ -2286,9 +2296,17 @@ class wps_ic_ajax extends wps_ic
         $nextgenChanged = false;
         $overrideChanged = false;
 
+        $grantsChanged = false;
         foreach ($changes as $change) {
             $optionName = explode(',', sanitize_text_field($change['name']));
             $optionValue = sanitize_text_field($change['value']);
+
+            if (count($optionName) > 1 && $optionName[0] === 'permissions') {
+                if (!$this->isAgencyPortal() && class_exists('wps_ic_users') && wps_ic_users::setGrant($optionName[1], $optionValue)) {
+                    $grantsChanged = true;
+                }
+                continue;
+            }
 
             if (count($optionName) > 1 && $optionName[0] === 'cf') {
                 // CF settings stored in WPS_IC_CF['settings']
@@ -2430,6 +2448,9 @@ class wps_ic_ajax extends wps_ic
         $wpc_livecdn_before_b = isset($prevSettings['live-cdn']) ? (string) $prevSettings['live-cdn'] : '';
 
         update_option(WPS_IC_SETTINGS, $options);
+        if ($grantsChanged) {
+            new wps_ic_users();
+        }
 
         // A live-cdn flip re-routes every image URL; the batch save's purge (wps_ic_purge_after_save)
         // gates on $htmlPurgeKeys, which does NOT include live-cdn, so a flip via serve/css/js could
@@ -8099,7 +8120,7 @@ class wps_ic_ajax extends wps_ic
         }
 
         $cache = new wps_ic_cache_integrations();
-        $cache->remove_key();
+        $cache->remove_key('disconnect-button');
 
         wp_send_json_success();
     }
@@ -9535,7 +9556,7 @@ class wps_ic_ajax extends wps_ic
                     'sizeLabel'     => (string) $label,
                     'maxWidth'      => $size_w,
                     'maxHeight'     => isset($info['height']) ? (int) $info['height'] : 0,
-                    'crop'          => ($label === 'thumbnail'),
+                    'crop'          => function_exists('wpc_v2_subsize_crop') ? wpc_v2_subsize_crop($label, (array) $info, $meta) : ($label === 'thumbnail'),
                     'filenames'     => $sub_file !== '' ? $build_filenames($sub_file) : null,
                     'originalBytes' => $sub_bytes,
                 ];
@@ -10835,8 +10856,6 @@ class wps_ic_ajax extends wps_ic
         $cache = new wps_ic_cache_integrations();
         $cache::purgeCacheFiles($url_key);
 
-        $requests = new wps_ic_requests();
-
         $tests = get_option(WPS_IC_TESTS);
         unset($tests['home']);
         update_option(WPS_IC_TESTS, $tests);
@@ -10857,19 +10876,11 @@ class wps_ic_ajax extends wps_ic
 
         set_transient('wpc_initial_test', 'running', 5 * 60);
 
-        // Test
-        $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
-        $response = $requests->POST(self::$PAGESPEED_URL_HOME, $args, ['timeout' => 5, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
-
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        if (isset($data['jobId'])) {
-            $job_id = $data['jobId'];
-            set_transient(WPS_IC_JOB_TRANSIENT, $job_id, 60 * 10);
+        // Kick off the PageSpeed run under a uuid the poll reads (wpc_psi_dispatch explains why).
+        $psiUuid = wpc_psi_dispatch(true);
+        set_transient(WPS_IC_JOB_TRANSIENT, $psiUuid !== '' ? $psiUuid : 'failed', 60 * 10);
+        if ($psiUuid !== '') {
             wp_send_json_success('started');
-        } else {
-            set_transient(WPS_IC_JOB_TRANSIENT, 'failed', 60 * 10);
         }
 
         wp_send_json_error();

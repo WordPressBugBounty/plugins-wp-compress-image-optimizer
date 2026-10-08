@@ -42,6 +42,8 @@
                 <p><span class="wpc-example-chip">/my-account/</span> <?php echo esc_html__('would exclude the account page and all sub-pages', WPS_IC_TEXTDOMAIN); ?></p>
                 <p><span class="wpc-example-chip">/checkout/</span> <?php echo esc_html__('would exclude just the checkout page', WPS_IC_TEXTDOMAIN); ?></p>
                 <p><span class="wpc-example-chip">cart</span> <?php echo __('would exclude any page with &quot;cart&quot; in the URL', WPS_IC_TEXTDOMAIN); ?></p>
+                <p><span class="wpc-example-chip">https://example.com/contact/</span> <?php echo esc_html__('a full address works too: that page and any sub-pages', WPS_IC_TEXTDOMAIN); ?></p>
+                <p><span class="wpc-example-chip">/</span> <?php echo esc_html__('would exclude the homepage only', WPS_IC_TEXTDOMAIN); ?></p>
             </div>
         </div>
       </div>

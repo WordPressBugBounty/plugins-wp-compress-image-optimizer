@@ -1278,6 +1278,15 @@ HTACCESS;
             $cacheExReplacement = "#WPC_CACHE_EXCLUDES_START\ndefine('WPC_CACHE_EXCLUDES', $cacheExcludesConstant);\n#WPC_CACHE_EXCLUDES_END";
             $newContents = preg_replace("/$cacheExPattern/s", $cacheExReplacement, $newContents);
 
+            if (!class_exists('wps_ic_url_key') && is_readable(WPS_IC_DIR . 'traits/url_key.php')) {
+                include_once WPS_IC_DIR . 'traits/url_key.php';
+            }
+            $homePathConstant = (class_exists('wps_ic_url_key') && !(function_exists('is_multisite') && is_multisite()))
+                ? var_export((string) wps_ic_url_key::homePath(), true) : 'false';
+            $homePathPattern = "#WPC_HOME_PATH_START\r?\n(.+?)\r?\n#WPC_HOME_PATH_END";
+            $homePathReplacement = "#WPC_HOME_PATH_START\ndefine('WPC_HOME_PATH', " . $homePathConstant . ");\n#WPC_HOME_PATH_END";
+            $newContents = preg_replace("/$homePathPattern/s", str_replace(['\\', '$'], ['\\\\', '\\$'], $homePathReplacement), $newContents);
+
             if ($newContents !== $currentAdvancedCache) {
                 wpc_fs_put($this->advancedCachePath, $newContents);
             }

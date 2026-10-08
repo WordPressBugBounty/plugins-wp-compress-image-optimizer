@@ -278,11 +278,12 @@ function wpc_v2_direct_callbacks_blocked($imageID) {
 
 
 /**
- * Lands one variant through the store. `refused` is set when the store refused the bytes as no
- * smaller than the file WordPress serves at that size: the caller journals a no-improvement entry
- * (the store cannot record it under SHORTINIT) and writes nothing.
+ * Lands one variant through the store. `refused` names the store's settled refusal (larger_than_disk:
+ * no smaller than the file WordPress serves at that size; identity_mismatch: a picture of another
+ * file): the caller journals a no-improvement entry with that reason (the store cannot record it
+ * under SHORTINIT) and writes nothing. `$claim` is wpc_v2_variant_claim() of the delivery.
  */
-function wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $size_label = '', $format = '', $src = 'direct_entry') {
+function wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $size_label = '', $format = '', $src = 'direct_entry', $claim = []) {
     if (!function_exists('get_attached_file')) {
 
 
@@ -300,9 +301,9 @@ function wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $size_label = ''
         return ['ok' => true, 'idempotent' => true, 'path' => $dest, 'bytes_size' => strlen($raw), 'error' => null];
     }
 
-    $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => (int) $imageID, 'size' => (string) $size_label, 'fmt' => (string) $format, 'src' => (string) $src]]);
-    if (($put['error'] ?? '') === 'larger_than_disk') {
-        return ['ok' => false, 'refused' => 'larger_than_disk', 'error' => 'larger_than_disk', 'path' => null, 'bytes_size' => 0, 'idempotent' => false];
+    $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => (int) $imageID, 'size' => (string) $size_label, 'fmt' => (string) $format, 'src' => (string) $src, 'claim' => is_array($claim) ? $claim : []]]);
+    if (!empty($put['settled'])) {
+        return ['ok' => false, 'refused' => (string) $put['error'], 'error' => (string) $put['error'], 'path' => null, 'bytes_size' => 0, 'idempotent' => false];
     }
     if (empty($put['ok'])) {
         return ['ok' => false, 'error' => (string) $put['error'], 'path' => null, 'bytes_size' => 0, 'idempotent' => false];

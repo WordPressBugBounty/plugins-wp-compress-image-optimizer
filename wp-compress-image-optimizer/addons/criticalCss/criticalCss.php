@@ -125,17 +125,7 @@ class wps_criticalCss
 
     public static function removeDirectory($path)
     {
-        $path = rtrim($path, '/');
-        $files = glob($path . '/*');
-        if (!empty($files)) {
-            foreach ($files as $file) {
-                is_dir($file) ? self::removeDirectory($file) : unlink($file);
-            }
-        }
-
-        if (is_dir($path)) {
-            rmdir($path);
-        }
+        wpc_fs_remove_tree($path);
     }
 
     public function getCriticalPages()
@@ -410,8 +400,7 @@ class wps_criticalCss
 
             if (!empty($json['apiResults'])) {
                 set_transient('wpc_api_' . $postID, $json['apiResults'], 60 * 15);
-                wp_send_json_success(['msg' => 'transient set for ' . $postID, 'apikey' => get_option(WPS_IC_OPTIONS)
-                ['api_key'], 'url' => $url, 'api' => $json['api']]);
+                wp_send_json_success(['msg' => 'transient set for ' . $postID, 'url' => $url, 'api' => $json['api']]);
             } else {
                 if (!empty($body) && strlen($body) > 128) {
                     $this->saveCriticalCss($url_key, $body, $type);

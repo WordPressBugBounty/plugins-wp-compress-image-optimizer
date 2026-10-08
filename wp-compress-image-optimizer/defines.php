@@ -416,6 +416,26 @@ if (!function_exists('wpc_css_is_icon_font')) {
     }
 }
 
+if (!function_exists('wpc_font_remote_range_auto_key')) {
+    /**
+     * The remote-range map key for a fonts.json entry the service marked `weight_auto`: a variable
+     * font the theme declared without a font-weight, whose subset carries the font's own range.
+     * 'family|auto=300 700|style', or '' for any other entry (those keep their weight key).
+     * The weightless theme face looks this key up and declares the same range
+     * (wps_cdn_rewrite::font_face_range_gate); both map writers key it here.
+     */
+    function wpc_font_remote_range_auto_key($fontEntry)
+    {
+        if (!is_array($fontEntry) || empty($fontEntry['weight_auto']) || empty($fontEntry['family'])) { return ''; }
+        $span = trim(preg_replace('/\s+/', ' ', preg_replace('/[^0-9 ]/', ' ', (string) ($fontEntry['weight'] ?? ''))));
+        if (!preg_match('/^(\d{2,4}) (\d{2,4})$/', $span, $spanMatch) || (int) $spanMatch[1] >= (int) $spanMatch[2]) { return ''; }
+        $family = strtolower(trim(str_replace(["'", '"', '\\', "\r", "\n", '<', '>'], '', (string) $fontEntry['family'])));
+        if ($family === '') { return ''; }
+        $style = (strtolower((string) ($fontEntry['style'] ?? 'normal')) === 'italic') ? 'italic' : 'normal';
+        return $family . '|auto=' . $spanMatch[1] . ' ' . $spanMatch[2] . '|' . $style;
+    }
+}
+
 if (!function_exists('wpc_ua_is_mobile')) {
     // Single source of truth for the mobile-UA test. The crit-choice detector
     // (wps_rewriteLogic::isMobile) and the cache-BUCKET detectors
@@ -1135,9 +1155,11 @@ if (!function_exists('wpc_atf_glyphs_read')) {
      *
      * Handles both artifact shapes: top-level `atf_glyphs`, and the live per-device nesting
      * (delay.json -> desktop|mobile -> atf_glyphs). Returns [] when nothing is readable, which
-     * every caller treats as "unknown" and fails open on.
+     * every caller treats as "unknown" and fails open on. With $device ('desktop' or 'mobile')
+     * the answer is that device's map, or a top-level one; another device's map is not an
+     * answer for it.
      */
-    function wpc_atf_glyphs_read($critDir)
+    function wpc_atf_glyphs_read($critDir, $device = null)
     {
         $dir = rtrim((string) $critDir, '/') . '/';
         foreach (['delay.json', 'lcp.json'] as $wpc_fn) {
@@ -1146,6 +1168,16 @@ if (!function_exists('wpc_atf_glyphs_read')) {
             }
             $j = json_decode((string) @file_get_contents($dir . $wpc_fn), true);
             if (!is_array($j)) {
+                continue;
+            }
+            if ($device !== null) {
+                $wpc_device = (string) $device;
+                if (isset($j[$wpc_device]['atf_glyphs']) && is_array($j[$wpc_device]['atf_glyphs']) && !empty($j[$wpc_device]['atf_glyphs'])) {
+                    return $j[$wpc_device]['atf_glyphs'];
+                }
+                if (isset($j['atf_glyphs']) && is_array($j['atf_glyphs']) && !empty($j['atf_glyphs'])) {
+                    return $j['atf_glyphs'];
+                }
                 continue;
             }
             if (isset($j['atf_glyphs']) && is_array($j['atf_glyphs']) && !empty($j['atf_glyphs'])) {
@@ -2268,25 +2300,10 @@ if (!function_exists('wpc_font_carrier_emit')) {
             if (function_exists('wpc_unify_fallback_face_locals')) {
                 $css = wpc_unify_fallback_face_locals($css);
             }
-            // v7.10.620 — preload the carrier woff2s so the swap window closes fast
-            // (the shift James saw). Cap 4. v7.10.689: POST-PAINT injected, never a
-            // static tag — a pre-paint as=font preload render-holds Chrome 150 ~2s.
-            if (preg_match_all('/@font-face\s*\{[^{}]*\}/is', $css, $face_blocks)) {
-                $preload_entries = [];
-                $seen_urls = [];
-                foreach ($face_blocks[0] as $face_block) {
-                    if (!preg_match('/url\(\s*["\']?(https?:\/\/[^)"\'\s]+\.woff2[^)"\'\s]*)/i', $face_block, $url_match)) { continue; }
-                    $woff2_url = $url_match[1];
-                    if (isset($seen_urls[$woff2_url]) || preg_match('/icon|awesome|fa-(?:solid|regular|brands|light|duotone)|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line|eicons|happy-icons/i', $woff2_url)) { continue; }
-                    $seen_urls[$woff2_url] = 1;
-                    $family = preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $face_block, $family_match) ? trim($family_match[1]) : '';
-                    $preload_entries[] = [$woff2_url, 'font/woff2', $family];
-                }
-                $preload_tag = wpc_font_preload_postpaint_tag(array_slice($preload_entries, 0, 4));
-                if ($preload_tag !== '') {
-                    echo "\n" . $preload_tag;
-                }
-            }
+            // No preload for the carrier faces: they are declared in <head>, so the browser already
+            // requests every face the first paint uses, by unicode-range, before the post-paint
+            // injector could run. The injector's first-four pick preloaded unused subsets instead
+            // (metropol-security.de: Barlow Condensed vietnamese + latin-ext, "preloaded but not used").
             echo "\n" . '<style id="wpc-font-carrier">' . $css . '</style>' . "\n";
             if (function_exists('wpc_cache_first_log') && !get_transient('wpc_fc602_log')) {
                 set_transient('wpc_fc602_log', 1, 3600);
@@ -2389,6 +2406,10 @@ if (!function_exists('wpc_heal_changed_home_host')) {
                 $fonts_root = rtrim(WPS_IC_FONTS_DIR, '/');
                 $font_dirs = @glob($fonts_root . '/*', GLOB_ONLYDIR);
                 foreach (is_array($font_dirs) ? $font_dirs : [] as $font_dir) {
+                    if (@is_link($font_dir)) {
+                        wpc_fs_remove_link($font_dir);
+                        continue;
+                    }
                     $dir_entries = @glob($font_dir . '/*');
                     foreach (is_array($dir_entries) ? $dir_entries : [] as $entry) {
                         if (is_file($entry) && @unlink($entry)) {
@@ -3381,6 +3402,10 @@ if (!function_exists('wpc_crit_own_hosts')) {
         return array_keys($hosts);
     }
 }
+// The corpus id's format: 'h' = content hashes per sheet. Bump when the tuple changes meaning.
+if (!defined('WPC_CRIT_CORPUS_ID_FORMAT')) {
+    define('WPC_CRIT_CORPUS_ID_FORMAT', 'h');
+}
 if (!function_exists('wpc_crit_corpus_id')) {
     /**
      * Identity of the CSS surface in a PRISTINE buffer: the site's own stylesheet links,
@@ -3411,14 +3436,15 @@ if (!function_exists('wpc_crit_corpus_id')) {
      * crit was stale-marked as corpus drift (greenvalleytint /services/ 2026-09-24: land 09:09:19,
      * drift 09:09:56, all 15 copies renamed, the re-dispatch answered `unchanged`).
      *
-     * The tuple is mtime+size, not content: an id has to be cheap enough to compute on every
-     * render with no cache behind it. The trade is that rewriting a sheet with identical bytes
-     * and a new mtime reads as a changed corpus — one regeneration, not a wrong artifact.
+     * The tuple is the sheet's content hash (wpc_crit_corpus_tuple), so a sheet rewritten with
+     * identical bytes keeps the id. Ids carry the format prefix WPC_CRIT_CORPUS_ID_FORMAT: a
+     * stamp written by an earlier release (mtime tuples) has no prefix, and the verdict reads a
+     * stamp of another format as 'unknown', never as drift.
      *
      * Rel-agnostic by design: the same page rendered blind, parked or combined must produce the
      * same id, and the rel attribute is exactly what those lanes rewrite.
      *
-     * @return string sha1:count, or '' when no local sheet resolves (no identity, no verdict).
+     * @return string <format>:sha1:count, or '' when no local sheet resolves (no identity, no verdict).
      */
     function wpc_crit_corpus_id($html)
     {
@@ -3463,7 +3489,7 @@ if (!function_exists('wpc_crit_corpus_id')) {
                 return '';
             }
             ksort($tuples);
-            return sha1(implode("\n", $tuples)) . ':' . count($tuples);
+            return WPC_CRIT_CORPUS_ID_FORMAT . ':' . sha1(implode("\n", $tuples)) . ':' . count($tuples);
         } catch (\Throwable $e) {
             return '';
         }
@@ -3521,17 +3547,81 @@ if (!function_exists('wpc_processed_copy_source_path')) {
 }
 if (!function_exists('wpc_crit_corpus_tuple')) {
     /**
-     * One `path|mtime|size` tuple into $tuples, keyed on the resolved path so a sheet reached
-     * twice (link scan and bundle clause) counts once. A path that is not a file is skipped:
-     * an href we cannot resolve is not evidence of anything, and counting it as zero would
-     * make an unrelated server move read as a corpus change.
+     * One `path|<sha1 of the bytes>` tuple into $tuples, keyed on the resolved path so a sheet
+     * reached twice (link scan and bundle clause) counts once. A path that is not a file is
+     * skipped: an href we cannot resolve is not evidence of anything, and counting it as zero
+     * would make an unrelated server move read as a corpus change.
+     *
+     * The bytes, not the mtime: a builder regeneration or a plugin update rewrites most sheets
+     * with the same bytes and a new mtime, and under the mtime tuple every such page read as
+     * drift and regenerated once for nothing (Denis, 2026-10-01). The hash is remembered per
+     * (path, mtime, size) by wpc_crit_sheet_hash(), so a sheet is read once per change, ever.
      */
     function wpc_crit_corpus_tuple($absolutePath, &$tuples)
     {
         if (isset($tuples[$absolutePath]) || !@is_file($absolutePath)) {
             return;
         }
-        $tuples[$absolutePath] = $absolutePath . '|' . (int) @filemtime($absolutePath) . '|' . (int) @filesize($absolutePath);
+        $hash = wpc_crit_sheet_hash($absolutePath);
+        if ($hash === '') {
+            return;
+        }
+        $tuples[$absolutePath] = $absolutePath . '|' . $hash;
+    }
+}
+if (!function_exists('wpc_crit_sheet_hash')) {
+    /**
+     * sha1 of a stylesheet's bytes, remembered under its (mtime, size) so the file is read only
+     * when it changed. The memory is the option `wpc_crit_sheet_hashes` (path => "mtime|size|sha1",
+     * not autoloaded, at most WPC_CRIT_SHEET_HASHES_MAX entries, the oldest dropped first) and a
+     * per-request copy; it is written once per request, and only when a sheet was read.
+     * '' when the file cannot be read.
+     */
+    function wpc_crit_sheet_hash($absolutePath)
+    {
+        static $known = null, $dirty = false, $registered = false;
+        $mtime = (int) @filemtime($absolutePath);
+        $size = (int) @filesize($absolutePath);
+        if ($known === null) {
+            $known = function_exists('get_option') ? get_option('wpc_crit_sheet_hashes', []) : [];
+            if (!is_array($known)) {
+                $known = [];
+            }
+        }
+        $key = str_replace(DIRECTORY_SEPARATOR, '/', (string) $absolutePath);
+        if (isset($known[$key]) && is_string($known[$key])) {
+            $parts = explode('|', $known[$key], 3);
+            if (count($parts) === 3 && (int) $parts[0] === $mtime && (int) $parts[1] === $size && $parts[2] !== '') {
+                return $parts[2];
+            }
+        }
+        $hash = @sha1_file($absolutePath);
+        if (!is_string($hash) || $hash === '') {
+            return '';
+        }
+        unset($known[$key]);
+        $known[$key] = $mtime . '|' . $size . '|' . $hash;
+        $max = defined('WPC_CRIT_SHEET_HASHES_MAX') ? (int) WPC_CRIT_SHEET_HASHES_MAX : 600;
+        while (count($known) > $max) {
+            reset($known);
+            unset($known[key($known)]);
+        }
+        $dirty = true;
+        if (!$registered && function_exists('update_option')) {
+            $registered = true;
+            $save = function () use (&$known, &$dirty) {
+                if ($dirty) {
+                    $dirty = false;
+                    update_option('wpc_crit_sheet_hashes', $known, false);
+                }
+            };
+            if (function_exists('add_action')) {
+                add_action('shutdown', $save, 0);
+            } else {
+                $save();
+            }
+        }
+        return $hash;
     }
 }
 if (!function_exists('wpc_crit_corpus_device')) {
@@ -3657,8 +3747,9 @@ if (!function_exists('wpc_saved_page_read')) {
 
     /**
      * Keep this render's page as $urlKey's saved page, for the visitor's device. Only a render of
-     * that page, an anonymous GET of its clean URL that no personal or excluded cookie shapes and
-     * that WordPress lets be cached (DONOTCACHEPAGE), and at most once a minute per device. The
+     * that page, an anonymous GET of its clean URL under the site's own host that no personal or
+     * excluded cookie shapes and that WordPress lets be cached (DONOTCACHEPAGE), and at most once a
+     * minute per device. The
      * template key is kept beside it when the page has none. Receipt: page-saved. Returns true
      * when it was written.
      */
@@ -3675,6 +3766,7 @@ if (!function_exists('wpc_saved_page_read')) {
             }
             $method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string) $_SERVER['REQUEST_METHOD']) : 'GET';
             if ($method !== 'GET' || (defined('DONOTCACHEPAGE') && DONOTCACHEPAGE)
+                || (function_exists('wpc_request_host_is_home') && !wpc_request_host_is_home())
                 || (function_exists('is_user_logged_in') && is_user_logged_in())
                 || (function_exists('wpc_pipeline_admission_ok') && !wpc_pipeline_admission_ok())
                 || ltrim((string) (new wps_ic_url_key())->setup(''), '/') !== $urlKey) {
@@ -4000,9 +4092,9 @@ if (!function_exists('wpc_crit_corpus_verdict')) {
      * 'drift'   — same device, different id: the artifact describes CSS this page no longer
      *             serves.
      * 'unknown' — no land_corpus.txt (never landed, or a land that could not be paired with a
-     *             dispatch), a stamp from the OTHER device, a stamp in the pre-device format, or
-     *             nothing resolved. We say nothing on it: what we cannot compare is not
-     *             evidence of drift.
+     *             dispatch), a stamp from the OTHER device, a stamp in the pre-device format or
+     *             in an earlier id format (mtime tuples), or nothing resolved. We say nothing on
+     *             it: what we cannot compare is not evidence of drift.
      *
      * Memoised per request in $GLOBALS['wpc_crit_corpus_verdict'], keyed by URL key so a request
      * that renders more than one URL cannot reuse the first answer.
@@ -4023,6 +4115,11 @@ if (!function_exists('wpc_crit_corpus_verdict')) {
             $landedParts = wpc_crit_corpus_stamp_parts($landed);
             $landedId = ($landedParts !== [] && $landedParts['device'] === wpc_crit_corpus_device())
                 ? $landedParts['id'] : '';
+            // A stamp of another format (the mtime tuples before 7.24.60) cannot be compared
+            // with this render's id: silence until the page's next land re-stamps it.
+            if ($landedId !== '' && strpos($landedId, WPC_CRIT_CORPUS_ID_FORMAT . ':') !== 0) {
+                $landedId = '';
+            }
             $renderId = $landedId === '' ? '' : wpc_crit_corpus_id($html);
             if ($landedId !== '' && $renderId !== '') {
                 $verdict = $renderId === $landedId ? 'match' : 'drift';
@@ -5714,7 +5811,7 @@ if (!function_exists('wpc_doctrine_reconcile')) {
             if (is_file($file) && @unlink($file)) { $deleted_count++; }
         }
         foreach ((array) @glob($crit_root . '/*/used_css*_url.txt') as $file) {
-            if (@unlink($file)) { $deleted_count++; }
+            if (!@is_link(dirname($file)) && @unlink($file)) { $deleted_count++; }
         }
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('ucss-invalidate', (string) $deleted_count, '', []);
@@ -5748,6 +5845,9 @@ if (!function_exists('wpc_doctrine_reconcile')) {
         if (function_exists('wpc_delay_excludes_migrate')) {
             wpc_delay_excludes_migrate();
             $done_steps[] = 'delay-excl-fold';
+        }
+        if (function_exists('wpc_embed_facade_migrate') && wpc_embed_facade_migrate()) {
+            $done_steps[] = 'embed-facade-to-iframe-lazy';
         }
         if (function_exists('wpc_reset_parked_attempts')) {
             $parked_reset = (int) wpc_reset_parked_attempts();
@@ -5834,7 +5934,8 @@ if (!function_exists('wpc_doctrine_reconcile')) {
     // gated on the delay master so plain sites keep core behavior.
     function wpc_disable_emoji()
     {
-        if (is_admin() || !apply_filters('wpc_disable_emoji', true)) {
+        if (is_admin() || !apply_filters('wpc_disable_emoji', true)
+            || (function_exists('wpc_request_excluded_from_plugin') && wpc_request_excluded_from_plugin() !== false)) {
             return;
         }
         $settings = function_exists('get_option') && defined('WPS_IC_SETTINGS') ? get_option(WPS_IC_SETTINGS) : [];
@@ -6226,6 +6327,37 @@ if (!function_exists('wpc_purge_human_save')) {
 // serving (stale-rewarm, no-cache) until its rewarm replaces it, at most 4 serves or 24 h.
 // There is no second opinion at serve time: the readers used to unlink every file older than
 // dcv.txt, which turned each soft settings purge into a hard one.
+if (!function_exists('wpc_builder_file_clear_hooks')) {
+    /**
+     * The builder hooks that mean "the generated files the stored pages link were just deleted".
+     * Each is owned by one of the functions below, which purges the page copies hard after the
+     * response: a copy that keeps serving links a stylesheet that answers 404 until that page
+     * re-renders, because every builder writes the file back only at render. The generic purge
+     * rule (wps_ic_cache::purgeHooks) skips these hooks, so the soft purge every other site
+     * change takes never reaches them.
+     *
+     * Observed failure (toulouse.catholique.fr, 7.24.04, 2026-10-01): Beaver Builder regenerated
+     * its asset cache after a plugin update and a theme edit; `fl_builder_cache_cleared` purged
+     * soft, every article was served `stale-rewarm` with its old `-layout` bundle link, and a
+     * 404 monitor counted 114 missing bb-plugin/cache files in a day. Deleting wp-cio by hand
+     * (the hard purge) fixed it at once.
+     *
+     * crit: whether the hook can change the CSS a page's crit was built from. Beaver's clear
+     * follows a layout or global settings change, so its crit is marked stale and keeps serving
+     * until the page regenerates. Elementor and Spectra rewrite the same block CSS from stored
+     * attributes, so the crit is left alone; a sheet whose bytes did change is caught per page
+     * by the corpus drift check on that page's next render (wpc_crit_corpus_verdict).
+     */
+    function wpc_builder_file_clear_hooks()
+    {
+        return [
+            'elementor/core/files/clear_cache' => ['callback' => 'wpc_elementor_css_cleared', 'reason' => 'elementor-css-clear', 'crit' => false],
+            'fl_builder_cache_cleared'         => ['callback' => 'wpc_beaver_cache_cleared', 'reason' => 'beaver-cache-cleared', 'crit' => true],
+            'uagb_delete_uag_asset_dir'        => ['callback' => 'wpc_spectra_assets_cleared', 'reason' => 'spectra-assets-cleared', 'crit' => false],
+        ];
+    }
+}
+
 if (!function_exists('wpc_purge_is_soft')) {
     function wpc_purge_is_soft($explicit = null)
     {
@@ -6665,6 +6797,39 @@ if (!function_exists('wpc_heal_pillar_riders')) {
     }
 }
 
+if (!function_exists('wpc_embed_facade_migrate')) {
+    /**
+     * Once per site, from the upgrade pass (wpc_doctrine_reconcile): a stored `embed-facade` '1',
+     * the retired Embed Facades option that nothing reads, becomes iframe Lazy Load. iframe-lazy is
+     * set to '1' and `embed-facade` to '0' in one write through update_option(WPS_IC_SETTINGS),
+     * the writer a settings save uses (its hooks purge the stored pages through the
+     * delivery-config flip, softly for a write no person made); no key leaves the row, so the
+     * settings ledger records a change, not a replace. `embed-facade-migrated {iframe_lazy_was}`
+     * is logged. Option wpc_embed_facade_migrated records the first run, whatever it found, so a
+     * later run, or an import that brings '1' back, changes nothing. Returns true when it wrote.
+     */
+    function wpc_embed_facade_migrate()
+    {
+        if (!function_exists('get_option') || !defined('WPS_IC_SETTINGS') || get_option('wpc_embed_facade_migrated', false) !== false) {
+            return false;
+        }
+        $settings = get_option(WPS_IC_SETTINGS);
+        $wrote = false;
+        if (is_array($settings) && isset($settings['embed-facade']) && (string) $settings['embed-facade'] === '1') {
+            $lazyWas = isset($settings['iframe-lazy']) ? (string) $settings['iframe-lazy'] : '';
+            $settings['embed-facade'] = '0';
+            $settings['iframe-lazy'] = '1';
+            update_option(WPS_IC_SETTINGS, $settings);
+            $wrote = true;
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('embed-facade-migrated', '', '', ['iframe_lazy_was' => $lazyWas]);
+            }
+        }
+        update_option('wpc_embed_facade_migrated', time(), false);
+        return $wrote;
+    }
+}
+
 // v7.21.149 — which keys wpc_lite_apply_pillar_riders() actually owns. The batch settings writer
 // carries non-boolean values too (replace-fonts=local, wpc_nextgen=webp, qualityLevel=3,
 // backup=cloud); the riders normalise their value to '1'/'0', so they must only ever be handed
@@ -6765,5 +6930,52 @@ if (!function_exists('wpc_cf_cname_gate_legacy')) {
     function wpc_cf_cname_gate_legacy()
     {
         return defined('WPC_CF_CNAME_GATE_LEGACY') && WPC_CF_CNAME_GATE_LEGACY;
+    }
+}
+
+if (!function_exists('wpc_record_key_removal')) {
+    /**
+     * Records why this site's API key was emptied. Call it right before the key is cleared.
+     *
+     * Six paths empty the key (the URL-change check, the Disconnect button, the daily key cron and
+     * the settings-page stats call on a 401, the portal's two deactivate actions, the multisite
+     * disconnect) and only the URL-change check left a trace. On amamiespresso.com the key was
+     * lost in September 2026 and nothing on the site could say when or by which path.
+     *
+     * Kept: the last 20 entries in `wps_ic_key_removal_log` (not autoloaded), shown on the
+     * debug tab, plus a `key-removed` cflog receipt. Nothing is recorded when there was no key.
+     */
+    function wpc_record_key_removal($path, $context = [])
+    {
+        try {
+            $options = get_option(WPS_IC_OPTIONS);
+            if (!is_array($options) || empty($options['api_key'])) {
+                return;
+            }
+            $user = function_exists('wp_get_current_user') ? wp_get_current_user() : null;
+            $entry = [
+                'ts'          => gmdate('Y-m-d H:i:s') . ' UTC',
+                'path'        => (string) $path,
+                'key'         => substr((string) $options['api_key'], 0, 6) . '…',
+                'user'        => ($user && !empty($user->ID)) ? $user->user_login . ' (#' . $user->ID . ')' : '',
+                'cron'        => (defined('DOING_CRON') && DOING_CRON) ? 1 : 0,
+                'ajax'        => (defined('DOING_AJAX') && DOING_AJAX) ? 1 : 0,
+                'request_uri' => isset($_SERVER['REQUEST_URI']) ? substr((string) $_SERVER['REQUEST_URI'], 0, 300) : '',
+                'version'     => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
+            ];
+            if (!empty($context) && is_array($context)) {
+                $entry['context'] = $context;
+            }
+            $log = get_option('wps_ic_key_removal_log', []);
+            if (!is_array($log)) {
+                $log = [];
+            }
+            $log[] = $entry;
+            update_option('wps_ic_key_removal_log', array_slice($log, -20), false);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('key-removed', '', '', ['path' => $entry['path'], 'user' => $entry['user'], 'cron' => $entry['cron']]);
+            }
+        } catch (\Throwable $e) {
+        }
     }
 }

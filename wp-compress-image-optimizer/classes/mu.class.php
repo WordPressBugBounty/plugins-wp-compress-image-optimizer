@@ -258,13 +258,7 @@ class wps_ic_mu extends wps_ic
         }
 
         if (defined('BREEZE_VERSION')) {
-            global $wp_filesystem;
-            require_once(ABSPATH . 'wp-admin/includes/file.php');
-
-            WP_Filesystem();
-
-            $cache_path = breeze_get_cache_base_path(is_network_admin(), true);
-            $wp_filesystem->rmdir(untrailingslashit($cache_path), true);
+            wpc_fs_remove_tree(breeze_get_cache_base_path(is_network_admin(), true), true);
 
             if (function_exists('wp_cache_flush')) {
                 if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('breeze'); } else { @wp_cache_flush(); }
@@ -543,6 +537,7 @@ class wps_ic_mu extends wps_ic
                 }
             }
 
+            unset($form_settings['permissions']);
             update_option(WPS_IC_SETTINGS, $form_settings);
         }
 
@@ -596,6 +591,7 @@ class wps_ic_mu extends wps_ic
             }
         }
 
+        unset($form_settings['permissions']);
         update_option(WPS_IC_SETTINGS, $form_settings);
 
         wp_send_json_success();
@@ -789,6 +785,9 @@ class wps_ic_mu extends wps_ic
         $uri = WPS_IC_KEYSURL . '?action=disconnect&apikey=' . $options['api_key'] . '&domain=' . $siteurl . '&hash=' . md5(time()) . '&time_hash=' . time();
 
         // Remove Settings
+        if (function_exists('wpc_record_key_removal')) {
+            wpc_record_key_removal('multisite-disconnect', ['blog_id' => $siteID]);
+        }
         $options = get_option(WPS_IC_OPTIONS);
 
         $options['api_key'] = '';

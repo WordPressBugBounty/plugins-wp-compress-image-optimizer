@@ -11,6 +11,7 @@ if (!function_exists('wpc_response_cache_guard')) {
             }
             // Each skip records why, so an "unguarded" response downstream can name its root.
             if (is_admin()) { $GLOBALS['wpc_cc_skip'] = 'admin'; return; }
+            if (function_exists('wpc_request_excluded_from_plugin') && wpc_request_excluded_from_plugin() !== false) { $GLOBALS['wpc_cc_skip'] = 'plugin-exclude'; return; }
             if (function_exists('is_user_logged_in') && is_user_logged_in()) { $GLOBALS['wpc_cc_skip'] = 'logged-in'; return; }
             if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] !== 'GET') { $GLOBALS['wpc_cc_skip'] = 'method'; return; }
             if (function_exists('wp_doing_ajax') && wp_doing_ajax()) { $GLOBALS['wpc_cc_skip'] = 'ajax'; return; }
@@ -43,6 +44,14 @@ if (!function_exists('wpc_response_cache_guard')) {
             if (headers_sent($wpc_hsf, $wpc_hsl)) {
                 $GLOBALS['wpc_cc_skip'] = 'headers-sent@' . basename((string) $wpc_hsf) . ':' . (int) $wpc_hsl;
                 return;
+            }
+            // Developer Mode writes `define('DONOTCACHEPAGE', true); return;` into the
+            // advanced-cache drop-in, so no copy is served or stored and the store verdict that
+            // names every other refusal never runs: totaltrailers.com.au (ticket 12190) answered
+            // no-store on every page with no reason anywhere, and its crit could not regenerate
+            // for want of a saved copy. The header names it; the no-store below stays.
+            if (!empty($wpc_cc_set['developer_mode']) && $wpc_cc_set['developer_mode'] == '1') {
+                header('X-WPC-CC: no-store-developer-mode');
             }
             if (!apply_filters('wpc_response_cache_guard', true)) { $GLOBALS['wpc_cc_skip'] = 'filter'; return; }
             header('Cache-Control: no-store, max-age=0');
@@ -183,8 +192,214 @@ if (!function_exists('wpc_stale_serve_plan')) {
     function wpc_stale_unlink_copies($dir, $prefix = '')
     {
         $dir = rtrim((string) $dir, '/') . '/';
-        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt'] as $copy_file) {
+        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt', 'links.txt'] as $copy_file) {
             @unlink($dir . $prefix . $copy_file);
+        }
+    }
+}
+
+if (!function_exists('wpc_copy_links_registry_sources')) {
+    /**
+     * The script URLs of the delay registry a document carries (`var wpcScriptRegistry=[…]` in the
+     * delay engine's inline script, v2 and v3): the scripts the engine took out of the document
+     * are named only there, their `src` base64-encoded when the entry says `encoded`. The bodies
+     * of the inline scripts ride the registry sidecar file, which names no script URL.
+     */
+    function wpc_copy_links_registry_sources($html)
+    {
+        $sources = [];
+        $from = 0;
+        $anchor = 'var wpcScriptRegistry=';
+        while (is_string($html) && ($at = strpos($html, $anchor, $from)) !== false) {
+            $start = $at + strlen($anchor);
+            $from = $start;
+            $end = false;
+            foreach ([';var wpcDelayV3Cfg=', ';</script>'] as $marker) {
+                $found = strpos($html, $marker, $start);
+                if ($found !== false && ($end === false || $found < $end)) {
+                    $end = $found;
+                }
+            }
+            if ($end === false) {
+                break;
+            }
+            $entries = json_decode(substr($html, $start, $end - $start), true);
+            foreach ((array) $entries as $entry) {
+                if (!is_array($entry) || empty($entry['src']) || !is_string($entry['src'])) {
+                    continue;
+                }
+                $source = !empty($entry['encoded']) ? base64_decode($entry['src'], true) : $entry['src'];
+                if (is_string($source) && $source !== '') {
+                    $sources[] = $source;
+                }
+            }
+        }
+        return $sources;
+    }
+}
+
+if (!function_exists('wpc_copy_links_scan')) {
+    /**
+     * The files of this site that a page document links, as the tokens a stored copy keeps beside
+     * itself: `c:<path under the content folder>` or `i:<path under wp-includes>`. One token per
+     * stylesheet or script URL in an href or src attribute, parked ones included, or in the delay
+     * registry's src list, that names this site, its CDN zone or its custom host, in the site's
+     * own form or as the zone's transform of it (`<zone>/m:0/a:<site url>`), and that is a file on
+     * disk now. A link to a file that is
+     * already missing is never recorded, and neither are the files the plugin generates: their
+     * owners keep them as long as the copies that link them. The one generated file the record
+     * names is the delay registry sidecar, as `s:<file name>` (first, so the cap never drops it):
+     * its owner (wps_ic_js_delay_v3::wpc_registry_sidecar_trim) keeps every sidecar a stored copy
+     * names, and the missing-asset audit does not read `s:` tokens.
+     */
+    function wpc_copy_links_scan($html)
+    {
+        $found = [];
+        try {
+            if (!is_string($html) || $html === '' || !function_exists('content_url') || !function_exists('site_url') || !defined('WPINC')) {
+                return [];
+            }
+            if (preg_match_all('#wpc-assets\\\\?/delay\\\\?/(r-[0-9a-f]{32}\.(?:js|json))\b#', $html, $sidecars)) {
+                foreach ($sidecars[1] as $sidecar) {
+                    $found['s:' . $sidecar] = true;
+                }
+            }
+            $values = preg_match_all('/(?<![\w:-])[\w:-]*(?:href|src)\s*=\s*(["\'])(.*?)\1/is', $html, $attributes) ? $attributes[2] : [];
+            $values = array_merge($values, wpc_copy_links_registry_sources($html));
+            if ($values === []) {
+                return array_keys($found);
+            }
+            $roots = [
+                'c' => rtrim((string) parse_url(content_url(), PHP_URL_PATH), '/'),
+                'i' => rtrim((string) parse_url(site_url('/' . WPINC . '/'), PHP_URL_PATH), '/'),
+            ];
+            $bare = function ($host) {
+                $host = strtolower(trim((string) $host));
+                return strpos($host, 'www.') === 0 ? substr($host, 4) : $host;
+            };
+            $own = [];
+            $hosts = function_exists('wpc_crit_own_hosts') ? wpc_crit_own_hosts() : [];
+            $hosts[] = function_exists('wpc_cdn_host') ? wpc_cdn_host() : '';
+            $hosts[] = (string) parse_url(content_url(), PHP_URL_HOST);
+            $hosts[] = (string) parse_url(site_url('/'), PHP_URL_HOST);
+            foreach ($hosts as $host) {
+                if ($bare($host) !== '') {
+                    $own[$bare($host)] = true;
+                }
+            }
+            $known = [];
+            foreach ($values as $value) {
+                if (stripos($value, '.css') === false && stripos($value, '.js') === false) {
+                    continue;
+                }
+                $url = trim(html_entity_decode($value, ENT_QUOTES, 'UTF-8'));
+                $url = substr($url, 0, strcspn($url, '?#'));
+                if (!preg_match('/\.(?:css|js)$/i', $url)) {
+                    continue;
+                }
+                if (($at = strrpos($url, '://')) !== false) {
+                    $rest = substr($url, $at + 3);
+                } elseif (strpos($url, '//') === 0) {
+                    $rest = substr($url, 2);
+                } else {
+                    $rest = null;
+                }
+                if ($rest !== null) {
+                    $slash = strpos($rest, '/');
+                    if ($slash === false || strpos(substr($rest, 0, $slash), '@') !== false) {
+                        continue;
+                    }
+                    $host = preg_replace('/:\d+$/', '', substr($rest, 0, $slash));
+                    if (!isset($own[$bare($host)])) {
+                        continue;
+                    }
+                    $path = substr($rest, $slash);
+                } elseif ($url[0] === '/') {
+                    $path = $url;
+                } else {
+                    continue;
+                }
+                foreach ($roots as $root => $prefix) {
+                    if ($prefix === '' || strpos($path, $prefix . '/') !== 0) {
+                        continue;
+                    }
+                    $relative = rawurldecode(substr($path, strlen($prefix) + 1));
+                    if ($relative === '' || strpos($relative, '..') !== false || preg_match('/[\x00-\x1f\\\\]/', $relative)
+                        || preg_match('#^cache/(?:wp-cio|wp-cio-fonts|critical|combine|wpc-hostfix)/|(?:^|/)wpc-assets/#', $relative)) {
+                        break;
+                    }
+                    $token = $root . ':' . $relative;
+                    if (!isset($found[$token]) && !wpc_copy_links_missing($token, $known)) {
+                        $found[$token] = true;
+                    }
+                    break;
+                }
+                if (count($found) >= 400) {
+                    break;
+                }
+            }
+        } catch (\Throwable $e) {
+            return [];
+        }
+        return array_keys($found);
+    }
+
+    /** The file a link token names, or '' when the token does not name one this site can resolve. */
+    function wpc_copy_links_file($token)
+    {
+        $token = (string) $token;
+        $relative = substr($token, 2);
+        if (strlen($token) < 3 || $token[1] !== ':' || $relative[0] === '/' || strpos($relative, '..') !== false) {
+            return '';
+        }
+        if ($token[0] === 'c' && defined('WP_CONTENT_DIR')) {
+            return rtrim(WP_CONTENT_DIR, '/') . '/' . $relative;
+        }
+        if ($token[0] === 'i' && defined('ABSPATH') && defined('WPINC')) {
+            return rtrim(ABSPATH, '/') . '/' . WPINC . '/' . $relative;
+        }
+        return '';
+    }
+
+    /** Whether the file a link token names is gone. A token that resolves to no file is not missing. */
+    function wpc_copy_links_missing($token, array &$known = [])
+    {
+        $token = (string) $token;
+        if (!isset($known[$token])) {
+            $file = wpc_copy_links_file($token);
+            $known[$token] = $file !== '' && !@is_file($file);
+        }
+        return $known[$token];
+    }
+
+    /**
+     * Writes the links a copy carries beside it ($file, the 'links' name of wpc_copy_names): one
+     * token per line, in one rename, and no file at all for a page that links none or when the write
+     * fails: a record of the copy before it is never left beside the copy that replaced it. Returns
+     * how many tokens it wrote.
+     */
+    function wpc_copy_links_record($file, $html)
+    {
+        try {
+            $tokens = wpc_copy_links_scan($html);
+            if ($tokens === []) {
+                if (@is_file($file)) {
+                    @unlink($file);
+                }
+                return 0;
+            }
+            $tmp = $file . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
+            if (wpc_fs_put($tmp, implode("\n", $tokens) . "\n") === false || !@rename($tmp, $file)) {
+                @unlink($tmp);
+                @unlink($file);
+                return 0;
+            }
+            if (function_exists('wpc_missing_asset_audit_arm')) {
+                wpc_missing_asset_audit_arm();
+            }
+            return count($tokens);
+        } catch (\Throwable $e) {
+            return 0;
         }
     }
 }
@@ -207,8 +422,11 @@ class wps_cacheHtml
 
         $this->options = get_option(WPS_IC_SETTINGS);
 
-        if (!file_exists(WPS_IC_CACHE)) {
-            mkdir(rtrim(WPS_IC_CACHE, '/'));
+        // Two requests can both see the directory missing and both create it; the loser's
+        // mkdir() warned "File exists" (toulouse.catholique.fr, 2026-10-01, from a purge during
+        // renders). Suppressed, and the directory is checked again after the attempt.
+        if (!is_dir(WPS_IC_CACHE) && !@mkdir(rtrim(WPS_IC_CACHE, '/'), 0755, true) && !is_dir(WPS_IC_CACHE)) {
+            return;
         }
 
         $this->url_key_class = new wps_ic_url_key();
@@ -1347,17 +1565,16 @@ class wps_cacheHtml
                     if (!@is_readable($fsib) || (int) @filesize($fsib) < 1) {
                         return $lm[0];
                     }
+                    $wpc_face_families = [];
+                    if (preg_match_all('/font-family\s*:\s*["\']?([^;"\'}]+)/i', (string) @file_get_contents($fsib, false, null, 0, 65536), $wpc_face_family_matches)) {
+                        foreach ($wpc_face_family_matches[1] as $wpc_face_family) {
+                            $wpc_face_families[strtolower(trim($wpc_face_family))] = 1;
+                        }
+                    }
                     // v7.21.331 — crit-referenced family in this sheet's faces: keep the sheet
                     // WHOLE (faces load at parse), never quarantine behind the flip.
-                    if (!empty($wpc_crit_families)) {
-                        $wpc_crit_check_faces_css = (string) @file_get_contents($fsib, false, null, 0, 65536);
-                        if ($wpc_crit_check_faces_css !== '' && preg_match_all('/font-family\s*:\s*["\']?([^;"\'}]+)/i', $wpc_crit_check_faces_css, $wpc_crit_check_family_matches)) {
-                            foreach ($wpc_crit_check_family_matches[1] as $wpc_crit_check_family) {
-                                if (!empty($wpc_crit_families[strtolower(trim($wpc_crit_check_family))])) {
-                                    return $lm[0];
-                                }
-                            }
-                        }
+                    if (array_intersect_key($wpc_crit_families, $wpc_face_families) !== []) {
+                        return $lm[0];
                     }
                     $wpc_split_count++;
                     $base = substr($href, 0, $cp);
@@ -1369,21 +1586,11 @@ class wps_cacheHtml
                     // v7.21.328 — if wpc-live-faces already declares EVERY family this .faces.css
                     // would re-declare, the flip-time re-declaration IS the never-binds collision:
                     // the sheet goes .nofaces and the faces ride the live block alone.
-                    $wpc_skip_face_link = false;
-                    if ($wpc_has_live_faces && !empty($wpc_live_face_families)) {
-                        $wpc_live_check_faces_css = (string) @file_get_contents($fsib, false, null, 0, 65536);
-                        if ($wpc_live_check_faces_css !== '' && preg_match_all('/font-family\s*:\s*[\'"]?([^;\'"}]+)/i', $wpc_live_check_faces_css, $wpc_live_check_family_matches)) {
-                            $wpc_skip_face_link = true;
-                            foreach ($wpc_live_check_family_matches[1] as $wpc_live_check_family) {
-                                if (empty($wpc_live_face_families[strtolower(trim($wpc_live_check_family))])) {
-                                    $wpc_skip_face_link = false;
-                                    break;
-                                }
-                            }
-                        }
-                    }
+                    $wpc_skip_face_link = $wpc_has_live_faces && !empty($wpc_live_face_families) && $wpc_face_families !== []
+                        && array_diff_key($wpc_face_families, $wpc_live_face_families) === [];
                     if (!$wpc_skip_face_link) {
-                        $wpc_late_face_links .= '<link rel="stylesheet" data-wpc-lf-href="' . esc_url($faceHref) . '" media="not all" data-wpc-lf="1" />';
+                        $wpc_late_face_links .= '<link rel="stylesheet" data-wpc-lf-href="' . esc_url($faceHref) . '" media="not all" data-wpc-lf="1"'
+                            . ($wpc_face_families !== [] ? ' data-wpc-lf-fam="' . esc_attr(implode(',', array_keys($wpc_face_families))) . '"' : '') . ' />';
                     }
                     return str_replace($hm[1], esc_url($newHref), $lm[0]);
                 },
@@ -1567,8 +1774,9 @@ class wps_cacheHtml
             $prefix = $prefix . '_';
         }
 
-        if (!file_exists($this->cachePath)) {
-            mkdir(rtrim($this->cachePath, '/'), 0777, true);
+        // Same race as the constructor's: a concurrent writer may have created it first.
+        if (!is_dir($this->cachePath) && !@mkdir(rtrim($this->cachePath, '/'), 0777, true) && !is_dir($this->cachePath)) {
+            return $buffer;
         }
 
 
@@ -1743,6 +1951,7 @@ class wps_cacheHtml
             }
         } else {
             wpc_fs_put($wpc_names['md5'], md5($buffer));
+            wpc_copy_links_record($wpc_names['links'], $buffer);
             // The file serve names the reason this copy is private (X-WPC-CC), not a fixed label
             // (webdesign4u.com.au, 2026-09-28: a device-mix copy was served as local-only-critless).
             if ($family !== '' && preg_match('/^[a-z0-9-]{1,40}$/', (string) $reason)) {
@@ -2158,7 +2367,7 @@ class wps_cacheHtml
                     continue; // tombstones are drained post-response, never inline
                 }
                 $entryPath = $cacheRoot . '/' . $entry;
-                is_dir($entryPath) ? self::removeDirectory($entryPath) : @unlink($entryPath);
+                is_dir($entryPath) ? wpc_fs_remove_tree($entryPath, true) : @unlink($entryPath);
             }
             // Drain every tombstone (this one and any orphaned by a killed request) after the
             // response is flushed, so a crash can never leak them permanently.
@@ -2186,7 +2395,7 @@ class wps_cacheHtml
                                     @rename($tombstonePath . '/' . $tombstoneChild, $cacheRoot . '/.purging-' . substr(md5(uniqid('', true)), 0, 10));
                                 }
                             }
-                            self::removeDirectory($tombstonePath);
+                            wpc_fs_remove_tree($tombstonePath, true);
                             $drainedCount++;
                         }
                         if (!$foundTombstone) {
@@ -2214,7 +2423,7 @@ class wps_cacheHtml
                 $usedTplRemoved = 0;
                 foreach ($usedTplMarkers as $usedTplMarker) {
                     if ($usedTplRemoved >= 200) { break; }
-                    if (@unlink($usedTplMarker)) { $usedTplRemoved++; }
+                    if (!@is_link(dirname($usedTplMarker)) && @unlink($usedTplMarker)) { $usedTplRemoved++; }
                 }
             }
             if ($journalTail !== '' && $journalFile !== '') {
@@ -2245,11 +2454,16 @@ class wps_cacheHtml
         }
     }
 
+    /**
+     * Stale-marks one page folder's stored copies (index.html* renamed to stale.html*, the md5
+     * sidecar removed). A folder reached through a symbolic link below the cache root is left
+     * alone. Answers how many copies were renamed.
+     */
     public static function wpc_stale_mark_page_dir($dir)
     {
         $dir = rtrim((string) $dir, '/');
         $n = 0;
-        if ($dir === '' || !@is_dir($dir)) {
+        if ($dir === '' || !@is_dir($dir) || (defined('WPS_IC_CACHE') && wpc_fs_link_below(WPS_IC_CACHE, $dir))) {
             return 0;
         }
         // Both devices, both copy families: a local-only copy is stale-marked like any other and
@@ -2277,7 +2491,7 @@ class wps_cacheHtml
         $done = true;
         try {
             foreach ((array) @scandir($root) as $top_entry) {
-                if ($top_entry === '.' || $top_entry === '..' || $top_entry === 'css' || $top_entry === 'js' || strpos($top_entry, '.purging-') === 0 || !@is_dir($root . '/' . $top_entry)) {
+                if ($top_entry === '.' || $top_entry === '..' || $top_entry === 'css' || $top_entry === 'js' || strpos($top_entry, '.purging-') === 0 || !@is_dir($root . '/' . $top_entry) || @is_link($root . '/' . $top_entry)) {
                     continue;
                 }
                 $page_dirs = [$root . '/' . $top_entry];
@@ -2364,26 +2578,7 @@ class wps_cacheHtml
             }
             return;
         }
-        $files = glob($path . '/*');
-
-        if (!empty($files)) {
-            foreach ($files as $file) {
-                // v7.10.530b — the deadline must be honoured INSIDE the recursion, not around it.
-                // critical/ holds ~20,000 files on the flagship, so one call to this function was
-                // the entire drain: a budget checked only between top-level tombstones could never
-                // fire. Leftovers are inert and swept by the next purge.
-                if (!empty($GLOBALS['wpc_tombstone_drain_deadline']) && microtime(true) > $GLOBALS['wpc_tombstone_drain_deadline']) {
-                    return;
-                }
-                is_dir($file) ? self::removeDirectory($file) : unlink($file);
-            }
-        }
-
-        $files = glob($path . '/*');
-
-        if (is_dir($path) && empty($files)) {
-            @rmdir($path);
-        }
+        wpc_fs_remove_tree($path);
     }
 
     public function removeCacheFilesByKey($urlKey)
@@ -2490,20 +2685,10 @@ class wps_cacheHtml
         delete_transient('wpc_critical_uuid_' . $urlKey);
     }
 
+    /** Deletes a folder and everything in it through the one tree delete (wpc_fs_remove_tree). */
     public function recursiveDelete($folder)
     {
-        // Delete all the files in the folder
-        $files = glob($folder . '/*');
-        foreach ($files as $file) {
-            if (is_file($file)) {
-                unlink($file);
-            } else {
-                $this->recursiveDelete($file);
-            }
-        }
-
-        // Delete the folder itself
-        if (is_dir($folder)) rmdir($folder);
+        wpc_fs_remove_tree($folder, true);
     }
 
     private function getAllHeaders()

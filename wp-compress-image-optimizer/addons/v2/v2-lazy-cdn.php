@@ -468,6 +468,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
 
         $site_host   = wp_parse_url(site_url(), PHP_URL_HOST);
         $origin_host = isset($parsed['host']) ? (string) $parsed['host'] : '';
+        $wildcard_host = '';
         if ($origin_host !== '' && $site_host !== '' && strcasecmp($origin_host, $site_host) !== 0) {
             // Accept ALL of this site's zone identities, not either-or: a custom cname can
 
@@ -495,6 +496,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
 
             if (!$zone_ok && preg_match('/\.zapwp\.com$/i', $origin_host)) {
                 $zone_ok = true;
+                $wildcard_host = $origin_host;
             }
             if (!$zone_ok) {
                 return ['ok' => false, 'reason' => 'host_mismatch', 'origin_host' => $origin_host];
@@ -764,7 +766,7 @@ if (!function_exists('wpc_v2_lazy_cdn_derive_abs_path')) {
             }
         }
 
-        return ['ok' => true, 'abs_path' => $abs_path];
+        return ['ok' => true, 'abs_path' => $abs_path] + ($wildcard_host !== '' ? ['foreign_host' => $wildcard_host] : []);
     }
 }
 
@@ -1185,6 +1187,22 @@ if (!function_exists('wpc_v2_lazy_cdn_ingest')) {
                 wpc_cache_first_log('kept-original', basename($abs_path), '', ['twin' => strlen($bytes), 'vs' => $smaller_sibling]);
             }
             wpc_v2_lazy_outcome('kept_original');
+            return true;
+        }
+        $foreign_host = isset($derived['foreign_host']) ? (string) $derived['foreign_host'] : '';
+        $identity = function_exists('wpc_v2_variant_identity')
+            ? wpc_v2_variant_identity($bytes, $abs_path, function_exists('wpc_v2_variant_claim') ? wpc_v2_variant_claim($entry) : [])
+            : ['verdict' => 'unverified', 'reason' => 'no-owner', 'distance' => null, 'source' => '', 'claim' => 'none'];
+        $identity_refused = function_exists('wpc_v2_variant_identity_refused')
+            ? wpc_v2_variant_identity_refused($identity, $foreign_host)
+            : $foreign_host !== '';
+        if ($identity_refused) {
+            if (function_exists('wpc_v2_variant_identity_refuse')) {
+                wpc_v2_variant_identity_refuse($identity, $abs_path, 'lazy-cdn', $foreign_host !== '' ? ['host' => $foreign_host] : []);
+            }
+            wpc_v2_lazy_outcome('refused_identity');
+            wpc_v2_lazy_fail_note('refused_identity', basename($abs_path) . ' ' . (string) $identity['verdict'] . ':' . (string) $identity['reason'] . ($foreign_host !== '' ? ' host=' . $foreign_host : ''));
+            error_log('[WPC LazyCDN] refused_identity verdict=' . (string) $identity['verdict'] . ' reason=' . (string) $identity['reason'] . ' dest_tail=' . substr($abs_path, -60) . ($foreign_host !== '' ? ' host=' . $foreign_host : ''));
             return true;
         }
         $tmp = $abs_path . '.wpc_lazycdn_tmp_' . wp_generate_password(8, false);

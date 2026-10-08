@@ -184,7 +184,7 @@ class wps_ic_url_key
             'disablewpc', 'wpc_visitor_mode', 'remote_generate_critical', 'dbgcache',
             'forcecritical', 'removecritical', 'forcerecombine', 'crit', 'cdn', 'nocache',
             'wpc_no_buffer', 'wpc_smoke', 'wpcdoc', 'wpc_perf_debug', 'wpc_img_debug',
-            'wpc_tier', 'wpc_key', 'wpc_stages', 'stop_before', 'stop_after', 'no_rewriter'];
+            'wpc_tier', 'wpc_key', 'wpc_stages', 'stop_before', 'stop_after', 'no_rewriter', 'apikey'];
     }
 
     public static function tierNames()
@@ -842,5 +842,105 @@ class wps_ic_url_key
 		$scheme     = ($homeScheme === 'http') ? 'http' : 'https';
 		$path       = isset($parts['path']) && $parts['path'] !== '' ? $parts['path'] : '/';
 		return $scheme . '://' . $urlHost . $path;
+	}
+
+	public static function requestHostPath()
+	{
+		$url = preg_replace('#^[a-z][a-z0-9+.-]*://#i', '', (string) self::requestUrl());
+		return explode('#', explode('?', (string) $url, 2)[0], 2)[0];
+	}
+
+	public static function homePath()
+	{
+		if (!function_exists('home_url')) {
+			return '/';
+		}
+		$path = (string) parse_url((string) home_url('/'), PHP_URL_PATH);
+		return '/' . ltrim($path === '' ? '/' : $path, '/');
+	}
+
+	public static function excludeHost($host)
+	{
+		$host = strtolower(trim((string) $host));
+		$host = preg_replace('/:\d+$/', '', $host);
+		$host = rtrim((string) $host, '.');
+		return (strpos($host, 'www.') === 0) ? (string) substr($host, 4) : (string) $host;
+	}
+
+	public static function excludeMatch($pattern, $hostPath, $homePath = '/')
+	{
+		$pattern = trim((string) $pattern);
+		if ($pattern === '' || $pattern[0] === '#') {
+			return false;
+		}
+
+		$hostPath = preg_replace('#^[a-z][a-z0-9+.-]*://#i', '', (string) $hostPath);
+		$hostPath = explode('?', (string) $hostPath, 2)[0];
+		$cut  = strcspn($hostPath, '/');
+		$host = self::excludeHost(substr($hostPath, 0, $cut));
+		$path = rawurldecode((string) substr($hostPath, $cut));
+		if ($path === '') {
+			$path = '/';
+		}
+
+		$sited = false;
+		if (preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//([^/?\#]*)(.*)$#is', $pattern, $m)) {
+			if ($host === '' || self::excludeHost($m[1]) !== $host) {
+				return false;
+			}
+			$pattern = $m[2];
+			$sited = true;
+		} else {
+			$first = strcspn($pattern, '/');
+			$lead  = (string) substr($pattern, 0, $first);
+			if ($host !== '' && strpos($lead, '.') !== false && self::excludeHost($lead) === $host) {
+				$pattern = (string) substr($pattern, $first);
+				$sited = true;
+			}
+		}
+		if ($sited) {
+			$pattern = preg_split('/[?#]/', $pattern, 2)[0];
+		}
+		$pattern = rawurldecode((string) $pattern);
+
+		$homePath = '/' . trim(rawurldecode((string) $homePath), '/');
+		$homePath = ($homePath === '/') ? '/' : $homePath . '/';
+		$atHome = (rtrim(strtolower($path), '/') . '/') === strtolower($homePath);
+		if ($pattern === '' || $pattern === '/') {
+			return $atHome;
+		}
+		if ($sited && (rtrim(strtolower($pattern), '/') . '/') === strtolower($homePath)) {
+			return $atHome;
+		}
+
+		if (strpos($pattern, '*') !== false || strpos($pattern, '?') !== false) {
+			$regex = str_replace(['\\*\\*', '\\*', '\\?'], ['.*', '[^/]*', '.'], preg_quote($pattern, '#'));
+			if (@preg_match('#' . $regex . '#i', $path) === 1) {
+				return true;
+			}
+			return $host !== '' && stripos($pattern, $host) !== false
+				&& @preg_match('#' . $regex . '#i', $host . $path) === 1;
+		}
+
+		return stripos($path, $pattern) !== false || stripos(rtrim($path, '/') . '/', $pattern) !== false;
+	}
+
+	public static function excludedBy($patterns, $hostPath, $homePath = null)
+	{
+		if ($homePath === null) {
+			$homePath = self::homePath();
+		}
+		if (is_string($patterns)) {
+			$patterns = explode("\n", $patterns);
+		}
+		if (!is_array($patterns)) {
+			return false;
+		}
+		foreach ($patterns as $pattern) {
+			if (is_scalar($pattern) && self::excludeMatch((string) $pattern, $hostPath, $homePath)) {
+				return trim((string) $pattern);
+			}
+		}
+		return false;
 	}
 }

@@ -55,45 +55,6 @@ if (!empty($_GET['selectModes'])) {
     #echo '<a href="#" class="wpc-select-modes">Select modes</a>';
 }
 
-// Generate Critical CSS
-if (!empty($_GET['generate_crit'])) {
-    $page = sanitize_text_field($_GET['generate_crit']);
-
-    if ($page == 'home') {
-        $page = site_url();
-    }
-
-    $response = wp_remote_post('https://mc-6463k17ku1.bunny.run/critical', array('headers' => array('Content-Type' => 'application/json',), 'body' => json_encode(array('url' => $page . '?criticalCombine=true&wpc-hash=' . time(),)), 'method' => 'POST', 'timeout' => 15, 'blocking' => true,));
-
-    if (is_wp_error($response)) {
-        $error_message = $response->get_error_message();
-        echo sprintf(esc_html__('Something went wrong: %s', WPS_IC_TEXTDOMAIN), $error_message);
-    } else {
-        $body = wp_remote_retrieve_body($response);
-        if (!is_wp_error($body) && !empty($body)) {
-            $bodyDecoded = json_decode($body, true);
-
-            if (!empty($bodyDecoded)) {
-
-                $urlKey = new wps_ic_url_key();
-                $urlKey = $urlKey->setup($page);
-                $criticalCSS = new wps_criticalCss();
-
-                if (method_exists($criticalCSS, 'saveCriticalCssText')) {
-                    $response = $criticalCSS->saveCriticalCssText($urlKey, $bodyDecoded['desktop'], 'desktop');
-                    $response = $criticalCSS->saveCriticalCssText($urlKey, $bodyDecoded['mobile'], 'mobile');
-                }
-
-            }
-        }
-
-    }
-
-
-    die();
-}
-
-
 if (!empty($_GET['show_hidden_menus']) && !(defined('WPS_IC_AGENCY') && WPS_IC_AGENCY)) {
     update_option('wpc_show_hidden_menus', sanitize_text_field($_GET['show_hidden_menus']));
 }
@@ -182,7 +143,11 @@ if (!empty($_POST['options']['font-display']) && isset($_POST['fonts'])) {
         $options['cdnAll'] = '1';
     }
 
+    unset($options['permissions']);
     update_option(WPS_IC_SETTINGS, $options);
+    if (!empty($_POST['wpc_role_grants_form']) && class_exists('wps_ic_users')) {
+        wps_ic_users::saveGrants(isset($submittedOptions['permissions']) ? $submittedOptions['permissions'] : []);
+    }
     $cache::purgeAll(false, false, false, false, true);
 
 
@@ -832,23 +797,6 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                         <span class="wpc-title"><?php echo esc_html__('Smart Optimization', WPS_IC_TEXTDOMAIN); ?></span>
                                     </a>
                                 </li>
-                                <?php
-                                }
-
-                                $cdn_critical_mc = get_option('wps_ic_critical_mc');
-                                if (!empty($cdn_critical_mc) && 1 == 0) {
-                                    ?>
-                                    <li>
-                                        <a href="#" class="" data-tab="critical-css-optimization">
-                                <span class="wpc-icon-container">
-                                <span class="wpc-icon">
-                                    <img src="<?php
-                                    echo WPS_IC_ASSETS; ?>/v4/images/menu-icons/wand-magic.svg"/>
-                                </span>
-                                </span>
-                                            <span class="wpc-title"><?php echo esc_html__('Critical CSS', WPS_IC_TEXTDOMAIN); ?></span>
-                                        </a>
-                                    </li>
                                 <?php } ?>
                                 <li>
                                     <a href="#" class="" data-tab="integrations">
@@ -910,6 +858,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                             <span class="wpc-title"><?php echo esc_html__('System Information', WPS_IC_TEXTDOMAIN); ?></span>
                                         </a>
                                     </li>
+                                    <?php if (current_user_can('manage_options')) { ?>
                                     <li class="wpc-dev-tools-nav">
                                         <a href="#" class="" data-tab="debug">
                                 <span class="wpc-icon-container">
@@ -920,6 +869,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                             <span class="wpc-title"><?php echo esc_html__('Debug', WPS_IC_TEXTDOMAIN); ?></span>
                                         </a>
                                     </li>
+                                    <?php } ?>
                                     <li class="wpc-dev-tools-nav">
                                         <a href="#" class="" data-tab="logger">
                                 <span class="wpc-icon-container">
@@ -1660,8 +1610,15 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                         // Role avatar colors
                                         $roleColors = ['#6366f1', '#3b82f6', '#10b981', '#f59e0b'];
 
+                                        $canEditGrants = wps_ic_users::canEditGrants();
+
                                         if (!empty($roles)) {
                                         ?>
+                                        <?php if ($canEditGrants) { ?>
+                                        <input type="hidden" name="wpc_role_grants_form" value="1"/>
+                                        <?php } elseif ($wps_ic->isAgencyPortal()) { ?>
+                                        <p class="wpc-perm-managed-on-site"><?php echo esc_html__('User permissions are managed on the site itself.', WPS_IC_TEXTDOMAIN); ?></p>
+                                        <?php } ?>
                                         <div class="wpc-permissions-matrix">
                                             <div class="wpc-perm-header">
                                                 <div class="wpc-perm-role-col"><?php echo esc_html__('Role', WPS_IC_TEXTDOMAIN); ?></div>
@@ -1689,11 +1646,11 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                     $optKey = $key . $perm['suffix'];
                                                     $optName = 'options[permissions][' . $optKey . ']';
                                                     $optId = 'options_permissions_' . $optKey;
-                                                    $isActive = isset(wpc_gui_v4::$options['permissions'][$optKey]) && wpc_gui_v4::$options['permissions'][$optKey] == '1';
+                                                    $isActive = !$wps_ic->isAgencyPortal() && $users->permissionEnabled($key, ltrim($perm['suffix'], '_'));
                                                 ?>
                                                 <div class="wpc-perm-col">
                                                     <label class="wpc-switch">
-                                                        <input type="checkbox" class="wpc-ic-settings-v4-checkbox" value="1" id="<?php echo $optId; ?>" name="<?php echo $optName; ?>" data-recommended="0" data-safe="0" data-connected-slave-option="<?php echo $optId; ?>" <?php echo $isActive ? 'checked="checked"' : ''; ?> />
+                                                        <input type="checkbox" class="wpc-ic-settings-v4-checkbox" value="1" id="<?php echo $optId; ?>" name="<?php echo $optName; ?>" data-recommended="0" data-safe="0" data-connected-slave-option="<?php echo $optId; ?>" <?php echo $isActive ? 'checked="checked"' : ''; ?><?php echo $canEditGrants ? '' : ' disabled="disabled"'; ?> />
                                                         <span class="wpc-switch-slider wpc-switch-round"></span>
                                                     </label>
                                                 </div>
@@ -1953,9 +1910,6 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                 }
 
 
-                                                echo $gui::checkboxDescription_v4(__('Embed Facades — Maps & YouTube', WPS_IC_TEXTDOMAIN), __('Replaces Google Maps and YouTube embeds with a lightweight static preview that loads the real embed on click. The embed\'s scripts never load until the visitor asks for them — fastest possible page — and visitors see a video poster or map placeholder instead of an empty box. Logged-in users always see live embeds.', WPS_IC_TEXTDOMAIN), false, '0', 'embed-facade', false, 'right', '');
-
-
                                                 echo $gui::checkboxDescription_v4(__('Load Slider Immediately (Feel Preference)', WPS_IC_TEXTDOMAIN), __('Exempts Revolution Slider from the interaction-gate so it boots automatically instead of waiting for a click/scroll — feels more alive on first paint. Loads deferred (never render-blocking), just not interaction-gated. Off by default for the best possible score.', WPS_IC_TEXTDOMAIN), false, '0', 'revslider-instant', false, 'right', '');
 
 
@@ -2039,69 +1993,6 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                     </div>
 
                                 </div>
-                                <div class="wpc-tab-content" id="critical-css-optimization" style="display:none;">
-
-                                    <div class="wpc-tab-content-box">
-
-                                        <div class="wpc-critical-css-status"
-                                             style="display:flex;align-items:center;border:none;">
-
-                                            <div class="d-flex align-items-top gap-3 tab-title-checkbox"
-                                                 style="width:100%; padding-right:20px">
-                                                <div class="wpc-checkbox-icon">
-                                                    <div class="wpc-smart-monitor-img-animated">
-                                                        <div class="pulse-container" style="display:none"></div>
-                                                        <div style="background-image:url(<?php
-                                                        echo WPS_IC_URI . '/assets/v4/images/24monitor.svg' ?>);min-height:100px;min-width:100px;background-repeat:no-repeat;"
-                                                             class="background-image wpc-smart-monitor-img">
-                                                        </div>
-                                                        <div class="shimmer-container" style="display:none"></div>
-                                                    </div>
-                                                </div>
-                                                <div class="wpc-checkbox-description" style="z-index:2">
-                                                    <div style="display:flex">
-                                                        <h4 class="fs-500 text-dark-300 fw-500 p-inline wpc-critical-css-title">
-                                                            <?php echo esc_html__('Critical CSS', WPS_IC_TEXTDOMAIN); ?></h4>
-                                                        <img src="<?php
-                                                        echo WPS_IC_URI . '/assets/v4/images/24bubble.svg' ?>"
-                                                             style="padding-left: 15px;height: 30px;padding-top: 2px;">
-                                                    </div>
-                                                    <p class="wpc-smart-optimization-text" style="margin: 7px 0px 4px">
-                                                        <?php echo esc_html__('No need to lift a finger -- your website is intelligently optimized around the clock based on demand.', WPS_IC_TEXTDOMAIN); ?></p>
-                                                </div>
-
-                                            </div>
-
-                                            <div class="wpc-optimization-status"
-                                                 style="display:flex;align-items:center;margin-left:10px;padding-left:20px">
-                                                <div class="optimization-image">
-                                                    <img src="<?php
-                                                    echo WPS_IC_URI . '/assets/v4/images/pages_optimized.svg' ?>" alt=""
-                                                         style="margin-top:-5px">
-                                                </div>
-
-                                                <div class="optimization-text">
-                                                    <div class="optimized-pages-text">0</div>
-                                                    <div class="optimized-pages-bottom-text"><?php echo esc_html__('Preparing', WPS_IC_TEXTDOMAIN); ?></div>
-                                                </div>
-
-
-                                            </div>
-                                        </div>
-
-                                        <div class="wpc-spacer"></div>
-
-                                        <div class="wpc-critical-css-actions">
-                                            <a href="<?php echo esc_url(wpc_settings_page_url('&generate_crit=home#critical-css-optimization')); ?>">
-                                                <?php echo esc_html__('Generate Critical CSS for Home Page', WPS_IC_TEXTDOMAIN); ?>
-                                            </a>
-                                            <a href="#" class="wpc-purge-icon wpc-purge-critical-css" title="<?php echo esc_attr__('Purge Critical CSS', WPS_IC_TEXTDOMAIN); ?>">
-                                                <i class="icon-arrows-ccw"></i>
-                                            </a>
-                                        </div>
-
-                                    </div>
-                                </div>
                                 <div class="wpc-tab-content" id="integrations" style="display:none;">
                                     <div class="wpc-tab-content-box wpc-card-rows wpc-perf-section" id="cf-connect-options" style="display: block;">
                                         <?php
@@ -2182,6 +2073,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                                 <div class="wpc-cf-token-connected-info-left">
                                                                     <?php
                                                                     echo '<strong>' . $cf['zoneName'] . '</strong>';
+                                                                    if (get_option('wpc_show_hidden_menus') == 'true') {
                                                                     // The token's identity as the last permission check read it
                                                                     // (checkPrivileges -> verifyToken); only its id, never its value.
                                                                     $wpc_cf_token_seen = get_option('wpc_cf_privileges');
@@ -2196,6 +2088,9 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                                     ?>
                                                                     <small class="wpc-cfperm-does wpc-cf-token-identity" id="wpc-cf-token-identity"><?php echo esc_html($wpc_cf_token_line); ?></small>
                                                                     <small class="wpc-cfperm-does"><?php echo esc_html__('Find this id under Cloudflare → My Profile → API Tokens → (the token) → View summary, or with user/tokens/verify.', WPS_IC_TEXTDOMAIN); ?></small>
+                                                                    <?php
+                                                                    }
+                                                                    ?>
                                                                 </div>
 
 
@@ -2743,6 +2638,11 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                     <?php
                                                     echo print_r(get_option('wps_ic_url_changed_log'), true); ?>
                                                 </li>
+
+                                                <li><?php echo esc_html__('Key removals:', WPS_IC_TEXTDOMAIN); ?>
+                                                    <?php
+                                                    echo esc_html(print_r(get_option('wps_ic_key_removal_log', []), true)); ?>
+                                                </li>
                                             </ul>
                                         </div>
                                     </div>
@@ -2750,6 +2650,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                 <?php } ?>
 
 
+                                <?php if (current_user_can('manage_options')) { ?>
                                 <div class="wpc-tab-content" id="debug" style="display:none;">
                                     <?php
                                     // Above debug_tool.php: that file opens nested forms, and markup after its
@@ -2757,6 +2658,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                     include WPS_IC_DIR . 'templates/admin/partials/doctor.php';
                                     include_once 'debug_tool.php'; ?>
                                 </div>
+                                <?php } ?>
 
 
                                 <div class="wpc-tab-content" id="logger" style="display:none;">

@@ -10,6 +10,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
     protected $manifest_rc = [];
     protected $companion_ids = [];  // {handle}-js-before/-after/-extra of excluded-at-parse parents
     protected $wpc_family_keep_ids = [];  // dependency-family members coupled to a kept lane
+    protected $wpc_first_screen_sliders = [];
 
 
     // JetFormBuilder's main.js by basename, its jet-plugins provider stayed delayed → ReferenceError
@@ -114,6 +115,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             // there) — it closes the exposure wherever delay IS active, since a delayed CMP
             // cannot prior-block trackers booting in the same replay wave.
             'real-cookie-banner', 'devowl', 'realCookieBanner',
+            'surecookie', 'ccm19', 'consentmanager.net', 'cookiefirst', 'cookiehub', 'cookie-script.com', 'cookieinformation',
 
             'form_embed', 'msgsndr', 'leadconnectorhq', 'hsforms', 'hbspt',
             'calendly', 'typeform', 'jotform',
@@ -215,6 +217,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 'tarteaucitron', 'onetrust', 'quantcast', 'usercentrics', 'consently',
                 'didomi', 'trustarc', 'truste.com', 'sourcepoint', 'axeptio', 'klaro', 'securiti.ai',
                 'real-cookie-banner', 'devowl', 'realCookieBanner',
+                'surecookie', 'ccm19', 'consentmanager.net', 'cookiefirst', 'cookiehub', 'cookie-script.com', 'cookieinformation',
                 // ORDERING INVARIANT: consent-delayed => NO tracking-class script may
                 // run eager — the replay is document-ordered, so the head CMP boots
                 // first and its prior-blocking holds, same as the original page. An
@@ -990,6 +993,20 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             }
         }
 
+        if (!empty($this->wpc_first_screen_sliders)) {
+            if (!empty($attributes['src'])
+                && preg_match('#/breakdance-elements/dependencies-files/(?:swiper@\d+/swiper-bundle(?:\.min)?\.js|breakdance-swiper/breakdance-swiper\.js)#i', (string) $attributes['src'])) {
+                return true;
+            }
+            if ($content !== '' && strpos($content, 'BreakdanceSwiper') !== false) {
+                foreach ($this->wpc_first_screen_sliders as $slider_id) {
+                    if (strpos($content, "'" . $slider_id . "'") !== false || strpos($content, '"' . $slider_id . '"') !== false) {
+                        return true;
+                    }
+                }
+            }
+        }
+
         // v7.10.395: lane-listed scripts outrank STALE structural pins — a scroll-behavior
         // script can never be a load-time dependency (its function needs the gesture that
         // releases it), but a link-and-go-era prescription pin held sticky eager forever.
@@ -1305,6 +1322,212 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
     }
 
     /**
+     * The manifest entries the keep reader never reaches: everything past the first 20 of each
+     * render_critical / atf_mutators list (top level and per device), as basenames.
+     */
+    public static function wpc_manifest_keep_overflow($manifest)
+    {
+        $names = [];
+        if (!is_array($manifest)) {
+            return $names;
+        }
+        $sections = [$manifest];
+        foreach (['mobile', 'desktop'] as $device) {
+            if (!empty($manifest[$device]) && is_array($manifest[$device])) {
+                $sections[] = $manifest[$device];
+            }
+        }
+        foreach ($sections as $section) {
+            foreach (['render_critical', 'atf_mutators'] as $list) {
+                if (empty($section[$list]) || !is_array($section[$list])) {
+                    continue;
+                }
+                foreach (array_slice($section[$list], 20) as $entry) {
+                    if (is_array($entry) && !empty($entry['key'])) {
+                        $entry = $entry['key'];
+                    }
+                    if (!is_string($entry) || strlen($entry) < 4 || strpos($entry, 'inline:') === 0) {
+                        continue;
+                    }
+                    $names[strtolower(basename((string) strtok($entry, '?')))] = true;
+                }
+            }
+        }
+        return array_keys($names);
+    }
+
+    /**
+     * The name a Delay JS error report says is missing: ['kind' => 'fn'|'global', 'name' => NAME] for
+     * "X is not a function", "X is not defined" and Safari's "Can't find variable: X", else null.
+     */
+    public static function wpc_missing_symbol($message)
+    {
+        $message = (string) $message;
+        if (preg_match('/can\'?t find variable:\s*([A-Za-z_$][\w$]*)/i', $message, $found)
+            || preg_match('/([A-Za-z_$][\w$]*)\s+is not defined/i', $message, $found)) {
+            return ['kind' => 'global', 'name' => $found[1]];
+        }
+        if (preg_match('/([A-Za-z_$][\w$]*)\s+is not a function/i', $message, $found)) {
+            return ['kind' => 'fn', 'name' => $found[1]];
+        }
+        return null;
+    }
+
+    /**
+     * The Delay JS exclude patterns for the same-site scripts the render saw delayed that define a
+     * missing name (wpc_missing_symbol): a jQuery plugin of that name for "is not a function", a
+     * window global of that name for either kind. The pattern is the file's basename, or its path
+     * under wp-content when the basename is one many scripts share (main.js, plugins.min.js). Only
+     * files still on disk, and never the file that threw ($thrower_url).
+     */
+    public static function wpc_provider_patterns($symbol, $thrower_url = '')
+    {
+        $index = get_option('wpc_delay_v3_providers', []);
+        if (!is_array($index) || !is_array($symbol) || empty($symbol['name'])) {
+            return [];
+        }
+        $thrower = '/' . ltrim((string) parse_url(self::wpc_script_origin_url($thrower_url), PHP_URL_PATH), '/');
+        $keys = $symbol['kind'] === 'fn' ? ['fn:' . $symbol['name'], 'g:' . $symbol['name']] : ['g:' . $symbol['name']];
+        $patterns = [];
+        foreach ($keys as $key) {
+            foreach ((array) ($index[$key] ?? []) as $path) {
+                $path = (string) $path;
+                if ($path === $thrower || self::wpc_script_path_file($path) === '') {
+                    continue;
+                }
+                $base = basename($path);
+                $shared = preg_match('/^(?:main|index|app|script|scripts|common|frontend|front|theme|custom|global|bundle|vendor|vendors|plugins|all|public|admin|core)(?:\.min)?\.js$/i', $base) === 1;
+                $content_at = strpos($path, '/wp-content/');
+                $patterns[$shared && $content_at !== false ? substr($path, $content_at) : $base] = true;
+            }
+        }
+        return array_keys($patterns);
+    }
+
+    /**
+     * What the Delay JS tuner keeps for a missing-name error (wpc_missing_symbol): ['as' => 'provider',
+     * 'patterns' => wpc_provider_patterns()] when a script on record other than the thrower defines
+     * the name; ['as' => 'thrower', 'patterns' => [the thrower's basename]] when no script on disk
+     * on record defines it (an inline or a foreign global) and no pattern of the site's Delay JS
+     * exclude list already keeps the thrower; otherwise ['as' => 'none', 'patterns' => []] (the
+     * thrower is the only definer on record, or it already runs at load).
+     */
+    public static function wpc_missing_symbol_keep($symbol, $thrower_url)
+    {
+        $providers = self::wpc_provider_patterns($symbol, $thrower_url);
+        if ($providers !== []) {
+            return ['as' => 'provider', 'patterns' => $providers];
+        }
+        $thrower = basename((string) parse_url((string) $thrower_url, PHP_URL_PATH));
+        if ($thrower === '' || self::wpc_provider_patterns($symbol) !== [] || self::wpc_delay_exclude_matches($thrower_url)) {
+            return ['as' => 'none', 'patterns' => []];
+        }
+        return ['as' => 'thrower', 'patterns' => [$thrower]];
+    }
+
+    /**
+     * True when a pattern of the site's Delay JS exclude list (delay_js_v3, read through
+     * wpc_delay_excludes_fold) is in the script URL, compared without case as the engine compares
+     * it: the script runs at load on every page.
+     */
+    public static function wpc_delay_exclude_matches($src)
+    {
+        $excludes = function_exists('get_option') ? get_option('wpc-excludes', []) : [];
+        if (!is_array($excludes)) {
+            return false;
+        }
+        if (function_exists('wpc_delay_excludes_fold')) {
+            $excludes = wpc_delay_excludes_fold($excludes);
+        }
+        $src = strtolower((string) $src);
+        foreach ((array) ($excludes['delay_js_v3'] ?? []) as $pattern) {
+            $pattern = strtolower(trim((string) $pattern));
+            if ($pattern !== '' && strpos($src, $pattern) !== false) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The promotion kill switch is on: the site-wide promoted list and every page's record of what
+     * it promoted are dropped, because nothing is promoted until the switch clears.
+     */
+    public static function wpc_promotion_clear()
+    {
+        if (get_option('wpc_delay_v3_promoted', false) !== false) {
+            delete_option('wpc_delay_v3_promoted');
+        }
+        $log = get_option('wpc_delay_v3_promotion_log', false);
+        if (is_array($log)) {
+            $kept = [];
+            foreach ($log as $key => $entry) {
+                if (substr((string) $key, 0, 1) === '*') {
+                    $kept[$key] = $entry;
+                }
+            }
+            if ($kept !== $log) {
+                update_option('wpc_delay_v3_promotion_log', $kept, false);
+            }
+        }
+    }
+
+    /**
+     * Record what this render did with the measured manifest's promotions, in the option
+     * wpc_delay_v3_promotion_log: for a page (url key) the basenames applied and, per basename,
+     * why one was skipped (cap, shared-basename, list-truncated); for the whole site the reason no
+     * page could promote anything (*manifest_off, *no-delay-json), refreshed hourly. Written only
+     * when it changes; rows older than 14 days go; 40 rows at most.
+     */
+    public static function wpc_promotion_note($key, array $applied, array $skipped, $site_reason = '')
+    {
+        $key = (string) $key;
+        $now = time();
+        $log = get_option('wpc_delay_v3_promotion_log', []);
+        if (!is_array($log)) {
+            $log = [];
+        }
+        $before = $log;
+        foreach ($log as $row_key => $row) {
+            if (!is_array($row) || (int) ($row['t'] ?? 0) < $now - 14 * DAY_IN_SECONDS) {
+                unset($log[$row_key]);
+            }
+        }
+        if ($site_reason === 'manifest_off') {
+            foreach (array_keys($log) as $row_key) {
+                if (substr((string) $row_key, 0, 1) !== '*') {
+                    unset($log[$row_key]);
+                }
+            }
+        } else {
+            unset($log['*manifest_off']);
+        }
+        if ($site_reason !== '') {
+            unset($log[$key]);
+            $mark = '*' . $site_reason;
+            if (!isset($log[$mark]) || (int) $log[$mark]['t'] < $now - HOUR_IN_SECONDS) {
+                $log[$mark] = ['t' => $now, 'key' => $key];
+            }
+        } elseif ($key !== '') {
+            if ($applied === [] && $skipped === []) {
+                unset($log[$key]);
+            } else {
+                $row = ['applied' => array_slice(array_values($applied), 0, 12), 'skipped' => array_slice($skipped, 0, 12, true)];
+                if (!isset($log[$key]) || array_diff_key($log[$key], ['t' => 1]) !== $row) {
+                    $log[$key] = $row + ['t' => $now];
+                }
+            }
+        }
+        if (count($log) > 40) {
+            uasort($log, function ($a, $b) { return (int) $b['t'] - (int) $a['t']; });
+            $log = array_slice($log, 0, 40, true);
+        }
+        if ($log !== $before) {
+            update_option('wpc_delay_v3_promotion_log', $log, false);
+        }
+    }
+
+    /**
      * The builder runtime keeps (Bricks' swapper and its libs, Divi 5's script library) added to
      * this render's keep list. One place, asked by process_html and by keeps_script_at_load().
      * Idempotent: the list is merged uniquely.
@@ -1356,17 +1579,27 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         // defer lane: same order, parse-adjacent execution. Kill wpc_divi_runtime_keep.
         if ((strpos($html, '/themes/Divi/') !== false || strpos($html, 'et_pb_') !== false)
             && apply_filters('wpc_divi_runtime_keep', true)) {
+            // Name stems, not file names: SiteGround Optimizer serves every one of these renamed
+            // to divi-<name>.min.js, which the old 'name.js' entries never matched, so the whole
+            // runtime stayed delay cargo. theme-scripts-library-menu sets #page-container's top
+            // padding to the header height; delayed, the 80px CSS default holds until a gesture
+            // and the mobile hero sits 21px low under a white strip (bgqld.com.au, 2026-10-07).
+            // theme-scripts-library itself stays exact so the stem does not take in every
+            // theme-scripts-library-* file.
             $diviRuntime = [
-                'theme-scripts-library-base.js',
-                'theme-scripts-library-scroll-to-top.js',
-                'script-library-frontend-global-functions.js',
-                'script-library-frontend-scripts.js',
-                'script-library-ext-waypoint.js',
-                'script-library-menu.js',
-                'script-library-animation.js',
-                'script-library-multi-view.js',
-                'script-library-link.js',
+                'theme-scripts-library-base',
+                'theme-scripts-library-scroll-to-top',
+                'theme-scripts-library-menu',
+                'script-library-frontend-global-functions',
+                'script-library-global-functions',
+                'script-library-frontend-scripts',
+                'script-library-ext-waypoint',
+                'script-library-menu',
+                'script-library-animation',
+                'script-library-multi-view',
+                'script-library-link',
                 'theme-scripts-library.js',
+                'theme-scripts-library.min.js',
             ];
             $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, $diviRuntime)));
             $diviKept = 0;
@@ -1380,6 +1613,13 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             }
         }
 
+        if (strpos($html, 'data-vc-full-width') !== false && apply_filters('wpc_wpbakery_runtime_keep', true)) {
+            $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, ['js_composer_front'])));
+            if (strpos($html, 'js_composer_front') !== false && $noteReceipts && function_exists('wpc_render_belt_note')) {
+                wpc_render_belt_note('delay-keep-rules', ['wpbakery_runtime' => 1], true);
+            }
+        }
+
     }
 
     /**
@@ -1389,6 +1629,32 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
      * it before it holds a builder video's source for the replay (Divi 4 on webdesign4u.com.au):
      * a script this answers true for runs at load, and the source must stay.
      */
+    /**
+     * Ids of the Breakdance sliders (advanced slider, basic slider, gallery) whose markup sits in
+     * the page's first two <section> blocks after <body>: the carousels on the first screen.
+     */
+    public static function wpc_breakdance_first_screen_sliders($html)
+    {
+        if (!is_string($html) || strpos($html, 'BreakdanceSwiper') === false) {
+            return [];
+        }
+        $body = stripos($html, '<body');
+        if ($body === false) {
+            return [];
+        }
+        $end = strlen($html);
+        if (preg_match_all('/<section\b/i', $html, $sections, PREG_OFFSET_CAPTURE, $body) && count($sections[0]) >= 3) {
+            $end = $sections[0][2][1];
+        }
+        $ids = [];
+        if (preg_match_all('/class="[^"]*\b(bde-(?:advancedslider|basicslider|gallery)-[0-9]+(?:-[0-9]+)*)\b/i', substr($html, $body, $end - $body), $found)) {
+            foreach ($found[1] as $id) {
+                $ids[$id] = 1;
+            }
+        }
+        return array_keys($ids);
+    }
+
     public function keeps_script_at_load($src, $html)
     {
         $src = (string) $src;
@@ -1430,42 +1696,462 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             . 'document.createElement=function(t){var el=C.apply(document,arguments),l=String(t).toLowerCase();if(S&&"script"===l)W(el,S);if(F&&"iframe"===l)W(el,F);return el}}catch(e){}}();';
     }
 
-    protected function wpc_keep_dependency_closure($wpc_excluded_ids, $wpc_seen_src_ids)
+    /**
+     * Every script a kept script needs, by id: its declared wp_scripts dependencies, and the
+     * same-site delayed scripts that define a jQuery plugin or a window global a kept script
+     * calls (a provider joins its consumer's lane). Providers are walked for their own
+     * dependencies and their own providers, up to the page cap (wpc_keep_plugin_provider_cap).
+     */
+    protected function wpc_keep_dependency_closure($wpc_excluded_ids, $wpc_seen_src_ids, $html = '')
     {
         $closure_ids = [];
-        if (empty($wpc_excluded_ids) || !apply_filters('wpc_keep_dep_closure', true)
-            || empty($GLOBALS['wp_scripts']) || empty($GLOBALS['wp_scripts']->registered)) {
+        if (!apply_filters('wpc_keep_dep_closure', true)) {
             return $closure_ids;
         }
-        $registered = $GLOBALS['wp_scripts']->registered;
+        $wpc_excluded_ids = (array) $wpc_excluded_ids;
+        $registered = (!empty($GLOBALS['wp_scripts']) && !empty($GLOBALS['wp_scripts']->registered))
+            ? $GLOBALS['wp_scripts']->registered : [];
         $stack = array_keys((array) $wpc_excluded_ids);
         $seen = [];
         $steps = 0;
-        while (!empty($stack) && $steps < 400) {
-            $steps++;
-            $kept_id = (string) array_pop($stack);
-            $handle = preg_replace('/-js$/', '', $kept_id);
-            if ($handle === '' || isset($seen[$handle]) || !isset($registered[$handle])) {
-                continue;
-            }
-            $seen[$handle] = true;
-            $deps = isset($registered[$handle]->deps) ? (array) $registered[$handle]->deps : [];
-            foreach ($deps as $dep) {
-                $dep = (string) $dep;
-                if ($dep === '') {
+        $delayed = null;
+        $inline = null;
+        $pulled = [];
+        $provider_cap = (int) apply_filters('wpc_keep_plugin_provider_cap', 8);
+        $round = 0;
+        do {
+            while (!empty($stack) && $steps < 400) {
+                $steps++;
+                $kept_id = (string) array_pop($stack);
+                $handle = preg_replace('/-js$/', '', $kept_id);
+                if ($handle === '' || isset($seen[$handle]) || !isset($registered[$handle])) {
                     continue;
                 }
-                $dep_id = $dep . '-js';
-                // Aliases (jquery -> jquery-core/jquery-migrate) have no tag of their own;
-                // re-entering the stack walks through them to the real carriers.
-                $stack[] = $dep_id;
-                if (isset($wpc_seen_src_ids[$dep_id]) && !isset($wpc_excluded_ids[$dep_id])
-                    && !isset($closure_ids[$dep_id])) {
-                    $closure_ids[$dep_id] = true;
+                $seen[$handle] = true;
+                $deps = isset($registered[$handle]->deps) ? (array) $registered[$handle]->deps : [];
+                foreach ($deps as $dep) {
+                    $dep = (string) $dep;
+                    if ($dep === '') {
+                        continue;
+                    }
+                    $dep_id = $dep . '-js';
+                    // Aliases (jquery -> jquery-core/jquery-migrate) have no tag of their own;
+                    // re-entering the stack walks through them to the real carriers.
+                    $stack[] = $dep_id;
+                    if (isset($wpc_seen_src_ids[$dep_id]) && !isset($wpc_excluded_ids[$dep_id])
+                        && !isset($closure_ids[$dep_id])) {
+                        $closure_ids[$dep_id] = true;
+                    }
+                }
+            }
+            $added = [];
+            if ($round < 3 && count($pulled) < $provider_cap && apply_filters('wpc_keep_plugin_providers', true)) {
+                if ($delayed === null) {
+                    $delayed = $this->wpc_delayed_local_scans($wpc_excluded_ids + $closure_ids, $wpc_seen_src_ids);
+                    self::wpc_provider_index_note($delayed);
+                }
+                $added = $this->wpc_plugin_provider_ids(
+                    array_keys($wpc_excluded_ids + $closure_ids),
+                    $wpc_seen_src_ids,
+                    $delayed,
+                    $closure_ids + $wpc_excluded_ids,
+                    $html,
+                    $inline,
+                    $provider_cap - count($pulled)
+                );
+            }
+            foreach ($added as $provider_id => $why) {
+                $closure_ids[$provider_id] = true;
+                $pulled[$provider_id] = $why;
+                $stack[] = $provider_id;
+            }
+            $round++;
+        } while (!empty($added));
+        if (!empty($pulled) && function_exists('wpc_render_belt_note')) {
+            $pairs = [];
+            foreach (array_slice($pulled, 0, 6, true) as $provider_id => $why) {
+                $pairs[] = $why['name'] . ':' . preg_replace('/-js$/', '', (string) $provider_id) . '<' . preg_replace('/-js$/', '', (string) $why['by']);
+            }
+            wpc_render_belt_note('delay-keep-rules', ['plugin_providers' => count($pulled), 'plugin_pairs' => implode(',', $pairs)], true);
+        }
+        return array_keys($closure_ids);
+    }
+
+    /**
+     * The file on disk behind a same-site script URL (the site's host, or our zone with the
+     * site's path embedded), or '' for a foreign host, a non-.js path or a missing file.
+     */
+    protected function wpc_local_script_file($src)
+    {
+        $url = self::wpc_script_origin_url($src);
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+        if ($host !== '' && !$this->wpc_is_own_host($host)) {
+            return '';
+        }
+        return self::wpc_script_path_file((string) parse_url($url, PHP_URL_PATH));
+    }
+
+    /** A script URL as the site served it: a zone URL carrying the origin after /a: gives that origin. */
+    protected static function wpc_script_origin_url($src)
+    {
+        $src = html_entity_decode((string) $src);
+        $embedded = strrpos($src, '/a:');
+        return $embedded !== false ? substr($src, $embedded + 3) : $src;
+    }
+
+    /** The readable .js file at a URL path under the content dir or wp-includes, or ''. */
+    public static function wpc_script_path_file($path)
+    {
+        $path = '/' . ltrim((string) $path, '/');
+        if (substr($path, -3) !== '.js' || strpos($path, '..') !== false) {
+            return '';
+        }
+        $file = '';
+        $content_path = function_exists('content_url') ? rtrim((string) parse_url(content_url(), PHP_URL_PATH), '/') : '';
+        if ($content_path !== '' && strpos($path, $content_path . '/') === 0 && defined('WP_CONTENT_DIR')) {
+            $file = WP_CONTENT_DIR . substr($path, strlen($content_path));
+        } elseif (($pos = strpos($path, '/wp-content/')) !== false && defined('WP_CONTENT_DIR')) {
+            $file = WP_CONTENT_DIR . substr($path, $pos + 11);
+        } elseif (($pos = strpos($path, '/wp-includes/')) !== false && defined('ABSPATH')) {
+            $file = rtrim(ABSPATH, '/') . substr($path, $pos);
+        }
+        return $file !== '' && @is_file($file) && @is_readable($file) ? $file : '';
+    }
+
+    /**
+     * What a script file defines and calls: 'fn' the jQuery plugin names it assigns
+     * (.fn.NAME=), 'glob' the window globals it assigns, 'call' the method names it calls
+     * (only when $with_calls). Keyed by path + mtime + size: answered from this request's memo,
+     * then from the scan store (wpc_script_scan_stored), and read from the file only when
+     * neither holds the answer. A file over wpc_provider_scan_bytes answers null.
+     */
+    protected static function wpc_script_scan($file, $with_calls = false)
+    {
+        static $memo = [];
+        $size = (int) @filesize($file);
+        if ($size <= 0 || $size > (int) apply_filters('wpc_provider_scan_bytes', 524288)) {
+            return null;
+        }
+        $key = $file . '|' . (int) @filemtime($file) . '|' . $size;
+        if (!isset($memo[$key])) {
+            $stored = self::wpc_script_scan_stored($key);
+            if ($stored !== null) {
+                $memo[$key] = $stored;
+            }
+        }
+        if (isset($memo[$key]) && (!$with_calls || isset($memo[$key]['call']))) {
+            return $memo[$key];
+        }
+        $body = @file_get_contents($file);
+        if (!is_string($body) || $body === '') {
+            return null;
+        }
+        $scan = ['fn' => [], 'glob' => []];
+        if (preg_match_all('/\.fn\.([A-Za-z_$][\w$]{2,})\s*=(?!=)/', $body, $found)) {
+            $scan['fn'] = array_flip($found[1]);
+        }
+        if (preg_match_all('/\b(?:window|self|globalThis)\)?\.([A-Za-z_$][\w$]{2,})\s*=(?!=)/', $body, $found)) {
+            $scan['glob'] = array_slice(array_flip($found[1]), 0, 40, true);
+        }
+        if ($with_calls || isset($memo[$key]['call'])) {
+            $scan['call'] = preg_match_all('/\.([A-Za-z_$][\w$]{3,})\s*\(/', $body, $found) ? array_flip($found[1]) : [];
+        }
+        $memo[$key] = $scan;
+        self::wpc_script_scan_keep($key, $scan);
+        return $scan;
+    }
+
+    /**
+     * The scan store: wpc-assets/delay/scan/ under uploads (the delay artifacts' directory, which
+     * a purge leaves alone), one JSON file per path + mtime + size + plugin version holding only a
+     * scan's name lists. False when uploads is unusable or not a local path, or the
+     * wpc_script_scan_store filter answers false; the scan then reads the file on every request.
+     */
+    public static function wpc_script_scan_dir()
+    {
+        static $dir = null;
+        if ($dir !== null) {
+            return $dir;
+        }
+        $dir = false;
+        if (!apply_filters('wpc_script_scan_store', true)) {
+            return $dir;
+        }
+        $paths = self::wpc_registry_sidecar_paths();
+        if (is_array($paths) && strpos($paths['dir'], '://') === false) {
+            $dir = $paths['dir'] . 'scan/';
+        }
+        return $dir;
+    }
+
+    /** The store's file for a scan key. */
+    protected static function wpc_script_scan_file($dir, $key)
+    {
+        return $dir . 's-' . md5($key . '|' . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '')) . '.json';
+    }
+
+    /** A stored scan for $key: ['fn', 'glob'] and 'call' when it was kept with calls, or null. */
+    protected static function wpc_script_scan_stored($key)
+    {
+        $dir = self::wpc_script_scan_dir();
+        if ($dir === false) {
+            return null;
+        }
+        $json = @file_get_contents(self::wpc_script_scan_file($dir, $key));
+        if (!is_string($json) || $json === '') {
+            return null;
+        }
+        $scan = json_decode($json, true);
+        if (!is_array($scan) || !isset($scan['fn'], $scan['glob']) || !is_array($scan['fn']) || !is_array($scan['glob'])
+            || (isset($scan['call']) && !is_array($scan['call']))) {
+            return null;
+        }
+        return $scan;
+    }
+
+    /**
+     * Writes a scan to the store (temporary file, then rename). The first write of a request that
+     * finds the store at wpc_script_scan_store_cap files or more first drops the oldest down to
+     * three quarters of it. A failed write ends the store's writes for the request.
+     */
+    protected static function wpc_script_scan_keep($key, array $scan)
+    {
+        static $count = null;
+        static $broken = false;
+        $dir = self::wpc_script_scan_dir();
+        if ($dir === false || $broken) {
+            return;
+        }
+        if (!@is_dir($dir)) {
+            if (!@mkdir($dir, 0755, true) && !@is_dir($dir)) {
+                $broken = true;
+                return;
+            }
+            @file_put_contents($dir . 'index.html', '');
+        }
+        if ($count === null) {
+            $cap = max(10, (int) apply_filters('wpc_script_scan_store_cap', 2000));
+            $stored = @glob($dir . 's-*.json');
+            $count = is_array($stored) ? count($stored) : 0;
+            if ($count >= $cap) {
+                $count -= self::wpc_script_scan_evict($dir, (int) floor($cap * 3 / 4), 0);
+            }
+        }
+        $json = json_encode($scan);
+        $file = self::wpc_script_scan_file($dir, $key);
+        $tmp = $file . '.' . str_replace('.', '', uniqid('', true)) . '.tmp';
+        if (!is_string($json) || @file_put_contents($tmp, $json) !== strlen($json) || !@rename($tmp, $file)) {
+            @unlink($tmp);
+            $broken = true;
+            return;
+        }
+        $count++;
+    }
+
+    /**
+     * Drops stored scans older than $max_age seconds (0: no age limit), then the oldest until at
+     * most $keep remain. Returns how many files it removed.
+     */
+    public static function wpc_script_scan_evict($dir, $keep, $max_age)
+    {
+        $files = [];
+        $stored = @glob($dir . 's-*.json');
+        foreach (is_array($stored) ? $stored : [] as $file) {
+            $files[$file] = (int) @filemtime($file);
+        }
+        asort($files);
+        $removed = 0;
+        $left = count($files);
+        $cut = $max_age > 0 ? time() - (int) $max_age : 0;
+        foreach ($files as $file => $mtime) {
+            if ($mtime >= $cut && $left <= $keep) {
+                break;
+            }
+            if (@unlink($file)) {
+                $removed++;
+                $left--;
+            }
+        }
+        $temporary = @glob($dir . '*.tmp');
+        foreach (is_array($temporary) ? $temporary : [] as $file) {
+            if ((int) @filemtime($file) < time() - 3600) {
+                @unlink($file);
+            }
+        }
+        return $removed;
+    }
+
+    /** True for a script that is analytics, ads or consent: never pulled into the eager lane for a plugin call. */
+    protected function wpc_provider_refused($id, $src)
+    {
+        $haystack = strtolower($id . ' ' . $src);
+        $tokens = (array) apply_filters('wpc_provider_refuse_tokens', ['analytics', 'gtag', 'googletagmanager', 'gtm.js', 'fbevents',
+            'facebook', 'hotjar', 'clarity', 'mixpanel', 'segment', 'doubleclick', 'adsbygoogle', 'tiktok', 'linkedin',
+            'matomo', 'plausible', 'pinterest']);
+        return $this->checkKeyword($haystack, array_merge($tokens, self::wpc_consent_satellites()))
+            || $this->checkKeyword($haystack, (array) $this->wpc_src_force_delay)
+            || $this->checkKeyword($haystack, (array) $this->wpc_io_patterns)
+            || (!empty($this->userForceDelay) && $this->checkKeyword($src, $this->userForceDelay));
+    }
+
+    /**
+     * The same-site scripts of this page that are not kept, with what each defines:
+     * id => ['src' => url, 'fn' => names, 'glob' => names]. At most 60 files; jQuery's own
+     * carriers and refused scripts are left out.
+     */
+    protected function wpc_delayed_local_scans($kept_ids, $seen_src_ids)
+    {
+        $delayed = [];
+        foreach ((array) $seen_src_ids as $id => $src) {
+            $id = (string) $id;
+            if (count($delayed) >= 60) {
+                break;
+            }
+            if (isset($kept_ids[$id]) || substr($id, -3) !== '-js' || $src === '' || self::wpc_is_jquery_script_id($id)
+                || $this->wpc_provider_refused($id, (string) $src)) {
+                continue;
+            }
+            $file = $this->wpc_local_script_file($src);
+            $scan = $file !== '' ? self::wpc_script_scan($file) : null;
+            if ($scan !== null && ($scan['fn'] !== [] || $scan['glob'] !== [])) {
+                $delayed[$id] = ['src' => (string) $src, 'fn' => $scan['fn'], 'glob' => $scan['glob']];
+            }
+        }
+        return $delayed;
+    }
+
+    /**
+     * Method names a plugin call can never be told apart from: jQuery's own instance API and the
+     * names media and window objects share with it. A script that defines one of these
+     * (a jQuery bundle, an animate or pause override) is not pulled for a call to it.
+     */
+    protected static function wpc_provider_name_deny()
+    {
+        return array_flip((array) apply_filters('wpc_provider_name_deny', ['add', 'addBack', 'addClass', 'after', 'animate', 'append', 'appendTo',
+            'attr', 'before', 'bind', 'blur', 'change', 'children', 'clearQueue', 'click', 'clone', 'closest', 'contents', 'contextmenu', 'css',
+            'data', 'dblclick', 'delay', 'delegate', 'dequeue', 'detach', 'each', 'empty', 'end', 'eq', 'error', 'extend', 'fadeIn', 'fadeOut',
+            'fadeTo', 'fadeToggle', 'filter', 'find', 'finish', 'first', 'focus', 'focusin', 'focusout', 'get', 'has', 'hasClass', 'height',
+            'hide', 'hover', 'html', 'index', 'init', 'innerHeight', 'innerWidth', 'insertAfter', 'insertBefore', 'jquery', 'keydown', 'keypress',
+            'keyup', 'last', 'length', 'load', 'map', 'mousedown', 'mouseenter', 'mouseleave', 'mousemove', 'mouseout', 'mouseover', 'mouseup',
+            'next', 'nextAll', 'nextUntil', 'not', 'off', 'offset', 'offsetParent', 'one', 'outerHeight', 'outerWidth', 'parent', 'parents',
+            'parentsUntil', 'position', 'prepend', 'prependTo', 'prev', 'prevAll', 'prevUntil', 'promise', 'prop', 'push', 'pushStack', 'queue',
+            'ready', 'remove', 'removeAttr', 'removeClass', 'removeData', 'replaceAll', 'replaceWith', 'resize', 'scroll', 'scrollLeft',
+            'scrollTop', 'select', 'serialize', 'serializeArray', 'show', 'siblings', 'size', 'slice', 'slideDown', 'slideToggle', 'slideUp',
+            'sort', 'splice', 'stop', 'submit', 'text', 'toArray', 'toggle', 'toggleClass', 'trigger', 'triggerHandler', 'unbind', 'undelegate',
+            'unload', 'unwrap', 'val', 'width', 'wrap', 'wrapAll', 'wrapInner', 'live', 'die', 'andSelf', 'uniqueSort',
+            'pause', 'resume', 'play', 'close', 'open', 'reset', 'start', 'abort', 'cancel', 'clear', 'reload', 'replace']));
+    }
+
+    /**
+     * The delayed same-site scripts a kept script calls into: for each kept consumer (its file and
+     * its inline companions), a delayed provider whose .fn.NAME it calls as .NAME(. Answers
+     * provider id => ['by' => consumer id, 'name' => NAME], at most $room of them.
+     */
+    protected function wpc_plugin_provider_ids($kept_ids, $seen_src_ids, $delayed, $taken, $html, &$inline, $room)
+    {
+        $found = [];
+        $by_name = [];
+        $deny = self::wpc_provider_name_deny();
+        foreach ($delayed as $provider_id => $facts) {
+            if (isset($taken[$provider_id])) {
+                continue;
+            }
+            foreach ($facts['fn'] as $name => $unused) {
+                if (strlen($name) >= 4 && !isset($deny[$name])) {
+                    $by_name[$name][$provider_id] = true;
                 }
             }
         }
-        return array_keys($closure_ids);
+        if ($room <= 0 || empty($by_name)) {
+            return $found;
+        }
+        if ($inline === null) {
+            $inline = [];
+            if (is_string($html) && $html !== ''
+                && preg_match_all('/<script\b(?![^>]*\bsrc=)[^>]*\bid=["\']([^"\']+-js-(?:before|after|extra))["\'][^>]*>(.*?)<\/script>/is', $html, $bodies, PREG_SET_ORDER)) {
+                foreach ($bodies as $body) {
+                    if (strlen($body[2]) <= 65536) {
+                        $inline[$body[1]] = $body[2];
+                    }
+                }
+            }
+        }
+        foreach ($kept_ids as $kept_id) {
+            $kept_id = (string) $kept_id;
+            if (self::wpc_is_jquery_script_id($kept_id)) {
+                continue;
+            }
+            $called = [];
+            $own = [];
+            $file = isset($seen_src_ids[$kept_id]) && $seen_src_ids[$kept_id] !== '' ? $this->wpc_local_script_file($seen_src_ids[$kept_id]) : '';
+            $scan = $file !== '' ? self::wpc_script_scan($file, true) : null;
+            if ($scan !== null) {
+                $called = $scan['call'];
+                $own = $scan['fn'];
+            }
+            $handle = preg_replace('/-js$/', '', $kept_id);
+            foreach (['-js-before', '-js-after', '-js-extra'] as $suffix) {
+                if (isset($inline[$handle . $suffix]) && preg_match_all('/\.([A-Za-z_$][\w$]{3,})\s*\(/', $inline[$handle . $suffix], $calls)) {
+                    $called += array_flip($calls[1]);
+                }
+            }
+            if ($called === []) {
+                continue;
+            }
+            foreach ($by_name as $name => $providers) {
+                if (!isset($called[$name]) || isset($own[$name])) {
+                    continue;
+                }
+                foreach (array_keys($providers) as $provider_id) {
+                    if (isset($found[$provider_id])) {
+                        continue;
+                    }
+                    $found[$provider_id] = ['by' => $kept_id, 'name' => $name];
+                    if (count($found) >= $room) {
+                        return $found;
+                    }
+                }
+            }
+        }
+        return $found;
+    }
+
+    /**
+     * Persist which same-site delayed script defines which jQuery plugin or window global
+     * (option wpc_delay_v3_providers, 'fn:NAME' / 'g:NAME' => URL paths), written only when it
+     * changes, 200 names at most, 3 paths a name. The Delay JS report handler reads it to name the script a
+     * "NAME is not a function / not defined" error needs.
+     */
+    protected static function wpc_provider_index_note($delayed)
+    {
+        if (empty($delayed) || !function_exists('get_option') || !function_exists('update_option')) {
+            return;
+        }
+        $index = get_option('wpc_delay_v3_providers', []);
+        if (!is_array($index)) {
+            $index = [];
+        }
+        $before = $index;
+        foreach ($delayed as $facts) {
+            $path = '/' . ltrim((string) parse_url(self::wpc_script_origin_url($facts['src']), PHP_URL_PATH), '/');
+            foreach (['fn' => 'fn:', 'glob' => 'g:'] as $set => $prefix) {
+                foreach ($facts[$set] as $name => $unused) {
+                    $key = $prefix . $name;
+                    if (!isset($index[$key]) && count($index) >= 200) {
+                        continue;
+                    }
+                    $paths = isset($index[$key]) && is_array($index[$key]) ? $index[$key] : [];
+                    if (!in_array($path, $paths, true) && count($paths) < 3) {
+                        $paths[] = $path;
+                        unset($index[$key]);
+                        $index[$key] = $paths;
+                    }
+                }
+            }
+        }
+        if ($index !== $before) {
+            update_option('wpc_delay_v3_providers', $index, false);
+        }
     }
 
     // v7.23.15 — ONE LOADER TAG BUILDER. The uploads copy + retro-heal, the .159 self-probe,
@@ -1501,7 +2187,8 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
      *
      * Returns ['url', 'file', 'n', 'bytes'] or null when the bodies stay inline: under $min bytes
      * to move, no usable dir, or the file could not be written. Idempotent: the same bodies always
-     * name the same file, and an existing file is never rewritten.
+     * name the same file, and an existing file is never rewritten; reusing one whose time is more
+     * than a day old sets its time to now, so the trim sees it in use.
      */
     public static function wpc_registry_sidecar(array &$registry, $dir, $url, $min = 2048)
     {
@@ -1521,7 +2208,9 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if (!is_string($wpc_json) || $wpc_json === '') {
             return null;
         }
-        $wpc_name = 'r-' . md5($wpc_json) . '.json';
+        $wpc_key = 'r-' . md5($wpc_json);
+        $wpc_name = $wpc_key . '.js';
+        $wpc_json = '(window.wpcRegistrySidecar=window.wpcRegistrySidecar||{})[' . json_encode($wpc_key) . ']=' . $wpc_json . ';';
         if (!@is_dir($dir) && !@mkdir($dir, 0755, true)) {
             return null;
         }
@@ -1537,6 +2226,8 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             if (!@file_exists($dir . 'index.html')) {
                 @file_put_contents($dir . 'index.html', '');
             }
+        } elseif ((int) @filemtime($dir . $wpc_name) < time() - 86400) {
+            @touch($dir . $wpc_name);
         }
         foreach ($registry as $wpc_k => $wpc_e) {
             if (is_array($wpc_e) && !empty($wpc_e['id']) && isset($wpc_bodies[(string) $wpc_e['id']])) {
@@ -1548,9 +2239,18 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
     }
 
     /**
-     * Daily: drops sidecars no cached document can still name. The page cache holds a document
-     * for a day and an edge for two, so fourteen days is a generous ceiling; a directory that has
-     * grown past 5000 files is trimmed to two days instead.
+     * Daily: drops the registry sidecars nothing can still name. A sidecar stays while it is
+     * younger than fourteen days (two once the directory holds more than 5000 files; a render that
+     * reuses one refreshes its time once a day) and while a stored page copy names it: the `s:`
+     * token of the copy's links record (wpc_copy_links_scan, read through wpc_copy_page_records).
+     * The records are read by a walk of the page cache in slices of wpc_delay_sidecar_trim_budget
+     * seconds (5), resumed a minute later from the folder it stopped at (option
+     * wpc_delay_sidecar_trim_walk, at most a day old); nothing is deleted before a walk has read
+     * every record, and a sidecar whose time moved during the walk stays. One walk judges at most
+     * the wpc_delay_sidecar_trim_batch (2000) oldest candidates. Where the page cache's records
+     * cannot be read (no page cache constant, no record reader) no sidecar is deleted. Stored
+     * script scans older than fourteen days go too, and the oldest beyond
+     * wpc_script_scan_store_cap. Returns how many sidecars it removed.
      */
     public static function wpc_registry_sidecar_trim()
     {
@@ -1558,23 +2258,119 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if (!$wpc_p || !@is_dir($wpc_p['dir'])) {
             return 0;
         }
-        $wpc_files = (array) @glob($wpc_p['dir'] . 'r-*.json');
-        $wpc_days = count($wpc_files) > 5000 ? 2 : 14;
-        $wpc_cut = time() - $wpc_days * 86400;
+        $wpc_walk = get_option('wpc_delay_sidecar_trim_walk', false);
+        if (!is_array($wpc_walk) || !isset($wpc_walk['t'], $wpc_walk['cut'], $wpc_walk['left']) || !is_array($wpc_walk['left'])
+            || time() - (int) $wpc_walk['t'] > 86400) {
+            $wpc_files = array_merge((array) @glob($wpc_p['dir'] . 'r-*.json'), (array) @glob($wpc_p['dir'] . 'r-*.js'));
+            $wpc_days = count($wpc_files) > 5000 ? 2 : 14;
+            $wpc_cut = time() - $wpc_days * 86400;
+            $wpc_candidates = [];
+            foreach ($wpc_files as $wpc_f) {
+                $wpc_m = @filemtime((string) $wpc_f);
+                if ($wpc_m !== false && $wpc_m < $wpc_cut) {
+                    $wpc_candidates[basename((string) $wpc_f)] = $wpc_m;
+                }
+            }
+            asort($wpc_candidates);
+            $wpc_batch = max(1, (int) apply_filters('wpc_delay_sidecar_trim_batch', 2000));
+            $wpc_walk = ['t' => time(), 'after' => '', 'cut' => $wpc_cut, 'days' => $wpc_days, 'named' => 0, 'read' => 0,
+                'left' => array_keys(array_slice($wpc_candidates, 0, $wpc_batch, true))];
+        }
+        $wpc_done = $wpc_walk['left'] === [] ? true
+            : self::wpc_registry_sidecar_walk($wpc_walk, (float) apply_filters('wpc_delay_sidecar_trim_budget', 5.0));
         $wpc_n = 0;
-        foreach ($wpc_files as $wpc_f) {
-            $wpc_m = @filemtime($wpc_f);
-            if ($wpc_m !== false && $wpc_m < $wpc_cut && @unlink($wpc_f)) {
-                $wpc_n++;
+        if ($wpc_done === false) {
+            update_option('wpc_delay_sidecar_trim_walk', $wpc_walk, false);
+            if (function_exists('wp_schedule_single_event')) {
+                wp_schedule_single_event(time() + 60, 'wpc_delay_sidecar_trim_hook');
+            }
+        } else {
+            delete_option('wpc_delay_sidecar_trim_walk');
+            if ($wpc_done === true) {
+                foreach ($wpc_walk['left'] as $wpc_name) {
+                    $wpc_f = $wpc_p['dir'] . (string) $wpc_name;
+                    if (!preg_match('/^r-[0-9a-f]{32}\.(?:js|json)$/', (string) $wpc_name)) {
+                        continue;
+                    }
+                    clearstatcache(true, $wpc_f);
+                    $wpc_m = @filemtime($wpc_f);
+                    if ($wpc_m !== false && $wpc_m < (int) $wpc_walk['cut'] && @unlink($wpc_f)) {
+                        $wpc_n++;
+                    }
+                }
             }
         }
         foreach ((array) @glob($wpc_p['dir'] . '*.tmp') as $wpc_f) {
-            @unlink($wpc_f);
+            if ((int) @filemtime((string) $wpc_f) < time() - 3600) {
+                @unlink((string) $wpc_f);
+            }
         }
-        if (function_exists('wpc_cache_first_log') && $wpc_n) {
-            wpc_cache_first_log('delay-sidecar-trim', '', '', ['removed' => $wpc_n, 'kept' => count($wpc_files) - $wpc_n, 'days' => $wpc_days]);
+        $wpc_scan_dir = self::wpc_script_scan_dir();
+        $wpc_scans = $wpc_scan_dir !== false && @is_dir($wpc_scan_dir)
+            ? self::wpc_script_scan_evict($wpc_scan_dir, max(10, (int) apply_filters('wpc_script_scan_store_cap', 2000)), 14 * 86400) : 0;
+        if (function_exists('wpc_cache_first_log') && ($wpc_n || $wpc_scans || $wpc_done !== true || (int) $wpc_walk['named'] > 0)) {
+            wpc_cache_first_log('delay-sidecar-trim', '', '', ['removed' => $wpc_n, 'named' => (int) $wpc_walk['named'], 'days' => (int) $wpc_walk['days'],
+                'scans' => $wpc_scans, 'walk' => $wpc_done === true ? 'done' : ($wpc_done === false ? 'resume' : 'no-records')]);
         }
         return $wpc_n;
+    }
+
+    /**
+     * One slice of the trim's walk of the page cache: the page folders after $walk['after'], in
+     * name order, each read through wpc_copy_page_records; every sidecar in $walk['left'] that a
+     * record names leaves it ($walk['named'] counts them, $walk['read'] counts the records read).
+     * True when the walk reached the end having read at least one record, or nothing is left to
+     * look for; false when it stopped at the time budget ($walk['after'] holds the last folder
+     * read); null when this process cannot read the records, there is no page cache, or the walk
+     * read none (copies held only by another cache or an edge cannot be seen, so nothing goes).
+     */
+    protected static function wpc_registry_sidecar_walk(array &$walk, $budget)
+    {
+        if (!defined('WPS_IC_CACHE') || !function_exists('wpc_copy_page_records') || !function_exists('wpc_copy_page_folders')) {
+            return null;
+        }
+        $root = rtrim(WPS_IC_CACHE, '/') . '/';
+        if (!@is_dir($root)) {
+            return null;
+        }
+        $entries = @scandir($root);
+        if (!is_array($entries)) {
+            return null;
+        }
+        $left = array_fill_keys(array_map('strval', $walk['left']), true);
+        $after = (string) $walk['after'];
+        $started = microtime(true);
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..' || strpos($entry, '.') !== false || $entry === 'css' || $entry === 'js'
+                || ($after !== '' && strcmp($entry, $after) <= 0) || !is_dir($root . $entry)) {
+                continue;
+            }
+            foreach (wpc_copy_page_folders($root, $entry) as $folder) {
+                $records = wpc_copy_page_records($root . $folder);
+                $walk['read'] = (int) ($walk['read'] ?? 0) + (int) $records['ledgers'];
+                foreach ($records['tokens'] as $token) {
+                    if (strpos($token, 's:') === 0 && isset($left[substr($token, 2)])) {
+                        unset($left[substr($token, 2)]);
+                        $walk['named'] = (int) $walk['named'] + 1;
+                    }
+                }
+            }
+            $after = $entry;
+            if ($left === []) {
+                break;
+            }
+            if (microtime(true) - $started >= (float) $budget) {
+                $walk['after'] = $after;
+                $walk['left'] = array_keys($left);
+                return false;
+            }
+        }
+        $walk['after'] = $after;
+        $walk['left'] = array_keys($left);
+        if ($left !== [] && (int) ($walk['read'] ?? 0) === 0) {
+            return null;
+        }
+        return true;
     }
 
     /**
@@ -1801,6 +2597,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         $this->wpc_sync_jquery = (bool) preg_match('/<script\b[^>]*\bsrc=["\'][^"\']*(?:wpbf|page-builder-framework|sb-youtube)[^"\']*\.js/i', $html);
 
         $this->wpc_apply_builder_runtime_keeps($html);
+        $this->wpc_first_screen_sliders = apply_filters('wpc_first_screen_slider_keep', true) ? self::wpc_breakdance_first_screen_sliders($html) : [];
 
         // v7.21.74 — A PARSE-TIME ROOT-VARIABLE SETTER IS A STYLESHEET IN SCRIPT'S CLOTHING.
         // Hozjan/falknerei: the theme's custom.js computes --fluid from the viewport and
@@ -1965,8 +2762,12 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         // freezes the measured read when a NEWER measured gen is on disk — the
         // aggressive path is governed by its own boot-watchdog, not this switch.
         $manifest_off_at = (int) get_option('wpc_delay_v3_manifest_off', 0);
-        $wpc_manifest_on = ($manifest_off_at <= 0 || self::wpc_measured_delay_newer_than($manifest_off_at))
-            && apply_filters('wpc_delay_v3_manifest', true);
+        $wpc_promo_site = ($manifest_off_at > 0 && !self::wpc_measured_delay_newer_than($manifest_off_at)) ? 'manifest_off' : '';
+        $wpc_manifest_on = $wpc_promo_site === '' && apply_filters('wpc_delay_v3_manifest', true);
+        $wpc_promo_skipped = [];
+        if ($wpc_manifest_on) {
+            $wpc_promo_site = 'no-delay-json';
+        }
         if ($wpc_manifest_on && class_exists('wps_ic_url_key') && defined('WPS_IC_CRITICAL')) {
             try {
                 $wpc_mk = (new wps_ic_url_key())->setup('');
@@ -1974,6 +2775,12 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 if ($wpc_mf && @is_readable($wpc_mf)) {
                     $wpc_m = json_decode((string) @file_get_contents($wpc_mf), true);
                     if (is_array($wpc_m)) {
+                        $wpc_promo_site = '';
+                        foreach (array_slice(self::wpc_manifest_keep_overflow($wpc_m), 0, 40) as $wpc_overflow) {
+                            if (strpos($html, $wpc_overflow) !== false) {
+                                $wpc_promo_skipped[$wpc_overflow] = 'list-truncated';
+                            }
+                        }
                         // Measured gate: schema_epoch>=N (authoritative) OR ceiling{}
                         // presence (legacy proxy), AND a render_critical KEY (the ATF
                         // keep list; empty array counts = "no script is ATF-critical").
@@ -2092,6 +2899,8 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                     $name_key = strtolower((string) $manifest_name);
                     if (isset($basename_paths[$name_key]) && count($basename_paths[$name_key]) === 1) {
                         $this->manifest_paths[array_key_first($basename_paths[$name_key])] = true;
+                    } elseif (isset($basename_paths[$name_key])) {
+                        $wpc_promo_skipped[$name_key] = 'shared-basename';
                     }
                 }
             }
@@ -2217,6 +3026,9 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 $wpc_changed = false;
                 foreach (array_keys($wpc_candidates) as $wpc_cid) {
                     if (isset($this->promoted_src_ids[$wpc_cid]) || count($this->promoted_src_ids) >= $wpc_promo_cap) {
+                        if (!isset($this->promoted_src_ids[$wpc_cid])) {
+                            $wpc_promo_skipped[strtolower((string) ($wpc_cand_base[$wpc_cid] ?? $wpc_cid))] = 'cap';
+                        }
                         continue;
                     }
                     $wpc_deps = $wpc_deps_all(substr($wpc_cid, 0, -3));
@@ -2278,6 +3090,8 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                             }
                         }
                         $wpc_changed = true;
+                    } elseif ($wpc_ok) {
+                        $wpc_promo_skipped[strtolower((string) ($wpc_cand_base[$wpc_cid] ?? $wpc_cid))] = 'cap';
                     }
                 }
                 if (!$wpc_changed) {
@@ -2301,6 +3115,20 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 }
             } catch (\Throwable $e) {
             }
+        }
+        try {
+            if ($wpc_promo_site === 'manifest_off') {
+                self::wpc_promotion_clear();
+            }
+            $wpc_promo_applied = array_values(array_intersect_key($wpc_cand_base, $this->promoted_src_ids));
+            foreach ($wpc_promo_applied as $wpc_promo_name) {
+                unset($wpc_promo_skipped[strtolower((string) $wpc_promo_name)]);
+            }
+            $wpc_promo_key = class_exists('wps_ic_url_key') ? ltrim((string) (new wps_ic_url_key())->setup(''), '/') : '';
+            if ($wpc_promo_key !== '' && ($wpc_promo_site !== '' || $wpc_promo_applied !== [] || $wpc_promo_skipped !== [] || get_option('wpc_delay_v3_promotion_log', false) !== false)) {
+                self::wpc_promotion_note($wpc_promo_key, $wpc_promo_applied, $wpc_promo_skipped, $wpc_promo_site);
+            }
+        } catch (\Throwable $e) {
         }
 
 
@@ -2479,7 +3307,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 if (empty($wpc_a['id'])) {
                     continue;
                 }
-                $seen_src_ids[(string) $wpc_a['id']] = true;
+                $seen_src_ids[(string) $wpc_a['id']] = isset($wpc_a['src']) ? html_entity_decode((string) $wpc_a['src']) : '';
                 if (preg_match('/^(.+)-webpack(?:-pro)?-runtime-js$/', (string) $wpc_a['id'], $wpc_fm)) {
                     $wpc_runtime_tags[(string) $wpc_a['id']] = $wpc_fm[1];
                 }
@@ -2589,7 +3417,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         // jQuery re-runs nothing). WordPress already knows the dependency edge (uael-nav-menu
         // depends on jquery); the walk resolves alias handles (jquery -> jquery-core) because
         // every dep re-enters the stack whether or not its own tag is on the page.
-        foreach ($this->wpc_keep_dependency_closure($wpc_excluded_ids, $seen_src_ids) as $closure_dep_id) {
+        foreach ($this->wpc_keep_dependency_closure($wpc_excluded_ids, $seen_src_ids, $html) as $closure_dep_id) {
             $this->companion_ids[$closure_dep_id]      = true;
             $this->wpc_family_keep_ids[$closure_dep_id] = true;
             $wpc_excluded_ids[$closure_dep_id]         = true;
@@ -2820,8 +3648,24 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         $html = self::wpc_enforce_defer_split_point($html);
         $html = $this->wpc_module_hoist($html);
         $html = $this->wpc_lazy_load_consent_css($html);
+        $html = self::wpc_embed_load_recorder($html);
 
         return $html;
+    }
+
+    public static function wpc_embed_load_recorder($html)
+    {
+        if (!is_string($html) || $html === '' || strpos($html, 'id="wpc-embed-loads"') !== false
+            || !apply_filters('wpc_embed_load_recorder', true)
+            || !preg_match('/<head\b[^>]*>/i', $html, $wpc_m, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $wpc_tag = '<script data-nodefer="1" id="wpc-embed-loads">(function(){try{var s=window.wpcEmbedLoads=new WeakMap,'
+            . 'b=window.wpcEmbedBefore=new WeakSet,l=document.querySelectorAll("iframe,frame,object,embed");for(var i=0;i<l.length;i++)b.add(l[i]);'
+            . 'document.addEventListener("load",function(e){var t=e.target,n=t&&t.tagName;'
+            . 'if(n==="IFRAME"||n==="FRAME"||n==="OBJECT"||n==="EMBED")s.set(t,t.src||t.data||"")},true)}catch(x){}})();</script>';
+        $wpc_at = $wpc_m[0][1] + strlen($wpc_m[0][0]);
+        return substr($html, 0, $wpc_at) . $wpc_tag . substr($html, $wpc_at);
     }
 
     /**
@@ -3057,6 +3901,65 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return $pairs;
     }
 
+    private static function wpc_blocking_script_handles($html)
+    {
+        $handles = [];
+        if (!preg_match_all('/<script\b([^>]*)>/i', (string) $html, $tags)) {
+            return $handles;
+        }
+        foreach ($tags[1] as $attrs) {
+            $bare = (string) preg_replace('/(["\'])(?:(?!\1).)*\1/s', ' ', $attrs);
+            if (!preg_match('/\bsrc\s*=/i', $attrs) || preg_match('/(?<![-\w=])(?:defer|async|nomodule)(?![-\w])/i', $bare)) {
+                continue;
+            }
+            if (preg_match('/\btype\s*=\s*["\']?([^"\'\s>]+)/i', $attrs, $type)
+                && !preg_match('#^(?:text|application)/(?:x-)?(?:java|ecma)script$#i', $type[1])) {
+                continue;
+            }
+            if (preg_match('/\bid=["\']([^"\']+)-js["\']/i', $attrs, $id)) {
+                $handles[strtolower($id[1])] = 1;
+            }
+        }
+        return $handles;
+    }
+
+    private static function wpc_handle_has_blocking_dependant($handle, array $blocking_handles)
+    {
+        if ($handle === '' || $blocking_handles === []) {
+            return false;
+        }
+        $ws = (!empty($GLOBALS['wp_scripts']) && is_object($GLOBALS['wp_scripts'])
+            && !empty($GLOBALS['wp_scripts']->registered) && is_array($GLOBALS['wp_scripts']->registered))
+            ? $GLOBALS['wp_scripts'] : null;
+        if ($ws === null) {
+            return true;
+        }
+        $registered = array_change_key_case($ws->registered, CASE_LOWER);
+        foreach (array_keys($blocking_handles) as $blocking) {
+            if ($blocking === $handle) {
+                continue;
+            }
+            $seen = [];
+            $stack = [$blocking];
+            while ($stack && count($seen) < 400) {
+                $current = array_pop($stack);
+                if (isset($seen[$current])) {
+                    continue;
+                }
+                $seen[$current] = 1;
+                $deps = isset($registered[$current]) && is_object($registered[$current]) ? (array) $registered[$current]->deps : [];
+                foreach ($deps as $dep) {
+                    $dep = strtolower((string) $dep);
+                    if ($dep === $handle) {
+                        return true;
+                    }
+                    $stack[] = $dep;
+                }
+            }
+        }
+        return false;
+    }
+
     private static function wpc_enforce_defer_split_point($html)
     {
         if (!is_string($html) || $html === '' || !apply_filters('wpc_defer_split', true)) {
@@ -3080,7 +3983,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             if (preg_match_all('/<script\b[^>]*\bsrc=[^>]*>/i', $html, $tag_matches, PREG_OFFSET_CAPTURE)) {
                 foreach ($tag_matches[0] as $tag_match) {
                     $tag = $tag_match[0];
-                    if (preg_match('/\b(?:defer|async)\b/i', $tag)) {
+                    if (preg_match('/(?<![-\w=])(?:defer|async)(?![-\w])/i', (string) preg_replace('/(["\'])(?:(?!\1).)*\1/s', ' ', $tag))) {
                         continue;
                     }
                     if (preg_match('/type=["\']([^"\']+)["\']/i', $tag, $type_match)
@@ -3097,17 +4000,14 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             if ($split_offset < 0) {
                 return $html;
             }
-            // v7.21.58 — CORE'S OWN DEFER PROOF IS NARROWER THAN OUR SPLIT. The head-slice
-            // strip exists because SOME parse-time inline below may call a keep's API — but a
-            // tag carrying data-wp-strategy="defer" passed WP core's filter_eligible_strategies
-            // (every dependent in the queue deferrable, no incompatible -after), and plugin-off
-            // WordPress serves it DEFERRED. Un-deferring it makes the page MORE blocking than
-            // baseline (ctfx: js-cookie + blockUI re-blocked 410-890ms of every first paint).
-            // Spare exactly those tags; everything else in the head slice still strips.
-            $head_slice = preg_replace_callback('/<script\b[^>]*>/i', function ($open_tag) {
-                if (strpos($open_tag[0], ' defer data-wpc-defer="1"') === false
-                    || stripos($open_tag[0], 'data-wp-strategy="defer"') !== false
-                    || stripos($open_tag[0], "data-wp-strategy='defer'") !== false) {
+            $blocking_handles = self::wpc_blocking_script_handles($html);
+            $head_slice = preg_replace_callback('/<script\b[^>]*>/i', function ($open_tag) use ($blocking_handles) {
+                if (strpos($open_tag[0], ' defer data-wpc-defer="1"') === false) {
+                    return $open_tag[0];
+                }
+                if ((stripos($open_tag[0], 'data-wp-strategy="defer"') !== false || stripos($open_tag[0], "data-wp-strategy='defer'") !== false)
+                    && preg_match('/\bid=["\']([^"\']+)-js["\']/i', $open_tag[0], $strategy_id)
+                    && !self::wpc_handle_has_blocking_dependant(strtolower($strategy_id[1]), $blocking_handles)) {
                     return $open_tag[0];
                 }
                 return str_replace(' defer data-wpc-defer="1"', '', $open_tag[0]);

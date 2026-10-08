@@ -190,7 +190,17 @@ class wps_ic_integrations extends wps_ic
             foreach ($this->int_option['admin_hooks'] as $class => $hooks) {
                 $plugin_instance = new $class();
                 if (!empty($hooks) && is_array($hooks)) {
+                    $owned = function_exists('wpc_builder_file_clear_hooks') ? wpc_builder_file_clear_hooks() : [];
                     foreach ($hooks as $hook => $data) {
+                        // A hook a builder fires after deleting its generated files has one owner,
+                        // the hard purge in warm.php. This list is an option that init() rewrites
+                        // only on some admin requests, so after an update it can still carry the
+                        // soft listener an older version registered (rig, 2026-10-01: Beaver's
+                        // clear ran that listener first and the hard purge found the request
+                        // already marked cleared).
+                        if (isset($owned[$hook])) {
+                            continue;
+                        }
                         add_action($hook, [$plugin_instance, $data['callback']], $data['priority'], $data['args']);
                     }
                 }

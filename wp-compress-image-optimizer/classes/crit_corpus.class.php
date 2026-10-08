@@ -668,6 +668,9 @@ class wps_ic_crit_corpus
             $content = preg_replace_callback('/src:\s*url\("([^"]+\.woff2)"\)\s*format\(\s*\'woff2\'\s*\);/is', [$this, 'changeFontToCDN'], $content);
         }
 
+        if (function_exists('wpc_css_isolate_sheet')) {
+            $content = wpc_css_isolate_sheet((string) $content);
+        }
         $this->current_file .= "/* SCRIPT : $src */" . PHP_EOL;
         // Wrap content in media query if it exists
         if ($media_query) {

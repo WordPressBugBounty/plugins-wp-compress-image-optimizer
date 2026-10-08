@@ -1,4 +1,7 @@
 <?php
+if (!current_user_can('manage_options')) {
+    return;
+}
 // Rendering this page writes nothing: the diagnostic log is armed only by the switch below
 // (wpc_diag_window_request), never by opening the settings page.
 global $wps_ic, $wpdb;
@@ -90,7 +93,7 @@ if (!empty($_GET['delete_option'])) {
     // Even past the nonce gate, only plugin-owned options are deletable — an admin
     // mis-click can no longer remove siteurl/home/active_plugins.
     $optionToDelete = sanitize_text_field((string) $_GET['delete_option']);
-    if (preg_match('/^(wps_ic|wpc_|ic_|wps_optimizejs|wps_critical|wps_no_content)/', $optionToDelete)) {
+    if (preg_match('/^(wps_ic|wpc_|ic_|wps_optimizejs|wps_critical|wps_no_content)/', $optionToDelete) && !(class_exists('wps_ic_users') && wps_ic_users::isProtectedOption($optionToDelete))) {
         delete_option($optionToDelete);
     } else {
         echo '<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:8px 12px;border-radius:6px;margin:10px 0;font-size:12px;">Refused: only WP Compress options may be deleted here.</div>';

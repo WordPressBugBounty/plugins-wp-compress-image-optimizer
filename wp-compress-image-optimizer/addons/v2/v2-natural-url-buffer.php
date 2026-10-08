@@ -48,6 +48,7 @@ if (!function_exists('wpc_v2_natural_url_buffer_start')) {
         if (defined('WP_CLI') && WP_CLI) return;
         if (defined('WPC_IS_BG_SWAP') && WPC_IS_BG_SWAP) return;
         if (!empty($_GET['wpc_no_buffer'])) return;
+        if (function_exists('wpc_request_excluded_from_plugin') && wpc_request_excluded_from_plugin() !== false) return;
         if (defined('WPC_NEGOTIATED_KILL') && WPC_NEGOTIATED_KILL) return;
 
 

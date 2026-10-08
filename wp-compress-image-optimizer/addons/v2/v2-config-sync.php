@@ -1532,13 +1532,10 @@ if (!function_exists('wpc_v2_zone_origin_proved')) {
 
 if (!function_exists('wpc_v2_zone_origin_probe_run')) {
     /**
-     * Measure "this zone serves THIS site's bytes": fetch an uploads file unique to this
-     * origin through the zone's m:0 passthrough form and byte-compare against local disk.
-     * WP-core paths cannot distinguish origins (every site ships the same style.min.css) —
-     * only an uploads asset proves the zone pulls from here, which is exactly the clone/
-     * migration case the env fingerprint exists to catch. Bounded: one fetch, 5s timeout,
-     * 1h throttle, admin/cron contexts only (callers gate). Mints a durable 12h proof on
-     * match; on mismatch or any failure the proof is CLEARED, never left stale.
+     * Measure "this zone serves THIS site's bytes": write a one-time text file with a random
+     * token into uploads, fetch it through the zone's plain path, compare, delete it. Bounded:
+     * one fetch, 5s timeout, 1h throttle, admin/cron contexts only (callers gate). Mints a
+     * durable 12h proof on match; a 200 with other bytes clears it.
      */
     function wpc_v2_zone_origin_probe_run()
     {
@@ -1553,39 +1550,37 @@ if (!function_exists('wpc_v2_zone_origin_probe_run')) {
             set_transient('wpc_v2_origin_probe_bk', 1, 3600);
         }
         $zone = strtolower(trim((string) get_option('ic_cdn_zone_name', '')));
-        if ($zone === '' || !function_exists('get_posts')) {
+        if ($zone === '' || !function_exists('wp_upload_dir')) {
             return false;
         }
-        $ids = get_posts(['post_type' => 'attachment', 'post_mime_type' => 'image', 'numberposts' => 20, 'fields' => 'ids', 'orderby' => 'ID', 'order' => 'ASC', 'suppress_filters' => true]);
-        $path = ''; $url = '';
-        foreach ((array) $ids as $id) {
-            $p = function_exists('get_attached_file') ? get_attached_file($id) : '';
-            if ($p && @is_file($p) && @filesize($p) > 256) {
-                $u = wp_get_attachment_url($id);
-                if ($u) { $path = $p; $url = $u; break; }
-            }
-        }
-        if ($path === '' || $url === '') {
+        $uploads = wp_upload_dir(null, false);
+        if (!is_array($uploads) || empty($uploads['basedir']) || empty($uploads['baseurl'])
+            || !@is_dir($uploads['basedir']) || !@is_writable($uploads['basedir'])) {
             return false;
         }
-        $resp = wp_remote_get('https://' . $zone . '/m:0/a:' . $url, ['timeout' => 5, 'redirection' => 2]);
+        $token = function_exists('random_bytes') ? bin2hex(random_bytes(16)) : md5(uniqid('', true) . mt_rand());
+        $name = 'wpc-origin-proof-' . substr($token, 0, 12) . '.txt';
+        $path = rtrim((string) $uploads['basedir'], '/\\') . '/' . $name;
+        $urlPath = (string) parse_url(rtrim((string) $uploads['baseurl'], '/') . '/' . $name, PHP_URL_PATH);
+        if ($urlPath === '' || @file_put_contents($path, $token) !== strlen($token)) {
+            @unlink($path);
+            return false;
+        }
+        $resp = wp_remote_get('https://' . $zone . $urlPath, ['timeout' => 5, 'redirection' => 0]);
+        @unlink($path);
         $ok = false;
         $definitive_failure = false;
         if (!is_wp_error($resp) && (int) wp_remote_retrieve_response_code($resp) === 200) {
-            $body = (string) wp_remote_retrieve_body($resp);
-            $ok = ($body !== '' && sha1($body) === (string) @sha1_file($path));
-            // A 200 with foreign bytes is the clone/migration signature — the only answer
-            // that DISPROVES the binding. Timeouts, 5xx and non-200s are the outage this
-            // proof exists to bridge; they leave the standing proof to its own 12h TTL.
+            $ok = ((string) wp_remote_retrieve_body($resp) === $token);
             $definitive_failure = !$ok;
         }
         if ($ok) {
-            update_option('wpc_v2_zone_origin_proof', ['ok' => 1, 'at' => time(), 'zone' => $zone, 'asset' => basename($path)], false);
+            update_option('wpc_v2_zone_origin_proof', ['ok' => 1, 'at' => time(), 'zone' => $zone, 'asset' => $name], false);
         } elseif ($definitive_failure) {
             update_option('wpc_v2_zone_origin_proof', [], false);
         }
         if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log('zone-origin-probe', '', '', ['ok' => $ok ? 1 : 0, 'def' => $definitive_failure ? 1 : 0, 'asset' => basename($path)]);
+            wpc_cache_first_log('zone-origin-probe', '', '', ['ok' => $ok ? 1 : 0, 'def' => $definitive_failure ? 1 : 0, 'asset' => $name]);
         }
         return $ok;
     }
@@ -1618,11 +1613,18 @@ if (!function_exists('wpc_v2_cdn_canary_url')) {
 }
 
 if (!function_exists('wpc_v2_auto_disable_purge')) {
-    /** Reuse WPC's canonical full purge — runs in the admin-ajax handler context. */
-    function wpc_v2_auto_disable_purge()
+    /**
+     * Purges every HTML layer (local copies, foreign page caches, Varnish, Cloudflare) when the plugin
+     * stops or resumes emitting zone URLs. Stopping purges hard: a soft purge keeps serving the stored
+     * copy while it rewarms, and that copy links the URLs the zone just failed on. Resuming passes
+     * null (soft): the stored copies link the origin, which still works while they rewarm.
+     */
+    function wpc_v2_auto_disable_purge($mode = 'hard')
     {
-        if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
-            wps_ic_cache::removeHtmlCacheFiles('all');
+        if (function_exists('wpc_r2_purge_html_layers')) {
+            wpc_r2_purge_html_layers($mode);
+        } elseif (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+            wps_ic_cache::removeHtmlCacheFiles('all', '', '', $mode);
         } elseif (function_exists('do_action')) {
             wpc_purge_foreign_caches(false, 'config-sync');
         }
@@ -1678,7 +1680,7 @@ if (!function_exists('wpc_v2_record_liveness')) {
                     if (function_exists('wpc_belt_receipt')) {
                         wpc_belt_receipt('cdn-liveness-repromoted', ['zone' => (string) $zone, 'oks' => $oks, 'down_s' => $since_flip], false, '');
                     }
-                    wpc_v2_auto_disable_purge();
+                    wpc_v2_auto_disable_purge(null);
                 }
             }
         } else {
@@ -1986,15 +1988,25 @@ if (!function_exists('wpc_v2_asset_mime_probe_run')) {
             // zone and must never revoke. Two consecutive strikes, so one blip cannot flap the shape.
             $probe_code = is_wp_error($probe_r) ? 0 : (int) wp_remote_retrieve_response_code($probe_r);
             $probe_def  = ($probe_code >= 400) || ($probe_code === 200 && (strpos($probe_ct, 'text/css') !== 0 || !$probe_css));
+            // A host's bot or country wall (an HTML page where a stylesheet was asked for, or 403 / 418
+            // / 429) is not a blip: it answers every pull the same way, and the CDN may keep it as the
+            // asset (gleninnesnews.com.au: SiteGround's sgcaptcha page held in Perma-Cache as a .css
+            // and a .woff2, its 418 "Country Blocked" page served for the rest). One strike revokes it.
+            $probe_challenged = in_array($probe_code, [403, 418, 429], true)
+                || ($probe_code >= 200 && $probe_code < 300 && strpos($probe_ct, 'text/html') === 0);
             if ($probe_def && (string) get_option('wpc_v2_cf_asset_mime_ok', '') === '1') {
                 $probe_strikes = (int) get_option('wpc_v2_cf_asset_mime_strikes', 0) + 1;
-                if ($probe_strikes >= (int) apply_filters('wpc_natural_proof_strikes', 2)) {
+                if ($probe_challenged || $probe_strikes >= (int) apply_filters('wpc_natural_proof_strikes', 2)) {
                     delete_option('wpc_v2_cf_asset_mime_ok');
                     delete_option('wpc_v2_cf_asset_mime_ts');
                     delete_option('wpc_v2_cf_asset_mime_strikes');
                     if (function_exists('wpc_cache_first_log')) {
-                        wpc_cache_first_log('natural-proof', '', '', ['revoked' => 1, 'code' => $probe_code]);
+                        wpc_cache_first_log('natural-proof', '', '', ['revoked' => 1, 'code' => $probe_code, 'challenged' => $probe_challenged ? 1 : 0]);
                     }
+                    // Revoking only changes what the next render emits. Every stored page still links its
+                    // css/js/fonts on the zone, so without a purge the broken copies keep serving until
+                    // something else clears them (gleninnesnews.com.au kept them until a manual purge).
+                    wpc_v2_auto_disable_purge();
                 } else {
                     update_option('wpc_v2_cf_asset_mime_strikes', $probe_strikes, false);
                 }

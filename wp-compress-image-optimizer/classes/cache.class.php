@@ -126,13 +126,7 @@ class wps_ic_cache
     public static function purgeBreeze()
     {
         if (defined('BREEZE_VERSION')) {
-            global $wp_filesystem;
-            require_once(ABSPATH . 'wp-admin/includes/file.php');
-
-            WP_Filesystem();
-
-            $cache_path = breeze_get_cache_base_path(is_network_admin(), true);
-            $wp_filesystem->rmdir(untrailingslashit($cache_path), true);
+            wpc_fs_remove_tree(breeze_get_cache_base_path(is_network_admin(), true), true);
 
             if (function_exists('wp_cache_flush')) {
                 if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('breeze'); } else { @wp_cache_flush(); }
@@ -167,11 +161,7 @@ class wps_ic_cache
 
     public static function removeDirectory($path)
     {
-        $path = rtrim($path, '/');
-        $files = glob($path . '/*');
-        foreach ($files as $file) {
-            is_dir($file) ? self::removeDirectory($file) : unlink($file);
-        }
+        wpc_fs_remove_tree($path);
     }
 
     public static function purgeHooks()
@@ -191,12 +181,14 @@ class wps_ic_cache
                         'wp_update_nav_menu',
                         'update_option_theme_mods_' . get_option('stylesheet'),
                         'et_core_static_resources_removed',
-                        'fl_builder_cache_cleared',
                         ''];
+                    $builder_file_clears = function_exists('wpc_builder_file_clear_hooks') ? wpc_builder_file_clear_hooks() : [];
                     foreach (self::$purge_rules['hooks'] as $hook) {
-                        if ($hook === 'elementor/core/files/clear_cache') {
-                            // Owned by wpc_elementor_css_cleared() (warm.php), which purges hard:
-                            // Elementor has just deleted the files every cached page links.
+                        if (isset($builder_file_clears[$hook])) {
+                            // Owned by the function the table names (warm.php), which purges hard:
+                            // the builder has just deleted the files every cached page links, and
+                            // a soft purge would keep serving copies that link them (toulouse
+                            // .catholique.fr, 2026-10-01: 114 bb-plugin/cache 404s in a day).
                             continue;
                         }
                         if ($hook === 'et_core_static_resources_removed') {
@@ -355,7 +347,13 @@ class wps_ic_cache
             $post_id = 'all';
         }
 
-        if (self::is_cache_cleared()) {
+        $softPurge = function_exists('wpc_purge_is_soft') && wpc_purge_is_soft($purge_mode);
+        // One purge per request, by mode: a soft purge earlier in the request does not stand in
+        // for a hard one. Observed failure (rig, 2026-10-01): Beaver Builder's Clear Cache fired
+        // a soft listener first (the integration hook list stored by an older version), the
+        // request was marked cleared, and the hard owner at shutdown returned here with every
+        // copy still on disk while its receipt said `sitechange-purge {mode:hard}`.
+        if (self::is_cache_cleared(!$softPurge)) {
 
             return;
         }
@@ -363,10 +361,9 @@ class wps_ic_cache
         // Ask the coalescer before logging: a hard purge that lands inside another one's window is
         // only a stale mark, and receipts it as purge-local-all-coalesced. Logging purge-local-all
         // {mode:hard} first made every coalesced purge read as a second hard purge in the journal.
-        $softPurge = function_exists('wpc_purge_is_soft') && wpc_purge_is_soft($purge_mode);
         if ($post_id === 'all' && !$softPurge
             && function_exists('wpc_purge_all_should_coalesce') && wpc_purge_all_should_coalesce()) {
-            self::mark_cache_cleared();
+            self::mark_cache_cleared('stale');
             return;
         }
         if ($post_id === 'all' && function_exists('wpc_cache_first_log')) {
@@ -409,7 +406,7 @@ class wps_ic_cache
 
 
         if ($post_id === 'all') {
-            self::mark_cache_cleared();
+            self::mark_cache_cleared($softPurge ? 'stale' : 'hard');
         }
 
 
@@ -531,10 +528,17 @@ class wps_ic_cache
         }
     }
 
-    private static function is_cache_cleared()
+    /**
+     * Whether a site-wide purge already ran in this request. $hard asks whether a HARD one did:
+     * a request marked by a soft purge still owes a hard one (see removeHtmlCacheFiles).
+     */
+    private static function is_cache_cleared($hard = false)
     {
         global $wps_ic_cache_cleared;
-        return !empty($wps_ic_cache_cleared);
+        if (empty($wps_ic_cache_cleared)) {
+            return false;
+        }
+        return !$hard || $wps_ic_cache_cleared === 'hard';
     }
 
     private static function is_cf_cache_cleared()
@@ -587,10 +591,13 @@ class wps_ic_cache
         $wps_ic_cf_cache_cleared = true;
     }
 
-    private static function mark_cache_cleared()
+    /** 'hard' or 'stale'; a hard mark is never downgraded by a later soft purge. */
+    private static function mark_cache_cleared($mode = 'stale')
     {
         global $wps_ic_cache_cleared;
-        $wps_ic_cache_cleared = true;
+        if ($wps_ic_cache_cleared !== 'hard') {
+            $wps_ic_cache_cleared = $mode === 'hard' ? 'hard' : 'stale';
+        }
     }
 
     public static function purgeAllCache()
@@ -1187,18 +1194,27 @@ class wps_ic_cache
     }
 
 
+    /**
+     * Deletes a folder and everything in it, dot entries and .purging-* tombstones included. A
+     * symbolic link inside it is removed itself and never followed; the folder itself a link is
+     * followed when it is one of the plugin's own root directories (wpc_fs_is_plugin_root: the
+     * host put it there), otherwise only the link is removed.
+     */
     public static function deleteFolder($folderPath)
     {
+        $folderPath = rtrim((string) $folderPath, '/\\');
+        if (@is_link($folderPath) && !wpc_fs_is_plugin_root($folderPath)) {
+            wpc_fs_remove_link($folderPath);
+            return true;
+        }
         if (is_dir($folderPath)) {
             $contents = scandir($folderPath);
             foreach ($contents as $item) {
                 if ($item != "." && $item != "..") {
                     $itemPath = $folderPath . DIRECTORY_SEPARATOR . $item;
                     if (is_dir($itemPath)) {
-                        // Recursively delete subdirectories and their contents
                         self::deleteFolder($itemPath);
                     } else {
-                        // Delete files
                         unlink($itemPath);
                     }
                 }

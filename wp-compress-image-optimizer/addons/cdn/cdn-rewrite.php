@@ -138,10 +138,24 @@ if (!function_exists('wpc_late_faces_flip_js')) {
     // something will undo it; this inline classic script is that promise, emitted WITH the
     // lane. No-op when the delay loader flips first (media already all): load+4s sits behind
     // the loader's own load+2.5s default, and the absolute 12s belt behind its 8s cap.
-    function wpc_late_faces_flip_js()
+    /**
+     * The late lane's own script. $firstScreen is the [family, weight] pairs the service measured
+     * on the page's first screen (wps_cdn_rewrite::wpc_first_screen_faces()); with them the script
+     * takes the first-screen families from that list and reads nothing of the page's layout, and
+     * with null it finds them from the visible text. A split .faces.css link that names its
+     * families (data-wpc-lf-fam) is attached at parse end only for a first-screen family its
+     * subset does not cover; a page with no delay loader attaches every remaining one when the
+     * lane flips.
+     */
+    function wpc_late_faces_flip_js($firstScreen = null)
     {
         if (!apply_filters('wpc_late_faces_flip', true)) {
             return '';
+        }
+        $stamp = is_array($firstScreen) && $firstScreen !== []
+            ? json_encode(array_values($firstScreen), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) : 'null';
+        if (!is_string($stamp) || $stamp === '') {
+            $stamp = 'null';
         }
         // v7.20.02 — flip AT load when no delay barrier exists on the page (dalton: the +4s
         // backstop made the swap land visibly late; with no loader there is nothing to wait for).
@@ -151,7 +165,7 @@ if (!function_exists('wpc_late_faces_flip_js')) {
         // direct FontFace.load() resolved instantly). The nudge walks the lane's rules and
         // fires document.fonts.load per declared face — sampled from the face's OWN
         // unicode-range so ranged subsets match — and the completed loads repaint as normal.
-        return '<script data-nodefer="1" id="wpc-late-faces-flip">(function(){var nd=false;var tx=null;'
+        return '<script data-nodefer="1" id="wpc-late-faces-flip">(function(){var ag=' . $stamp . ';var nd=false;var tx=null;'
             . 'var ts=function(){if(tx)return tx;tx={};try{var t=((document.body&&document.body.textContent)||"").slice(0,20000);'
             . 'for(var i=0;i<t.length;i++){var c=t.charCodeAt(i);if(c>=48&&!(c>=8192&&c<=8303)&&!(c>=55296&&c<=57343)&&c!==9676&&!(c>=65024&&c<=65039)){tx[c]=1}}}catch(e){}return tx};'
             . 'var pk=function(rg){if(!rg||rg==="U+0-10FFFF")return 77;var sg=rg.split(",");var st=null;'
@@ -172,7 +186,26 @@ if (!function_exists('wpc_late_faces_flip_js')) {
             . 'var j=0;var step=function(){var e2=Math.min(j+8,q.length);'
             . 'for(;j<e2;j++){try{q[j].load().catch(function(){})}catch(x){}}'
             . 'if(j<q.length){setTimeout(step,0)}};step()}catch(x){nd=false}};'
+            . 'var lr=function(l){var lh=l.getAttribute("data-wpc-lf-href");if(!l.getAttribute("href")&&lh){l.setAttribute("href",lh)}l.media="all"};'
+            . 'var fa=function(){try{var wn2=function(w){w=String(w||"400").toLowerCase();return w==="bold"?700:w==="normal"?400:(parseInt(w,10)||400)};'
+            . 'var sub={},E=document.getElementById("wpc-font-faces"),et=E?(E.textContent||""):"",rx=/@font-face\\s*\\{[^}]*\\}/gi,m0;'
+            . 'while((m0=rx.exec(et))){if(m0[0].indexOf("data:font")===-1)continue;var f0=m0[0].match(/font-family\\s*:\\s*["\']?([^;"\'}]+)/i),w0=m0[0].match(/font-weight\\s*:\\s*([^;}]+)/i);'
+            . 'if(!f0)continue;var ws=(w0?w0[1]:"400").trim().split(/\\s+/),k0=f0[1].trim().toLowerCase();(sub[k0]=sub[k0]||[]).push([wn2(ws[0]),wn2(ws[ws.length-1])])}'
+            . 'var hasSub=false;for(var z in sub){hasSub=true;break}'
+            . 'var used={},nu=0,ad=function(fm,uw){var sl=sub[fm]||[];for(var s2=0;s2<sl.length;s2++){if(uw>=sl[s2][0]&&uw<=sl[s2][1])return}if(!used[fm])nu++;used[fm]=1};'
+            . 'if(ag){for(var g=0;g<ag.length;g++){if(ag[g]&&ag[g][0])ad(String(ag[g][0]),+ag[g][1]||400)}}'
+            . 'else{var vh=window.innerHeight||800,els=document.querySelectorAll("h1,h2,h3,h4,h5,h6,p,a,li,span,button,label,td,th,strong,em,b,div");'
+            . 'for(var i=0,k=0;i<els.length&&i<3000&&k<400;i++){var el=els[i],tn=false;for(var c=el.firstChild;c;c=c.nextSibling){if(c.nodeType===3&&/\\S/.test(c.nodeValue)){tn=true;break}}if(!tn)continue;var r=el.getBoundingClientRect();'
+            . 'if(!r.width||r.top>vh||r.bottom<0)continue;k++;var cs=getComputedStyle(el),fm=(cs.fontFamily||"").split(",")[0].replace(/["\']/g,"").trim().toLowerCase();if(!fm)continue;'
+            . 'ad(fm,wn2(cs.fontWeight))}}'
+            . 'var lk=document.querySelectorAll("link[data-wpc-lf]");for(var q=0;q<lk.length;q++){var lf=lk[q].getAttribute("data-wpc-lf-fam"),go=lf===null&&(!hasSub||nu>0);'
+            . 'if(lf!==null){var fs=lf.split(",");for(var x=0;x<fs.length;x++){if(used[fs[x]]){go=true;break}}}if(go)lr(lk[q])}'
+            . 'var L=document.getElementById("wpc-late-faces");if(!L||L.media==="all"||document.getElementById("wpc-late-faces-atf"))return;'
+            . 'var css=L.textContent||"",out="",re=/@font-face\\s*\\{[^}]*\\}/gi,m;'
+            . 'while((m=re.exec(css))){var ff=m[0].match(/font-family\\s*:\\s*["\']?([^;"\'}]+)/i);if(ff&&used[ff[1].trim().toLowerCase()])out+=m[0]}'
+            . 'if(out){var st=document.createElement("style");st.id="wpc-late-faces-atf";st.textContent=out;L.parentNode.insertBefore(st,L)}}catch(x){}};fa();'
             . 'var f=function(){var e=document.getElementById("wpc-late-faces");'
+            . 'if(!window.wpcSwapLateBarrier){var lk=document.querySelectorAll("link[data-wpc-lf]");for(var q=0;q<lk.length;q++)lr(lk[q])}'
             . 'if(e&&e.media!=="all"){e.setAttribute("type","text/css");e.media="all";setTimeout(function(){n(e)},0);}'
             . 'else if(e){n(e);}};'
             . 'var hg=false;var hq=[];var hf=function(){if(!hg){hg=true;hq.splice(0).forEach(function(x){try{x()}catch(e){}})}};'
@@ -242,6 +275,8 @@ class wps_cdn_rewrite
      *  render, and both restore before the WPC-comment sweep. It has to begin `<!--WPC` so that
      *  sweep clears any placeholder a stop left behind. */
     const PICTURE_STASH_PLACEHOLDER = '<!--WPC_PICTURE_';
+
+    const IMG_RATIO_CSS = 'img:where([wpc-size][width][height]),img:where(.wpc-nd[width][height]),img:where([data-wpc-md][width][height]){height:auto}';
 
     /** Persisted keys: the name is the constant, the string is what is already written to every
      *  installed site's transients, so the value cannot change. */
@@ -482,7 +517,6 @@ class wps_cdn_rewrite
             }
         }
 
-        add_filter('get_site_icon_url', ['wps_cdn_rewrite', 'favicon_replace'], 10, 1);
         return true;
     }
 
@@ -495,15 +529,8 @@ class wps_cdn_rewrite
         }
 
         // URL exclusions (wildcard support) — auto-enabled when patterns exist
-        $url_excludes = get_option('wpc-url-excludes');
-        if (!empty($url_excludes['exclude-url-from-all']) && function_exists('wpc_url_is_excluded')) {
-            $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-            $url = explode('?', $url)[0];
-            $matched = wpc_url_is_excluded($url, $url_excludes['exclude-url-from-all']);
-            if ($matched !== false) {
-                error_log('[WPC Bypass] url=' . $url . ' matched_pattern=' . $matched);
-                return false;
-            }
+        if (function_exists('wpc_request_excluded_from_plugin') && wpc_request_excluded_from_plugin() !== false) {
+            return false;
         }
 
 
@@ -685,21 +712,6 @@ class wps_cdn_rewrite
         }
     }
 
-    public static function favicon_replace($url)
-    {
-        if (empty($url)) {
-            return $url;
-        }
-
-        if (strpos($url, self::$zone_name) !== false) {
-            return $url;
-        }
-
-        $url = 'https://' . self::$zone_name . '/m:0/a:' . self::reformat_url($url);
-
-        return $url;
-    }
-
     public static function wpc_render_breaker_tripped()
     {
         if (!function_exists('get_transient') || !apply_filters('wpc_render_breaker', true)) {
@@ -728,17 +740,35 @@ class wps_cdn_rewrite
         return true;
     }
 
+    /**
+     * Milliseconds this request has spent inside render_buffer: the finished runs plus the one
+     * in progress. Both breaker trips (the in-pipeline budget and the shutdown slow-render check)
+     * judge this, not the request's wall time. The wall time counts the PHP worker queue and
+     * WordPress's own boot, which the plugin's pipeline neither causes nor can shed. Observed
+     * failure (hawkeye.design, 2026-10-08, right after a plugin upload, load 11): renders of
+     * 14.7-23.2 s, of which 9.4-14.6 s passed before WordPress reached init, tripped the breaker;
+     * every visitor render was then shed for 600 s, and a shed render is never stored, so no page
+     * could be cached for those ten minutes.
+     */
+    public static function wpc_render_own_ms()
+    {
+        $ms = isset($GLOBALS['wpc_render_own_ms']) ? (int) $GLOBALS['wpc_render_own_ms'] : 0;
+        if (isset($GLOBALS['wpc_render_started_at'])) {
+            $ms += (int) round((microtime(true) - (float) $GLOBALS['wpc_render_started_at']) * 1000);
+        }
+        return $ms;
+    }
+
     public static function wpc_render_budget_exceeded($label)
     {
         if (!apply_filters('wpc_render_budget', true)) {
             return false;
         }
         $ms = (int) apply_filters('wpc_render_budget_ms', 10000);
-        $t0 = isset($_SERVER['REQUEST_TIME_FLOAT']) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : 0.0;
-        if ($ms <= 0 || $t0 <= 0.0) {
+        if ($ms <= 0) {
             return false;
         }
-        $spent = (int) round((microtime(true) - $t0) * 1000);
+        $spent = self::wpc_render_own_ms();
         if ($spent < $ms) {
             return false;
         }
@@ -1088,19 +1118,17 @@ class wps_cdn_rewrite
         return $jsCode;
     }
 
+    public function img_ratio_style()
+    {
+        echo '<style id="wpc-img-ratio">' . self::IMG_RATIO_CSS . '</style>';
+    }
+
     public function dnsPrefetch()
     {
         // Honor "Exclude from Plugin" — skip DNS prefetch / preconnect injection on excluded URLs
         if (!self::dontRunif()) {
             return;
         }
-        // Injected-dims imgs must scale proportionally under theme width-only CSS (same
-        // pattern WP core uses): attrs still reserve the aspect ratio for CLS, height:auto
-        // restores responsive fill (thepttv receipt: height attr pinned cards at 248px)
-        // :where() = zero specificity — the SAME pattern WP core uses, so a theme that
-        // MEANS to size an image (Blocksy .site-logo-container img{height:inherit} —
-        // liam logo receipt) always wins; the aspect fallback applies only when nothing else does.
-        echo '<style id="wpc-img-ratio">img:where([wpc-size][width][height]),img:where(.wpc-nd[width][height]),img:where([data-wpc-md][width][height]){height:auto}</style>';
         if (strlen(trim(self::$zone_name)) > 0) {
             if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
                 if (!empty($_GET['custom_server'])
@@ -1141,14 +1169,6 @@ class wps_cdn_rewrite
             return $tag;
         }
 
-
-        if (strpos($src, '.js')) {
-            $verPosition = strpos($src, '?ver=');
-            if ($verPosition !== false) {
-
-                $src = substr($src, 0, $verPosition);
-            }
-        }
 
         /**
          * TODO:
@@ -1505,12 +1525,6 @@ class wps_cdn_rewrite
             return $src;
         }
 
-
-        if (strpos($src, '.css')) {
-            if (strpos($src, '?ver=')) {
-                $src = remove_query_arg('ver', $src);
-            }
-        }
 
         // ORIGIN FLOOR for same-origin css/js: unproven zone → leave the origin href (proven → the
         // m:N/a: build below runs and adjust_src_url naturalizes it).
@@ -1883,6 +1897,41 @@ class wps_cdn_rewrite
             if ($v !== '' && is_string($k) && strpos($k, '|') !== false) { $wpc_rr[strtolower($k)] = $v; }
         }
         return $wpc_rr;
+    }
+
+    /**
+     * The range gate for one of the theme's own @font-face blocks: the unicode-range that leaves
+     * the inlined subset's glyphs to the subset, and the font-weight the block must declare for
+     * that split to hold. Null when the map has nothing for the face.
+     *
+     * A face that declares a numeric weight is looked up under that weight, any other face under
+     * 400. One exception: a face with no font-weight at all whose family has an `auto=` entry.
+     * The service writes that entry for a variable font declared without a weight (fonts.json
+     * `weight_auto`), and its subset declares the font's own range ("300 700"). The weightless
+     * face must then declare the same range: left without one it is `normal`, Chrome prefers it
+     * over the range face for 400 text, and its unicode-range excludes exactly the glyphs the
+     * subset carries, so that text falls through to the fallback font (bgqld.com.au Teko, measured
+     * 124px correct vs 181px fallback). Both readers apply the gate through this method.
+     */
+    public static function font_face_range_gate($familyKey, $faceBlock)
+    {
+        $remoteRanges = self::wpc_font_remote_ranges();
+        $familyKey = (string) $familyKey;
+        if (empty($remoteRanges) || $familyKey === '') { return null; }
+        $faceBlock = (string) $faceBlock;
+        $style = preg_match('/font-style\s*:\s*italic/i', $faceBlock) ? 'italic' : 'normal';
+        if (!preg_match('/font-weight\s*:/i', $faceBlock)) {
+            $autoPrefix = $familyKey . '|auto=';
+            foreach ($remoteRanges as $rangeKey => $range) {
+                if (strpos($rangeKey, $autoPrefix) === 0
+                    && preg_match('/\|auto=(\d{2,4}) (\d{2,4})\|' . $style . '$/', $rangeKey, $spanMatch)) {
+                    return ['range' => $range, 'weight' => $spanMatch[1] . ' ' . $spanMatch[2]];
+                }
+            }
+        }
+        $weight = preg_match('/font-weight\s*:\s*(\d{2,4})/i', $faceBlock, $weightMatch) ? (int) $weightMatch[1] : 400;
+        $rangeKey = $familyKey . '|' . $weight . '|' . $style;
+        return empty($remoteRanges[$rangeKey]) ? null : ['range' => $remoteRanges[$rangeKey], 'weight' => null];
     }
 
     public static function wpc_svg_zoneify_active()
@@ -2380,7 +2429,6 @@ class wps_cdn_rewrite
 
         $html = self::wpc_css_bg_imageset_sweep($html);
         $html = self::wpc_css_bg_external_sweep($html);
-        $html = self::wpc_inline_favicon($html);
         if (!empty($wpc_pic_blocks)) {
             $html = strtr($html, $wpc_pic_blocks);
         }
@@ -2531,71 +2579,56 @@ class wps_cdn_rewrite
         }
     }
 
-    // v7.21.256 — FAVICON OFF THE WIRE. The icon link(s) always cost one fetch (plus a
-    // 0-byte dup when two sizes reference the same file, plus the browser's /favicon.ico
-    // probe on iconless pages). A small local icon inlines as a data: URI in the link
-    // itself: zero requests, probe suppressed, identical pixels. Local-twin proven only;
-    // capped; apple-touch untouched (not fetched at page load).
-    public static function wpc_inline_favicon($html)
+    public static function wpc_crawler_urls_as_printed($html, $ctx = null)
     {
-        try {
-            if (!is_string($html) || $html === '' || stripos($html, 'icon') === false) { return $html; }
-            if (!apply_filters('wpc_inline_favicon', true)) { return $html; }
-            $inlined_icons = 0;
-            $out = preg_replace_callback('/<link\b[^>]*\brel=(["\'])(?:shortcut )?icon\1[^>]*>/i', static function ($m) use (&$inlined_icons) {
-                $t = (string) $m[0];
-                if (strpos($t, 'data:') !== false) { $inlined_icons++; return $t; }
-                if (!preg_match('/\bhref=(["\'])([^"\']+)\1/i', $t, $hm)) { return $t; }
-                $d = wps_cdn_rewrite::wpc_favicon_data_uri((string) $hm[2]);
-                if ($d === '') { return $t; }
-                $inlined_icons++;
-                return str_replace($hm[0], 'href="' . $d . '"', $t);
-            }, $html);
-            if (!is_string($out)) { return $html; }
-            // v7.21.263 — an OVERSIZED sibling (>cap, stays a URL) still costs the icon
-            // fetch even when a smaller rel=icon inlined (columbus: 18.7KB 192px logo).
-            // Once at least one icon is inline, drop the remaining URL rel=icon links —
-            // the browser uses the inlined one; apple-touch untouched.
-            if ($inlined_icons > 0 && preg_match('/<link\b[^>]*\brel=(["\'])(?:shortcut )?icon\1[^>]*\bhref=(["\'])(?!data:)[^"\']+\2[^>]*>/i', $out)) {
-                $without_url_icons = preg_replace('/<link\b[^>]*\brel=(["\'])(?:shortcut )?icon\1[^>]*\bhref=(["\'])(?!data:)[^"\']+\2[^>]*>\s*/i', '', $out);
-                if (is_string($without_url_icons) && strpos($without_url_icons, 'data:image/') !== false) { $out = $without_url_icons; }
-            }
-            return $out;
-        } catch (\Throwable $e) {
+        if (!is_string($html) || $html === '' || !is_object($ctx) || !isset($ctx->pristine) || !is_string($ctx->pristine) || $ctx->pristine === '') {
             return $html;
         }
-    }
-
-    public static function wpc_favicon_data_uri($url)
-    {
-        static $memo = [];
-        if (isset($memo[$url])) { return $memo[$url]; }
-        $memo[$url] = '';
-        try {
-            $u = (string) $url;
-            // zapwp transform forms carry the origin after a:/u:
-            if (preg_match('~/(?:a|u):(https?://.+)$~i', $u, $am)) { $u = $am[1]; }
-            $path = (string) wp_parse_url($u, PHP_URL_PATH);
-            $wc = strpos($path, '/wp-content/');
-            if ($wc === false || !preg_match('/\.(png|ico|gif|jpe?g|webp|svg)$/i', $path, $em)) { return ''; }
-            $disk = rtrim(ABSPATH, '/') . substr($path, $wc);
-            $sz = @filesize($disk);
-            if (!$sz || $sz > (int) apply_filters('wpc_inline_favicon_cap', 12288)) { return ''; }
-            $cache = get_option('wpc_favicon_inline256');
-            $sig = md5($u) . ':' . $sz . ':' . (int) @filemtime($disk);
-            if (is_array($cache) && ($cache['sig'] ?? '') === $sig && is_string($cache['d'] ?? null) && strpos((string) $cache['d'], 'data:image/') === 0) {
-                return $memo[$url] = (string) $cache['d'];
-            }
-            $bytes = (string) @file_get_contents($disk);
-            if ($bytes === '') { return ''; }
-            $mime = ['png' => 'image/png', 'ico' => 'image/x-icon', 'gif' => 'image/gif',
-                'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'webp' => 'image/webp', 'svg' => 'image/svg+xml'];
-            $d = 'data:' . $mime[strtolower($em[1])] . ';base64,' . base64_encode($bytes);
-            update_option('wpc_favicon_inline256', ['sig' => $sig, 'd' => $d], false);
-            return $memo[$url] = $d;
-        } catch (\Throwable $e) {
-            return '';
+        $pristine = function_exists('wpc_heal_mixed_content') ? wpc_heal_mixed_content($ctx->pristine) : $ctx->pristine;
+        $kinds = ['icon' => '#<link\b(?=[^>]*\srel\s*=\s*(["\']?)(?:shortcut icon|icon|apple-touch-icon(?:-precomposed)?|mask-icon)\1[\s/>])[^>]*>#i'];
+        if (empty(self::$settings['optimize_meta_images']) || self::$settings['optimize_meta_images'] == '0') {
+            $kinds['meta'] = '#<meta\b(?=[^>]*\s(?:property|name)\s*=\s*(["\'])(?:og:image(?::url|:secure_url)?|twitter:image(?::src)?)\1)[^>]*>#i';
+            $kinds['ld'] = '#<script\b[^>]*\stype\s*=\s*["\']application/ld\+json["\'][^>]*>.*?</script>#is';
         }
+        $edits = [];
+        $restored = [];
+        foreach ($kinds as $kind => $rx) {
+            if (!preg_match_all($rx, $html, $now, PREG_OFFSET_CAPTURE) || !preg_match_all($rx, $pristine, $printed)) {
+                continue;
+            }
+            if (count($now[0]) !== count($printed[0])) {
+                $restored[$kind . '_count_drift'] = 1;
+                continue;
+            }
+            foreach ($now[0] as $i => $element) {
+                if ($element[0] !== $printed[0][$i]) {
+                    $edits[] = [$element[1], strlen($element[0]), $printed[0][$i]];
+                    $restored[$kind] = (isset($restored[$kind]) ? $restored[$kind] : 0) + 1;
+                }
+            }
+        }
+        if ($edits === []) {
+            if ($restored !== [] && function_exists('wpc_render_belt_note')) {
+                wpc_render_belt_note('crawler-urls-restored', $restored, true);
+            }
+            return $html;
+        }
+        usort($edits, function ($x, $y) { return $y[0] - $x[0]; });
+        for ($i = 1; $i < count($edits); $i++) {
+            if ($edits[$i][0] + $edits[$i][1] > $edits[$i - 1][0]) {
+                if (function_exists('wpc_render_belt_note')) {
+                    wpc_render_belt_note('crawler-urls-restored', ['overlap' => 1], true);
+                }
+                return $html;
+            }
+        }
+        foreach ($edits as $edit) {
+            $html = substr($html, 0, $edit[0]) . $edit[2] . substr($html, $edit[0] + $edit[1]);
+        }
+        if (function_exists('wpc_render_belt_note')) {
+            wpc_render_belt_note('crawler-urls-restored', $restored, true);
+        }
+        return $html;
     }
 
     // v7.21.42 — HOST-TWIN HEAL. Clone/migration residue: a site copied to a new domain keeps
@@ -3669,6 +3702,9 @@ class wps_cdn_rewrite
         if (strpos($html, 'data-wpc-bf') !== false) {
             $css_rules .= ':where(img[data-wpc-bf]){height:auto;object-fit:contain}';
         }
+        if (strpos($html, 'id="wpc-img-ratio"') === false && preg_match('/\b(?:data-wpc-md\b|wpc-size=|wpc-nd\b)/', $html)) {
+            $css_rules .= self::IMG_RATIO_CSS;
+        }
         // v7.20.20 — Elementor renders eicons as INLINE SVG whose 1em sizing lives in the
         // widget/frontend sheets: through the crit window an ATF select caret painted at
         // container width (borderlessmoves: 211px box, 0.077 of the page's 0.078 CLS) and
@@ -3902,6 +3938,9 @@ class wps_cdn_rewrite
             }
             return $html;
         }
+        // The breakers judge this pipeline's own time (wpc_render_own_ms), counted from here to
+        // the end of the run below.
+        $GLOBALS['wpc_render_started_at'] = microtime(true);
         if (empty($GLOBALS['wpc_pristine_buffer_html']) && is_string($html) && stripos($html, '<body') !== false) {
             $GLOBALS['wpc_pristine_buffer_html'] = $html;
         }
@@ -3942,6 +3981,9 @@ class wps_cdn_rewrite
             $html = $pipeline->run($html, $lane);
         } catch (\Throwable $e) {
             return self::wpc_never_blank($pristine, '', $e);
+        } finally {
+            $GLOBALS['wpc_render_own_ms'] = self::wpc_render_own_ms();
+            unset($GLOBALS['wpc_render_started_at']);
         }
         $out = self::wpc_never_blank($pristine, $html);
         // Only a run whose OWN bytes leave this envelope stands in for the outer natural-URL
@@ -3989,6 +4031,8 @@ class wps_cdn_rewrite
             // The visitor combine lane is gone; its two entries held the corpus push's position.
             'combine_css_bundles' => 'crit_corpus_push',
             'combine_css_bundles_local' => 'crit_corpus_push',
+            // The embed facade is gone; its entry held the position drop_dashicons now has.
+            'embed_facade' => 'drop_dashicons',
         ];
     }
 
@@ -4082,6 +4126,7 @@ class wps_cdn_rewrite
             wps_ic_render_stage::make('mask_media_scripts', [$this, 'stage_mask_media_scripts'], $both),
             wps_ic_render_stage::make('negotiated_delivery_local', [$this, 'stage_negotiated_delivery_local'], $local),
             wps_ic_render_stage::make('iframe_lazy_and_video_facade', [$this, 'stage_iframe_lazy_and_video_facade'], $both),
+            wps_ic_render_stage::make('ghl_embed_native_lazy', [self::class, 'wpc_ghl_embed_native_lazy_pass'], $both),
 
             wps_ic_render_stage::make('encode_iframe', $marker, $both),
             wps_ic_render_stage::make('encode_iframe_tags', [$this, 'stage_encode_iframe_tags'], $both, [$this, 'gate_encode_iframe_tags']),
@@ -4193,6 +4238,7 @@ class wps_cdn_rewrite
             wps_ic_render_stage::make('inline_core_scripts', [self::class, 'inline_core_scripts_pass'], $both, [$this, 'gate_delay_v3_ran']),
             wps_ic_render_stage::make('remove_nodelay_markers', [$this, 'stage_remove_nodelay_markers'], $both, [$this, 'gate_remove_nodelay_markers']),
             wps_ic_render_stage::make('css_only_loader', [$this, 'stage_css_only_loader'], $both, [$this, 'gate_css_only_loader']),
+            wps_ic_render_stage::make('frames_without_restorer', [self::class, 'wpc_unpark_frames_without_restorer'], $both),
 
             wps_ic_render_stage::make('3491', $marker, $both),
             wps_ic_render_stage::make('scripts_to_footer', [$this, 'stage_scripts_to_footer'], $both, [$this, 'gate_scripts_to_footer']),
@@ -4252,12 +4298,12 @@ class wps_cdn_rewrite
             // css_host_twin_sweep is a zero-byte marker: the sweep itself runs inside
             // heal_mixed_content on both lanes, and this is the position the tail names.
             //
-            // Nine of the tail passes carry gate_not_amp. Eight inject markup AMP forbids — the LCP
+            // Eight of the tail passes carry gate_not_amp. Seven inject markup AMP forbids — the LCP
             // preload and the image-preload writer, the quiet wire and its below-fold companion,
-            // the embed and video facades, the RUM beacon and the device check — and the ninth,
+            // the video poster pass, the RUM beacon and the device check — and the eighth,
             // lcp_demote_competitors, strips fetchpriority against the LCP identity the gated
             // preload pass found, so it is skipped with it. amp_settings_squash squashes the
-            // settings the earlier passes read; these nine read none of them, which is why the
+            // settings the earlier passes read; these eight read none of them, which is why the
             // gate exists.
             wps_ic_render_stage::make('css_host_twin_sweep', $marker, $both),
             wps_ic_render_stage::make('svg_naturalize', [self::class, 'wpc_svg_naturalize'], $both),
@@ -4267,6 +4313,7 @@ class wps_cdn_rewrite
             wps_ic_render_stage::make('eager_nextgen_sources', [$this, 'stage_eager_nextgen_sources'], $both),
             wps_ic_render_stage::make('asset_naturalize', [self::class, 'wpc_asset_naturalize'], $both),
             wps_ic_render_stage::make('collapse_double_ext', [self::class, 'wpc_collapse_double_ext'], $both),
+            wps_ic_render_stage::make('crawler_urls_as_printed', [self::class, 'wpc_crawler_urls_as_printed'], $both),
             // The origin fallback is written once, after every pass that moves an asset URL onto
             // or off the zone. Written earlier, a later pass rewrote what it had written: the SVG
             // zoneifier moved an image's fallback onto the zone (2026-09-24), and the delay
@@ -4296,7 +4343,6 @@ class wps_cdn_rewrite
             wps_ic_render_stage::make('below_fold_cv', [self::class, 'wpc_below_fold_cv_tag'], $both, [$this, 'gate_not_amp']),
             wps_ic_render_stage::make('picture_fidelity', [self::class, 'wpc_picture_fidelity_pass'], $both),
             wps_ic_render_stage::make('lcp_demote_competitors', [$this, 'stage_lcp_demote_competitors'], $both, [$this, 'gate_not_amp']),
-            wps_ic_render_stage::make('embed_facade', [self::class, 'wpc_embed_facade_pass'], $both, [$this, 'gate_not_amp']),
             wps_ic_render_stage::make('drop_dashicons', [self::class, 'drop_dashicons'], $both),
             wps_ic_render_stage::make('rum_beacon', [self::class, 'wpc_rum_beacon_pass'], $both, [$this, 'gate_not_amp']),
             wps_ic_render_stage::make('device_check', [self::class, 'wpc_device_check_pass'], $both, [$this, 'gate_not_amp']),
@@ -5337,6 +5383,20 @@ class wps_cdn_rewrite
             $inlineCode = trim($body);
             if ($inlineCode === '') continue;
             if (preg_match('/wpcScriptRegistry|wpcDelayV3|wpcJqueryDeferMarker|data-wpc-qw-src|__wpcHuman|wpc-late-faces|wpcCheckpoint/i', $attrs . $inlineCode)) continue;
+            if (preg_match('/\bid\s*=\s*["\']([^"\']+)-js-extra["\']/i', $attrs, $ownerIdMatch)
+                && !preg_match('/jQuery|\$\s*[.(]/', $inlineCode)) {
+                $ownerStaysAsync = false;
+                for ($k = $i + 1; $k < $scriptCount && $k <= $i + 3; $k++) {
+                    $ownerAttrs = $scripts[1][$k][0];
+                    if (!preg_match('/\bid\s*=\s*["\']' . preg_quote($ownerIdMatch[1], '/') . '-js["\']/i', $ownerAttrs)) continue;
+                    if ($hasAttributeWord($ownerAttrs, 'async') && !$hasAttributeWord($ownerAttrs, 'defer|nomodule')) {
+                        $ownerSrc = preg_match('/\bsrc\s*=\s*["\']([^"\']+)["\']/i', $ownerAttrs, $ownerSrcMatch) ? (string) $ownerSrcMatch[1] : '';
+                        $ownerStaysAsync = $ownerSrc === '' || empty($asyncJqueryVerdicts[md5($ownerSrc)]);
+                    }
+                    break;
+                }
+                if ($ownerStaysAsync) continue;
+            }
             // v7.21.53 — scan a block-comment-stripped copy: GTranslate's localizer carries the
             // literal "/* document.write */" INSIDE a comment and stood the whole lane down on
             // every site running it (ganoderma: no defer, no marker, the page's biggest lever
@@ -7421,7 +7481,7 @@ WPCDEVJS;
                     $html = substr_replace($html, $block, $flipAt, 0);
                 } else {
                     if (function_exists('wpc_late_faces_flip_js')) {
-                        $block .= wpc_late_faces_flip_js();
+                        $block .= wpc_late_faces_flip_js(self::wpc_first_screen_faces());
                     }
                     $at = strripos($html, '</body>');
                     $html = ($at !== false) ? substr_replace($html, $block, $at, 0) : $html . $block;
@@ -7435,6 +7495,53 @@ WPCDEVJS;
         } catch (\Throwable $e) {
             return $html;
         }
+    }
+
+    /**
+     * The faces the service measured painting this page's first screen on the device this render
+     * is for (wpc_ua_is_mobile, the device the copy is stored for): [family, weight] pairs from
+     * the atf_glyphs keys ("Family|weight|style") of that device's map in the page's delay.json
+     * (or lcp.json), or of a map the file keeps for every device (wpc_atf_glyphs_read), family
+     * lower-cased without quotes, weight a number (bold 700, anything else not a number 400), at
+     * most 64. Null when the page carries no map for this device.
+     */
+    public static function wpc_first_screen_faces()
+    {
+        if (!defined('WPS_IC_CRITICAL') || !class_exists('wps_ic_url_key') || !function_exists('wpc_atf_glyphs_read')) {
+            return null;
+        }
+        try {
+            $urlKey = (string) (new wps_ic_url_key())->setup('');
+        } catch (\Throwable $e) {
+            return null;
+        }
+        if ($urlKey === '') {
+            return null;
+        }
+        $device = function_exists('wpc_ua_is_mobile') && wpc_ua_is_mobile() ? 'mobile' : 'desktop';
+        $glyphs = wpc_atf_glyphs_read(rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/', $device);
+        $keys = array_keys((array) $glyphs);
+        if ($keys !== [] && !is_string($keys[0])) {
+            $keys = array_values((array) $glyphs);
+        }
+        $faces = [];
+        foreach ($keys as $glyphKey) {
+            if (!is_string($glyphKey) || strpos($glyphKey, '|') === false) {
+                continue;
+            }
+            $parts = explode('|', $glyphKey);
+            $family = strtolower(trim(str_replace(['"', "'"], '', $parts[0])));
+            if ($family === '' || strlen($family) > 64) {
+                continue;
+            }
+            $weight = strtolower(trim((string) $parts[1]));
+            $weight = $weight === 'bold' ? 700 : (ctype_digit($weight) ? (int) $weight : 400);
+            $faces[$family . '|' . $weight] = [$family, $weight];
+            if (count($faces) >= 64) {
+                break;
+            }
+        }
+        return $faces === [] ? null : array_values($faces);
     }
 
     /**
@@ -7562,95 +7669,6 @@ WPCDEVJS;
             return $dashiconsUsed ? $dashiconsLinks[(int) $m[1]] : '';
         }, $out);
     }
-
-    public static function wpc_embed_facade_pass($html)
-    {
-        if (!is_string($html) || $html === '' || stripos($html, '<iframe') === false) {
-            return $html;
-        }
-        $set = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
-        $on  = is_array($set) && !empty($set['embed-facade']) && $set['embed-facade'] == '1';
-        if (!apply_filters('wpc_embed_facade', $on)) {
-            return $html;
-        }
-        if (function_exists('is_user_logged_in') && is_user_logged_in()) {
-            return $html;
-        }
-        $hosts = (array) apply_filters('wpc_embed_facade_hosts', [
-            'google.com/maps/embed', 'maps.google.com', 'youtube.com/embed', 'youtube-nocookie.com/embed',
-            'play.gumlet.io/embed',
-            // v7.21.60 — Bunny Stream: ~1.3MB (plyr-vr + hls + frame-jQuery) per page from
-            // inside the frame; ctfx's two near-fold players restored via framesIO's
-            // visible-at-load rule and dominated SI/TBT. autoplay=true embeds still skip
-            // below (design intent); autoplay=false is click-to-play either way, so the
-            // poster button is the same UX minus the payload.
-            'iframe.mediadelivery.net/embed',
-        ]);
-        $count = 0;
-        $out = preg_replace_callback('/<iframe\b[^>]*>(?:\s*<\/iframe>)?/is', function ($m) use ($hosts, &$count) {
-            $tag = $m[0];
-            $hit = '';
-            foreach ($hosts as $h) {
-                if (stripos($tag, $h) !== false) { $hit = $h; break; }
-            }
-            if ($hit === '') {
-                return $tag;
-            }
-            $isYt = (stripos($hit, 'youtube') !== false);
-            $isVid = $isYt || stripos($hit, 'gumlet') !== false || stripos($hit, 'mediadelivery') !== false;
-            // Box: honor declared width/height (ratio); default 16:9. min-height floors a tiny map.
-            $w = preg_match('/\bwidth=["\']?(\d{2,4})/i', $tag, $wm) ? (int) $wm[1] : 0;
-            $h = preg_match('/\bheight=["\']?(\d{2,4})/i', $tag, $hm) ? (int) $hm[1] : 0;
-            $ratio = ($w > 0 && $h > 0) ? ($w . ' / ' . $h) : '16 / 9';
-            $style = 'position:relative;display:block;width:100%;aspect-ratio:' . $ratio . ';'
-                   . 'background:#e8eaed;border-radius:8px;overflow:hidden;cursor:pointer;border:0;padding:0;';
-            // v7.21.60 — an absolute-fill embed (responsive padding-hack wrapper: the iframe
-            // is position:absolute inset) must stay an absolute fill: a static 16:9 button
-            // inside the padded wrapper would ADD its height below the reserved box.
-            if (preg_match('/style=(["\'])([^"\']*position\s*:\s*absolute[^"\']*)\1/i', $tag, $absoluteStyleMatch)) {
-                $style = rtrim((string) $absoluteStyleMatch[2], '; ') . ';display:block;background:#e8eaed;overflow:hidden;cursor:pointer;border:0;padding:0;';
-            }
-            $poster = '';
-            if ($isYt && preg_match('#/embed/([A-Za-z0-9_-]{6,})#', $tag, $vm)) {
-                $poster = '<img src="https://i.ytimg.com/vi/' . esc_attr($vm[1]) . '/hqdefault.jpg" alt="" loading="lazy" decoding="async"'
-                        . ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">';
-            }
-            $label = $isVid ? 'Play video' : 'Load map';
-            $badge = $isVid
-                ? '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:68px;height:48px;background:rgba(0,0,0,.72);border-radius:12px;display:flex;align-items:center;justify-content:center;">'
-                  . '<svg width="24" height="24" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span>'
-                : '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:8px;color:#5f6368;font:600 14px/1 -apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;">'
-                  . '<svg width="34" height="34" viewBox="0 0 24 24" fill="#ea4335" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>'
-                  . '<span style="background:#fff;border-radius:20px;padding:8px 16px;box-shadow:0 1px 3px rgba(0,0,0,.25);">Load map</span></span>';
-            $count++;
-            // A parked tag (data-wpc-src, wpc-iframe-delay) restored after boot would never
-            // un-park — store it as a LIVE iframe so the click always plays.
-            $unparkedTag = str_replace(['data-wpc-src=', 'wpc-iframe-delay'], ['src=', ''], $tag);
-            if ($isVid && $poster === '') {
-                $style = str_replace('background:#e8eaed;', 'background:#131417;', $style);
-            }
-            return '<button type="button" class="wpc-embed-facade" data-wpc-embed="' . base64_encode($unparkedTag) . '"'
-                 . ' aria-label="' . esc_attr($label) . '" style="' . $style . '">' . $poster . $badge . '</button>';
-        }, $html, -1, $n);
-        if ($out === null || $count === 0) {
-            return $html;
-        }
-
-
-        $js = '<script id="wpc-embed-facade-js">(function(){document.addEventListener("click",function(e){'
-            . 'var b=e.target&&e.target.closest?e.target.closest(".wpc-embed-facade"):null;if(!b)return;'
-            . 'e.preventDefault();var d=document.createElement("div");'
-            . 'try{d.innerHTML=atob(b.getAttribute("data-wpc-embed"));}catch(x){return;}'
-            . 'var f=d.querySelector("iframe");if(!f)return;'
-            . 'var s=f.getAttribute("src")||f.getAttribute("data-src")||f.getAttribute("data-wpc-src")||"";'
-            . 'if(s&&/youtube(-nocookie)?\\.com\\/embed\\//i.test(s)&&s.indexOf("autoplay=")===-1){s+=(s.indexOf("?")===-1?"?":"&")+"autoplay=1";}'
-            . 'if(s&&/(?:play\\.gumlet\\.io|iframe\\.mediadelivery\\.net)\\/embed\\//i.test(s)){if(/autoplay=false/i.test(s)){s=s.replace(/autoplay=false/ig,"autoplay=true");}else if(s.indexOf("autoplay=")===-1){s+=(s.indexOf("?")===-1?"?":"&")+"autoplay=true";}}'
-            . 'if(s){f.setAttribute("src",s);}f.removeAttribute("loading");'
-            . 'f.style.width="100%";f.style.height="100%";f.style.position="absolute";f.style.inset="0";f.style.border="0";'
-            . 'b.style.cursor="default";b.innerHTML="";b.appendChild(f);},true);})();</script>';
-        return wpc_inject_before_body_close($out, $js . "\n");
-    }
-
 
     public static function wpc_collapse_double_ext($html)
     {
@@ -8420,6 +8438,8 @@ WPCDEVJS;
             }
         }
 
+        add_action('wp_head', [$this, 'img_ratio_style'], 0);
+
         if (empty(self::$zone_name)) {
             return;
         }
@@ -9117,14 +9137,10 @@ WPCDEVJS;
             // no census and no completeness requirement. Applied verbatim from the service field;
             // skipped whenever the face already declares a range (never widen or narrow one).
             if (!preg_match('/unicode-range\s*:/i', $content)) {
-                $wpc_rrm = self::wpc_font_remote_ranges();
-                if (!empty($wpc_rrm) && !empty($familyMatch[1])) {
-                    $wpc_fw = 400; $wpc_fs = 'normal';
-                    if (preg_match('/font-weight\s*:\s*(\d{2,4})/i', $content, $wm)) { $wpc_fw = (int) $wm[1]; }
-                    if (preg_match('/font-style\s*:\s*italic/i', $content)) { $wpc_fs = 'italic'; }
+                if (!empty($familyMatch[1])) {
                     $familyKey = strtolower(trim($familyMatch[1], " \t\"'"));
-                    $wpc_rk = $familyKey . '|' . $wpc_fw . '|' . $wpc_fs;
-                    if (!empty($wpc_rrm[$wpc_rk])) {
+                    $rangeGate = self::font_face_range_gate($familyKey, $content);
+                    if ($rangeGate !== null) {
                         // .478 PAIRING INVARIANT, ENFORCED WHERE IT CAN BE CHECKED. The map may
                         // outlive the subset it is the complement of (baked into a versioned CSS
                         // file by .429, or carried across a gen that dropped font-subsets.css).
@@ -9148,7 +9164,8 @@ WPCDEVJS;
                         }
                         $subsetFamilies = self::wpc_font_subset_families();
                         if (!empty($subsetFamilies[$familyKey])) {
-                            $content .= ';unicode-range:' . $wpc_rrm[$wpc_rk];
+                            $content .= ';unicode-range:' . $rangeGate['range'];
+                            if ($rangeGate['weight'] !== null) { $content .= ';font-weight:' . $rangeGate['weight']; }
                         } elseif (function_exists('wpc_cache_first_log')) {
                             wpc_cache_first_log('font-gate-unpaired', '', '', [
                                 'family' => substr($familyKey, 0, 28),
@@ -9819,15 +9836,9 @@ WPCDEVJS;
             }
 
 
-            if (!empty($excludedUrls)) {
-                foreach ($excludedUrls as $k => $path) {
-                    if (!empty($path)) {
-                        $path = trim($path);
-                        if (strpos($_SERVER['REQUEST_URI'], $path) !== false) {
-                            return true;
-                        }
-                    }
-                }
+            if (!empty($excludedUrls) && class_exists('wps_ic_url_key')
+                && wps_ic_url_key::excludedBy($excludedUrls, wps_ic_url_key::requestHostPath()) !== false) {
+                return true;
             }
         }
 
@@ -10255,8 +10266,9 @@ WPCDEVJS;
         if ((!empty(self::$settings['iframe-lazy']) && self::$settings['iframe-lazy'] == '1'
                 || self::wpc_facade_aggr_ok($ctx->isAmp))
             && !$ctx->userLoggedIn) {
-            $html = preg_replace_callback('/<iframe[^>]*>(.*?)<\/iframe>/si', function ($iframe) use ($ctx) {
-                return $this->replace_iframe_tags($iframe, $ctx->isAmp);
+            $formEmbedDomains = (array) self::wpc_form_embed_domains($html);
+            $html = preg_replace_callback('/<iframe[^>]*>(.*?)<\/iframe>/si', function ($iframe) use ($ctx, $formEmbedDomains) {
+                return $this->replace_iframe_tags($iframe, $ctx->isAmp, $formEmbedDomains);
             }, $html);
             $iframeLazyOn = !empty(self::$settings['iframe-lazy']) && self::$settings['iframe-lazy'] == '1';
             $html = $this->park_media_sources($html,
@@ -11617,6 +11629,45 @@ WPCDEVJS;
         return wps_ic_js_delay_v3::wpc_css_only_loader($html);
     }
 
+    /**
+     * A parked frame (class wpc-iframe-delay, address in data-wpc-src) gets its address back when
+     * the page carries no loader that restores frames: no delay loader, or only the CSS-only one.
+     * A frame that is not a form frame and has no loading attribute gets the browser's own loading="lazy".
+     */
+    public static function wpc_unpark_frames_without_restorer($html)
+    {
+        if (!is_string($html) || strpos($html, 'wpc-iframe-delay') === false) {
+            return $html;
+        }
+        if (strpos($html, 'wpc-delay-v3-loader') !== false && !preg_match('/["\']cssOnly["\']\s*:\s*1/', $html)) {
+            return $html;
+        }
+        $count = 0;
+        $out = preg_replace_callback('/<(?:iframe|source)\b[^>]*\bwpc-iframe-delay\b[^>]*>/i', function ($m) use (&$count) {
+            $tag = $m[0];
+            if (!preg_match('/\sdata-wpc-src=(["\'])(.*?)\1/s', $tag, $address) || preg_match('/\ssrc\s*=/i', $tag)) {
+                return $tag;
+            }
+            $count++;
+            $tag = str_replace($address[0], ' src=' . $address[1] . $address[2] . $address[1], $tag);
+            if (stripos($tag, '<iframe') === 0 && !preg_match('/\sloading\s*=/i', $tag) && strpos($tag, 'data-wpc-form-frame') === false) {
+                $tag = (string) preg_replace('/^<iframe\b/i', '<iframe loading="lazy"', $tag, 1);
+            }
+            return (string) preg_replace_callback('/\sclass=(["\'])([^"\']*)\1/i', function ($c) {
+                $classes = trim((string) preg_replace('/(?:^|\s)wpc-iframe-delay(?=\s|$)/', ' ', $c[2]));
+                $classes = (string) preg_replace('/\s+/', ' ', $classes);
+                return $classes === '' ? '' : ' class=' . $c[1] . $classes . $c[1];
+            }, $tag, 1);
+        }, $html);
+        if (!is_string($out)) {
+            return $html;
+        }
+        if ($count && function_exists('wpc_render_belt_note')) {
+            wpc_render_belt_note('frames-unparked-no-restorer', ['n' => $count], true);
+        }
+        return $out;
+    }
+
     public function gate_scripts_to_footer($ctx)
     {
         if (!empty($_GET['disableCritical'])) {
@@ -12841,19 +12892,23 @@ JS;
     public function replace_source_tags($source)
     {
 
-        preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=["\']([^"]*)["\']?/is', $source[0], $sourceAtts);
-        if (!empty($sourceAtts[1])) {
+        $sourceAtts = self::wpc_parkable_attributes($source[0]);
+        if (!empty($sourceAtts[0])) {
             $iFrame = '<source';
             $hasClass = false;
 
-            $attNames = $sourceAtts[1];
-            $attValues = $sourceAtts[2];
+            $attNames = $sourceAtts[0];
+            $attValues = $sourceAtts[1];
 
             if (!in_array('loading', $attNames)) {
                 $attNames[] = 'loading';
             }
 
             foreach ($attNames as $i => $attName) {
+                if (isset($attValues[$i]) === false && $attName != 'loading') {
+                    $iFrame .= ' ' . $attName . ' ';
+                    continue;
+                }
                 if ($attName == 'src') {
                     $attName = 'data-wpc-src';
                 } elseif ($attName == 'class') {
@@ -12863,7 +12918,8 @@ JS;
                     $attValues[$i] = 'lazy';
                 }
 
-                $iFrame .= ' ' . $attName . '="' . $attValues[$i] . '" ';
+                $quote = strpos($attValues[$i], '"') === false ? '"' : "'";
+                $iFrame .= ' ' . $attName . '=' . $quote . $attValues[$i] . $quote . ' ';
             }
 
             if (!$hasClass) {
@@ -12876,6 +12932,210 @@ JS;
         } else {
             return $source;
         }
+    }
+
+    /** The opening tag of an element at the start of $markup, '' when it does not start with one. A
+     *  quoted value may hold a > or the other quote, so the tag ends at the first > outside quotes. */
+    private static function wpc_open_tag($markup, $name)
+    {
+        if (!is_string($markup) || !preg_match('/^<' . $name . '\b(?:[^>"\']++|"[^"]*+"|\'[^\']*+\')*+>/i', $markup, $tag)) {
+            return '';
+        }
+        return $tag[0];
+    }
+
+    /** The attributes of an opening tag in document order, each [name lower-cased, value, start, end,
+     *  name as written, whether it has a value]: a value may be double-quoted, single-quoted or bare and
+     *  may hold the other quote; start and end are byte offsets in $tag, start taking in the whitespace
+     *  that separates the attribute from the one before, so cutting start..end leaves the rest of the
+     *  tag as it was. A name is anything up to whitespace, a quote, = or >, so xml:lang is one name. */
+    private static function wpc_tag_attributes($tag)
+    {
+        $attributes = [];
+        if (!is_string($tag) || !preg_match_all('/(?:\s+|(?<=["\']))([^\s"\'<>\/=]+)(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+)))?/', $tag, $found, PREG_SET_ORDER | PREG_OFFSET_CAPTURE, strcspn($tag, " \t\r\n/>"))) {
+            return $attributes;
+        }
+        foreach ($found as $match) {
+            $value = '';
+            $hasValue = false;
+            foreach ([2, 3, 4] as $group) {
+                if (isset($match[$group]) && $match[$group][1] !== -1) {
+                    $value = $match[$group][0];
+                    $hasValue = true;
+                    break;
+                }
+            }
+            $attributes[] = [strtolower($match[1][0]), $value, $match[0][1], $match[0][1] + strlen($match[0][0]), $match[1][0], $hasValue];
+        }
+        return $attributes;
+    }
+
+    /** An attribute value as the source wrote it, made safe to write back: & < > are escaped, an entity
+     *  the value already carries (&amp;, &#039;, &apos;) is kept, and the quotes are left to the caller,
+     *  which delimits the value with whichever quote it does not hold. */
+    private static function wpc_escape_attribute_value($value)
+    {
+        return htmlspecialchars($value, ENT_NOQUOTES | ENT_HTML5, 'UTF-8', false);
+    }
+
+    /** The attributes a parked tag is rebuilt from, as [names as written, values] in document order. A
+     *  value is null for an attribute written without one (allowfullscreen). A bare src, data-src,
+     *  data-wpc-src, class or loading names nothing and is left out. */
+    private static function wpc_parkable_attributes($openTag)
+    {
+        $names = [];
+        $values = [];
+        foreach (self::wpc_tag_attributes($openTag) as $attribute) {
+            if (!$attribute[5] && in_array($attribute[4], ['src', 'data-src', 'data-wpc-src', 'class', 'loading'], true)) {
+                continue;
+            }
+            $names[] = $attribute[4];
+            $values[] = $attribute[5] ? $attribute[1] : null;
+        }
+        return [$names, $values];
+    }
+
+    /** The domain a form_embed.js host stands for: its parent when it is a sub-domain of a branded
+     *  domain (link.agency.com serves the script, api.agency.com the frames), the host itself for an
+     *  address, a bare domain or a second-level public suffix. */
+    private static function wpc_embed_family_domain($host)
+    {
+        $labels = explode('.', $host);
+        if (count($labels) < 3 || filter_var($host, FILTER_VALIDATE_IP)) {
+            return $host;
+        }
+        $parent = implode('.', array_slice($labels, 1));
+        return preg_match('/^(?:co|com|org|net|gov|edu|ac)\.[a-z]{2}$/', $parent) ? $host : $parent;
+    }
+
+    /** Whether a form_embed.js family may widen what counts as a GoHighLevel frame: not the site's own
+     *  (home_url and the request host, www or not: a self-hosted script says nothing about other
+     *  frames of the site) and not a public CDN that mirrors scripts. */
+    private static function wpc_embed_family_unusable($family)
+    {
+        $unusable = ['jsdelivr.net', 'unpkg.com', 'cdnjs.cloudflare.com', 'googleapis.com', 'gstatic.com', 'cloudflare.com'];
+        foreach ([function_exists('home_url') ? home_url() : '', isset($_SERVER['HTTP_HOST']) ? '//' . $_SERVER['HTTP_HOST'] : ''] as $address) {
+            $host = parse_url((string) $address, PHP_URL_HOST);
+            if (is_string($host) && $host !== '') {
+                $unusable[] = self::wpc_embed_family_domain(strtolower($host));
+            }
+        }
+        foreach ($unusable as $domain) {
+            if ($family === $domain || substr($family, -strlen($domain) - 1) === '.' . $domain) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The domains the GoHighLevel form_embed.js scripts on the page load from, null when the page
+     *  loads none. A script with no host (a relative src), on the site's own host or on a public CDN
+     *  counts as loaded and names no domain. */
+    public static function wpc_form_embed_domains($html)
+    {
+        if (!is_string($html) || stripos($html, 'form_embed') === false
+            || !preg_match_all('/<script\b(?:[^>"\']++|"[^"]*+"|\'[^\']*+\')*+>/i', $html, $scripts)) {
+            return null;
+        }
+        $domains = null;
+        foreach ($scripts[0] as $script) {
+            foreach (self::wpc_tag_attributes($script) as $attribute) {
+                if ($attribute[0] !== 'src' && $attribute[0] !== 'data-src' && $attribute[0] !== 'data-wpc-src') {
+                    continue;
+                }
+                $url = parse_url(trim(html_entity_decode($attribute[1], ENT_QUOTES, 'UTF-8')));
+                if (!is_array($url) || empty($url['path']) || !preg_match('#/form_embed\.js$#i', $url['path'])) {
+                    continue;
+                }
+                if ($domains === null) {
+                    $domains = [];
+                }
+                if (!empty($url['host'])) {
+                    $family = self::wpc_embed_family_domain(strtolower($url['host']));
+                    if (!self::wpc_embed_family_unusable($family)) {
+                        $domains[] = $family;
+                    }
+                }
+            }
+        }
+        return $domains === null ? null : array_values(array_unique($domains));
+    }
+
+    /** Whether an iframe is a GoHighLevel embed (a LeadConnector form, survey, calendar, booking, group
+     *  or chat frame), under any white-label host: it carries data-layout-iframe-id, or its src
+     *  (or data-wpc-src) is on leadconnectorhq.com, msgsndr.com or one of $formEmbedDomains
+     *  (wpc_form_embed_domains()), or a sub-domain of one, at any path. $iframeMarkup may be the whole
+     *  <iframe>…</iframe>; only the opening tag is read. */
+    public static function wpc_is_ghl_embed_iframe($iframeMarkup, array $formEmbedDomains = [])
+    {
+        $tag = self::wpc_open_tag($iframeMarkup, 'iframe');
+        if ($tag === '') {
+            return false;
+        }
+        $domains = array_merge(['leadconnectorhq.com', 'msgsndr.com'], $formEmbedDomains);
+        foreach (self::wpc_tag_attributes($tag) as $attribute) {
+            if ($attribute[0] === 'data-layout-iframe-id') {
+                return true;
+            }
+            if ($attribute[0] !== 'src' && $attribute[0] !== 'data-wpc-src') {
+                continue;
+            }
+            $url = parse_url(trim(html_entity_decode($attribute[1], ENT_QUOTES, 'UTF-8')));
+            if (!is_array($url) || empty($url['host'])) {
+                continue;
+            }
+            $host = strtolower($url['host']);
+            foreach ($domains as $domain) {
+                if ($host === $domain || substr($host, -strlen($domain) - 1) === '.' . $domain) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Removes loading="lazy" from a GoHighLevel embed iframe on a page that loads form_embed.js, for
+     *  a frame no pass of ours rewrote: the one the facade keeps eager (page not measured) or never
+     *  reached (iframe-lazy off), carrying the lazy attribute its own markup wrote. A frame the
+     *  facade parked (data-wpc-src) is skipped, since replace_iframe_tags writes no loading onto a
+     *  GoHighLevel frame. Every other iframe is left as it is. One receipt when it acted. */
+    public static function wpc_ghl_embed_native_lazy_pass($html)
+    {
+        $domains = self::wpc_form_embed_domains($html);
+        if ($domains === null || stripos($html, '<iframe') === false) {
+            return $html;
+        }
+        $stripped = 0;
+        $out = preg_replace_callback('/<iframe\b(?:[^>"\']++|"[^"]*+"|\'[^\']*+\')*+>/i', function ($open) use ($domains, &$stripped) {
+            $tag = $open[0];
+            if (stripos($tag, 'lazy') === false) {
+                return $tag;
+            }
+            $lazy = [];
+            foreach (self::wpc_tag_attributes($tag) as $attribute) {
+                if ($attribute[0] === 'data-wpc-src') {
+                    return $tag;
+                }
+                if ($attribute[0] === 'loading' && strtolower(trim($attribute[1])) === 'lazy') {
+                    $lazy[] = $attribute;
+                }
+            }
+            if (!$lazy || !self::wpc_is_ghl_embed_iframe($tag, $domains)) {
+                return $tag;
+            }
+            foreach (array_reverse($lazy) as $attribute) {
+                $tag = substr($tag, 0, $attribute[2]) . substr($tag, $attribute[3]);
+            }
+            $stripped++;
+            return $tag;
+        }, $html);
+        if (!is_string($out)) {
+            return $html;
+        }
+        if ($stripped > 0 && function_exists('wpc_belt_receipt')) {
+            wpc_belt_receipt('ghl-embed-lazy-stripped', ['n' => $stripped], true);
+        }
+        return $out;
     }
 
     // Fleet P0 guard: the facade may AUTO-arm only where the v3 loader is
@@ -12928,7 +13188,7 @@ JS;
         return $aggressiveFacadeAllowed;
     }
 
-    public function replace_iframe_tags($iframe, $isAmp)
+    public function replace_iframe_tags($iframe, $isAmp, array $formEmbedDomains = [])
     {
         if (strpos($iframe[0], 'gform') !== false || strpos($iframe[0], 'data-src-cmplz') !== false) {
             return $iframe[0];
@@ -12949,17 +13209,17 @@ JS;
         // pre-io left the form blank). Under the aggressive default the heavy
         // list restores them at boot/gesture and the IO restore covers scroll-
         // toward — same reconciliation as the .359 form-family script release.
-        if ((stripos($wpc_if, 'leadconnectorhq.com') !== false || stripos($wpc_if, 'msgsndr') !== false)
-            && !self::wpc_facade_aggr_ok($isAmp)) {
+        $isGhlEmbed = self::wpc_is_ghl_embed_iframe($wpc_if, $formEmbedDomains);
+        if ($isGhlEmbed && !self::wpc_facade_aggr_ok($isAmp)) {
             return $iframe[0];
         }
 
-        preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=(["\'])([^"\']*)\2/is', $iframe[0], $iframeAtts);
+        $iframeAtts = self::wpc_parkable_attributes(self::wpc_open_tag($iframe[0], 'iframe'));
 
-        if (!empty($iframeAtts[1])) {
-            $attNames = $iframeAtts[1];
+        if (!empty($iframeAtts[0])) {
+            $attNames = $iframeAtts[0];
             $srcIndex = array_search('src', $attNames, true);
-            $hasSrc = $srcIndex !== false && !empty($iframeAtts[3][$srcIndex]);
+            $hasSrc = $srcIndex !== false && !empty($iframeAtts[1][$srcIndex]);
             $hasDataSrc = in_array('data-src', $attNames, true) || in_array('data-wpc-src', $attNames, true);
 
             if (!$hasSrc) {
@@ -12968,7 +13228,7 @@ JS;
 
             if ($hasDataSrc && $hasSrc) {
                 $srcIndex = array_search('src', $attNames, true);
-                $srcValue = $iframeAtts[3][$srcIndex];
+                $srcValue = $iframeAtts[1][$srcIndex];
 
                 if (strpos($srcValue, 'data:') === 0) {
                     // Probably already delayed with a placeholder in src
@@ -12979,31 +13239,42 @@ JS;
             $iFrame = '<iframe';
             $hasClass = false;
 
-            $attNames = $iframeAtts[1];
-            $attValues = $iframeAtts[3];
+            $attNames = $iframeAtts[0];
+            $attValues = $iframeAtts[1];
 
             foreach ($attNames as $i => $attName) {
+                if ($attValues[$i] === null) {
+                    $iFrame .= ' ' . $attName;
+                    continue;
+                }
                 if ($attName == 'src') {
                     $attName = 'data-wpc-src';
                     $escapedValue = $this->conditionallyEscapeUrl($attValues[$i]);
                 } elseif ($attName == 'class') {
                     $hasClass = true;
                     $attValues[$i] .= ' wpc-iframe-delay';
-                    $escapedValue = htmlspecialchars($attValues[$i], ENT_QUOTES, 'UTF-8');
+                    $escapedValue = self::wpc_escape_attribute_value($attValues[$i]);
                 } elseif ($attName == 'loading') {
+                    if ($isGhlEmbed) {
+                        continue;
+                    }
                     $attValues[$i] = 'lazy';
                     $escapedValue = $attValues[$i];
                 } else if ($attName == 'data-src') {
                     $escapedValue = $this->conditionallyEscapeUrl($attValues[$i]);
                 } else {
-                    $escapedValue = htmlspecialchars($attValues[$i], ENT_QUOTES, 'UTF-8');
+                    $escapedValue = self::wpc_escape_attribute_value($attValues[$i]);
                 }
 
-                $iFrame .= ' ' . $attName . '="' . $escapedValue . '"';
+                $quote = strpos($escapedValue, '"') === false ? '"' : "'";
+                $iFrame .= ' ' . $attName . '=' . $quote . $escapedValue . $quote;
             }
 
             if (!$hasClass) {
                 $iFrame .= ' class="wpc-iframe-delay"';
+            }
+            if ($isGhlEmbed) {
+                $iFrame .= ' data-wpc-form-frame="1"';
             }
 
             $iFrame .= '></iframe>';

@@ -94,7 +94,7 @@ if (!function_exists('wpc_stale_serve_plan')) {
     function wpc_stale_unlink_copies($dir, $prefix = '')
     {
         $dir = rtrim((string) $dir, '/') . '/';
-        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt'] as $copy_file) {
+        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt', 'links.txt'] as $copy_file) {
             @unlink($dir . $prefix . $copy_file);
         }
     }
@@ -731,18 +731,7 @@ class wps_advancedCache
 
     public static function removeDirectory($path)
     {
-        $path = rtrim($path, '/');
-        $files = glob($path . '/*');
-        if (!empty($files)) {
-            foreach ($files as $file) {
-                is_dir($file) ? self::removeDirectory($file) : unlink($file);
-            }
-        }
-
-        $files = glob($path . '/*');
-        if (is_dir($path) && empty($files)) {
-            rmdir($path);
-        }
+        wpc_fs_remove_tree($path);
     }
 
     public function removeCombinedFiles($post_id)
@@ -832,20 +821,10 @@ class wps_advancedCache
         if (function_exists('wpc_land_cooldown_clear')) { wpc_land_cooldown_clear($urlKey); }
     }
 
+    /** Deletes a folder and everything in it through the one tree delete (wpc_fs_remove_tree). */
     public function recursiveDelete($folder)
     {
-        // Delete all the files in the folder
-        $files = glob($folder . '/*');
-        foreach ($files as $file) {
-            if (is_file($file)) {
-                unlink($file);
-            } else {
-                $this->recursiveDelete($file);
-            }
-        }
-
-        // Delete the folder itself
-        if (is_dir($folder)) rmdir($folder);
+        wpc_fs_remove_tree($folder, true);
     }
 
 }

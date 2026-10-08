@@ -82,8 +82,11 @@ class wps_ic_cache_integrations
         delete_option('wps_ic_preloads');
     }
 
-    public function remove_key()
+    public function remove_key($path = 'remove_key')
     {
+        if (function_exists('wpc_record_key_removal')) {
+            wpc_record_key_removal($path);
+        }
         $options = get_option(WPS_IC_OPTIONS);
 
         delete_transient('wpc_test_running');
@@ -139,18 +142,7 @@ class wps_ic_cache_integrations
 
     public static function removeDirectory($path)
     {
-        $path = rtrim($path, '/');
-        $files = glob($path . '/*');
-        if (!empty($files)) {
-            foreach ($files as $file) {
-                is_dir($file) ? self::removeDirectory($file) : unlink($file);
-            }
-        }
-
-        if (is_dir($path)) {
-            // Concurrent renders repopulate mid-purge; a surviving dir is retried next purge.
-            @rmdir($path);
-        }
+        wpc_fs_remove_tree($path);
     }
 
 
@@ -164,7 +156,7 @@ class wps_ic_cache_integrations
                 if (in_array(basename($file), $except, true)) {
                     continue;
                 }
-                is_dir($file) ? self::removeDirectory($file) : unlink($file);
+                is_dir($file) ? wpc_fs_remove_tree($file, true) : @unlink($file);
             }
         }
     }
@@ -341,6 +333,9 @@ class wps_ic_cache_integrations
                 continue;
             }
             $p = $dir . '/' . $it;
+            if (@is_link($p) && is_dir($p)) {
+                continue;
+            }
             if (is_dir($p)) {
                 // Page dirs are emptied via the keep-list, NOT deleted: tpl.txt/url.txt are
                 // PAGE IDENTITY, and the purge-all wholesale delete was the true tpl_key
@@ -348,6 +343,9 @@ class wps_ic_cache_integrations
                 // service echoed None → used-css store never marked done → refetch churn).
                 self::removeFiles($p);
                 foreach ((array) @glob($p . '/*', GLOB_ONLYDIR) as $wpc_s1) {
+                    if (@is_link($wpc_s1)) {
+                        continue;
+                    }
                     self::removeFiles($wpc_s1);
                     foreach ((array) @glob($wpc_s1 . '/*', GLOB_ONLYDIR) as $wpc_s2) {
                         self::removeFiles($wpc_s2);
@@ -359,12 +357,19 @@ class wps_ic_cache_integrations
         }
     }
 
+    /**
+     * Deletes the files directly in $path except the page's identity files; directories, and
+     * what is under them, stay. A symbolic link in $path is removed itself (a link to a
+     * directory stays, like a directory); $path itself a link is left alone and nothing is
+     * deleted through it.
+     */
     public static function removeFiles($path)
     {
-
-
         $keep = (array) apply_filters('wpc_crit_purge_preserve', ['tpl.txt', 'url.txt', 'used_tpl.txt', 'page.html_gzip', 'page_mobile.html_gzip']);
         $path = rtrim($path, '/');
+        if (@is_link($path)) {
+            return;
+        }
         $files = glob($path . '/*');
         if (!empty($files)) {
             foreach ($files as $file) {
@@ -388,13 +393,7 @@ class wps_ic_cache_integrations
         do_action('breeze_clear_all_cache');
 
         if (defined('BREEZE_VERSION')) {
-            global $wp_filesystem;
-            require_once(ABSPATH . 'wp-admin/includes/file.php');
-
-            WP_Filesystem();
-
-            $cache_path = breeze_get_cache_base_path(is_network_admin(), true);
-            $wp_filesystem->rmdir(untrailingslashit($cache_path), true);
+            wpc_fs_remove_tree(breeze_get_cache_base_path(is_network_admin(), true), true);
 
             if (function_exists('wp_cache_flush')) {
                 if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('breeze'); } else { @wp_cache_flush(); }
@@ -452,6 +451,9 @@ class wps_ic_cache_integrations
                 $cache_dir . '*/' . $url_key . '_*',
             ] as $pattern) {
                 foreach ((array) @glob($pattern, GLOB_ONLYDIR) as $variant_dir) {
+                    if (wpc_fs_link_below($cache_dir, $variant_dir)) {
+                        continue;
+                    }
                     self::removeFiles($variant_dir);
                 }
             }

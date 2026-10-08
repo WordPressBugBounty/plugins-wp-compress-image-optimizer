@@ -542,8 +542,8 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
                 $skip_write = true;
             }
             if (!$skip_write) {
-                $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $sz, 'fmt' => $fmt, 'src' => (string) ($e['source'] ?? 'journal')]]);
-                if (($put['error'] ?? '') === 'larger_than_disk') {
+                $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $sz, 'fmt' => $fmt, 'src' => (string) ($e['source'] ?? 'journal'), 'claim' => wpc_v2_variant_claim($e)]]);
+                if (!empty($put['settled'])) {
                     // Settled by the store (no improvement, out of pending): nothing lands.
                     $any_drain_complete_signal = true;
                     continue;

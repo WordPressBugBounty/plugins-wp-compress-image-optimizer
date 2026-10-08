@@ -19,9 +19,13 @@ class wps_ic_comms extends wps_ic
     {
         $settings = get_option(WPS_IC_SETTINGS);
 
-        $setting_group = sanitize_text_field($_GET['group']);
-        $setting_key = sanitize_text_field($_GET['setting']);
-        $setting_value = sanitize_text_field($_GET['value']);
+        $setting_group = sanitize_text_field($_GET['group'] ?? '');
+        $setting_key = sanitize_text_field($_GET['setting'] ?? '');
+        $setting_value = sanitize_text_field($_GET['value'] ?? '');
+
+        if ($setting_key === '' || wps_ic_users::isLocalOnlySetting($setting_group) || ($setting_group === '' && wps_ic_users::isLocalOnlySetting($setting_key))) {
+            wp_send_json_error('refused');
+        }
 
         if ($setting_key == 'cdn') {
             // First check if CDN Zone already exists
@@ -58,6 +62,9 @@ class wps_ic_comms extends wps_ic
         $settings['hide_compress'] = 0;
         update_option(WPS_IC_SETTINGS, $settings);
 
+        if (function_exists('wpc_record_key_removal')) {
+            wpc_record_key_removal('portal-deactivate');
+        }
         $options = get_option(WPS_IC_OPTIONS);
         $options['api_key'] = '';
         $options['response_key'] = '';
@@ -521,8 +528,6 @@ class wps_ic_comms extends wps_ic
 
     public function resetTest()
     {
-        $options = get_option(WPS_IC_OPTIONS);
-
         // If a test is already in progress, don't start another one
         if (get_transient('wpc_initial_test')) {
             wp_send_json_success('already-running');
@@ -556,19 +561,11 @@ class wps_ic_comms extends wps_ic
         // Mark test as running
         set_transient('wpc_initial_test', 'running', 5 * 60);
 
-        // Kick off pagespeed test
-        $requests = new wps_ic_requests();
-        $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'hash' => time() . mt_rand(100, 9999), 'apikey' => $options['api_key']];
-        $response = $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 5, 'blocking' => true, 'headers' => ['Content-Type' => 'application/json']]);
-
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        if (isset($data['jobId'])) {
-            set_transient(WPS_IC_JOB_TRANSIENT, $data['jobId'], 60 * 10);
+        // Kick off the PageSpeed run under a uuid the poll reads (wpc_psi_dispatch explains why).
+        $psiUuid = wpc_psi_dispatch(true);
+        set_transient(WPS_IC_JOB_TRANSIENT, $psiUuid !== '' ? $psiUuid : 'failed', 60 * 10);
+        if ($psiUuid !== '') {
             wp_send_json_success('started');
-        } else {
-            set_transient(WPS_IC_JOB_TRANSIENT, 'failed', 60 * 10);
         }
 
         wp_send_json_error();
@@ -742,7 +739,7 @@ class wps_ic_comms extends wps_ic
         $options_class = new wps_ic_options();
 
         if (isset($form['settings'])) {
-            $settings = $options_class->setMissingSettings($form['settings']);
+            $settings = $options_class->setMissingSettings(wps_ic_users::keepLocalOnlySettings($form['settings'], get_option(WPS_IC_SETTINGS)));
             update_option(WPS_IC_SETTINGS, $settings);
         }
 
@@ -811,6 +808,14 @@ class wps_ic_comms extends wps_ic
 
         if (empty($form['apikey']) || $form['apikey'] !== $options['api_key']) {
             wp_send_json_error(['msg' => 'bad-apikey']);
+        }
+
+        if (isset($form['options']) && is_array($form['options'])) {
+            foreach (array_keys($form['options']) as $key) {
+                if (wps_ic_users::isLocalOnlySetting($key)) {
+                    unset($form['options'][$key]);
+                }
+            }
         }
 
         if (!empty($settings)) {
@@ -1215,6 +1220,9 @@ class wps_ic_comms extends wps_ic
 
     public function deactivatePlugin()
     {
+        if (function_exists('wpc_record_key_removal')) {
+            wpc_record_key_removal('portal-deactivate-plugin');
+        }
         $options = get_option(WPS_IC_OPTIONS);
         $options['api_key'] = '';
         $options['response_key'] = '';

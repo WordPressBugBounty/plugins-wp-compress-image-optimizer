@@ -77,7 +77,7 @@
     position: relative;
 
     &.align-right {
-      float: right;
+      margin-left: auto;
     }
   }
 
@@ -192,17 +192,30 @@
   }
 
   #wps-ic-delete {
-    float:right;
-    line-height: 30px !important;
-    color:#bc0f0f !important;
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 38px !important;
+    padding: 0 16px;
+    border: 1px solid #b32d2e;
+    border-radius: 3px;
+    background: #fff;
+    color:#b32d2e !important;
     text-decoration: none !important;
-  }
+    white-space: nowrap;
 
-  #wps-ic-leave-active {
-    margin-right:15px !important;
+    &:hover,
+    &:focus {
+      background: #b32d2e;
+      color: #fff !important;
+    }
   }
 
   .wpc-boxed-footer {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
     background: #f5f5f5 !important;
     padding:15px !important;
   }

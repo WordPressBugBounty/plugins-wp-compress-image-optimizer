@@ -36,7 +36,11 @@ if (!function_exists('wpc_v2_pull_recover')) {
         }
 
         // 2) On-upload compress queue (wpc_compress_queue).
-        delete_option('wpc_compress_queue');
+        if (class_exists('wps_local_compress') && method_exists('wps_local_compress', 'queue_clear')) {
+            wps_local_compress::queue_clear();
+        } else {
+            delete_option('wpc_compress_queue');
+        }
 
         // 3) Pending-variant transients (best effort — they also TTL out, and on
         //    an external object cache they aren't in the options table).
@@ -81,7 +85,7 @@ if (!function_exists('wpc_v2_pull_status')) {
     function wpc_v2_pull_status()
     {
         global $wpdb;
-        $queue  = get_option('wpc_compress_queue', []);
+        $queue  = class_exists('wps_local_compress') ? wps_local_compress::queue_ids() : get_option('wpc_compress_queue', []);
         $cursor = (int) get_option('wpc_v2_pull_cursor_ms', 0);
         return [
             'pull_enabled'       => (function_exists('wpc_v2_pull_enabled') && wpc_v2_pull_enabled()) ? 'on' : 'OFF — drain bails flag_off; click Run drain inline to fix',

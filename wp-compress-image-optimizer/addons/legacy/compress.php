@@ -137,7 +137,7 @@ if (!function_exists('wpc_compute_best_savings')) {
 
 /**
  * Atomic queue-dedup gate (L7). Uses object-cache ADD semantics when persistent cache is available,
- * falls back to transient check. Worker-lock (wpc_compress_lock) bounds worst case (G4).
+ * falls back to transient check. The queue worker lock (wps_local_compress::queue_lock_take) bounds worst case (G4).
  */
 if (!function_exists('wpc_atomic_queue_gate')) {
     function wpc_atomic_queue_gate($attachmentId)
@@ -190,12 +190,7 @@ if (!function_exists('wpc_maybe_trigger_optimize')) {
         if (!wpc_atomic_queue_gate($attachmentId)) return;
 
         // Gate 5: queue-array dedup (belt-and-suspenders)
-        $queue = get_option('wpc_compress_queue', []);
-        if (!is_array($queue)) $queue = [];
-        if (!in_array($attachmentId, $queue)) {
-            $queue[] = $attachmentId;
-            update_option('wpc_compress_queue', $queue, false);
-        }
+        wps_local_compress::queue_add($attachmentId);
 
         wpc_log_trigger('queued_lazy_gen', $attachmentId);
 
@@ -809,30 +804,27 @@ if (!function_exists('wpc_run_admin_drain')) {
 
 
         $compress_queue_busy = false;
-        if (!get_transient('wpc_compress_lock')) {
-            wp_cache_delete('wpc_compress_queue', 'options');
-            $cq = get_option('wpc_compress_queue', []);
-            if (is_array($cq) && !empty($cq) && class_exists('wps_local_compress')) {
-                $compress_queue_busy = true;
-                $cq_id = (int) array_shift($cq);
-                update_option('wpc_compress_queue', $cq, false);
-                if ($cq_id > 0 && get_post_type($cq_id) === 'attachment') {
-                    set_transient('wpc_compress_lock', time(), 300);
-                    try {
+        if (class_exists('wps_local_compress')) {
+            if (wps_local_compress::queue_lock_take()) {
+                try {
+                    $cq_id = wps_local_compress::queue_next();
+                    if ($cq_id > 0) {
+                        $compress_queue_busy = true;
                         $cq_obj = new wps_local_compress();
                         if (method_exists($cq_obj, 'backup_all_sizes')) {
                             $cq_obj->backup_all_sizes($cq_id);
                         }
-                        $cq_obj->singleCompressV4($cq_id, 'silent', true, 'page-load-drain');
-                    } finally {
-                        delete_transient('wpc_compress_lock');
+                        if (wps_local_compress::queue_lock_touch()) {
+                            $cq_obj->singleCompressV4($cq_id, 'silent', true, 'page-load-drain');
+                            wps_local_compress::queue_done($cq_id);
+                        }
                     }
-                } else {
-                    delete_transient('wps_ic_compress_' . $cq_id);
+                } finally {
+                    wps_local_compress::queue_lock_release();
                 }
+            } else {
+                $compress_queue_busy = true;
             }
-        } else {
-            $compress_queue_busy = true;
         }
 
         // Nothing pending anywhere → arm the 60s idle throttle
@@ -1848,6 +1840,18 @@ class wps_local_compress
     private static $allowed_types;
     private static $settings;
     private static $hook_owner;
+    private static $queue_lock_token = '';
+    private static $queue_mutex_value = '';
+
+    const QUEUE_CRON = 'wpc_compress_queue_cron';
+    const QUEUE_LOCK = 'wpc_compress_worker_lock';
+    const QUEUE_LOCK_TTL = 300;
+    const QUEUE_MAX_TRIES = 2;
+    const QUEUE_MUTEX = 'wpc_compress_queue_mutex';
+    const QUEUE_MUTEX_TTL = 5;
+    const QUEUE_ADD_ROW = 'wpc_compress_queue_add_';
+    const QUEUE_ADD_TRIES = 3;
+    const QUEUE_REMOVE_TRIES = 600;
 
 
     /**
@@ -1940,43 +1944,54 @@ class wps_local_compress
 
 
     /**
-     * Sequential queue worker — processes one image at a time, then chains to the next.
-     * Only one worker runs at a time (enforced by wpc_compress_lock transient).
+     * The loopback's end of the compress queue: answers `queued` at once (the caller waits for
+     * it, fireQueueWorker) and releases the client, then drains the queue.
      */
     public function wpc_handle_async_compress(\WP_REST_Request $request) {
-        // Suppress auto-compress hook to prevent recursion
+        @ignore_user_abort(true);
+        http_response_code(200);
+        echo 'queued';
+        if (!(function_exists('wpc_finish_request') && wpc_finish_request())) {
+            while (ob_get_level() > 0 && @ob_end_flush()) {}
+            @flush();
+        }
+        $this->runQueue('upload');
+        exit;
+    }
+
+    /**
+     * Sequential queue worker: takes the worker lock, then processes one image at a time until
+     * the queue is empty. The loopback, the cron event and the admin drain all start it here, so
+     * one worker runs at a time. The lock is refreshed before an image, before its dispatch and
+     * after it; a worker that finds the lock taken over stops, and when that is before the
+     * dispatch the image is left, in flight, to the worker that holds the lock. A worker takes
+     * an image at most once: one still at the head after it was processed (its removal did not
+     * reach the database) stops the worker. An image leaves the queue only when its processing
+     * is done; an image a dead worker held is tried once more, then dropped. False when another
+     * worker holds the lock.
+     */
+    public function runQueue($source = 'upload') {
         self::unhook_upload();
 
-        // Acquire lock (5 min TTL — failsafe if worker crashes)
-        if (get_transient('wpc_compress_lock')) {
+        if (!self::queue_lock_take()) {
             error_log('[WPC Queue] Worker blocked — lock already held');
-            return rest_ensure_response(['success' => false, 'reason' => 'worker-already-running']);
+            return false;
         }
-        set_transient('wpc_compress_lock', time(), 300);
 
         $workerStart = microtime(true);
         $processed = 0;
-        error_log('[WPC Queue] Worker started. Queue: ' . json_encode(get_option('wpc_compress_queue', [])));
+        error_log('[WPC Queue] Worker started via ' . $source . '. Queue: ' . json_encode(self::queue_ids()));
 
-
+        $owned = true;
+        $taken = [];
         try {
-            // Process queue sequentially until empty
-            while (true) {
-                wp_cache_delete('wpc_compress_queue', 'options');
-                $queue = get_option('wpc_compress_queue', []);
-                if (empty($queue)) break;
-
-                // Take next image from front of queue
-                $imageID = intval(array_shift($queue));
-                update_option('wpc_compress_queue', $queue, false);
-
-                if (!$imageID || get_post_type($imageID) !== 'attachment') {
-                    error_log('[WPC Queue] Skipping invalid ID=' . $imageID);
-                    delete_transient('wps_ic_compress_' . $imageID);
-                    continue;
+            while (($owned = self::queue_lock_touch()) && ($imageID = self::queue_next()) > 0) {
+                if (isset($taken[$imageID])) {
+                    error_log('[WPC Queue] image=' . $imageID . ' is still queued after this worker processed it; stopping, the next worker takes it');
+                    break;
                 }
-
-                $remaining = count($queue);
+                $taken[$imageID] = true;
+                $remaining = max(0, count(self::queue_ids()) - 1);
                 $queuedAt = 0;
                 $trans = get_transient('wps_ic_compress_' . $imageID);
                 if ($trans && is_array($trans) && !empty($trans['time'])) {
@@ -1985,17 +2000,15 @@ class wps_local_compress
 
                 error_log('[WPC Queue] Processing image=' . $imageID . ' position=' . ($processed + 1) . ' remaining=' . $remaining . ' waited=' . $queuedAt . 's');
 
-                // Refresh lock TTL for each image (worker is alive)
-                set_transient('wpc_compress_lock', time(), 300);
-
                 $imgStart = microtime(true);
                 try {
                     $backupOk = $this->backup_all_sizes($imageID);
                     if (!$backupOk) {
                         error_log('[WPC Queue] SKIPPED image=' . $imageID . ' — backup failed, will not compress');
+                    } elseif (!($owned = self::queue_lock_touch())) {
+                        error_log('[WPC Queue] image=' . $imageID . ' left to the worker that took the lock over, before its dispatch');
+                        break;
                     } else {
-                        // Queue worker handles upload-originated images + single-click concurrency-cap overflow.
-                        // 'upload' is the most common source; rare cap-overflow gets the same attribution (minor).
                         $this->singleCompressV4($imageID, 'silent', true, 'upload');
                     }
                 } catch (\Exception $e) {
@@ -2003,71 +2016,451 @@ class wps_local_compress
                 } catch (\Error $e) {
                     error_log('[WPC Queue] Fatal error image=' . $imageID . ': ' . $e->getMessage());
                 }
+                $owned = self::queue_lock_touch();
                 $imgElapsed = round(microtime(true) - $imgStart, 2);
 
                 $status = get_post_meta($imageID, 'ic_status', true) ?: 'failed';
                 $savings = get_post_meta($imageID, 'ic_savings', true) ?: '0';
                 error_log('[WPC Queue] Done image=' . $imageID . ' status=' . $status . ' savings=' . $savings . '% time=' . $imgElapsed . 's');
 
-                // Always clean up this image's transients
                 delete_transient('wps_ic_compress_' . $imageID);
                 delete_transient('wps_ic_queue_' . $imageID);
 
-                // If compression failed, set heartbeat so UI refreshes to uncompressed state
-                // (successful compression already sets this inside singleCompressV4)
                 if ($status !== 'compressed') {
                     set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 300);
                 }
 
+                $done = self::queue_done($imageID);
                 $processed++;
+                if (!$done || !$owned) {
+                    break;
+                }
             }
         } finally {
-            // Release lock — always, even if loop body threw past the inner catch blocks
-            delete_transient('wpc_compress_lock');
+            self::queue_lock_release();
         }
 
         $totalElapsed = round(microtime(true) - $workerStart, 2);
+        if (!$owned) {
+            error_log('[WPC Queue] Worker stopped: another worker holds the lock');
+            return $processed;
+        }
         error_log('[WPC Queue] Worker done. Processed=' . $processed . ' total_time=' . $totalElapsed . 's');
 
-        return rest_ensure_response(['success' => true, 'processed' => $processed]);
+        if (self::queue_ids()) {
+            self::queue_cron_arm();
+        }
+
+        return $processed;
+    }
+
+    /** The cron event's end of the queue: a worker runs, or a live worker is asked about again in a minute. */
+    public static function queue_cron_run() {
+        @ignore_user_abort(true);
+        if (!self::queue_ids()) {
+            return;
+        }
+        $local = new self();
+        if ($local->runQueue('cron') === false) {
+            self::queue_cron_arm(60);
+        }
+    }
+
+    /** Queues the one cron event that runs the worker in-process when no loopback reaches this site. */
+    public static function queue_cron_arm($delay = 0) {
+        if (!function_exists('wp_next_scheduled') || !function_exists('wp_schedule_single_event')) {
+            return false;
+        }
+        if (!wp_next_scheduled(self::QUEUE_CRON)) {
+            wp_schedule_single_event(time() + max(0, (int) $delay), self::QUEUE_CRON);
+        }
+        return true;
     }
 
     /**
-     * Fire the queue worker via non-blocking loopback (if not already running).
+     * The queue, read past the object cache (the worker runs in another process than the page that
+     * adds to it): the stored list, then every add recorded beside it that a write has not folded
+     * in yet.
      */
-    public function fireQueueWorker() {
-        // Don't fire if worker is already running
-        if (get_transient('wpc_compress_lock')) return;
+    public static function queue_ids() {
+        $queue = self::queue_stored();
+        foreach (array_keys(self::queue_added_rows()) as $imageID) {
+            if (!in_array($imageID, $queue)) {
+                $queue[] = $imageID;
+            }
+        }
+        return $queue;
+    }
 
-        $loopback_status = get_option('wpc_loopback_status', '');
-        if ($loopback_status === 'fail') return;
+    /** The stored id list alone, read past the object cache. */
+    private static function queue_stored() {
+        if (function_exists('wp_cache_delete')) {
+            wp_cache_delete('wpc_compress_queue', 'options');
+        }
+        $queue = get_option('wpc_compress_queue', []);
+        return is_array($queue) ? array_values($queue) : [];
+    }
 
-        $api_key = $this->getApiKey();
+    /** The adds recorded beside the list (one option row per image, QUEUE_ADD_ROW . id): [id => time queued], oldest first. */
+    private static function queue_added_rows() {
+        global $wpdb;
+        if (!isset($wpdb) || !is_object($wpdb) || !method_exists($wpdb, 'get_results')) {
+            return [];
+        }
+        $rows = (array) $wpdb->get_results($wpdb->prepare("SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_id ASC", $wpdb->esc_like(self::QUEUE_ADD_ROW) . '%'), ARRAY_A);
+        $added = [];
+        foreach ($rows as $row) {
+            $imageID = (int) substr((string) (isset($row['option_name']) ? $row['option_name'] : ''), strlen(self::QUEUE_ADD_ROW));
+            if ($imageID > 0) {
+                $added[$imageID] = (int) (isset($row['option_value']) ? $row['option_value'] : 0);
+            }
+        }
+        return $added;
+    }
 
-
-        $qw_parts = wp_parse_url(rest_url('wpc/v1/compress-async'));
-        if (!empty($qw_parts['host'])) {
-            $qw_https = (!empty($qw_parts['scheme']) && $qw_parts['scheme'] === 'https');
-            $qw_port  = !empty($qw_parts['port']) ? (int) $qw_parts['port'] : ($qw_https ? 443 : 80);
-            $qw_host  = (string) $qw_parts['host'];
-            $qw_path  = (!empty($qw_parts['path']) ? $qw_parts['path'] : '/') . (!empty($qw_parts['query']) ? '?' . $qw_parts['query'] : '');
-            $qw_req   = "POST {$qw_path} HTTP/1.1\r\nHost: {$qw_host}\r\nx-api-key: {$api_key}\r\nContent-Length: 0\r\nConnection: close\r\nUser-Agent: WPCQueueWorker/1.0\r\n\r\n";
-            $qw_fp = false;
-            if (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'wpc_loopback_open_socket')) {
-                $qw_fp = wps_ic_ajax::wpc_loopback_open_socket($qw_host, $qw_port, $qw_https, 0.2);
-            } else {
-                $qw_ctx = $qw_https ? stream_context_create(['ssl' => ['peer_name' => $qw_host, 'SNI_enabled' => true, 'verify_peer' => false, 'verify_peer_name' => false, 'allow_self_signed' => true]]) : null;
-                foreach (['127.0.0.1', 'localhost', $qw_host] as $qw_chost) {
-                    $qw_errno = 0; $qw_errstr = '';
-                    $qw_remote = ($qw_https ? 'tls://' : 'tcp://') . $qw_chost . ':' . $qw_port;
-                    $qw_sock   = $qw_ctx
-                        ? @stream_socket_client($qw_remote, $qw_errno, $qw_errstr, 0.2, STREAM_CLIENT_CONNECT, $qw_ctx)
-                        : @stream_socket_client($qw_remote, $qw_errno, $qw_errstr, 0.2);
-                    if ($qw_sock) { $qw_fp = $qw_sock; break; }
+    /**
+     * The one writer of the stored queue: under the queue mutex it folds in the adds recorded beside
+     * the list, applies $change(list, times) => [list, times], writes both, then deletes the rows it
+     * folded in. False when the mutex could not be had in $tries tries; nothing is written then.
+     */
+    private static function queue_write(callable $change, $tries) {
+        global $wpdb;
+        if (!self::queue_mutex_take($tries)) {
+            return false;
+        }
+        try {
+            $queue = self::queue_stored();
+            $times = get_option('wpc_compress_queue_times', []);
+            $times = is_array($times) ? $times : [];
+            $added = self::queue_added_rows();
+            foreach ($added as $imageID => $at) {
+                if (!in_array($imageID, $queue)) {
+                    $queue[] = $imageID;
+                }
+                if (empty($times[$imageID])) {
+                    $times[$imageID] = $at > 0 ? $at : time();
                 }
             }
-            if ($qw_fp) { @stream_set_timeout($qw_fp, 0, 100000); @fwrite($qw_fp, $qw_req); @fclose($qw_fp); }
+            list($queue, $times) = $change($queue, $times);
+            $queue = array_values($queue);
+            update_option('wpc_compress_queue', $queue, false);
+            update_option('wpc_compress_queue_times', array_intersect_key($times, array_flip(array_map('intval', $queue))), false);
+            foreach (array_keys($added) as $imageID) {
+                $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s", self::QUEUE_ADD_ROW . $imageID));
+            }
+        } finally {
+            self::queue_mutex_release();
         }
+        return true;
+    }
+
+    /**
+     * Takes the queue mutex: an INSERT IGNORE of its row, at most $tries times 10 ms apart; a mutex
+     * older than QUEUE_MUTEX_TTL is a dead writer's and is taken over by a compare-and-swap. A
+     * statement the database refused ends the tries at once.
+     */
+    private static function queue_mutex_take($tries) {
+        global $wpdb;
+        $token = md5(uniqid((string) mt_rand(), true));
+        for ($attempt = 0; $attempt < max(1, (int) $tries); $attempt++) {
+            if ($attempt > 0) {
+                usleep(10000);
+            }
+            $now = time();
+            $mine = $token . ':' . $now;
+            $inserted = $wpdb->query($wpdb->prepare("INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::QUEUE_MUTEX, $mine));
+            if ($inserted === false) {
+                return false;
+            }
+            if ((int) $inserted === 1) {
+                self::$queue_mutex_value = $mine;
+                return true;
+            }
+            $held = (string) $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::QUEUE_MUTEX));
+            if ($held !== '' && (int) substr((string) strrchr($held, ':'), 1) <= $now - self::QUEUE_MUTEX_TTL
+                && (int) $wpdb->query($wpdb->prepare("UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", $mine, self::QUEUE_MUTEX, $held)) === 1) {
+                self::$queue_mutex_value = $mine;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static function queue_mutex_release() {
+        global $wpdb;
+        if (self::$queue_mutex_value === '') {
+            return;
+        }
+        $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::QUEUE_MUTEX, self::$queue_mutex_value));
+        self::$queue_mutex_value = '';
+    }
+
+    /**
+     * The one writer that adds an image to the queue; it records when the image was queued. It
+     * never waits: when the queue mutex is busy after QUEUE_ADD_TRIES tries (about 20 ms) the add
+     * is recorded beside the list as its own option row, which every reader counts and the next
+     * write folds in.
+     */
+    public static function queue_add($imageID) {
+        global $wpdb;
+        $imageID = (int) $imageID;
+        if ($imageID <= 0) {
+            return;
+        }
+        $now = time();
+        $written = self::queue_write(function ($queue, $times) use ($imageID, $now) {
+            if (!in_array($imageID, $queue)) {
+                $queue[] = $imageID;
+            }
+            if (empty($times[$imageID])) {
+                $times[$imageID] = $now;
+            }
+            return [$queue, $times];
+        }, self::QUEUE_ADD_TRIES);
+        if (!$written) {
+            $wpdb->query($wpdb->prepare("INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::QUEUE_ADD_ROW . $imageID, (string) $now));
+        }
+    }
+
+    /** Empties the queue: the list, the times and every add recorded beside it. */
+    public static function queue_clear() {
+        global $wpdb;
+        delete_option('wpc_compress_queue');
+        delete_option('wpc_compress_queue_times');
+        $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like(self::QUEUE_ADD_ROW) . '%'));
+    }
+
+    /**
+     * The image at the head of the queue, marked in flight, or 0 when the queue is empty. The
+     * image stays in the queue until queue_done(); an image that was in flight when its worker
+     * died comes back once, and the second time it is dropped with a receipt.
+     */
+    public static function queue_next() {
+        for ($guard = 0; $guard < 1000; $guard++) {
+            $queue = self::queue_ids();
+            if (!$queue) {
+                delete_option('wpc_compress_inflight');
+                return 0;
+            }
+            $head = $queue[0];
+            $imageID = (int) $head;
+            if ($imageID <= 0 || get_post_type($imageID) !== 'attachment') {
+                error_log('[WPC Queue] Skipping invalid ID=' . $imageID);
+                delete_transient('wps_ic_compress_' . $imageID);
+                self::queue_remove($head);
+                continue;
+            }
+            $held = get_option('wpc_compress_inflight', []);
+            $tries = (is_array($held) && (int) (isset($held['id']) ? $held['id'] : 0) === $imageID)
+                ? (int) (isset($held['tries']) ? $held['tries'] : 0) + 1 : 1;
+            if ($tries > self::QUEUE_MAX_TRIES) {
+                self::queue_remove($head);
+                delete_transient('wps_ic_compress_' . $imageID);
+                delete_transient('wps_ic_queue_' . $imageID);
+                set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 300);
+                self::queue_journal('worker-died', ['id' => $imageID, 'tries' => $tries - 1]);
+                continue;
+            }
+            update_option('wpc_compress_inflight', ['id' => $imageID, 'tries' => $tries, 'at' => time()], false);
+            return $imageID;
+        }
+        return 0;
+    }
+
+    /** An image's processing is over: it leaves the queue. False when the queue could not be written. */
+    public static function queue_done($imageID) {
+        return self::queue_remove((int) $imageID);
+    }
+
+    /**
+     * The one remover: takes an image out of the queue (processed, deleted, restored, invalid) and
+     * clears its in-flight mark. It waits for the queue mutex up to QUEUE_REMOVE_TRIES tries (6 s,
+     * past QUEUE_MUTEX_TTL, so a dead writer's mutex is always taken over). False when the queue
+     * could not be written.
+     */
+    public static function queue_remove($entry) {
+        $written = self::queue_write(function ($queue, $times) use ($entry) {
+            $left = [];
+            foreach ($queue as $queued) {
+                if ((string) $queued !== (string) $entry) {
+                    $left[] = $queued;
+                }
+            }
+            return [$left, $times];
+        }, self::QUEUE_REMOVE_TRIES);
+        if (!$written) {
+            return false;
+        }
+        $held = get_option('wpc_compress_inflight', []);
+        if (is_array($held) && isset($held['id']) && (string) $held['id'] === (string) $entry) {
+            delete_option('wpc_compress_inflight');
+        }
+        return true;
+    }
+
+    /** Takes the worker lock: true for exactly one caller at a time, a dead worker's lock (older than QUEUE_LOCK_TTL) included. */
+    public static function queue_lock_take() {
+        global $wpdb;
+        if (self::$queue_lock_token === '') {
+            self::$queue_lock_token = md5(uniqid((string) mt_rand(), true));
+        }
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $now  = time();
+            $mine = self::$queue_lock_token . ':' . $now;
+            if ((int) $wpdb->query($wpdb->prepare("INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::QUEUE_LOCK, $mine)) === 1) {
+                return true;
+            }
+            $held = (string) $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::QUEUE_LOCK));
+            if ($held === '') {
+                continue;
+            }
+            if ((int) substr((string) strrchr($held, ':'), 1) > $now - self::QUEUE_LOCK_TTL) {
+                return false;
+            }
+            return (int) $wpdb->query($wpdb->prepare("UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", $mine, self::QUEUE_LOCK, $held)) === 1;
+        }
+        return false;
+    }
+
+    /** The holder of the lock says it is alive; false when the lock is no longer this worker's. */
+    public static function queue_lock_touch() {
+        global $wpdb;
+        if (self::$queue_lock_token === '') {
+            return false;
+        }
+        $wpdb->query($wpdb->prepare("UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value LIKE %s", self::$queue_lock_token . ':' . time(), self::QUEUE_LOCK, $wpdb->esc_like(self::$queue_lock_token) . ':%'));
+        $held = (string) $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::QUEUE_LOCK));
+        return strpos($held, self::$queue_lock_token . ':') === 0;
+    }
+
+    public static function queue_lock_release() {
+        global $wpdb;
+        if (self::$queue_lock_token === '') {
+            return;
+        }
+        $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value LIKE %s", self::QUEUE_LOCK, $wpdb->esc_like(self::$queue_lock_token) . ':%'));
+    }
+
+    /** Whether a worker holds the lock (a lock older than QUEUE_LOCK_TTL is a dead worker's). */
+    public static function queue_worker_running() {
+        global $wpdb;
+        $held = (string) $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::QUEUE_LOCK));
+        return $held !== '' && (int) substr((string) strrchr($held, ':'), 1) > time() - self::QUEUE_LOCK_TTL;
+    }
+
+    private static function queue_oldest_age(array $queue) {
+        $times = get_option('wpc_compress_queue_times', []);
+        $times = (is_array($times) ? $times : []) + self::queue_added_rows();
+        $oldest = 0;
+        foreach ($queue as $queued) {
+            $at = (is_array($times) && isset($times[(int) $queued])) ? (int) $times[(int) $queued] : 0;
+            if ($at > 0 && ($oldest === 0 || $at < $oldest)) {
+                $oldest = $at;
+            }
+        }
+        return $oldest > 0 ? max(0, time() - $oldest) : 0;
+    }
+
+    /** Receipt `compress-queue-stalled {reason, queued, oldest_age, ...}`, one line per reason per 10 minutes. */
+    private static function queue_journal($reason, array $fields = []) {
+        $reason = (string) $reason;
+        $seen = get_transient('wpc_compress_stalled_seen');
+        $seen = is_array($seen) ? $seen : [];
+        if (isset($seen[$reason]) && (int) $seen[$reason] > time() - 10 * MINUTE_IN_SECONDS) {
+            return;
+        }
+        $seen[$reason] = time();
+        set_transient('wpc_compress_stalled_seen', $seen, 10 * MINUTE_IN_SECONDS);
+        $queue = self::queue_ids();
+        $fields = ['reason' => $reason, 'queued' => count($queue), 'oldest_age' => self::queue_oldest_age($queue)] + $fields;
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('compress-queue-stalled', '', '', $fields);
+        }
+        error_log('[WPC Queue] stalled reason=' . $reason);
+    }
+
+    /** The loopback did not start a worker: say why, and let the cron run it in-process. */
+    private static function queue_fallback($reason, array $fields = []) {
+        self::queue_journal($reason, $fields);
+        self::queue_cron_arm();
+        if (!(defined('DOING_CRON') && DOING_CRON) && !(defined('DISABLE_WP_CRON') && DISABLE_WP_CRON) && function_exists('spawn_cron')) {
+            spawn_cron();
+        }
+        return false;
+    }
+
+    /**
+     * Start the queue worker through a loopback POST and wait (at most `wpc_loopback_confirm_timeout`,
+     * 2.5 s) for it to answer `queued`. Any other outcome (no socket, no answer, a non-2xx answer,
+     * a page that is not the worker's) is not a started worker: it journals
+     * `compress-queue-stalled {reason}` and queues the cron event that runs the worker in-process.
+     * A loopback that went unanswered is not asked again for 10 minutes. On a visitor render the
+     * fire waits for the response to be released, or goes to the cron where it cannot be. True
+     * when the worker answered.
+     */
+    public function fireQueueWorker() {
+        if (!self::queue_ids() || self::queue_worker_running()) return false;
+
+        $api_key = $this->getApiKey();
+        if ($api_key === '') return false;
+
+        if (function_exists('wpc_render_guard_active') && wpc_render_guard_active()) {
+            $released = function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request');
+            if (!($released && function_exists('wpc_net_defer') && wpc_net_defer('compress-queue-worker', [$this, 'fireQueueWorker']))) {
+                self::queue_cron_arm();
+            }
+            return false;
+        }
+
+        if (get_option('wpc_loopback_status', '') === 'fail') {
+            return self::queue_fallback('loopback-failed');
+        }
+        if ((int) get_transient('wpc_compress_loopback_unconfirmed') > 0) {
+            return self::queue_fallback('loopback-unconfirmed');
+        }
+
+        $qw_parts = wp_parse_url(rest_url('wpc/v1/compress-async'));
+        if (empty($qw_parts['host']) || !class_exists('wps_ic_ajax')
+            || !method_exists('wps_ic_ajax', 'wpc_loopback_open_socket') || !method_exists('wps_ic_ajax', 'wpc_loopback_read_answer')) {
+            return self::queue_fallback('no-loopback');
+        }
+        $qw_https = (!empty($qw_parts['scheme']) && $qw_parts['scheme'] === 'https');
+        $qw_port  = !empty($qw_parts['port']) ? (int) $qw_parts['port'] : ($qw_https ? 443 : 80);
+        $qw_host  = (string) $qw_parts['host'];
+        $qw_path  = (!empty($qw_parts['path']) ? $qw_parts['path'] : '/') . (!empty($qw_parts['query']) ? '?' . $qw_parts['query'] : '');
+        $qw_req   = "POST {$qw_path} HTTP/1.1\r\nHost: {$qw_host}\r\nx-api-key: {$api_key}\r\nContent-Length: 0\r\nConnection: close\r\nUser-Agent: WPCQueueWorker/1.0\r\n\r\n";
+        $qw_fp = wps_ic_ajax::wpc_loopback_open_socket($qw_host, $qw_port, $qw_https, 0.2);
+        if (!$qw_fp) {
+            return self::queue_fallback('loopback-refused', ['host' => $qw_host]);
+        }
+        @fwrite($qw_fp, $qw_req);
+        $qw_answer = wps_ic_ajax::wpc_loopback_read_answer($qw_fp, (float) apply_filters('wpc_loopback_confirm_timeout', 2.5, 'wpc_compress_async', 0));
+        @fclose($qw_fp);
+        if (!wps_ic_ajax::wpc_loopback_answer_queued($qw_answer)) {
+            set_transient('wpc_compress_loopback_unconfirmed', time(), 10 * MINUTE_IN_SECONDS);
+            $qw_status = preg_match('#^HTTP/\S+\s+(\d{3})#', (string) $qw_answer, $qw_m) ? (int) $qw_m[1] : 0;
+            return self::queue_fallback('loopback-unconfirmed', ['host' => $qw_host, 'status' => $qw_status]);
+        }
+        delete_transient('wpc_compress_loopback_unconfirmed');
+        return true;
+    }
+
+    /** fireQueueWorker after the response is released, where it can be; the upload never waits for the answer. */
+    public function fireQueueWorkerAfterResponse() {
+        $releasable = function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request');
+        if (!$releasable || !function_exists('wpc_finish_request') || !function_exists('add_action')) {
+            return $this->fireQueueWorker();
+        }
+        if (empty($GLOBALS['wpc_compress_fire_armed'])) {
+            $GLOBALS['wpc_compress_fire_armed'] = true;
+            $self = $this;
+            add_action('shutdown', function () use ($self) {
+                wpc_finish_request();
+                @ignore_user_abort(true);
+                $self->fireQueueWorker();
+            }, PHP_INT_MAX - 1);
+        }
+        return false;
     }
 
     // ─── Backup image files to /wpc-backups/ before compression ────────
@@ -2420,10 +2813,8 @@ class wps_local_compress
         if (function_exists('wp_cache_delete')) {
             wp_cache_delete('wpc_queued_' . $post_id, 'wpc');
         }
-        $queue = get_option('wpc_compress_queue', []);
-        if (is_array($queue) && in_array($post_id, $queue)) {
-            $queue = array_values(array_diff($queue, [$post_id]));
-            update_option('wpc_compress_queue', $queue, false);
+        if (in_array($post_id, self::queue_ids())) {
+            self::queue_remove($post_id);
         }
     }
 
@@ -2480,18 +2871,14 @@ class wps_local_compress
         set_transient('wps_ic_compress_' . $imageID, ['imageID' => $imageID, 'status' => 'queued', 'time' => time()], 300);
 
         // Add to sequential queue
-        $queue = get_option('wpc_compress_queue', []);
-        if (!in_array($imageID, $queue)) {
-            $queue[] = $imageID;
-            update_option('wpc_compress_queue', $queue, false);
-        }
+        self::queue_add($imageID);
 
-        $queueSize = count(get_option('wpc_compress_queue', []));
-        $workerRunning = get_transient('wpc_compress_lock') ? 'YES' : 'NO';
+        $queueSize = count(self::queue_ids());
+        $workerRunning = self::queue_worker_running() ? 'YES' : 'NO';
         error_log('[WPC Queue] on_upload image=' . $imageID . ' queue_size=' . $queueSize . ' worker_running=' . $workerRunning . ' elapsed=' . round(microtime(true) - $t0, 3) . 's');
 
         // Start worker if not already running
-        $this->fireQueueWorker();
+        $this->fireQueueWorkerAfterResponse();
 
         return $data;
     }
@@ -2575,11 +2962,6 @@ class wps_local_compress
         }
         set_transient('wpc_loopback_test_at', time(), HOUR_IN_SECONDS);
 
-
-        if (!empty($_SERVER['HTTP_CF_RAY'])) {
-            update_option('wpc_loopback_status', 'ok', false);
-            return true;
-        }
 
         $response = wp_remote_post(rest_url('wpc/v1/fetch'), [
             'blocking'  => true,
@@ -3321,10 +3703,8 @@ class wps_local_compress
             wp_cache_delete('wpc_queued_' . $imageID, 'wpc');
         }
         // Remove from in-flight queue option
-        $queue = get_option('wpc_compress_queue', []);
-        if (is_array($queue) && in_array($imageID, $queue)) {
-            $queue = array_values(array_diff($queue, [$imageID]));
-            update_option('wpc_compress_queue', $queue, false);
+        if (in_array($imageID, self::queue_ids())) {
+            self::queue_remove($imageID);
         }
 
 

@@ -16,25 +16,56 @@ include_once __DIR__ . '/addons/cache/beacon.php';
 
 include_once __DIR__ . '/addons/cache/link-preset.php';
 
-// The cron carrier of a v2 compress run (wps_ic_ajax::wpc_bulk_drain_cron_arm): one slice a minute
-// while the run has work, so a started run finishes without an open admin tab when no loopback
-// reaches the site (ticket 12006). The cron lane never loads the plugin core; the slice needs
-// its classes (wps_ic_ajax extends wps_ic), so this event loads the core's declarations only:
-// the event is queued only while a bulk run is active.
-add_action('wpc_bulk_drain_cron', function () {
-    if (!class_exists('wps_ic', false)) {
+if (!function_exists('wpc_cron_lane_load_core')) {
+    // The cron lane never loads the plugin core; an event that needs its classes loads the core's
+    // declarations only (wps_ic_ajax extends wps_ic). The core's includes register hooks against
+    // the plugin file (wp-compress.php defines it only on the lanes that load the core).
+    function wpc_cron_lane_load_core()
+    {
+        if (class_exists('wps_ic', false)) {
+            return;
+        }
         if (!defined('WPC_DECLARATIONS_ONLY')) {
             define('WPC_DECLARATIONS_ONLY', true);
         }
-        // The core's includes register hooks against the plugin file (wp-compress.php defines it
-        // only on the lanes that load the core).
         if (!defined('WPC_CC_PLUGIN_FILE')) {
             define('WPC_CC_PLUGIN_FILE', __DIR__ . '/wp-compress.php');
         }
         include_once __DIR__ . '/wp-compress-core.php';
     }
+}
+
+// The cron carrier of a v2 compress run (wps_ic_ajax::wpc_bulk_drain_cron_arm): one slice a minute
+// while the run has work, so a started run finishes without an open admin tab when no loopback
+// reaches the site (ticket 12006): the event is queued only while a bulk run is active.
+add_action('wpc_bulk_drain_cron', function () {
+    wpc_cron_lane_load_core();
     if (class_exists('wps_ic_ajax')) {
         wps_ic_ajax::wpc_bulk_drain_cron_run();
+    }
+});
+
+// The cron carrier of the on-upload compress queue (wps_local_compress::queue_cron_arm): runs the
+// worker in-process when the loopback did not start one.
+add_action('wpc_compress_queue_cron', function () {
+    wpc_cron_lane_load_core();
+    if (class_exists('wps_local_compress')) {
+        wps_local_compress::queue_cron_run();
+    }
+});
+
+// The daily trim of the delay registry sidecars and the stored script scans
+// (wps_ic_js_delay_v3::wpc_registry_sidecar_trim). The cron lane loads the delay engine's two
+// class files for it, nothing else.
+add_action('wpc_delay_sidecar_trim_hook', function () {
+    if (!class_exists('wps_ic_js_delay_v2', false)) {
+        include_once __DIR__ . '/classes/js_delay_v2.class.php';
+    }
+    if (!class_exists('wps_ic_js_delay_v3', false)) {
+        include_once __DIR__ . '/classes/js_delay_v3.class.php';
+    }
+    if (class_exists('wps_ic_js_delay_v3', false)) {
+        wps_ic_js_delay_v3::wpc_registry_sidecar_trim();
     }
 });
 
@@ -127,12 +158,10 @@ class wps_ic_cron
             wp_schedule_event(time(), 'daily', 'wps_ic_check_key_hook');
         }
 
-        // Delay registry sidecars nobody can reference any more (see wps_ic_js_delay_v3::wpc_registry_sidecar_trim)
-        if (class_exists('wps_ic_js_delay_v3')) {
-            add_action('wpc_delay_sidecar_trim_hook', ['wps_ic_js_delay_v3', 'wpc_registry_sidecar_trim']);
-            if (!wp_next_scheduled('wpc_delay_sidecar_trim_hook')) {
-                wp_schedule_event(time() + 600, 'daily', 'wpc_delay_sidecar_trim_hook');
-            }
+        // Delay registry sidecars nobody can reference any more, and old stored script scans
+        // (the handler is registered at file level above)
+        if (!wp_next_scheduled('wpc_delay_sidecar_trim_hook')) {
+            wp_schedule_event(time() + 600, 'daily', 'wpc_delay_sidecar_trim_hook');
         }
 
         // Natural-assets convergence: the MIME proof's other arming paths are all opportunistic
@@ -268,7 +297,7 @@ class wps_ic_cron
 
         if (wp_remote_retrieve_response_code($call) == 401) {
             $cache = new wps_ic_cache_integrations();
-            $cache->remove_key();
+            $cache->remove_key('daily-key-check-401');
         }
     }
 
