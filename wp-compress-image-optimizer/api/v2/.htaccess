@@ -1,26 +1,26 @@
 # WP Compress v7.02 — Direct entry point hardening
 #
-# Allow only the 5 named handlers in this directory. Anything else 403's.
+# Allow only the 6 named handlers in this directory. Anything else 403's.
 # This is defense-in-depth — if a future accidental file drop lands here,
 # it can't be served. Also blocks attackers probing for unexpected entries.
 
 <IfModule mod_authz_core.c>
     # Apache 2.4+
-    <FilesMatch "^(bg_swap|bg_swap_batch|bg_swap_announce|health|_shared)\.php$">
+    <FilesMatch "^(bg_swap|bg_swap_batch|bg_swap_announce|health|sized_report|_shared)\.php$">
         Require all granted
     </FilesMatch>
-    <FilesMatch "^(?!(bg_swap|bg_swap_batch|bg_swap_announce|health|_shared)\.php$).*">
+    <FilesMatch "^(?!(bg_swap|bg_swap_batch|bg_swap_announce|health|sized_report|_shared)\.php$).*">
         Require all denied
     </FilesMatch>
 </IfModule>
 
 <IfModule !mod_authz_core.c>
     # Apache 2.2 fallback
-    <FilesMatch "^(bg_swap|bg_swap_batch|bg_swap_announce|health|_shared)\.php$">
+    <FilesMatch "^(bg_swap|bg_swap_batch|bg_swap_announce|health|sized_report|_shared)\.php$">
         Order Allow,Deny
         Allow from all
     </FilesMatch>
-    <FilesMatch "^(?!(bg_swap|bg_swap_batch|bg_swap_announce|health|_shared)\.php$).*">
+    <FilesMatch "^(?!(bg_swap|bg_swap_batch|bg_swap_announce|health|sized_report|_shared)\.php$).*">
         Order Allow,Deny
         Deny from all
     </FilesMatch>

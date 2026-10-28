@@ -23,6 +23,10 @@ define('WPC_EXCLUDE_COOKIES', false);
 define('WPC_MANDATORY_COOKIES', false);
 #WPC_MANDATORY_COOKIES_END
 
+#WPC_PERSONAL_COOKIES_START
+define('WPC_PERSONAL_COOKIES', false);
+#WPC_PERSONAL_COOKIES_END
+
 #WPC_CACHE_QUERY_PARAMS_START
 define('WPC_CACHE_QUERY_PARAMS', false);
 #WPC_CACHE_QUERY_PARAMS_END
@@ -67,10 +71,13 @@ include_once $pluginExists . 'classes/config.class.php';
 include_once $pluginExists . 'addons/cache/advancedCache.php';
 
 
-foreach($_COOKIE as $key => $value) {
-  if (strpos($key, 'wordpress_logged_in_') === 0 && !WPC_CACHE_LOGGED_IN) {
-    return; // Don't cache for logged-in users
-  }
+if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'loginCookieName')) {
+  $wpc_signed_in = wps_ic_url_key::loginCookieName() !== '';
+} else {
+  $wpc_signed_in = (bool) preg_grep('/^wordpress_logged_in_/', array_keys($_COOKIE));
+}
+if ($wpc_signed_in && !WPC_CACHE_LOGGED_IN) {
+  return; // Don't cache for logged-in users
 }
 
 // Check for excluded cookies
@@ -140,6 +147,7 @@ if (isset($_SERVER['HTTP_CRITICALCOMBINE']) || isset($_SERVER['HTTP_DISABLEWPC']
 
 
 $check_url = ($_SERVER['HTTP_HOST'] ?? '') . ($_SERVER['REQUEST_URI'] ?? '');
+$check_query = (strpos($check_url, '?') !== false) ? explode('#', (string) substr($check_url, strpos($check_url, '?') + 1))[0] : '';
 $check_url = explode('?', $check_url)[0];
 
 $wpc_home_path = (defined('WPC_HOME_PATH') && is_string(WPC_HOME_PATH) && WPC_HOME_PATH !== '') ? WPC_HOME_PATH : '/';
@@ -184,7 +192,8 @@ if (is_array($wpc_url_excludes_list)) {
 }
 if (is_array($wpc_cache_excludes_list)) {
     foreach ($wpc_cache_excludes_list as $pattern) {
-        if ($wpc_match_pattern($check_url, $pattern)) {
+        if ($wpc_match_pattern($check_url, $pattern)
+            || (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'queryExcludeMatch') && wps_ic_url_key::queryExcludeMatch($pattern, $check_url, $check_query))) {
             return; // Skip cache for this URL (plugin still optimizes)
         }
     }

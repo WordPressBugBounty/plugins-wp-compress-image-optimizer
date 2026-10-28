@@ -33,12 +33,15 @@ if (!function_exists('wpc_v2_fetch_signed_header')) {
         if ($apikey === '' || $orch === '' || $zone_id === '') {
             return false;
         }
+        // The header configures the zone's edge: asked only once a fresh credits answer
+        // registers this address (a copied database carries the live zone id, ticket 12238).
+        if (!wpc_site_address_confirmed('signed-header')) {
+            return false;
+        }
 
 
         $body = wp_json_encode([
-            'apikey'   => $apikey,
-            'zone_id'  => $zone_id,
-            'site_url' => site_url(),
+            'apikey' => $apikey,
         ]);
         if (!is_string($body)) {
             return false;

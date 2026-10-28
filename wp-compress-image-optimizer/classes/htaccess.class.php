@@ -241,6 +241,34 @@ class wps_ic_htaccess extends wps_ic
         return (bool) apply_filters('wpc_browser_cache_headers', $on);
     }
 
+    /** Whether the service turned the 7.25.56 block off for this site (policy.off_bc_htaccess): the block is written in the form 7.25.50 wrote. */
+    public function wpcBrowserCacheOldForm()
+    {
+        return function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('off_bc_htaccess') === 1;
+    }
+
+    /**
+     * Rewrites a block already in .htaccess to the form the site's policy asks for. Writes nothing
+     * where the setting is off or the file holds no block; answers whether the file now holds the
+     * wanted form. A rewrite the probe refuses restores the file and keeps the person's setting,
+     * and the form is not tried again for six hours.
+     */
+    public function wpcSyncBrowserCacheForm()
+    {
+        try {
+            $path = $this->getHtaccessPath();
+            if (empty($path) || !$this->isReadble($path) || strpos((string) $this->getContents($path), self::WPC_BC_START) === false) {
+                return false;
+            }
+            if (get_transient('wpc_bc_form_held') === ($this->wpcBrowserCacheOldForm() ? 'old' : 'new')) {
+                return false;
+            }
+            return $this->wpcApplyBrowserCache(false, 'policy');
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public function wpcBrowserCacheRules()
     {
         $s  = self::WPC_BC_START . PHP_EOL;
@@ -261,7 +289,18 @@ class wps_ic_htaccess extends wps_ic
         $s .= '</IfModule>' . PHP_EOL;
         $s .= '<IfModule mod_headers.c>' . PHP_EOL;
         $s .= '  <FilesMatch "\.(css|js|jpe?g|png|gif|webp|avif|svgz?|ico|woff2?|ttf|otf|eot)$">' . PHP_EOL;
-        $s .= '    Header set Cache-Control "public, max-age=31536000"' . PHP_EOL;
+        if ($this->wpcBrowserCacheOldForm()) {
+            $s .= '    Header set Cache-Control "public, max-age=31536000"' . PHP_EOL;
+        } else {
+            $s .= '    <IfModule mod_version.c>' . PHP_EOL;
+            $s .= '      <IfVersion >= 2.4.7>' . PHP_EOL;
+            $s .= '        Header setifempty Cache-Control "public, max-age=31536000"' . PHP_EOL;
+            $s .= '      </IfVersion>' . PHP_EOL;
+            $s .= '      <IfVersion < 2.4.7>' . PHP_EOL;
+            $s .= '        Header set Cache-Control "public, max-age=31536000"' . PHP_EOL;
+            $s .= '      </IfVersion>' . PHP_EOL;
+            $s .= '    </IfModule>' . PHP_EOL;
+        }
         $s .= '  </FilesMatch>' . PHP_EOL;
         $s .= '</IfModule>' . PHP_EOL;
         $s .= self::WPC_BC_END . PHP_EOL;
@@ -277,7 +316,13 @@ class wps_ic_htaccess extends wps_ic
         );
     }
 
-    public function wpcApplyBrowserCache($force = false)
+    /**
+     * Writes the Browser Cache block and probes the site. $by names who asks: '' is a person's toggle,
+     * whose refused rewrite switches the setting off and says so; 'policy' (the form sync) and 'upgrade'
+     * are not a person, so a refused rewrite puts the file back as it was, holds the form for six hours,
+     * receipts it and leaves the setting as the person chose it.
+     */
+    public function wpcApplyBrowserCache($force = false, $by = '')
     {
         try {
             if (!$force && !$this->wpcBrowserCacheEnabled()) {
@@ -303,7 +348,11 @@ class wps_ic_htaccess extends wps_ic
             }
 
             wpc_fs_put($path . '.wpc-bcbak', $content);
-            if (wpc_fs_put($path, $desired) === false) {
+            if (wpc_fs_put($path, $desired) === false || (string) $this->getContents($path) !== $desired) {
+                $restored = $this->wpcRestoreBrowserCache($path, $content);
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('browser-cache-write-failed', '', '', ['restored' => $restored ? 1 : 0]);
+                }
                 return false;
             }
 
@@ -325,7 +374,16 @@ class wps_ic_htaccess extends wps_ic
                 if ($wpc_last >= 200 && $wpc_last < 500) { $wpc_any_ok = true; } // 200/302/401/403 = Apache parsed .htaccess OK
             }
             if ($wpc_bad || !$wpc_any_ok) {
-                wpc_fs_put($path, $content);
+                if (!$this->wpcRestoreBrowserCache($path, $content) && function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('browser-cache-restore-failed', '', '', ['code' => $wpc_last]);
+                }
+                if ($by === 'policy' || $by === 'upgrade') {
+                    set_transient('wpc_bc_form_held', $this->wpcBrowserCacheOldForm() ? 'old' : 'new', 21600);
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('browser-cache-' . $by . '-rollback', '', '', ['code' => $wpc_last, 'form' => $this->wpcBrowserCacheOldForm() ? 'old' : 'new']);
+                    }
+                    return false;
+                }
                 $s = get_option(WPS_IC_SETTINGS);
                 if (is_array($s)) { $s['browser-cache-headers'] = '0'; update_option(WPS_IC_SETTINGS, $s); }
                 if (function_exists('wpc_cache_first_log')) {
@@ -341,6 +399,23 @@ class wps_ic_htaccess extends wps_ic
         } catch (\Throwable $e) {
             return false;
         }
+    }
+
+    /**
+     * Puts the file back as it was before a rewrite: the content written again and, if the bytes read
+     * back are not the original, the backup copied over it. Answers whether the bytes read back are the original.
+     */
+    private function wpcRestoreBrowserCache($path, $content)
+    {
+        wpc_fs_put($path, $content);
+        if ((string) $this->getContents($path) !== $content) {
+            @copy($path . '.wpc-bcbak', $path);
+        }
+        if ((string) $this->getContents($path) === $content) {
+            return true;
+        }
+        $this->notice('not-writeable-htaccess');
+        return false;
     }
 
     public function wpcRemoveBrowserCache()
@@ -632,6 +707,7 @@ HTACCESS;
         if ($cookies) {
             $rules .= 'RewriteCond %{HTTP:Cookie} !(' . $cookies . ') [NC]' . PHP_EOL;
         }
+        $rules .= $this->mandatoryCookieConditions();
 
         $rules .= 'RewriteCond "' . $cache_dir_path . '/%{ENV:WPC_MOBILE}index.html' . $enc . '" -s' . PHP_EOL;
         $rules .= 'RewriteRule .* "' . $cacheRoot . $http_host . '%{REQUEST_URI}/%{ENV:WPC_MOBILE}index.html' . $enc . '" [L]' . PHP_EOL;
@@ -654,6 +730,7 @@ HTACCESS;
         if ($cookies) {
             $rules .= 'RewriteCond %{HTTP:Cookie} !(' . $cookies . ') [NC]' . PHP_EOL;
         }
+        $rules .= $this->mandatoryCookieConditions();
 
         // TODO: Excluded URLs from Cache?
         $excludedCacheUrls = false;
@@ -684,6 +761,9 @@ HTACCESS;
     /** Enable static serve: write rules → self-test → keep, or auto-rollback if the host doesn't serve it. */
     public function applyStaticServe()
     {
+        if (self::pageCacheBlocked()) {
+            return ['ok' => false, 'reason' => 'page-cache-blocked'];
+        }
         $was_active  = (int) get_option('wpc_static_serve_active', 0) === 1;
         $this->htaccessPath = $this->getHtaccessPath();
         if (empty($this->htaccessPath)) {
@@ -761,6 +841,62 @@ HTACCESS;
         $this->fileSystem()->put_contents($this->htaccessPath, $content);
     }
 
+    private function staticServeBlockPresent()
+    {
+        $path = $this->getHtaccessPath();
+        return !empty($path) && strpos((string) $this->getContents($path), '#StartWPC-StaticServe') !== false;
+    }
+
+    private function wpCacheLineIsOurs()
+    {
+        $path = function_exists('wpc_wp_config_path') ? wpc_wp_config_path() : '';
+        if ($path === '' || !@is_readable($path)) {
+            return false;
+        }
+        return preg_match('/define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*true\s*\)\s*;[ \t]*\/\/\s*WP Compress Cache/i', (string) @file_get_contents($path)) === 1;
+    }
+
+    /**
+     * With WPC_NO_PAGE_CACHE on, takes down what our page cache armed before the constant: the
+     * static-serve rules, our advanced-cache.php drop-in and the WP_CACHE line we wrote. Another
+     * cache's drop-in and a WP_CACHE line a person wrote stay. Reads the state first and writes
+     * only what is there; answers what it took down (an empty array when there was nothing).
+     */
+    public function retireForBlockedPageCache()
+    {
+        $retired = [];
+        if (!self::pageCacheBlocked()) {
+            return $retired;
+        }
+        if ((int) get_option('wpc_static_serve_active', 0) === 1 || $this->staticServeBlockPresent()) {
+            $this->removeStaticServe();
+            $retired['static_serve'] = $this->staticServeBlockPresent() ? 'failed' : 'removed';
+        }
+        if (function_exists('wpc_advanced_cache_dropin_state') && wpc_advanced_cache_dropin_state($this->advancedCacheFilePath()) === 'ours') {
+            $this->removeAdvancedCache();
+            $retired['drop_in'] = wpc_advanced_cache_dropin_state($this->advancedCacheFilePath()) === 'ours' ? 'failed' : 'removed';
+        }
+        if (defined('WP_CACHE') && WP_CACHE && $this->wpCacheLineIsOurs()) {
+            $this->removeOurWPCacheLine();
+            $retired['wp_cache'] = $this->wpCacheLineIsOurs() ? 'failed' : 'removed';
+        }
+        return $retired;
+    }
+
+    private function removeOurWPCacheLine()
+    {
+        $path = function_exists('wpc_wp_config_path') ? wpc_wp_config_path() : '';
+        if ($path === '' || !@is_readable($path) || !@is_writable($path)) {
+            return false;
+        }
+        $contents = (string) @file_get_contents($path);
+        $next = preg_replace('/^[ \t]*define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*true\s*\)\s*;[ \t]*\/\/\s*WP Compress Cache[ \t]*(\r\n|\n|\r)?/mi', '', $contents);
+        if (!is_string($next) || $next === $contents) {
+            return false;
+        }
+        return wpc_fs_put($path, $next) !== false;
+    }
+
     /**
      * Self-test: write a MARKER mirror at a nonce URL that has NO WordPress page, then loopback-fetch it.
      * Only the static .htaccess rule can produce that marker (WP would 404) — so a marker in the response
@@ -772,7 +908,7 @@ HTACCESS;
         if (!$this->isApache || !defined('WPS_IC_CACHE') || !function_exists('home_url')) {
             return false;
         }
-        $host = (string) wp_parse_url(home_url(), PHP_URL_HOST);
+        $host = class_exists('wps_cacheHtml') ? wps_cacheHtml::staticMirrorHost() : '';
         if ($host === '') {
             return false;
         }
@@ -903,7 +1039,90 @@ HTACCESS;
         $cookies[] = 'wptouch_switch_toggle';
         $cookies[] = 'comment_author_';
         $cookies[] = 'comment_author_email_';
-        return implode('|', $cookies);
+        if (function_exists('wpc_cache_phase_on') && wpc_cache_phase_on('p4')) {
+            $lists = $this->dropInCookieLists();
+            foreach (array_merge($lists['variant'], $lists['exclude'], $lists['personal'], $lists['commerce']) as $name) {
+                $cookies[] = preg_quote($name, '/');
+            }
+        }
+        return implode('|', array_unique($cookies));
+    }
+
+    /**
+     * The cookie lists the advanced-cache drop-in decides with, derived where setAdvancedCache()
+     * derives them: the cookies that vary the copy (a visit carrying one is not the bare page), the
+     * ones that keep a visit out of the cache, the ones that must be present, the personal cookies
+     * the store refuses, and the cart cookies the drop-in bypasses on. Only names a rewrite
+     * condition can carry as they are (letters, digits, underscore, dash, dot).
+     */
+    private function dropInCookieLists()
+    {
+        if (!class_exists('wps_ic_url_key') && defined('WPS_IC_DIR') && is_readable(WPS_IC_DIR . 'traits/url_key.php')) {
+            include_once WPS_IC_DIR . 'traits/url_key.php';
+        }
+        $clean = function ($names) {
+            $out = [];
+            foreach ((array) $names as $name) {
+                if (is_string($name) && preg_match('/^[A-Za-z0-9_.\-]{1,100}\z/', $name) === 1) {
+                    $out[$name] = $name;
+                }
+            }
+            return array_values($out);
+        };
+        $personal = class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'wpc_personal_cookie_names') ? wps_cacheHtml::wpc_personal_cookie_names() : [];
+        return [
+            'variant'   => $clean(class_exists('wps_ic_url_key') ? wps_ic_url_key::cacheCookiesFromSettings() : []),
+            'exclude'   => $clean(class_exists('wps_ic_url_key') ? wps_ic_url_key::excludeCookiesFromSettings() : []),
+            'mandatory' => $clean(class_exists('wps_ic_url_key') ? wps_ic_url_key::mandatoryCookiesFromSettings() : []),
+            'personal'  => $clean($personal),
+            'commerce'  => ['woocommerce_cart_hash', 'woocommerce_items_in_cart'],
+        ];
+    }
+
+    /**
+     * The rewrite conditions that keep a request without a mandatory cookie out of the static
+     * mirror, as the drop-in bypasses it: one condition per cookie, the name at the start of the
+     * header or after a semicolon (a prefix when it ends in an underscore), with a value that is
+     * neither empty nor 0, which PHP's empty() reads as missing.
+     */
+    private function mandatoryCookieConditions()
+    {
+        if (!function_exists('wpc_cache_phase_on') || !wpc_cache_phase_on('p4')) {
+            return '';
+        }
+        $rules = '';
+        foreach ($this->dropInCookieLists()['mandatory'] as $name) {
+            $rules .= 'RewriteCond %{HTTP:Cookie} (?:^|;\\s*)' . preg_quote($name, '/') . (substr($name, -1) === '_' ? '[^=;]*' : '') . '=(?!0?(?:;|\\s*$))' . PHP_EOL;
+        }
+        return $rules;
+    }
+
+    /**
+     * Rewrites the static-serve block when it is live and differs from what the rules are now (a
+     * cookie list was saved, the phase switch changed); answers whether it wrote. No self-test: the
+     * rules differ only in their cookie conditions.
+     */
+    public function refreshStaticServeBlock()
+    {
+        if (self::pageCacheBlocked()) {
+            return false;
+        }
+        if ((int) get_option('wpc_static_serve_active', 0) !== 1) {
+            return false;
+        }
+        if (method_exists($this, 'isApache')) {
+            $this->isApache();
+        }
+        $this->htaccessPath = $this->getHtaccessPath();
+        if (empty($this->htaccessPath) || !$this->isApache || !$this->isWriteable($this->htaccessPath)) {
+            return false;
+        }
+        $rules = $this->modifyForCaching();
+        $content = (string) $this->getContents($this->htaccessPath);
+        if (empty($rules) || strpos($content, '#StartWPC-StaticServe' . PHP_EOL . $rules . '#EndWPC-StaticServe') !== false) {
+            return false;
+        }
+        return $this->writeStaticServeBlock() !== false;
     }
 
     public function removeHtaccessRules()
@@ -942,9 +1161,17 @@ HTACCESS;
      * web root, 2026-09-22/24) ran with the drop-in installed, WP_CACHE unset and "only the home
      * URL caches", with nothing on screen.
      */
+    private static function pageCacheBlocked()
+    {
+        return function_exists('wpc_page_cache_blocked') ? wpc_page_cache_blocked() : (defined('WPC_NO_PAGE_CACHE') && WPC_NO_PAGE_CACHE);
+    }
+
     public function setWPCache($status = true)
     {
         $status = (bool) $status;
+        if ($status && self::pageCacheBlocked()) {
+            return 'blocked';
+        }
         $runtimeActive = defined('WP_CACHE') && WP_CACHE;
         $this->configPath = $this->getConfigPath();
         $verdict = $this->writeWPCacheConstant($status, $runtimeActive);
@@ -1066,12 +1293,42 @@ HTACCESS;
     }
 
 
+    private static function bakedList($items)
+    {
+        $quoted = array();
+        foreach ((array) $items as $item) {
+            if (is_scalar($item)) {
+                $quoted[] = var_export((string) $item, true);
+            }
+        }
+        return empty($quoted) ? 'false' : 'array(' . implode(', ', $quoted) . ')';
+    }
+
+    private static function bakeBlock($contents, $block, $literal)
+    {
+        $pattern = '/#' . $block . "_START\r?\n(.+?)\r?\n#" . $block . '_END/s';
+        return preg_replace_callback($pattern, function () use ($block, $literal) {
+            return '#' . $block . "_START\ndefine('" . $block . "', " . $literal . ");\n#" . $block . '_END';
+        }, $contents);
+    }
+
     public function setAdvancedCache()
     {
+        if (self::pageCacheBlocked()) {
+            return;
+        }
         $error = false;
         $this->advancedCachePath = $this->getAdvancedCachePath();
 
         if (!$this->advancedCachePath) {
+            return;
+        }
+
+        if (function_exists('wpc_advanced_cache_dropin_state') && wpc_advanced_cache_dropin_state($this->advancedCachePath) === 'foreign') {
+            if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_dropin_foreign_kept')) {
+                set_transient('wpc_dropin_foreign_kept', 1, 6 * HOUR_IN_SECONDS);
+                wpc_cache_first_log('drop-in-foreign-kept', '', '', ['path' => basename(dirname($this->advancedCachePath)) . '/' . basename($this->advancedCachePath)]);
+            }
             return;
         }
 
@@ -1138,75 +1395,36 @@ HTACCESS;
                 $newContents = preg_replace("/$pattern/s", $replacement, $newContents);
             }
 
-            // Set cache cookies constant in advanced-cache
-            $cookiesConstant = 'false';
-            $excludeCookiesConstant = 'false';
-            $mandatoryCookiesConstant = 'false';
-
-            $cookies_list = [];
-            $exclude_cookies_list = [];
-
-            if (!empty($settings['cache']['cookies']) && $settings['cache']['cookies'] == 1) {
-                $cookies_setting = get_option('wps_ic_cache_cookies', []);
-
-                if (!empty($cookies_setting['cookies'])) {
-                    $cookies_list = $cookies_setting['cookies'];
-                }
-
-                if (!empty($cookies_setting['exclude_cookies'])) {
-                    $exclude_cookies_list = $cookies_setting['exclude_cookies'];
-                }
+            // Set the cookie constants in advanced-cache: the three lists come from the one derivation
+            // an install with no drop-in reads at request time (the row and the filters).
+            if (!class_exists('wps_ic_url_key') && is_readable(WPS_IC_DIR . 'traits/url_key.php')) {
+                include_once WPS_IC_DIR . 'traits/url_key.php';
             }
+            $cookies_list = wps_ic_url_key::cacheCookiesFromSettings();
+            $exclude_cookies_list = wps_ic_url_key::excludeCookiesFromSettings();
+            $mandatory_cookies_list = wps_ic_url_key::mandatoryCookiesFromSettings();
 
-            // Allow plugins to add/modify cache cookies and exclude cookies via filters
-            $cookies_list = apply_filters('wps_ic_cache_cookies', $cookies_list);
-            $exclude_cookies_list = apply_filters('wps_ic_exclude_cookies', $exclude_cookies_list);
+            $newContents = self::bakeBlock($newContents, 'WPC_CACHE_COOKIES', self::bakedList($cookies_list));
+            $newContents = self::bakeBlock($newContents, 'WPC_EXCLUDE_COOKIES', self::bakedList($exclude_cookies_list));
+            $newContents = self::bakeBlock($newContents, 'WPC_MANDATORY_COOKIES', self::bakedList($mandatory_cookies_list));
 
-            if (!empty($cookies_list)) {
-                $cookiesFormatted = array_map(function ($cookie) {
-                    return "'" . addslashes($cookie) . "'";
-                }, $cookies_list);
-                $cookiesConstant = 'array(' . implode(', ', $cookiesFormatted) . ')';
+            // Personal cookies (wps_ic_url_key::personalCookieNames(): the WooCommerce cart, a
+            // password-protected post, a commenter). The drop-in runs before any plugin can add
+            // to the wpc_personal_cookies filter, so the filtered list is baked here and the
+            // drop-in reads it from this constant: one list for the drop-in and WordPress.
+            if (!class_exists('wps_ic_url_key') && is_readable(WPS_IC_DIR . 'traits/url_key.php')) {
+                include_once WPS_IC_DIR . 'traits/url_key.php';
             }
-
-            if (!empty($exclude_cookies_list)) {
-                $excludeCookiesFormatted = array_map(function ($cookie) {
-                    return "'" . addslashes($cookie) . "'";
-                }, $exclude_cookies_list);
-                $excludeCookiesConstant = 'array(' . implode(', ', $excludeCookiesFormatted) . ')';
-            }
-
-            // Mandatory cookies - cache is bypassed entirely if any of these are not set
-            $mandatory_cookies_list = apply_filters('wps_ic_mandatory_cookies', []);
-            if (!empty($mandatory_cookies_list)) {
-                $mandatoryCookiesFormatted = array_map(function ($cookie) {
-                    return "'" . addslashes($cookie) . "'";
-                }, $mandatory_cookies_list);
-                $mandatoryCookiesConstant = 'array(' . implode(', ', $mandatoryCookiesFormatted) . ')';
-            }
-
-            // Replace cache cookies
-            $cookiePattern = "#WPC_CACHE_COOKIES_START\r?\n(.+?)\r?\n#WPC_CACHE_COOKIES_END";
-            $cookieReplacement = "#WPC_CACHE_COOKIES_START\ndefine('WPC_CACHE_COOKIES', $cookiesConstant);\n#WPC_CACHE_COOKIES_END";
-            $newContents = preg_replace("/$cookiePattern/s", $cookieReplacement, $newContents);
-
-            // Replace exclude cookies
-            $excludeCookiePattern = "#WPC_EXCLUDE_COOKIES_START\r?\n(.+?)\r?\n#WPC_EXCLUDE_COOKIES_END";
-            $excludeCookieReplacement = "#WPC_EXCLUDE_COOKIES_START\ndefine('WPC_EXCLUDE_COOKIES', $excludeCookiesConstant);\n#WPC_EXCLUDE_COOKIES_END";
-            $newContents = preg_replace("/$excludeCookiePattern/s", $excludeCookieReplacement, $newContents);
-
-            // Replace mandatory cookies
-            $mandatoryCookiePattern = "#WPC_MANDATORY_COOKIES_START\r?\n(.+?)\r?\n#WPC_MANDATORY_COOKIES_END";
-            $mandatoryCookieReplacement = "#WPC_MANDATORY_COOKIES_START\ndefine('WPC_MANDATORY_COOKIES', $mandatoryCookiesConstant);\n#WPC_MANDATORY_COOKIES_END";
-            $newContents = preg_replace("/$mandatoryCookiePattern/s", $mandatoryCookieReplacement, $newContents);
+            $personalCookiesConstant = (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'personalCookieNames'))
+                ? var_export(array_values(array_map('strval', wps_ic_url_key::personalCookieNames())), true) : 'false';
+            $personalCookiePattern = "#WPC_PERSONAL_COOKIES_START\r?\n(.+?)\r?\n#WPC_PERSONAL_COOKIES_END";
+            $personalCookieReplacement = "#WPC_PERSONAL_COOKIES_START\ndefine('WPC_PERSONAL_COOKIES', " . $personalCookiesConstant . ");\n#WPC_PERSONAL_COOKIES_END";
+            $newContents = preg_replace("/$personalCookiePattern/s", str_replace(['\\', '$'], ['\\\\', '\\$'], $personalCookieReplacement), $newContents);
 
             // Query parameters that may vary the cache, and the ones the key ignores. Baked for the
             // same reason the cookie lists are: url_key.php reads them from the drop-in's constants,
             // and the drop-in runs before WordPress can answer a get_option(). Defined either way —
             // `false` when the row is off — so a baked drop-in is always the single source of truth.
-            $queryParamsConstant = 'false';
-            $ignoreQueryParamsConstant = 'false';
-
             $query_params_list = [];
             $ignore_query_params_list = [];
 
@@ -1227,56 +1445,17 @@ HTACCESS;
             $query_params_list = apply_filters('wps_ic_cache_query_params', $query_params_list);
             $ignore_query_params_list = apply_filters('wps_ic_ignore_query_params', $ignore_query_params_list);
 
-            if (!empty($query_params_list)) {
-                $queryParamsFormatted = array_map(function ($param) {
-                    return "'" . addslashes($param) . "'";
-                }, $query_params_list);
-                $queryParamsConstant = 'array(' . implode(', ', $queryParamsFormatted) . ')';
-            }
-
-            if (!empty($ignore_query_params_list)) {
-                $ignoreQueryParamsFormatted = array_map(function ($param) {
-                    return "'" . addslashes($param) . "'";
-                }, $ignore_query_params_list);
-                $ignoreQueryParamsConstant = 'array(' . implode(', ', $ignoreQueryParamsFormatted) . ')';
-            }
-
-            $queryParamsPattern = "#WPC_CACHE_QUERY_PARAMS_START\r?\n(.+?)\r?\n#WPC_CACHE_QUERY_PARAMS_END";
-            $queryParamsReplacement = "#WPC_CACHE_QUERY_PARAMS_START\ndefine('WPC_CACHE_QUERY_PARAMS', $queryParamsConstant);\n#WPC_CACHE_QUERY_PARAMS_END";
-            $newContents = preg_replace("/$queryParamsPattern/s", $queryParamsReplacement, $newContents);
-
-            $ignoreQueryParamsPattern = "#WPC_IGNORE_QUERY_PARAMS_START\r?\n(.+?)\r?\n#WPC_IGNORE_QUERY_PARAMS_END";
-            $ignoreQueryParamsReplacement = "#WPC_IGNORE_QUERY_PARAMS_START\ndefine('WPC_IGNORE_QUERY_PARAMS', $ignoreQueryParamsConstant);\n#WPC_IGNORE_QUERY_PARAMS_END";
-            $newContents = preg_replace("/$ignoreQueryParamsPattern/s", $ignoreQueryParamsReplacement, $newContents);
+            $newContents = self::bakeBlock($newContents, 'WPC_CACHE_QUERY_PARAMS', self::bakedList($query_params_list));
+            $newContents = self::bakeBlock($newContents, 'WPC_IGNORE_QUERY_PARAMS', self::bakedList($ignore_query_params_list));
 
 
             // ZERO DB queries (was 2 SELECTs per request). Re-baked here on every settings/excludes save.
-            $urlExcludesConstant = 'false';
-            $cacheExcludesConstant = 'false';
-
             $wpc_url_excludes_opt = get_option('wpc-url-excludes');
-            if (!empty($wpc_url_excludes_opt['exclude-url-from-all']) && is_array($wpc_url_excludes_opt['exclude-url-from-all'])) {
-                $urlExFmt = array_map(function ($p) {
-                    return "'" . addslashes($p) . "'";
-                }, $wpc_url_excludes_opt['exclude-url-from-all']);
-                $urlExcludesConstant = 'array(' . implode(', ', $urlExFmt) . ')';
-            }
-
             $wpc_cache_excludes_opt = get_option('wpc-excludes');
-            if (!empty($wpc_cache_excludes_opt['cache']) && is_array($wpc_cache_excludes_opt['cache'])) {
-                $cacheExFmt = array_map(function ($p) {
-                    return "'" . addslashes($p) . "'";
-                }, $wpc_cache_excludes_opt['cache']);
-                $cacheExcludesConstant = 'array(' . implode(', ', $cacheExFmt) . ')';
-            }
-
-            $urlExPattern = "#WPC_URL_EXCLUDES_START\r?\n(.+?)\r?\n#WPC_URL_EXCLUDES_END";
-            $urlExReplacement = "#WPC_URL_EXCLUDES_START\ndefine('WPC_URL_EXCLUDES', $urlExcludesConstant);\n#WPC_URL_EXCLUDES_END";
-            $newContents = preg_replace("/$urlExPattern/s", $urlExReplacement, $newContents);
-
-            $cacheExPattern = "#WPC_CACHE_EXCLUDES_START\r?\n(.+?)\r?\n#WPC_CACHE_EXCLUDES_END";
-            $cacheExReplacement = "#WPC_CACHE_EXCLUDES_START\ndefine('WPC_CACHE_EXCLUDES', $cacheExcludesConstant);\n#WPC_CACHE_EXCLUDES_END";
-            $newContents = preg_replace("/$cacheExPattern/s", $cacheExReplacement, $newContents);
+            $newContents = self::bakeBlock($newContents, 'WPC_URL_EXCLUDES',
+                is_array($wpc_url_excludes_opt) && is_array($wpc_url_excludes_opt['exclude-url-from-all'] ?? null) ? self::bakedList($wpc_url_excludes_opt['exclude-url-from-all']) : 'false');
+            $newContents = self::bakeBlock($newContents, 'WPC_CACHE_EXCLUDES',
+                is_array($wpc_cache_excludes_opt) && is_array($wpc_cache_excludes_opt['cache'] ?? null) ? self::bakedList($wpc_cache_excludes_opt['cache']) : 'false');
 
             if (!class_exists('wps_ic_url_key') && is_readable(WPS_IC_DIR . 'traits/url_key.php')) {
                 include_once WPS_IC_DIR . 'traits/url_key.php';
@@ -1290,7 +1469,15 @@ HTACCESS;
             if ($newContents !== $currentAdvancedCache) {
                 wpc_fs_put($this->advancedCachePath, $newContents);
             }
+            if (function_exists('wpc_cache_phase_on') && wpc_cache_phase_on('p4')) {
+                $this->refreshStaticServeBlock();
+            }
         }
+    }
+
+    private function advancedCacheFilePath()
+    {
+        return ABSPATH . 'wp-content/advanced-cache.php';
     }
 
     public function getAdvancedCachePath()
@@ -1299,7 +1486,7 @@ HTACCESS;
             require_once ABSPATH . 'wp-admin/includes/file.php';
         }
 
-        $config_file = ABSPATH . 'wp-content/advanced-cache.php';
+        $config_file = $this->advancedCacheFilePath();
 
         if (!file_exists($config_file)) {
             // Initialize the WP_Filesystem

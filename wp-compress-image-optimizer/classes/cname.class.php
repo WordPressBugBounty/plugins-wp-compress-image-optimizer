@@ -419,7 +419,7 @@ class wps_ic_cname
 		}
 		$r = wp_remote_get(WPS_IC_KEYSURL . '?action=test_origin_fetch&apikey=' . urlencode((string) $apikey)
 			. '&nonce=' . urlencode($nonce) . '&time=' . time(),
-			['timeout' => (int) apply_filters('wpc_origin_fetch_timeout', 25), 'sslverify' => false,
+			['timeout' => (int) apply_filters('wpc_origin_fetch_timeout', 25), 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL),
 			 'user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : 'wpc']);
 		@unlink($probe_file);
 		if (is_wp_error($r) || (int) wp_remote_retrieve_response_code($r) !== 200) {

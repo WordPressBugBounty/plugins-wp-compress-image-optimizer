@@ -14,6 +14,61 @@ function pathWalker($path, $find)
   return $array;
 }
 
+function fixCssRefuse()
+{
+  http_response_code(403);
+  die();
+}
+
+function fixCssStylesheet($path)
+{
+  global $dirName;
+
+  $root = realpath($dirName);
+  $real = realpath($path);
+  if ($root === false || $real === false) {
+    return '';
+  }
+
+  $root = rtrim(str_replace('\\', '/', $root), '/');
+  $real = str_replace('\\', '/', $real);
+
+  if (strpos($real, $root . '/') === 0 && substr($real, -4) === '.css' && is_file($real)) {
+    return $real;
+  }
+
+  return '';
+}
+
+function fixCssInsideRoot($path)
+{
+  global $dirName;
+
+  $path = str_replace('\\', '/', $path);
+  $root = rtrim(str_replace('\\', '/', $dirName), '/');
+
+  $parts = [];
+  foreach (explode('/', $path) as $part) {
+    if ($part === '' || $part === '.') {
+      continue;
+    }
+
+    if ($part === '..') {
+      if (!$parts) {
+        return false;
+      }
+      array_pop($parts);
+      continue;
+    }
+
+    $parts[] = $part;
+  }
+
+  $normal = ($path !== '' && $path[0] === '/' ? '/' : '') . implode('/', $parts);
+
+  return strpos($normal, $root . '/') === 0;
+}
+
 // Code Here
 if (isset($_SERVER['HTTPS']) && ($_SERVER['HTTPS'] == 'on' || $_SERVER['HTTPS'] == 1) || isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https') {
   $protocol = 'https://';
@@ -25,7 +80,27 @@ if (isset($_SERVER['HTTPS']) && ($_SERVER['HTTPS'] == 'on' || $_SERVER['HTTPS'] 
 $siteUrl = $protocol . $_SERVER['HTTP_HOST'];
 
 // Decode the URL, because it's encoded in GET
-$cssUrl = urldecode($_GET['css']);
+$rawCss = isset($_GET['css']) && is_string($_GET['css']) ? $_GET['css'] : '';
+if ($rawCss === '') {
+  die();
+}
+
+$forms = [$rawCss];
+for ($level = 0; $level < 5; $level++) {
+  $decoded = urldecode($forms[$level]);
+  if ($decoded === $forms[$level]) {
+    break;
+  }
+  $forms[] = $decoded;
+}
+
+foreach ($forms as $form) {
+  if (strpos($form, '..') !== false || preg_match('/[\x00-\x1f\x7f\\\\]/', $form)) {
+    fixCssRefuse();
+  }
+}
+
+$cssUrl = urldecode($rawCss);
 
 // Parse the URLs to get the host components
 $siteHostValidation = parse_url($siteUrl, PHP_URL_HOST);
@@ -40,37 +115,31 @@ if ($siteHostValidation === $cssHostValidation) {
 
 
 // Zone Name
-$zoneName = urldecode($_GET['zoneName']);
+$zoneName = isset($_GET['zoneName']) && is_string($_GET['zoneName']) ? urldecode($_GET['zoneName']) : '';
 
 // Info about file
 $path = parse_url($cssUrl, PHP_URL_PATH);
+$path = is_string($path) ? $path : '';
 
-// Get the filename and extension using pathinfo
-$fileInfo = pathinfo($path);
-
-// Extract filename and extension
-$extension = $fileInfo['extension'];
+// Extract the extension
+$extension = pathinfo($path, PATHINFO_EXTENSION);
 
 // File extension is not css or not found
-if (!$extension || $extension !== 'css') {
+if ($extension !== 'css') {
   header('Location: ' . $cssUrl, 302);
   die();
 }
 
 // Get the filename
-$cssFilename = basename($cssUrl);
-$cssUrlPath = str_replace($cssFilename, '', $cssUrl);
+$cssFilename = basename($path);
+$cssUrlPath = substr($cssUrl, 0, strcspn($cssUrl, '?#'));
+$cssUrlPath = substr($cssUrlPath, 0, strrpos($cssUrlPath, '/') + 1);
 
-$cssFilename = explode('?', $cssFilename);
-$cssFilename = $cssFilename[0];
-
-// Remove the site URL from the Path to retrieve just the path
-$cssPath = str_replace([$siteUrl . '/', 'http://' . $_SERVER['HTTP_HOST'] . '/'], '', $cssUrlPath);
-$cssPath = rtrim($cssPath, '/');
+$cssPath = trim(dirname($path), '/');
 
 // Get clean ABSPATH
 $dirName = str_replace('/wp-content/plugins/wp-compress-image-optimizer', '', dirname(__FILE__));
-$filePath = $dirName . '/' . $cssPath . '/' . $cssFilename;
+$filePath = fixCssStylesheet($dirName . '/' . $cssPath . '/' . $cssFilename);
 
 function replaceCSS($matches)
 {
@@ -120,7 +189,7 @@ function replaceCSS($matches)
 
 
           // Once again, check if the file exists in figured out path
-          if (file_exists($dirName . '/' . $walker)) {
+          if (fixCssInsideRoot($dirName . '/' . $walker) && file_exists($dirName . '/' . $walker)) {
             return 'url("' . $siteUrl . '/' . $walker . '")';
           }
         } elseif (strpos($foundUrls, './') !== false) {

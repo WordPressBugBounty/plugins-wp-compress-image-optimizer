@@ -128,7 +128,8 @@ class wps_ic_admin_notice {
   public function render_notice() {
     $screen = get_current_screen();
 
-    if (!$this->global && $screen->id != 'settings_page_wpcompress' && $screen->id != 'toplevel_page_wpcompress') {
+    $own_slug = function_exists('wpc_settings_page_target') ? wpc_settings_page_target()['slug'] : 'wpcompress';
+    if (!$this->global && !in_array($screen->id, ['settings_page_' . $own_slug, 'toplevel_page_' . $own_slug, 'settings_page_wpcompress', 'toplevel_page_wpcompress'], true)) {
       return true;
     }
 

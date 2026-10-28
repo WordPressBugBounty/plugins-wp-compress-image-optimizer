@@ -76,15 +76,7 @@ class wps_ic_crit_corpus
 
         $this->patterns = '/(<link[^>]*rel=["\']stylesheet["\'][^>]*>)|((?<!<noscript>)<style\b[^>]*>(.*?)<\/style>)|(<link\b[^>]*?onload=["\']this.rel=["\']stylesheet["\']["\'][^>]*>)/si';
 
-        $cf = get_option(WPS_IC_CF);
-        $cfCname = get_option(WPS_IC_CF_CNAME);
-        $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok())) ? $cfCname : get_option('ic_custom_cname');
-        if (!empty($custom_cname) && function_exists('wpc_cdn_cname_is_reachable') && !wpc_cdn_cname_is_reachable($custom_cname)) { $custom_cname = ''; }
-        if (empty($custom_cname) || !$custom_cname) {
-            $this->zone_name = get_option('ic_cdn_zone_name');
-        } else {
-            $this->zone_name = $custom_cname;
-        }
+        $this->zone_name = wpc_cdn_host();
 
         //Check if Hide my WP is active and get replaces
         $this->hmwpReplace = false;
@@ -157,17 +149,7 @@ class wps_ic_crit_corpus
         if ($href === '' || stripos($href, 'data:') === 0) {
             return '';
         }
-        $own = [];
-        $ownHosts = function_exists('wpc_crit_own_hosts') ? wpc_crit_own_hosts() : [];
-        $ownHosts[] = (string) parse_url((string) self::$site_url, PHP_URL_HOST);
-        $ownHosts[] = (string) $this->zone_name;
-        foreach ($ownHosts as $ownHost) {
-            $ownHost = strtolower(trim((string) $ownHost));
-            if ($ownHost !== '') {
-                $own[$ownHost] = 1;
-                $own[strpos($ownHost, 'www.') === 0 ? substr($ownHost, 4) : 'www.' . $ownHost] = 1;
-            }
-        }
+        $own = $this->own_host_set();
         for ($hop = 0; $hop < 2; $hop++) {
             $parts = parse_url(strpos($href, '//') === 0 ? 'https:' . $href : $href);
             if (!is_array($parts) || empty($parts['path'])) {
@@ -187,6 +169,61 @@ class wps_ic_crit_corpus
         return strpos($path, '..') === false ? $path : '';
     }
 
+    /**
+     * The hosts this site serves its own files from, lower case, each with its www twin:
+     * wpc_crit_own_hosts, the site URL's host and the zone this class rewrites to. The keys are
+     * the hosts.
+     */
+    private function own_host_set()
+    {
+        $own = [];
+        $ownHosts = function_exists('wpc_crit_own_hosts') ? wpc_crit_own_hosts() : [];
+        $ownHosts[] = (string) parse_url((string) self::$site_url, PHP_URL_HOST);
+        $ownHosts[] = (string) $this->zone_name;
+        foreach ($ownHosts as $ownHost) {
+            $ownHost = strtolower(trim((string) $ownHost));
+            if ($ownHost !== '') {
+                $own[$ownHost] = 1;
+                $own[strpos($ownHost, 'www.') === 0 ? substr($ownHost, 4) : 'www.' . $ownHost] = 1;
+            }
+        }
+        return $own;
+    }
+
+    /** True when $url is an http(s) address on one of this site's own hosts. */
+    public function is_own_url($url)
+    {
+        $parts = parse_url(trim((string) $url));
+        if (!is_array($parts) || empty($parts['host']) || empty($parts['scheme'])
+            || !in_array(strtolower((string) $parts['scheme']), ['http', 'https'], true)) {
+            return false;
+        }
+        $own = $this->own_host_set();
+        return isset($own[strtolower((string) $parts['host'])]);
+    }
+
+    /**
+     * The text of one of this site's own stylesheets, read from disk, for a caller that is not
+     * building the corpus (the font scan). '' for a sheet on another host, one that is not a
+     * .css file, one that is not on disk, one whose real path is outside the directories
+     * WordPress serves files from (ABSPATH, the content, plugin and theme directories, uploads),
+     * which a symlink can lead out of, and for an unreadable one. At most $maxBytes bytes are
+     * read. The address maps to a path the way the corpus reads it (corpus_own_path,
+     * local_file_path); nothing is fetched.
+     */
+    public function own_sheet_text($href, $maxBytes)
+    {
+        $path = $this->corpus_own_path($href);
+        if ($path === '' || strtolower(substr($path, -4)) !== '.css') {
+            return '';
+        }
+        $file = wpc_install_file_real($this->local_file_path($path));
+        if ($file === '' || !is_file($file)) {
+            return '';
+        }
+        $text = @file_get_contents($file, false, null, 0, max(1, (int) $maxBytes));
+        return is_string($text) ? $text : '';
+    }
 
     /**
      * The ?criticalCombine=true render: the page with its sheets and inline styles replaced by one
@@ -656,6 +693,8 @@ class wps_ic_crit_corpus
                 ? trim($wpc_ff[1], " \t\"'") : '';
             if ($fontFamily !== '' && wpc_css_is_icon_font($fontFamily)) {
                 $disp = 'block';
+            } elseif (function_exists('wpc_font_display_site_kept') && wpc_font_display_site_kept($fontDisplayRaw)) {
+                return $m[0];
             } elseif (function_exists('wpc_font_display_effective')) {
                 $disp = wpc_font_display_effective($fontDisplayRaw, $fontFamily);
                 if (!in_array($disp, ['swap', 'block', 'auto', 'optional', 'fallback'], true)) { $disp = 'swap'; }
@@ -668,18 +707,8 @@ class wps_ic_crit_corpus
             $content = preg_replace_callback('/src:\s*url\("([^"]+\.woff2)"\)\s*format\(\s*\'woff2\'\s*\);/is', [$this, 'changeFontToCDN'], $content);
         }
 
-        if (function_exists('wpc_css_isolate_sheet')) {
-            $content = wpc_css_isolate_sheet((string) $content);
-        }
         $this->current_file .= "/* SCRIPT : $src */" . PHP_EOL;
-        // Wrap content in media query if it exists
-        if ($media_query) {
-            $this->current_file .= "@media " . $media_query . " {" . PHP_EOL;
-            $this->current_file .= $content . PHP_EOL;
-            $this->current_file .= "}" . PHP_EOL;
-        } else {
-            $this->current_file .= $content . PHP_EOL;
-        }
+        $this->current_file .= wpc_css_wrap($content, $media_query, true) . PHP_EOL;
 
         $this->write_file_and_next();
 
@@ -753,14 +782,14 @@ class wps_ic_crit_corpus
         return $body;
     }
 
-    public function getLocalContent($url)
+    /**
+     * The path on disk of one of this site's files named by address or by root-relative path: a zone
+     * address is unwrapped to the address behind it, the query is dropped, and the plugin, includes,
+     * uploads and theme directories are used where the path names them, ABSPATH for the rest. The
+     * path is not checked to exist.
+     */
+    public function local_file_path($url)
     {
-        $output = [];
-
-        if ($this->log_criticalCombine) {
-            $this->logger->log('Fetching script content.');
-        }
-
         if ($this->hmwpReplace) {
 
             foreach ($this->hmwp_rewrite->_replace['to'] as $key => $value) {
@@ -817,9 +846,26 @@ class wps_ic_crit_corpus
             $finalPath = ABSPATH . $path;
         }
 
+        return $finalPath;
+    }
+
+    public function getLocalContent($url)
+    {
+        $output = [];
+
+        if ($this->log_criticalCombine) {
+            $this->logger->log('Fetching script content.');
+        }
+
+        $finalPath = $this->local_file_path($url);
 
         if ($this->log_criticalCombine) {
             $this->logger->log('Fetching script content.' . $finalPath);
+        }
+
+        $finalPath = strtolower(substr($finalPath, -4)) === '.css' ? wpc_install_file_real($finalPath) : '';
+        if ($finalPath === '') {
+            return false;
         }
 
         $content = false;
@@ -934,7 +980,7 @@ class wps_ic_crit_corpus
                 && apply_filters('wpc_combine_css_natural_fonts', true)) {
                 return 'https://' . $this->zone_name . $font_path;
             }
-            return 'https://' . $this->zone_name . '/m:0/a:' . $absolute;
+            return wpc_asset_zone_url($this->zone_name, 'm:0', $absolute, $absolute);
         }
 
         if ($is_img) {
@@ -956,7 +1002,7 @@ class wps_ic_crit_corpus
                     && stripos($wpc_ip, '/wp-content/') !== false
                     && strcasecmp((string) $this->zone_name, $wpc_sh) !== 0
                     && apply_filters('wpc_combine_css_natural_rasters', true)) {
-                    return 'https://' . $this->zone_name . $wpc_ip;
+                    return 'https://' . $this->zone_name . $wpc_ip . wpc_asset_sprite_fragment($absolute);
                 }
                 return 'https://' . $this->zone_name . '/q:u/r:0/wp:0/w:1/u:' . $absolute;
             }
@@ -1009,7 +1055,7 @@ class wps_ic_crit_corpus
         }
         if (!empty($this->settings['font-subsetting']) && $this->settings['font-subsetting'] == '1') {
             if (strpos($html[1], 'icon') === false && strpos($html[1], 'awesome') === false && strpos($html[1], 'lightgallery') === false && strpos($html[1], 'gallery') === false && strpos($html[1], 'side-cart-woocommerce') === false) {
-                return 'src:url("https://' . $this->zone_name . '/font:true/a:' . $html[1] . '");';
+                return 'src:url("' . wpc_asset_zone_url($this->zone_name, 'font:true', $html[1], $html[1]) . '");';
             }
         }
 
@@ -1020,7 +1066,7 @@ class wps_ic_crit_corpus
             && apply_filters('wpc_combine_css_natural_fonts', true)) {
             return 'src:url("https://' . $this->zone_name . $font_path . '");';
         }
-        return 'src:url("https://' . $this->zone_name . '/m:0/a:' . $html[1] . '");';
+        return 'src:url("' . wpc_asset_zone_url($this->zone_name, 'm:0', $html[1], $html[1]) . '");';
     }
 
     public function combine($html)
@@ -1043,8 +1089,21 @@ class wps_ic_crit_corpus
             return $placeholder;
         }, $html);
 
+        $noscript_placeholders = [];
+        if (function_exists('wpc_policy_cohort') && wpc_policy_cohort('corpus_noscript') === 1) {
+            $html = preg_replace_callback('/<noscript\b[^>]*>.*?<\/noscript>/si', function ($match) use (&$noscript_placeholders) {
+                $placeholder = '___NOSCRIPT_PLACEHOLDER_' . count($noscript_placeholders) . '___';
+                $noscript_placeholders[$placeholder] = $match[0];
+                return $placeholder;
+            }, $html);
+        }
+
         // STEP 2: Now process CSS (scripts are temporarily removed)
         $html = preg_replace_callback($this->patterns, [$this, 'script_combine_and_replace'], $html);
+
+        foreach ($noscript_placeholders as $placeholder => $original_noscript) {
+            $html = str_replace($placeholder, $original_noscript, $html);
+        }
 
         // STEP 3: Restore all <script> tags
         foreach ($script_placeholders as $placeholder => $original_script) {

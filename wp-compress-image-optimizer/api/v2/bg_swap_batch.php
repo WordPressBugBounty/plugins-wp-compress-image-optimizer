@@ -71,12 +71,15 @@ if ($jobId !== '') {
     }
 }
 
+wpc_v2_direct_require_journal_room($imageID, $jobId);
+
 $t_after_validate = microtime(true);
 
 
 $journal_entries  = [];
 $results          = [];
 $persisted_count  = $rejected_count = $duplicate_count = 0;
+$journal_ready    = null;
 
 foreach ($variants as $idx => $v) {
     if (!is_array($v)) {
@@ -157,8 +160,7 @@ foreach ($variants as $idx => $v) {
     } elseif ($fetch_url !== '') {
 
 
-        $ctx = stream_context_create(['http' => ['timeout' => 15, 'follow_location' => 0, 'max_redirects' => 0]]);
-        $raw = @file_get_contents($fetch_url, false, $ctx);
+        $raw = wpc_v2_pull_read_url($fetch_url);
         if ($raw === false || $raw === '') {
             $results[] = ['ok' => false, 'kind' => 'rejected', 'error' => 'fetch_url_failed', 'sizeLabel' => $sz, 'format' => $fmt];
             $rejected_count++;
@@ -176,8 +178,15 @@ foreach ($variants as $idx => $v) {
         continue;
     }
 
+    if ($journal_ready === null) {
+        $journal_ready = wpc_v2_journal_ensure_dir();
+    }
+    if (!$journal_ready) {
+        wpc_v2_direct_respond(503, ['error' => 'journal_unavailable', 'retry_via' => 'rest']);
+    }
+
     // Atomic disk write
-    $persist = wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $sz, $fmt, 'direct_bg_swap_batch', wpc_v2_variant_claim($v));
+    $persist = wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $sz, $fmt, 'direct_bg_swap_batch', wpc_v2_variant_claim($v), $jobId);
     if (($persist['refused'] ?? '') !== '') {
         // Refused by the store (no smaller than the file WordPress serves at this size, or a picture of another file): settled as no improvement, not written.
         $journal_entries[] = ['type' => 'no_improvement', 'sizeLabel' => $sz, 'format' => $fmt, 'reason' => (string) $persist['refused'], 'baselineKb' => 0.0];

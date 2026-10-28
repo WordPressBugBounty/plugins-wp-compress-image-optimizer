@@ -1,5 +1,10 @@
 <?php
+if (!current_user_can('manage_options')) {
+    return;
+}
 global $wps_ic, $wpdb;
+wpc_log_combine_request($_GET);
+$wpc_logger_nonce = wp_create_nonce('wps_ic_nonce_action');
 ?>
 <table id="information-table" class="wp-list-table widefat fixed striped posts">
     <thead>
@@ -10,20 +15,12 @@ global $wps_ic, $wpdb;
         <td colspan="3">
             <p>
               <?php
-              if (!empty($_GET['log_critCombine'])) {
-                  if ($_GET['log_critCombine'] === 'true') {
-                      update_option('wps_log_critCombine', sanitize_text_field($_GET['log_critCombine']));
-                  } else {
-                      delete_option('wps_log_critCombine');
-                  }
-              }
-
               $log_critCombine = get_option('wps_log_critCombine');
 
               if (empty($log_critCombine) || $log_critCombine == 'false') {
-                  echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&log_critCombine=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                  echo '<a href="' . esc_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&log_critCombine=true&wps_ic_nonce=' . $wpc_logger_nonce) . '" class="button-primary" style="margin-right:20px;">Enable</a>';
               } else {
-                  echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&log_critCombine=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                  echo '<a href="' . esc_url(wpc_debug_tool_base_url($wps_ic::$slug) . '&view=debug_tool&log_critCombine=false&wps_ic_nonce=' . $wpc_logger_nonce) . '" class="button-primary" style="margin-right:20px;">Disable</a>';
               }
               ?>
                 This will log combine progress to a file.
@@ -43,6 +40,7 @@ global $wps_ic, $wpdb;
                   mkdir($logs_dir, 0755, true);
               }
 
+              if (!function_exists('list_directory_contents')) {
               function list_directory_contents($dir, $base_url) {
                   $output = '<ul class="ul-disc">';
                   $items = scandir($dir);
@@ -73,6 +71,7 @@ global $wps_ic, $wpdb;
 
                   $output .= '</ul>';
                   return $output;
+              }
               }
 
               // Get the site URL for direct file access

@@ -134,6 +134,10 @@ class wps_ic_connect extends wps_ic
         }
 
         if ($call->success && $call->data->apikey !== '' && $call->data->response_key !== '') {
+            // The zone comes from this key (the answer below or /v2/zone), never from what the
+            // database held before: it may be a copy of another site's (ticket 12238).
+            wpc_v2_identity_clear();
+
             $options = new wps_ic_options();
             $options->set_option('api_key', $call->data->apikey);
             $options->set_option('response_key', $call->data->response_key);
@@ -209,8 +213,6 @@ class wps_ic_connect extends wps_ic
             $cache::purgeAll();
             delete_option('wps_ic_url_changed');
 
-
-            delete_option('wpc_v2_provisioned_fingerprint');
             update_option('wpc_v2_force_provision', 1, false);
 
             delete_transient('wps_ic_account_status');

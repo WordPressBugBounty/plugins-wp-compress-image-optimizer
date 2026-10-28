@@ -113,6 +113,16 @@ if (!class_exists('wps_ic_doctor_crit')) {
             $noPageFile = function_exists('wpc_saved_page_missing_file') ? wpc_saved_page_missing_file($key) : '';
             $noPage = $noPageFile !== '' && @is_file($noPageFile);
             $facts[] = self::fact('no-page lock', $noPage ? self::file_state($noPageFile, $now) : 'none', 'fn:wpc_saved_page_missing_file');
+            $dropNotes = [];
+            if (function_exists('wpc_saved_page_dropped_note')) {
+                foreach ($ctx->devices as $device) {
+                    $dropNote = wpc_saved_page_dropped_note($key, $device === 'mobile');
+                    if ($dropNote !== []) {
+                        $dropNotes[$device] = ['why' => $dropNote['why'], 'at' => self::at($dropNote['at'])];
+                    }
+                }
+            }
+            $facts[] = self::fact('saved page dropped', $dropNotes === [] ? 'none' : $dropNotes, 'fn:wpc_saved_page_dropped_note');
 
             // The removal epochs, side by side; the doctor does not reconcile them.
             $siteAcked = get_option('wpc_crit_site_epoch_acked', null);

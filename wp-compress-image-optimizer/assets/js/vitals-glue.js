@@ -24,7 +24,7 @@
     // some monitors) still produced a v.php row that defined the waterfall's Fully Loaded
     // (9.2s receipt) AND polluted the field panel with bot samples. A pageview with zero
     // input ever is not a user session: no gesture => no beacon, in any browser.
-    var HU = false;
+    var HU = window.wpcAfterHeroGesture === 1;
     ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll', 'mousemove'].forEach(function (ev) {
         addEventListener(ev, function () { HU = true; }, { once: true, passive: true, capture: true });
     });

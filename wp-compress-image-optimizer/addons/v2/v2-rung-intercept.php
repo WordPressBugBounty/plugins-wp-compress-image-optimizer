@@ -2,6 +2,58 @@
 if (!defined('ABSPATH')) exit;
 
 
+if (!function_exists('wpc_v2_rung_width_asked')) {
+    function wpc_v2_rung_width_asked($att, $width, array $known, $meta = null, $source_url = '')
+    {
+        $width = (int) $width;
+        if ($width <= 0) return false;
+        if (isset($known[$width])) return true;
+        $printed = get_post_meta((int) $att, 'wpc_printed_rungs', true);
+        if (is_array($printed) && in_array($width, array_map('intval', $printed), true)) return true;
+        if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_nw_ladder_widths')
+            && in_array($width, wps_rewriteLogic::wpc_nw_ladder_widths($meta, (string) $source_url), true)) return true;
+        $asked = get_post_meta((int) $att, 'wpc_ideal_widths', true);
+        return is_array($asked) && in_array($width, array_map('intval', $asked), true);
+    }
+}
+
+if (!function_exists('wpc_v2_rung_bound_off')) {
+    function wpc_v2_rung_bound_off()
+    {
+        return function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('off_rung_bound') === 1;
+    }
+}
+
+if (!function_exists('wpc_v2_rung_budget_open')) {
+    function wpc_v2_rung_budget_open()
+    {
+        $limit = (int) apply_filters('wpc_rung_intercept_budget', 120);
+        $hour = (int) floor(time() / 3600);
+        $held = get_option('wpc_rung_budget', []);
+        $held = (is_array($held) && (int) ($held['h'] ?? 0) === $hour) ? $held : ['h' => $hour, 'n' => 0, 's' => 0];
+        if ((int) $held['n'] < $limit) return true;
+        if (empty($held['s'])) {
+            $held['s'] = 1;
+            update_option('wpc_rung_budget', $held, false);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('rung-intercept-budget', '', '', ['limit' => $limit]);
+            }
+        }
+        return false;
+    }
+}
+
+if (!function_exists('wpc_v2_rung_budget_spend')) {
+    function wpc_v2_rung_budget_spend()
+    {
+        $hour = (int) floor(time() / 3600);
+        $held = get_option('wpc_rung_budget', []);
+        $held = (is_array($held) && (int) ($held['h'] ?? 0) === $hour) ? $held : ['h' => $hour, 'n' => 0, 's' => 0];
+        $held['n'] = (int) $held['n'] + 1;
+        update_option('wpc_rung_budget', $held, false);
+    }
+}
+
 if (!function_exists('wpc_v2_rung_intercept')) {
     function wpc_v2_rung_intercept()
     {
@@ -11,13 +63,13 @@ if (!function_exists('wpc_v2_rung_intercept')) {
         $uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
         if ($uri === '' || strpos($uri, '/uploads/') === false) return;
         $path = (string) parse_url($uri, PHP_URL_PATH);
-        if (!preg_match('#^(.*/)([^/]+)-(\d{2,4})x(\d{2,4})\.(avif|webp|jpe?g|png)$#i', $path, $m)) return;
+        if (!preg_match('#^(.*/)([^/]+)-(\d{2,4})(?:x\d{2,4}|w)\.(avif|webp|jpe?g|png)$#i', $path, $m)) return;
         if (!apply_filters('wpc_rung_intercept_enabled', true)) return;
 
         $dir_url  = $m[1];                   // e.g. /wp-content/uploads/2026/05/
         $stem     = $m[2];                   // e.g. puscas-adryan-..._E-unsplash
         $want_w   = (int) $m[3];
-        $req_ext  = strtolower($m[5]);
+        $req_ext  = strtolower($m[4]);
 
 
         if (!function_exists('attachment_url_to_postid')) return;
@@ -48,8 +100,20 @@ if (!function_exists('wpc_v2_rung_intercept')) {
             readfile($exact_abs);
             exit;
         }
+        $hard_crop = class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_nw_crop_kept')
+            && wps_rewriteLogic::wpc_nw_crop_kept($path, $meta);
         $subdir = (strpos($meta['file'], '/') !== false) ? substr($meta['file'], 0, strrpos($meta['file'], '/') + 1) : '';
         $base   = rtrim($up['basedir'], '/') . '/' . $subdir;
+        $crop_pick = '';
+        if ($hard_crop) {
+            $crop_base = preg_replace('/\.[^.]+$/', '', basename($path));
+            foreach (array_unique([strtolower((string) pathinfo((string) $meta['file'], PATHINFO_EXTENSION)), 'jpg', 'jpeg', 'png']) as $crop_ext) {
+                if ($crop_ext !== '' && $crop_ext !== $req_ext && @is_file($base . $crop_base . '.' . $crop_ext)) {
+                    $crop_pick = $subdir . $crop_base . '.' . $crop_ext;
+                    break;
+                }
+            }
+        }
 
         // Candidate widths: registered sizes + the main file + on-disk adaptive names from
         // ic_local_variants ({W}x{H}[-fmt] labels — the deterministic naming).
@@ -66,10 +130,13 @@ if (!function_exists('wpc_v2_rung_intercept')) {
                 if (preg_match('/^(\d+)x(\d+)(?:-[a-z0-9]+)?$/', (string) $lk, $am)) {
                     $aw = (int) $am[1];
                     if ($aw > 0 && !isset($widths[$aw])) $widths[$aw] = $stem . '-' . $am[1] . 'x' . $am[2] . '.x';
+                } elseif (preg_match('/^(\d+)w(?:-[a-z0-9]+)?$/', (string) $lk, $am)) {
+                    $aw = (int) $am[1];
+                    if ($aw > 0 && !isset($widths[$aw])) $widths[$aw] = $stem . '-' . $am[1] . 'w.x';
                 }
             }
         }
-        if (empty($widths)) return;
+        if (empty($widths) && $crop_pick === '') return;
         ksort($widths);
 
 
@@ -90,15 +157,22 @@ if (!function_exists('wpc_v2_rung_intercept')) {
                 }
             }
         }
+        if ($crop_pick !== '') $pick = $crop_pick;
         if ($pick === '') return;
 
 
         if (function_exists('wpc_v2_sized_trigger_queue')) {
-            wpc_v2_sized_trigger_queue($att, $want_w, $want_w);
+            if (wpc_v2_rung_bound_off()) {
+                wpc_v2_sized_trigger_queue($att, $want_w, $want_w);
+            } elseif (!get_transient('wpc_szt_' . $att . '_' . $want_w)
+                && wpc_v2_rung_width_asked($att, $want_w, $widths, $meta, $site . $dir_url . $stem . '.jpg') && wpc_v2_rung_budget_open()
+                && wpc_v2_sized_trigger_queue($att, $want_w, $want_w)) {
+                wpc_v2_rung_budget_spend();
+            }
         }
         if (!headers_sent()) {
             header('Cache-Control: no-store, max-age=0');
-            header('X-WPC-Rung: nearest;want=' . $want_w);
+            header('X-WPC-Rung: ' . ($crop_pick !== '' ? 'crop' : 'nearest') . ';want=' . $want_w);
             wp_redirect(rtrim($up['baseurl'], '/') . '/' . ltrim($pick, '/'), 302);
             exit;
         }

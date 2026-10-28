@@ -12,6 +12,20 @@ class wps_ic_js_delay_v2
     protected $excludes;
     protected $priority_run;
 
+    // WooCommerce's cart fragments script, as the keep list can see it: the keep list is matched
+    // against the script's src only (never its id), and the file is
+    // woocommerce/assets/js/frontend/cart-fragments(.min).js. Written as the handle name
+    // wc-cart-fragments it matched nothing, so the script meant to stay eager was delayed until
+    // a gesture and a shopper's header cart showed 0 until the first click (ticket 12239).
+    const WOO_CART_FRAGMENTS = '/cart-fragments';
+
+    // The jQuery/WooCommerce chain kept out of delay on a WooCommerce site or beside a consent
+    // manager (the cart, the variation form and the checkout must work before a gesture). One
+    // list, read by both branches here and by the v3 engine's closure.
+    const WOO_EAGER_CHAIN = ['jquery.min.js', 'jquery.js', 'jquery-migrate', 'jquery-ui', 'jquery.blockUI',
+        'js-cookie', 'js.cookie', 'woocommerce.min.js', self::WOO_CART_FRAGMENTS,
+        'wc-add-to-cart', 'wc-checkout'];
+
     protected $userExcludes;
     protected $deferPatterns;
     protected $userDeferScripts;
@@ -19,10 +33,11 @@ class wps_ic_js_delay_v2
     public static $settings;
     public function __construct()
     {
-		self::$settings = get_option(WPS_IC_SETTINGS);
+		self::$settings = function_exists('wpc_levered_settings') ? wpc_levered_settings(get_option(WPS_IC_SETTINGS)) : get_option(WPS_IC_SETTINGS);
         $this->script_registry = array();
         $this->script_id = 0;
         $this->excludes = ['dark-mode',
+          'woocommerce-no-js',
           'wpcJqueryDeferMarker', // .52: the jquery-defer replay-gate marker must run at parse — a delay pass eating it disarms the gate
           'n489D_var', // WPC js_delay config vars (inline block must run at parse time)
           'ngf298gh738qwbdh0s87v_vars', // WPC adaptive optimizer config vars (inline wp_localize_script output)
@@ -117,19 +132,7 @@ class wps_ic_js_delay_v2
             if (is_plugin_active($plugin)) {
 
 
-                $cookieEcosystem = [
-                    'jquery.min.js',
-                    'jquery.js',
-                    'jquery-migrate',
-                    'jquery-ui',
-                    'jquery.blockUI',
-                    'js-cookie',
-                    'js.cookie',
-                    'woocommerce.min.js',
-                    'wc-cart-fragments',
-                    'wc-add-to-cart',
-                    'wc-checkout',
-                ];
+                $cookieEcosystem = self::WOO_EAGER_CHAIN;
                 // Exclude from delay (must load eagerly for Complianz / consent gates)
                 foreach ($cookieEcosystem as $script) {
                     $this->excludes[] = $script;
@@ -157,10 +160,8 @@ class wps_ic_js_delay_v2
         // WooCommerce WITHOUT a listed consent plugin: the cart/variation chain
         // still must run eagerly — a delayed wc-cart-fragments lies about the
         // mini-cart and a delayed variation form deadens the money path.
-        if (class_exists('WooCommerce') && !in_array('wc-cart-fragments', (array) $this->excludes, true)) {
-            foreach (['jquery.min.js', 'jquery.js', 'jquery-migrate', 'jquery-ui', 'jquery.blockUI',
-                         'js-cookie', 'js.cookie', 'woocommerce.min.js', 'wc-cart-fragments',
-                         'wc-add-to-cart', 'wc-checkout'] as $woo_script) {
+        if (class_exists('WooCommerce') && !in_array(self::WOO_CART_FRAGMENTS, (array) $this->excludes, true)) {
+            foreach (self::WOO_EAGER_CHAIN as $woo_script) {
                 $this->excludes[] = $woo_script;
                 // v7.21.136 — same rule as the cookie chain above: jquery core is excluded-eager
                 // here; ONLY the jq-defer lane may defer it (full dependent closure + gate).
@@ -434,12 +435,19 @@ class wps_ic_js_delay_v2
         element.classList.remove("elementor-invisible");
 
         // Add animation classes
-        animationClasses.forEach(cls => {
-            element.classList.add(cls);
-        });
+        if (!isFullCssPending()) {
+            animationClasses.forEach(cls => {
+                element.classList.add(cls);
+            });
+        }
 
         // Mark as processed
         element.classList.add("wpc-animation-processed");
+    }
+
+    function isFullCssPending() {
+        if (document.documentElement.classList.contains("wpc-css-live")) return false;
+        return !!document.querySelector("link[rel^=\"wpc-\"],style[type^=\"wpc-\"],link[data-wpc-ucss],link[data-wpc-rest]");
     }
 
     // Check if element is in viewport

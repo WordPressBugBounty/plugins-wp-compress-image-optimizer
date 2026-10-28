@@ -54,15 +54,34 @@ if (defined('WPC_FAST404_OFF') && WPC_FAST404_OFF) { return; }
     // v7.21.273 -- a missing NEXT-GEN VARIANT with an on-disk source is a redirect, not a 404:
     // css/crit mint bare .avif urls while disk holds sized rungs or only the source (columbus
     // Section-6-bg.avif?src=png -> our own fast-404 answered while Section-6-bg.png sat beside
-    // it). src= names the source; unhinted falls down jpg/jpeg/png. Bounded: two stat calls max
+    // it). src= names the source; unhinted falls down png/jpg/jpeg. Bounded: two stat calls max
     // per ext, only for avif/webp, only when the parent dir is real.
     if (preg_match('~\.(avif|webp)$~i', $rel, $variantExtMatch)) {
         $rungStem = preg_replace('~\.(avif|webp)$~i', '', $abs);
         // Nearest-rung first: disk holds sized {base}-WxH twins (AVIF naming law), never the
         // bare full -- serve the largest same-format rung (19KB avif beats a 455KB png source).
         $bestRung = ''; $bestRungWidth = 0;
+        $query = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
+        $sourceExts = array();
+        if (preg_match('~(?:^|&)src=(jpe?g|png|gif)(?:&|$)~i', $query, $srcMatch)) { $sourceExts[] = strtolower($srcMatch[1]); }
+        foreach (array('png', 'PNG', 'jpg', 'JPG', 'jpeg', 'JPEG', 'gif', 'GIF') as $ext) { if (!in_array($ext, $sourceExts, true)) { $sourceExts[] = $ext; } }
+        $aspectGuard = !(defined('WPC_FAST404_ASPECT_OFF') && WPC_FAST404_ASPECT_OFF) && (!function_exists('apply_filters') || apply_filters('wpc_fast404_aspect_guard', true));
+        $sourceAspect = 0.0;
+        if ($aspectGuard) {
+            foreach ($sourceExts as $ext) {
+                if (@is_file($rungStem . '.' . $ext)) {
+                    $sourceDims = @getimagesize($rungStem . '.' . $ext);
+                    if (is_array($sourceDims) && (int) $sourceDims[0] > 0 && (int) $sourceDims[1] > 0) { $sourceAspect = (float) $sourceDims[0] / (float) $sourceDims[1]; }
+                    break;
+                }
+            }
+        }
         foreach ((array) @glob($rungStem . '-*.' . strtolower($variantExtMatch[1])) as $candidate) {
-            if (preg_match('~-(\d+)x\d+\.' . strtolower($variantExtMatch[1]) . '$~i', (string) $candidate, $widthMatch) && (int) $widthMatch[1] > $bestRungWidth) {
+            if (preg_match('~/' . preg_quote(basename($rungStem), '~') . '-(\d+)(x\d+|w)\.' . strtolower($variantExtMatch[1]) . '$~i', (string) $candidate, $widthMatch) && (int) $widthMatch[1] > $bestRungWidth) {
+                if ($sourceAspect > 0 && $widthMatch[2] !== 'w' && (int) substr($widthMatch[2], 1) > 0) {
+                    $rungAspect = (float) $widthMatch[1] / (float) substr($widthMatch[2], 1);
+                    if (abs($rungAspect / $sourceAspect - 1) > 0.03 && abs($rungAspect * $sourceAspect - 1) > 0.03) { continue; }
+                }
                 $bestRungWidth = (int) $widthMatch[1]; $bestRung = (string) $candidate;
             }
         }
@@ -86,17 +105,13 @@ if (defined('WPC_FAST404_OFF') && WPC_FAST404_OFF) { return; }
                     header('Content-Type: image/' . strtolower($variantExtMatch[1]));
                     header('Content-Length: ' . $rungSize);
                     header('ETag: ' . $etag);
-                    header('Cache-Control: public, max-age=86400');
+                    header('Cache-Control: public, max-age=' . ($aspectGuard ? 600 : 86400));
                     header('X-WPC-Fast-404: rung');
                 }
                 @readfile($bestRung);
                 exit;
             }
         }
-        $query = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
-        $sourceExts = array();
-        if (preg_match('~(?:^|&)src=(jpe?g|png|gif)(?:&|$)~i', $query, $srcMatch)) { $sourceExts[] = strtolower($srcMatch[1]); }
-        foreach (array('jpg', 'jpeg', 'png') as $ext) { if (!in_array($ext, $sourceExts, true)) { $sourceExts[] = $ext; } }
         $sourceStem = preg_replace('~\.(avif|webp)$~i', '', $abs);
         $relSourceStem = preg_replace('~\.(avif|webp)$~i', '', $path);
         foreach ($sourceExts as $ext) {

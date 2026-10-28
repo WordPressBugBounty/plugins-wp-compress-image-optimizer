@@ -18,45 +18,19 @@ if (!function_exists('wpc_v2_wake_register_route')) {
 add_action('rest_api_init', 'wpc_v2_wake_register_route');
 
 
-if (!function_exists('wpc_v2_wake_is_rate_limited')) {
-    function wpc_v2_wake_is_rate_limited($ip)
+if (!function_exists('wpc_v2_wake_bad_spent')) {
+    function wpc_v2_wake_bad_spent()
     {
-        $ip_hash = substr(hash('sha256', (string) $ip), 0, 16);
-        $throttle_key = 'wpc_wake_thr_' . $ip_hash;
-        if (get_transient($throttle_key)) {
-            return true;
-        }
-        return false;
+        return (int) get_transient('wpc_wake_bad') >= max(1, (int) apply_filters('wpc_v2_wake_bad_budget', 20));
     }
 }
 
-if (!function_exists('wpc_v2_wake_record_auth_failure')) {
-    function wpc_v2_wake_record_auth_failure($ip)
+if (!function_exists('wpc_v2_wake_bad_note')) {
+    function wpc_v2_wake_bad_note()
     {
-        $ip_hash = substr(hash('sha256', (string) $ip), 0, 16);
-        $counter_key = 'wpc_wake_rl_' . $ip_hash;
-        $count = (int) get_transient($counter_key);
-        $count++;
-        set_transient($counter_key, $count, 300);  // 5min counter window
-
-        // After 3 failures, install hard-block for 5min
-        if ($count >= 3) {
-            $throttle_key = 'wpc_wake_thr_' . $ip_hash;
-            set_transient($throttle_key, 1, 300);
-            error_log(sprintf(
-                '[WPC Wake] rate_limit_engaged ip_hash=%s failures=%d',
-                $ip_hash, $count
-            ));
-        }
-    }
-}
-
-if (!function_exists('wpc_v2_wake_clear_auth_failures')) {
-    function wpc_v2_wake_clear_auth_failures($ip)
-    {
-        $ip_hash = substr(hash('sha256', (string) $ip), 0, 16);
-        delete_transient('wpc_wake_rl_'  . $ip_hash);
-        delete_transient('wpc_wake_thr_' . $ip_hash);
+        $count = (int) get_transient('wpc_wake_bad') + 1;
+        set_transient('wpc_wake_bad', $count, 300);
+        return $count;
     }
 }
 
@@ -74,32 +48,42 @@ if (!function_exists('wpc_v2_wake_failed')) {
 }
 
 if (!function_exists('wpc_v2_wake_note')) {
-    // Remote wake observability: record the last wake's outcome on the healthcheck.
+    // Remote wake observability: the last wake's outcome, kept by the pull-state owner for the healthcheck.
 
 
     function wpc_v2_wake_note($outcome, $extra = [])
     {
-
-        if (function_exists('wpc_v2_ingest_diag_on') && wpc_v2_ingest_diag_on()) {
-            update_option('wpc_v2_last_wake', array_merge(['t' => time(), 'outcome' => (string) $outcome], $extra), false);
+        if (function_exists('wpc_v2_pull_state_note')) {
+            wpc_v2_pull_state_note('wake', array_merge(['outcome' => (string) $outcome, 'reason' => (string) $outcome], $extra));
         }
+    }
+}
+if (!function_exists('wpc_v2_wake_policy_drain')) {
+    /**
+     * The policy pull a signed wake owes, run once per request after the response is released,
+     * by the wake's last shutdown callback. The image-drain fallback before it hands control
+     * back (wpc_pull_loop_inline) instead of exiting, so this callback always runs.
+     */
+    function wpc_v2_wake_policy_drain()
+    {
+        if (!empty($GLOBALS['wpc_wake_policy_drained']) || !function_exists('wpc_policy_drain_owed')) {
+            return;
+        }
+        $GLOBALS['wpc_wake_policy_drained'] = true;
+        if (function_exists('wpc_finish_request')) {
+            wpc_finish_request();
+        }
+        @ignore_user_abort(true);
+        @set_time_limit(150);
+        $GLOBALS['wpc_signed_wake_request'] = true;
+        wpc_policy_drain_owed('wake');
+        unset($GLOBALS['wpc_signed_wake_request']);
     }
 }
 if (!function_exists('wpc_v2_wake_handler')) {
     function wpc_v2_wake_handler($request)
     {
         $start_t = microtime(true);
-        $ip = isset($_SERVER['HTTP_X_FORWARDED_FOR'])
-            ? trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0])
-            : (isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '0.0.0.0');
-
-        // Hard-block by IP if previously rate-limited
-
-
-        if (wpc_v2_wake_is_rate_limited($ip)) {
-            wpc_v2_wake_failed('rate-limited');
-            return new WP_REST_Response(['error' => 'rate_limited'], 429);
-        }
 
         $raw_body   = $request->get_body();
         $sig_header = $request->get_header('X-WPC-Sig');
@@ -111,19 +95,24 @@ if (!function_exists('wpc_v2_wake_handler')) {
             if ($verify['reason'] !== 'bad-signature') {
                 return new WP_REST_Response(['error' => $verify['reason']], (int) $verify['status']);
             }
-            wpc_v2_wake_record_auth_failure($ip);
+            if (wpc_v2_wake_bad_spent()) {
+                wpc_v2_wake_failed('rate-limited');
+                return new WP_REST_Response(['error' => 'rate_limited'], 429);
+            }
+            $bad = wpc_v2_wake_bad_note();
             error_log(sprintf(
-                '[WPC Wake] hmac_fail ip_hash=%s reason=%s',
-                substr(hash('sha256', $ip), 0, 16),
-                isset($verify['detail']) ? $verify['detail'] : 'unknown'
+                '[WPC Wake] hmac_fail reason=%s bad_in_window=%d',
+                isset($verify['detail']) ? $verify['detail'] : 'unknown',
+                $bad
             ));
 
             return new WP_REST_Response(['error' => 'hmac_fail'], 401);
         }
 
-        // Auth success — clear any previous failure counter for this IP
-        wpc_v2_wake_clear_auth_failures($ip);
 
+        if (function_exists('wpc_policy_note_wake')) {
+            wpc_policy_note_wake();
+        }
 
         if (function_exists('wpc_v2_pull_breaker_reset')) {
             wpc_v2_pull_breaker_reset();
@@ -188,7 +177,14 @@ if (!function_exists('wpc_v2_wake_handler')) {
         if (!$dispatched && function_exists('wpc_v2_pull_enabled') && !wpc_v2_pull_enabled()) {
             wpc_v2_wake_failed('pull-disabled');
         }
-        wpc_v2_wake_note('ok', ['dispatched' => $dispatched, 'items' => is_array($wake_items) ? count($wake_items) : 0]);
+        $fire_reason = $dispatched ? 'dispatched' : 'no_fire';
+        if (function_exists('wpc_v2_pull_state')) {
+            $wake_ps = wpc_v2_pull_state();
+            if (isset($wake_ps['fire']['reason']) && (int) $wake_ps['fire']['t'] >= (int) $start_t) {
+                $fire_reason = (string) $wake_ps['fire']['reason'];
+            }
+        }
+        wpc_v2_wake_note('ok', ['dispatched' => $dispatched, 'reason' => $fire_reason, 'items' => is_array($wake_items) ? count($wake_items) : 0]);
         if (function_exists('wpc_policy_schedule_resync')) {
             wpc_policy_schedule_resync(5);
         }
@@ -197,6 +193,11 @@ if (!function_exists('wpc_v2_wake_handler')) {
         // $dispatched (= the fsockopen self-POST was at least WRITTEN), but on a host where fsockopen can't
         // open the loopback socket AT ALL, $dispatched is false — so the fallback meant to cover a dead
 
+
+        unset($GLOBALS['wpc_wake_policy_drained']);
+        if (function_exists('wpc_policy_drain_owed')) {
+            add_action('shutdown', 'wpc_v2_wake_policy_drain', PHP_INT_MAX);
+        }
 
         if (function_exists('wpc_v2_pull_drain_loop_handler')) {
             $wpc_wake_items_for_inline = $wake_items;
@@ -207,15 +208,8 @@ if (!function_exists('wpc_v2_wake_handler')) {
                     @litespeed_finish_request();
                 }
 
-
-                if (function_exists('wpc_policy_resync') && !get_transient('wpc_policy23_resync_inline')) {
-                    set_transient('wpc_policy23_resync_inline', 1, 60);
-                    @ignore_user_abort(true);
-                    $GLOBALS['wpc_signed_wake_request'] = true;
-                    wpc_policy_resync();
-                    unset($GLOBALS['wpc_signed_wake_request']);
-                }
                 if (get_transient('wpc_v2_inline_drain_pending')) {
+                    wpc_v2_pull_state_note('inline', ['reason' => 'already_pending']);
                     return;
                 }
                 set_transient('wpc_v2_inline_drain_pending', 1, 8);
@@ -223,15 +217,18 @@ if (!function_exists('wpc_v2_wake_handler')) {
                 @set_time_limit(150);
                 wpc_diag_sleep(3, 'v2-wake');
                 if (get_transient('wpc_v2_drain_worker_started')) {
+                    wpc_v2_pull_state_note('inline', ['reason' => 'worker_started']);
                     return;
                 }
                 error_log('[WPC Wake] loopback_worker_never_started — running drain inline');
                 $apikey_inline = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
                 if ($apikey_inline === '') {
                     wpc_v2_wake_failed('no-apikey');
+                    wpc_v2_pull_state_note('inline', ['reason' => 'no_apikey']);
                     return;
                 }
                 $_POST['t']   = (string) time();
+                $_POST['src'] = 'inline';
                 $_POST['sig'] = hash_hmac('sha256', 'wpc_v2_pull_drain.' . $_POST['t'], $apikey_inline);
                 if (is_array($wpc_wake_items_for_inline) && !empty($wpc_wake_items_for_inline)) {
                     $items_inline = wp_json_encode(array_slice(array_values($wpc_wake_items_for_inline), 0, 50));
@@ -239,8 +236,11 @@ if (!function_exists('wpc_v2_wake_handler')) {
                         $_POST['items'] = $items_inline;
                     }
                 }
+                wpc_v2_pull_state_note('inline', ['reason' => 'ran']);
+                $GLOBALS['wpc_pull_loop_inline'] = true;
                 wpc_v2_pull_drain_loop_handler();
-            }, PHP_INT_MAX);
+                unset($GLOBALS['wpc_pull_loop_inline']);
+            }, PHP_INT_MAX - 1);
         }
 
         $wall_ms = (int) round((microtime(true) - $start_t) * 1000);
@@ -269,7 +269,7 @@ if (!function_exists('wpc_v2_wake_handler')) {
             empty($wake_items) ? ' shape=old' : ' shape=new'
         ));
 
-        return new WP_REST_Response([
+        $answer = [
             'ok'         => true,
             'dispatched' => $dispatched,
             'wall_ms'    => $wall_ms,
@@ -277,6 +277,13 @@ if (!function_exists('wpc_v2_wake_handler')) {
 
             't2_wake_ms' => $t2_wake_ms,
             'trace_id'   => $t2_trace_id,
-        ], 200);
+        ];
+        if (!$dispatched) {
+            $answer['reason'] = $fire_reason;
+        }
+        if (function_exists('wpc_v2_pull_state_last')) {
+            $answer = array_merge($answer, wpc_v2_pull_state_last());
+        }
+        return new WP_REST_Response($answer, 200);
     }
 }

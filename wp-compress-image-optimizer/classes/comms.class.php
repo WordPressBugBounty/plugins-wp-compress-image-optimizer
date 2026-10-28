@@ -4,11 +4,13 @@
 class wps_ic_comms extends wps_ic
 {
 
-
     public function __construct()
     {
         if (!is_admin()) {
             if ((!empty($_POST['apikey']) && !empty($_POST['comms_action'])) || (!empty($_GET['apikey']) && !empty($_GET['comms_action']))) {
+                if (self::request_pair()[1] === 'getGpsResult') {
+                    $this->start_comms();
+                }
                 add_action('send_headers', [$this, 'start_comms']);
             }
         }
@@ -37,7 +39,7 @@ class wps_ic_comms extends wps_ic
             $request_params['action'] = 'cdn_check';
             $request_params['url'] = site_url();
 
-            $params = ['method' => 'POST', 'timeout' => 30, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
+            $params = ['method' => 'POST', 'timeout' => 30, 'redirection' => 3, 'sslverify' => wpc_service_sslverify(WPS_IC_APIURL), 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
                 'headers' => [], 'body' => $request_params, 'cookies' => []];
 
             // Send call to API
@@ -422,7 +424,7 @@ class wps_ic_comms extends wps_ic
         $options = get_option(WPS_IC_OPTIONS);
         $form = json_decode(stripslashes($_GET['form']), true);
 
-        if (empty($form['apikey']) || $form['apikey'] !== $options['api_key']) {
+        if (!wpc_site_key_matches($form['apikey'] ?? null)) {
             wp_send_json_error('bad-apikey', $form);
         }
 
@@ -473,7 +475,7 @@ class wps_ic_comms extends wps_ic
         $options = get_option(WPS_IC_OPTIONS);
         $form = json_decode(stripslashes($_GET['form']), true);
 
-        if (empty($form['apikey']) || $form['apikey'] !== $options['api_key']) {
+        if (!wpc_site_key_matches($form['apikey'] ?? null)) {
             wp_send_json_error('bad-apikey');
         }
 
@@ -518,18 +520,155 @@ class wps_ic_comms extends wps_ic
 
     public function getGpsResult()
     {
+        self::sendGpsRunState();
+    }
+
+
+    /**
+     * The speed-test run state, the one answer both pollers get (the agency relay through
+     * getGpsResult, the site's own admin through wps_ic_ajax::wps_fetchInitialTest):
+     *   done    ['success' => true, 'data' => <WPS_IC_LITE_GPS>]
+     *   running ['success' => false, 'data' => 'not-done', 'state' => 'running', 'retry_after' => 30]
+     *   failed  ['success' => false, 'data' => 'failed', 'state' => 'failed', 'reason' => dispatch-failed|run-lost|window-closed]
+     *   idle    ['success' => false, 'data' => 'idle', 'state' => 'idle']
+     * Both pollers used to get `not-done` in every state but done, so a run that never finished
+     * was polled forever: ecotechie.io (ticket 12241, 14 Oct) had the portal's poll every 10 s,
+     * each one booting WordPress and each one answered 499, until the box sat at 100 % CPU.
+     * A pollable answer has to be able to say "stop".
+     *
+     * A run reads running for at most 10 minutes after its dispatch (wpc_psi_dispatched_at).
+     * While running, the answer first collects the result itself (at most once every 30 s, only
+     * for a dispatch at least 60 s old): the result was only ever pulled by WP-cron or an admin
+     * visit, so on a site whose cron never runs it never landed and the poll never ended.
+     */
+    public static function gpsRunState()
+    {
+        $state = self::gpsRunStateNow();
+        if (($state['state'] ?? '') === 'running' && self::gpsPullDue()) {
+            self::gpsPullResult();
+            $state = self::gpsRunStateNow();
+        }
+        if (($state['state'] ?? '') === 'failed') {
+            self::gpsFailedReceipt($state['reason']);
+        }
+        return $state;
+    }
+
+
+    /** Send gpsRunState() as the HTTP answer: never cached, Retry-After on a running answer. */
+    public static function sendGpsRunState()
+    {
+        $state = self::gpsRunState();
+        // Loaded by wp-includes/functions.php long before send_headers and admin-ajax, so both
+        // pollers' ends have it; its Cache-Control carries no-store and max-age=0.
+        nocache_headers();
+        if (($state['state'] ?? '') === 'running') {
+            wpc_send_header('Retry-After: ' . (int) $state['retry_after']);
+        }
+        if (!empty($state['success'])) {
+            wp_send_json_success($state['data']);
+        }
+        wp_send_json($state);
+    }
+
+
+    /** The state as stored right now, without collecting anything. */
+    private static function gpsRunStateNow()
+    {
         $gps = get_option(WPS_IC_LITE_GPS);
         if (!empty($gps) && !empty($gps['result'])) {
-            wp_send_json_success($gps);
+            return ['success' => true, 'data' => $gps];
         }
-        wp_send_json_error('not-done');
+        $uuid = (string) get_transient('wpc_psi_uuid');
+        if ($uuid !== '') {
+            $dispatchedAt = (int) get_transient('wpc_psi_dispatched_at');
+            if ($dispatchedAt <= 0) {
+                // A uuid with no dispatch time (sent by an older build, or the stamp lost by the
+                // object cache) would read running until the uuid expires and never be pulled:
+                // its clock starts at the first poll that sees it.
+                $dispatchedAt = time();
+                set_transient('wpc_psi_dispatched_at', $dispatchedAt, 30 * MINUTE_IN_SECONDS);
+            }
+            if (time() - $dispatchedAt >= 10 * MINUTE_IN_SECONDS) {
+                return ['success' => false, 'data' => 'failed', 'state' => 'failed', 'reason' => 'window-closed'];
+            }
+            return ['success' => false, 'data' => 'not-done', 'state' => 'running', 'retry_after' => 30];
+        }
+        $due = (int) get_option('wpc_psi_due_at');
+        $late = time() - $due;
+        if ($due > 0 && $late <= 3600) {
+            if ($late <= wpc_psi_poll_window()) {
+                return ['success' => false, 'data' => 'not-done', 'state' => 'running', 'retry_after' => 30];
+            }
+            return ['success' => false, 'data' => 'failed', 'state' => 'failed', 'reason' => 'window-closed'];
+        }
+        if (get_transient(WPS_IC_JOB_TRANSIENT) === 'failed') {
+            return ['success' => false, 'data' => 'failed', 'state' => 'failed', 'reason' => 'dispatch-failed'];
+        }
+        if (get_transient('wpc_initial_test')) {
+            return ['success' => false, 'data' => 'failed', 'state' => 'failed', 'reason' => 'run-lost'];
+        }
+        return ['success' => false, 'data' => 'idle', 'state' => 'idle'];
+    }
+
+
+    /**
+     * Whether this answer may collect the result itself: the dispatch is at least 60 s old (the
+     * first run took ~70 s) and no answer collected in the last 30 s. The stamp is a time value
+     * compared here, not a transient left to expire, so a stalled object cache cannot unthrottle it.
+     */
+    private static function gpsPullDue()
+    {
+        $dispatchedAt = (int) get_transient('wpc_psi_dispatched_at');
+        if ($dispatchedAt <= 0 || time() - $dispatchedAt < 60) {
+            return false;
+        }
+        $pulledAt = (int) get_transient('wpc_gps_pull_at');
+        return $pulledAt <= 0 || time() - $pulledAt >= 30;
+    }
+
+
+    /** One get-results read through saveBenchmark(), the one reader, keyed as wpc_first_run_psi_now() keys it. */
+    private static function gpsPullResult()
+    {
+        set_transient('wpc_gps_pull_at', time(), 10 * MINUTE_IN_SECONDS);
+        if (!class_exists('wps_criticalCss')) {
+            include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
+        }
+        if (!class_exists('wps_criticalCss')) {
+            return;
+        }
+        $key = wpc_home_page_key();
+        if ($key === '') {
+            return;
+        }
+        try {
+            (new wps_criticalCss())->saveBenchmark($key, (string) get_transient('wpc_psi_uuid'));
+        } catch (\Throwable $e) {
+            // A transport error leaves the state as it was: the next due answer tries again.
+        }
+    }
+
+
+    /** `gps-run-failed {reason}` once per run, not once per poll (a poll is a request). */
+    private static function gpsFailedReceipt($reason)
+    {
+        $run = (string) get_transient(WPS_IC_JOB_TRANSIENT);
+        $marker = $reason . ':' . ($run !== '' ? $run : (string) get_transient('wpc_initial_test'));
+        if ((string) get_transient('wpc_gps_failed_logged') === $marker) {
+            return;
+        }
+        set_transient('wpc_gps_failed_logged', $marker, DAY_IN_SECONDS);
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('gps-run-failed', '', '', ['reason' => $reason]);
+        }
     }
 
 
     public function resetTest()
     {
         // If a test is already in progress, don't start another one
-        if (get_transient('wpc_initial_test')) {
+        if ((self::gpsRunStateNow()['state'] ?? '') === 'running' || get_transient('wpc_test_running')) {
             wp_send_json_success('already-running');
         }
 
@@ -562,10 +701,14 @@ class wps_ic_comms extends wps_ic
         set_transient('wpc_initial_test', 'running', 5 * 60);
 
         // Kick off the PageSpeed run under a uuid the poll reads (wpc_psi_dispatch explains why).
+        // The previous run's uuid and dispatch time go first, so a failed dispatch cannot leave
+        // the poll reading the old run as running.
+        delete_transient('wpc_psi_uuid');
+        delete_transient('wpc_psi_dispatched_at');
         $psiUuid = wpc_psi_dispatch(true);
         set_transient(WPS_IC_JOB_TRANSIENT, $psiUuid !== '' ? $psiUuid : 'failed', 60 * 10);
         if ($psiUuid !== '') {
-            wp_send_json_success('started');
+            wp_send_json(['success' => true, 'data' => 'started', 'uuid' => $psiUuid]);
         }
 
         wp_send_json_error();
@@ -610,7 +753,13 @@ class wps_ic_comms extends wps_ic
                     wpc_cache_first_log('cf-relay-token-empty', '', '', ['kept' => $stored_token !== '' ? 1 : 0]);
                 }
             }
-            update_option(WPS_IC_CF, $relayed_cf);
+            if (is_array($relayed_cf) && isset($relayed_cf['settings']) && is_array($relayed_cf['settings'])
+                && array_key_exists('edge-cache', $relayed_cf['settings']) && class_exists('wps_ic_cf_rules')) {
+                $stored_cf   = isset($stored_cf) ? $stored_cf : get_option(WPS_IC_CF);
+                $stored_edge = is_array($stored_cf) && isset($stored_cf['settings']['edge-cache']) ? $stored_cf['settings']['edge-cache'] : 'home';
+                $relayed_cf['settings']['edge-cache'] = wps_ic_cf_rules::edge_mode_saved($relayed_cf['settings']['edge-cache'], $stored_edge);
+            }
+            update_option(WPS_IC_CF, wpc_cf_option_keep_settings($relayed_cf, isset($stored_cf) ? $stored_cf : get_option(WPS_IC_CF)));
         }
         if (!empty($form['cname'])) {
             wpc_cf_cname_persist($form['cname'], 'portal-relay');
@@ -748,12 +897,27 @@ class wps_ic_comms extends wps_ic
             update_option('wpc-excludes', wpc_delay_excludes_fold($form['excludes']));
         }
 
+        $url_excludes = wpc_url_excludes_import($form['url_excludes'] ?? null);
+        if ($url_excludes !== null) {
+            update_option('wpc-url-excludes', $url_excludes);
+        }
+
         if (isset($form['cache'])) {
             update_option('wps_ic_purge_rules', $form['cache'], false);
         }
 
         if (isset($form['cache_cookies'])) {
             update_option('wps_ic_cache_cookies', $form['cache_cookies']);
+        }
+
+        $query_params = wpc_cache_query_params_import($form['cache_query_params'] ?? null);
+        if ($query_params !== null) {
+            update_option('wps_ic_cache_query_params', $query_params);
+        }
+
+        // Same rebuild as the site's own import: the drop-in carries these lists baked in.
+        if (isset($form['cache_cookies']) || $query_params !== null) {
+            wpc_rebake_advanced_cache_if_on();
         }
 
         $cache = new wps_ic_cache_integrations();
@@ -806,7 +970,7 @@ class wps_ic_comms extends wps_ic
             $form = json_decode(stripslashes($_POST['form']), true);
         }
 
-        if (empty($form['apikey']) || $form['apikey'] !== $options['api_key']) {
+        if (!wpc_site_key_matches($form['apikey'] ?? null)) {
             wp_send_json_error(['msg' => 'bad-apikey']);
         }
 
@@ -901,7 +1065,7 @@ class wps_ic_comms extends wps_ic
     {
         $options = get_option(WPS_IC_OPTIONS);
         $form = json_decode(stripslashes($_GET['form']), true);
-        if (empty($form['apikey']) || $form['apikey'] !== $options['api_key']) {
+        if (!wpc_site_key_matches($form['apikey'] ?? null)) {
             wp_send_json_error('bad-apikey', $form);
         }
 
@@ -1060,6 +1224,7 @@ class wps_ic_comms extends wps_ic
                 'on'    => function_exists('wpc_auto_mode_on') ? (bool) wpc_auto_mode_on() : false,
                 'state' => function_exists('wpc_auto_state') ? wpc_auto_state() : [],
             ],
+            'crit_off'       => function_exists('wpc_crit_off_state') ? wpc_crit_off_state() : null,
         ]);
     }
 
@@ -1158,21 +1323,9 @@ class wps_ic_comms extends wps_ic
         }
 
         $fonts = new wps_ic_fonts();
-        $response = $fonts->callAPI($url);
-        $found = $fonts->scanForFonts($response);
+        $scan = $fonts->scanAndLocalize($url);
 
-
-        if ((empty($found['googleFontsStylesheets']) && empty($found['gstaticUrls']))
-            && method_exists($fonts, 'localScan') && apply_filters('wpc_font_local_scan', true)) {
-            $found = $fonts->localScan($url);
-        }
-
-        $hasGoogleFonts = !empty($found['googleFontsStylesheets']) || !empty($found['gstaticUrls']);
-        if ($hasGoogleFonts) {
-            $fonts->readGoogleStylesheet($found);
-        }
-
-        wp_send_json_success(['found' => $hasGoogleFonts]);
+        wp_send_json_success($scan);
     }
 
 
@@ -1194,27 +1347,13 @@ class wps_ic_comms extends wps_ic
 
     public function purgeFontCache()
     {
-        delete_option(WPS_IC_FONTS_MAP);
-
         $form = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
         $scanUrl = !empty($form['scanUrl']) ? sanitize_url($form['scanUrl']) : site_url();
 
         $fonts = new wps_ic_fonts();
-        $response = $fonts->callAPI($scanUrl);
-        $found = $fonts->scanForFonts($response);
+        $scan = $fonts->scanAndLocalize($scanUrl, true);
 
-
-        if ((empty($found['googleFontsStylesheets']) && empty($found['gstaticUrls']))
-            && method_exists($fonts, 'localScan') && apply_filters('wpc_font_local_scan', true)) {
-            $found = $fonts->localScan($scanUrl);
-        }
-
-        $hasGoogleFonts = !empty($found['googleFontsStylesheets']) || !empty($found['gstaticUrls']);
-        if ($hasGoogleFonts) {
-            $fonts->readGoogleStylesheet($found);
-        }
-
-        wp_send_json_success(['found' => $hasGoogleFonts]);
+        wp_send_json_success($scan);
     }
 
 
@@ -1233,13 +1372,8 @@ class wps_ic_comms extends wps_ic
         wp_send_json_success($options);
     }
 
-    public function start_comms()
+    private static function request_pair()
     {
-        global $wps_ic;
-
-        ini_set('display_errors', 0);
-        error_reporting(0);
-
         $apikey = '';
         $action = '';
 
@@ -1252,9 +1386,21 @@ class wps_ic_comms extends wps_ic
         }
 
         if (empty($apikey) || empty($action)) {
-            $apikey = sanitize_text_field($_GET['apikey']);
-            $action = sanitize_text_field($_GET['comms_action']);
+            $apikey = sanitize_text_field($_GET['apikey'] ?? '');
+            $action = sanitize_text_field($_GET['comms_action'] ?? '');
         }
+
+        return [$apikey, $action];
+    }
+
+    public function start_comms()
+    {
+        global $wps_ic;
+
+        ini_set('display_errors', 0);
+        error_reporting(0);
+
+        list($apikey, $action) = self::request_pair();
 
         if (!empty($apikey) && !empty($action)) {
             $options = get_option(WPS_IC_OPTIONS);
@@ -1264,11 +1410,11 @@ class wps_ic_comms extends wps_ic
 
             // Constant-time: a loose != leaks the key's shape through timing and type juggling,
             // and this door answers with the site's settings and state.
-            if (empty($options['api_key']) || !hash_equals((string) $options['api_key'], (string) $apikey)) {
+            if (!wpc_site_key_matches($apikey)) {
                 wp_send_json_error('Hacking?');
             }
 
-            if (!method_exists($this, $action)) {
+            if (!method_exists($this, $action) || (new ReflectionMethod($this, $action))->isPrivate()) {
                 wp_send_json_error('Function does not exist');
             }
 
@@ -1351,7 +1497,7 @@ class wps_ic_comms extends wps_ic
 
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
         $started_at = microtime(true);
-        $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'],]]);
+        $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => wpc_service_sslverify($url), 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'],]]);
         $elapsed_ms = (int) round((microtime(true) - $started_at) * 1000);
 
         $fail = null;
@@ -1378,23 +1524,17 @@ class wps_ic_comms extends wps_ic
             $source = 'settings-check-pushed';
         }
         if ($data === null) {
-            update_option('wpc_credits_check_err', ['t' => time(), 'err' => (string) $fail['error'], 'http' => (int) $fail['http']], false);
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('credits-check-failed', 'settings-check', '', ['err' => substr((string) $fail['error'], 0, 160), 'http' => (int) $fail['http'], 'ms' => $elapsed_ms]);
             }
             wp_send_json_error($fail);
         }
 
-        list($allow_local, $allow_live) = wpc_allow_flags_from_api($data);
-        list($updated_local, $updated_live) = wpc_allow_flags_apply($allow_local, $allow_live, $source);
-
-        if ($updated_local || $updated_live) {
-            if (class_exists('wps_ic_cache_integrations')) {
-                $cache = new wps_ic_cache_integrations();
-
-                $cache::purgeAll(false, true, false, false, true);
-            }
-        }
+        $flags = wpc_account_flags_sync($data, $source, 'push');
+        $allow_local = $flags['allow_local'];
+        $allow_live = $flags['allow_live'];
+        $updated_local = $flags['updated_local'];
+        $updated_live = $flags['updated_live'];
         wp_send_json_success(['updated_local' => $updated_local, 'updated_live' => $updated_live, 'allow_local' => $allow_local, 'allow_live' => $allow_live, 'source' => $source, 'api' => $fail, 'ms' => $elapsed_ms]);
     }
 

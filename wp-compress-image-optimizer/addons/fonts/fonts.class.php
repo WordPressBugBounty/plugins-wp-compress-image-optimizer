@@ -7,8 +7,27 @@ class wps_ic_fonts
 
     public $stylesheet;
     public $stylesheetMap;
-    private $url;
 
+    const SCAN_SHEET_LIMIT = 120;
+    const SCAN_SHEET_BYTES = 1048576;
+    const SCAN_TOTAL_BYTES = 8388608;
+    const MAP_MAX = 64;
+    const BEACON_RESERVE = 16;
+    const SEEN_SHEETS = 'wpc_font_page_sheets';
+    const SEEN_MAX = 100;
+
+
+    /** The runtime intercept's code: M is the map from a Google Fonts stylesheet address to its local copy, A the ajax address; $seen false leaves out the beacon that names a font address not yet localized (test traffic sends none). */
+    public static function font_rt_code($seen = true)
+    {
+        return 'function h(l){var u=l.getAttribute("href")||"";if(u.indexOf("fonts.googleapis.com/css")===-1&&u.indexOf("fonts.bunny.net/css")===-1)return;'
+            . 'if(M[u]){l.setAttribute("href",M[u]);return;}'
+            . ($seen ? 'var k="wpcfs_"+u.slice(0,120);try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}'
+            . 'try{var f=new FormData();f.append("action","wpc_font_seen");f.append("u",u);navigator.sendBeacon(A,f);}catch(e){}}' : '}')
+            . 'new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var a=ms[i].addedNodes;for(var j=0;j<a.length;j++){var n=a[j];'
+            . 'if(n.tagName==="LINK")h(n);else if(n.querySelectorAll){var ls=n.querySelectorAll("link[href]");for(var q=0;q<ls.length;q++)h(ls[q]);}}}})'
+            . '.observe(document.documentElement,{childList:true,subtree:true});';
+    }
 
     public static function versionedFontsCssUrl($rel)
     {
@@ -20,8 +39,6 @@ class wps_ic_fonts
     private $filename;
     /** @var string $path */
     private $path;
-    private $response;
-    private $foundFonts;
     private $mimeMap = ['font/woff2' => 'woff2', 'application/font-woff2' => 'woff2', 'font/woff' => 'woff', 'application/font-woff' => 'woff', 'font/ttf' => 'ttf', 'application/x-font-ttf' => 'ttf', 'font/sfnt' => 'ttf', // Can be WOFF2 or TTF, but we pick TTF.
         'application/font-sfnt' => 'ttf', 'font/otf' => 'otf', 'application/x-font-opentype' => 'otf', 'application/vnd.ms-fontobject' => 'eot',];
 
@@ -35,6 +52,9 @@ class wps_ic_fonts
 
     public function isActive() {
         $options = get_option(WPS_IC_SETTINGS);
+        if (function_exists('wpc_fonts_origin_settings')) {
+            $options = wpc_fonts_origin_settings($options);
+        }
         if (!empty($options) && !empty($options['replace-fonts'])) {
             // Active, check if local or bunny
             if ($options['replace-fonts'] == 'local') {
@@ -58,6 +78,10 @@ class wps_ic_fonts
      *  stage_fonts_replace_frontend: the localized sheets' faces are registered with it. */
     public function replaceFrontend($html, wps_ic_font_face_set $fontFaces)
     {
+        if (stripos($html, 'fonts.googleapis.com/css') !== false || stripos($html, 'fonts.bunny.net/css') !== false) {
+            $this->noteSheets(self::providerSheetsIn($html));
+        }
+
         if (!empty($this->stylesheetMap)) {
 
             foreach ($this->stylesheetMap as $style => $replaceData) {
@@ -166,8 +190,10 @@ class wps_ic_fonts
             && apply_filters('wpc_font_auto_rescan', true)
             && function_exists('get_transient') && !get_transient('wpc_font_rescan_lock')
             && function_exists('wp_schedule_single_event')) {
-            set_transient('wpc_font_rescan_lock', 1, 6 * HOUR_IN_SECONDS);
-            wp_schedule_single_event(time() + 60, 'wpc_font_rescan');
+            set_transient('wpc_font_rescan_lock', 1, 15 * MINUTE_IN_SECONDS);
+            if (!function_exists('wp_next_scheduled') || !wp_next_scheduled('wpc_font_rescan')) {
+                wp_schedule_single_event(time() + 60, 'wpc_font_rescan');
+            }
         }
 
 
@@ -182,15 +208,14 @@ class wps_ic_fonts
                     $wpc_rt_map[$wpc_rt_key] = self::versionedFontsCssUrl($wpc_rt_d['dir'] . '/' . $wpc_rt_d['filename']);
                 }
             }
-            $wpc_rt_js = '<script id="wpc-font-rt">(function(){try{var M=' . wp_json_encode($wpc_rt_map)
-                . ',A=' . wp_json_encode(admin_url('admin-ajax.php')) . ';'
-                . 'function h(l){var u=l.getAttribute("href")||"";if(u.indexOf("fonts.googleapis.com/css")===-1&&u.indexOf("fonts.bunny.net/css")===-1)return;'
-                . 'if(M[u]){l.setAttribute("href",M[u]);return;}'
-                . 'var k="wpcfs_"+u.slice(0,120);try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}'
-                . 'try{var f=new FormData();f.append("action","wpc_font_seen");f.append("u",u);navigator.sendBeacon(A,f);}catch(e){}}'
-                . 'new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var a=ms[i].addedNodes;for(var j=0;j<a.length;j++){var n=a[j];'
-                . 'if(n.tagName==="LINK")h(n);else if(n.querySelectorAll){var ls=n.querySelectorAll("link[href]");for(var q=0;q<ls.length;q++)h(ls[q]);}}}})'
-                . '.observe(document.documentElement,{childList:true,subtree:true});}catch(e){}})();</script>';
+            $wpc_rt_quiet = function_exists('wpc_lever_test_active') && wpc_lever_test_active();
+            if (!$wpc_rt_quiet && function_exists('wpc_body_js_on') && wpc_body_js_on()) {
+                $wpc_rt_js = wpc_body_js_cfg('rt', ['M' => $wpc_rt_map, 'A' => admin_url('admin-ajax.php')])
+                    . (strpos($html, 'id="wpc-body-js"') === false ? wpc_body_js_tag() : '');
+            } else {
+                $wpc_rt_js = '<script id="wpc-font-rt">(function(){try{var M=' . wp_json_encode($wpc_rt_map)
+                    . ',A=' . wp_json_encode(admin_url('admin-ajax.php')) . ';' . self::font_rt_code(!$wpc_rt_quiet) . '}catch(e){}})();</script>';
+            }
             $html = wpc_inject_before_body_close($html, $wpc_rt_js . "\n");
         }
 
@@ -233,7 +258,7 @@ class wps_ic_fonts
                 return $html;
             }
 
-            $inlineMaxBytes = (int) apply_filters('wpc_fonts_css_inline_max', 24576);
+            $inlineMaxBytes = (int) apply_filters('wpc_fonts_css_inline_max', function_exists('wpc_lever_num') ? wpc_lever_num('fonts_css_inline_max', 24576, 6144, 98304) : 24576);
 
 
             $critTagPresent = (strpos($html, 'id="wpc-critical-css"') !== false);
@@ -402,6 +427,9 @@ class wps_ic_fonts
                     if ($h !== '' && strcasecmp($h, $oh) !== 0) {
                         return $lm[0];
                     }
+                    if (wpc_tag_pins_integrity($lm[0])) {
+                        return $lm[0];
+                    }
                     $path = (string) wp_parse_url($href, PHP_URL_PATH);
                     if ($path === '' || strpos($path, '/wp-') === false) {
                         return $lm[0];
@@ -410,22 +438,27 @@ class wps_ic_fonts
                     if ($sitep !== '' && $sitep !== '/' && strpos($rel, rtrim($sitep, '/') . '/') === 0) {
                         $rel = substr($rel, strlen(rtrim($sitep, '/')));
                     }
-                    $disk = rtrim(ABSPATH, '/') . $rel;
+                    $disk = wpc_install_file_real(rtrim(ABSPATH, '/') . $rel);
                     $n++;
+                    if ($disk === '') {
+                        return $lm[0];
+                    }
                     $sz = @filesize($disk);
                     $mt = @filemtime($disk);
                     if (!$sz || !$mt || $sz < 64 || $sz > (int) apply_filters('wpc_fonts_sweep_external_cap', 1048576)) {
                         return $lm[0];
                     }
                     $key = md5($path);
-                    $sig = $mt . ':' . $sz . ':' . $mapN;
+                    $sig = $mt . ':' . $sz . ':' . $mapN . ((function_exists('wpc_font_display_site_kept') && wpc_font_display_site_kept()) ? ':declared' : '');
                     if (isset($idx[$key]) && $idx[$key]['sig'] === $sig) {
                         $o = (string) $idx[$key]['out'];
-                        if ($o === '' || !@is_readable(WP_CONTENT_DIR . '/cache/wpc-fontsheet/' . $o)) {
+                        if ($o === '') {
                             return $lm[0];
                         }
-                        return str_replace($lm[1] . $lm[2] . $lm[1],
-                            $lm[1] . content_url('cache/wpc-fontsheet/' . $o) . $lm[1], $lm[0]);
+                        if (@is_readable(WP_CONTENT_DIR . '/cache/wpc-fontsheet/' . $o)) {
+                            return str_replace($lm[1] . $lm[2] . $lm[1],
+                                $lm[1] . content_url('cache/wpc-fontsheet/' . $o) . $lm[1], $lm[0]);
+                        }
                     }
                     $css = (string) @file_get_contents($disk);
                     $verdict = '';
@@ -453,8 +486,9 @@ class wps_ic_fonts
                             }
                             $inlineFontsBase = (string) WPS_IC_FONTS_URL . self::INLINE_DIR . '/';
                             $fontSettings = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
-                            $fontDisplayOff = is_array($fontSettings) && !empty($fontSettings['font-display'])
-                                && strtolower((string) $fontSettings['font-display']) === 'off';
+                            $fontDisplayOff = (is_array($fontSettings) && !empty($fontSettings['font-display'])
+                                && strtolower((string) $fontSettings['font-display']) === 'off')
+                                || (function_exists('wpc_font_display_site_kept') && wpc_font_display_site_kept(is_array($fontSettings) && isset($fontSettings['font-display']) ? $fontSettings['font-display'] : ''));
                             $stamped = $fontDisplayOff ? $swapped : preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($fm) use ($inlineFontsBase) {
                                 if (stripos($fm[0], $inlineFontsBase) === false) {
                                     return $fm[0];
@@ -472,16 +506,8 @@ class wps_ic_fonts
                             $stem = preg_replace('/\.css$/', '', basename($path));
                             $name = $stem . '-' . substr(md5($swapped), 0, 10) . '.css';
                             if (wpc_fs_put($dd . '/' . $name, $swapped) !== false) {
-                                $sib = (array) @glob($dd . '/' . $stem . '-*.css');
-                                if (count($sib) > 3) {
-                                    usort($sib, static function ($a, $b) {
-                                        return (int) @filemtime($a) - (int) @filemtime($b);
-                                    });
-                                    foreach (array_slice($sib, 0, count($sib) - 3) as $old) {
-                                        if (basename($old) !== $name) {
-                                            @unlink($old);
-                                        }
-                                    }
+                                if (class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_prune_sheet_copies')) {
+                                    wps_cdn_rewrite::wpc_prune_sheet_copies($dd, $stem, $name, $idx);
                                 }
                                 $verdict = $name;
                             }
@@ -510,6 +536,48 @@ class wps_ic_fonts
         }
     }
 
+    /** Every Google font file address the inline map has a file on disk for, as address => local address, with the entity-encoded spelling of each. */
+    private static function inlineSwapPairs()
+    {
+        $pairs = [];
+        $map = get_option(self::INLINE_MAP);
+        if (empty($map) || !is_array($map)) {
+            return $pairs;
+        }
+        foreach ($map as $gurl => $fname) {
+            if (empty($fname) || !is_string($fname) || !is_string($gurl)) {
+                continue;
+            }
+            if (!file_exists(WPS_IC_FONTS_DIR . self::INLINE_DIR . '/' . $fname)) {
+                continue;
+            }
+            $lurl = WPS_IC_FONTS_URL . self::INLINE_DIR . '/' . $fname;
+            $pairs[$gurl] = $lurl;
+            $enc = str_replace('&', '&#038;', $gurl);
+            if ($enc !== $gurl) {
+                $pairs[$enc] = $lurl;
+            }
+        }
+        return $pairs;
+    }
+
+    /** $css with every Google font file address the localizer holds a copy of swapped for the copy, when the localizer is on; an address it holds no copy of, and every other byte, stays. */
+    public function localizeFaceUrls($css)
+    {
+        if (!is_string($css) || stripos($css, 'fonts.gstatic.com') === false
+            || !defined('WPS_IC_FONTS_DIR') || !defined('WPS_IC_FONTS_URL')
+            || $this->isActive() !== 'local' || !apply_filters('wpc_localize_inline_fonts', true)) {
+            return $css;
+        }
+        $pairs = self::inlineSwapPairs();
+        if (empty($pairs)) {
+            return $css;
+        }
+        $out = strtr($css, $pairs);
+
+        return is_string($out) ? $out : $css;
+    }
+
     public function replaceInlineFonts($html)
     {
         if (!is_string($html) || $html === '' || !apply_filters('wpc_localize_inline_fonts', true)) {
@@ -518,28 +586,11 @@ class wps_ic_fonts
         if (stripos($html, 'fonts.gstatic.com') === false) {
             return $html;
         }
-        $map = get_option(self::INLINE_MAP);
-        if (!empty($map) && is_array($map)) {
-            $pairs = [];
-            foreach ($map as $gurl => $fname) {
-                if (empty($fname) || !is_string($fname) || !is_string($gurl)) {
-                    continue;
-                }
-                if (!file_exists(WPS_IC_FONTS_DIR . self::INLINE_DIR . '/' . $fname)) {
-                    continue;
-                }
-                $lurl = WPS_IC_FONTS_URL . self::INLINE_DIR . '/' . $fname;
-                $pairs[$gurl] = $lurl;
-                $enc = str_replace('&', '&#038;', $gurl);
-                if ($enc !== $gurl) {
-                    $pairs[$enc] = $lurl;
-                }
-            }
-            if (!empty($pairs)) {
-                $out = strtr($html, $pairs);
-                if (is_string($out)) {
-                    $html = $out;
-                }
+        $pairs = self::inlineSwapPairs();
+        if (!empty($pairs)) {
+            $out = strtr($html, $pairs);
+            if (is_string($out)) {
+                $html = $out;
             }
         }
 
@@ -616,6 +667,9 @@ class wps_ic_fonts
                 $fontSettings = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
                 if (is_array($fontSettings) && !empty($fontSettings['font-display'])
                     && strtolower((string) $fontSettings['font-display']) === 'off') {
+                    return $m[0];
+                }
+                if (function_exists('wpc_font_display_site_kept') && wpc_font_display_site_kept(is_array($fontSettings) && isset($fontSettings['font-display']) ? $fontSettings['font-display'] : '')) {
                     return $m[0];
                 }
                 $faceWithoutDisplay = preg_replace('/font-display\s*:\s*[^;}]+;?/i', '', $m[0]);
@@ -790,7 +844,7 @@ class wps_ic_fonts
         if ($html === '') {
             $ua   = defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : 'WPCompress';
             $resp = wp_remote_get(home_url('/'), ['timeout' => 8, 'redirection' => 3,
-                'headers' => ['User-Agent' => $ua, 'X-WPC-Cache-Warm' => '1']]);
+                'headers' => ['User-Agent' => $ua, 'X-WPC-Cache-Warm' => wpc_warm_header_for(home_url('/'))]]);
             if (is_wp_error($resp)) {
                 return 0;
             }
@@ -804,7 +858,7 @@ class wps_ic_fonts
         if (empty($urls)) {
             return 0;
         }
-        $cap     = (int) apply_filters('wpc_localize_inline_fonts_cap', 60);
+        $cap     = (int) apply_filters('wpc_localize_inline_fonts_cap', function_exists('wpc_lever_num') ? wpc_lever_num('localize_inline_fonts_cap', 60, 15, 240) : 60);
         $done    = 0;
         $changed = false;
         foreach ($urls as $g) {
@@ -828,96 +882,155 @@ class wps_ic_fonts
     }
 
 
-    public function callAPI($urlToScan)
-    {
-        $this->url = $urlToScan;
-
-        $response = wp_remote_get(add_query_arg(array('url' => esc_url_raw($urlToScan),), WPS_IC_FONTS_SCAN), array('method' => 'POST', 'timeout' => 15, 'headers' => array('Content-Type' => 'application/json',),));
-
-        // Handle errors
-        if (is_wp_error($response)) {
-            return $response->get_error_message();
-        }
-
-        // Get response body
-        $body = wp_remote_retrieve_body($response);
-
-        // Decode JSON if API returns JSON
-        $data = json_decode($body, true);
-        $this->response = $data;
-
-        return $data;
-    }
-
-
+    /**
+     * Reads the page at $url (one of this site's own addresses) and the same-origin stylesheets it
+     * links, and answers the Google Fonts it uses: the stylesheets it links or its own sheets
+     * @import (googleFontsStylesheets) and the fonts.gstatic.com files it names (gstaticUrls). The
+     * page is fetched with the plugin off (disableWPC); the sheets are read from disk through the
+     * critical-CSS corpus owner, never fetched. `failed` is '' when the page was read, else why it
+     * was not: no-url, foreign-host, fetch, http-<status> or empty; a page that was read and uses
+     * no Google Fonts answers empty lists and failed ''.
+     */
     public function localScan($url)
     {
-        $found = ['googleFontsStylesheets' => [], 'gstaticUrls' => []];
-        $u = (string) $url;
+        $found = ['googleFontsStylesheets' => [], 'gstaticUrls' => [], 'failed' => ''];
+        $u = trim((string) $url);
         if ($u === '') {
+            $found['failed'] = 'no-url';
+            return $found;
+        }
+        $corpus = new wps_ic_crit_corpus();
+        if (!$corpus->is_own_url($u)) {
+            $found['failed'] = 'foreign-host';
             return $found;
         }
         $u .= (strpos($u, '?') === false ? '?' : '&') . 'disableWPC=true';
         $r = wp_remote_get($u, ['timeout' => 20, 'sslverify' => false, 'headers' => [
             'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         ]]);
-        if (is_wp_error($r) || (int) wp_remote_retrieve_response_code($r) !== 200) {
+        if (is_wp_error($r)) {
+            $found['failed'] = 'fetch';
+            return $found;
+        }
+        if ((int) wp_remote_retrieve_response_code($r) !== 200) {
+            $found['failed'] = 'http-' . (int) wp_remote_retrieve_response_code($r);
             return $found;
         }
         $html = (string) wp_remote_retrieve_body($r);
         if ($html === '') {
+            $found['failed'] = 'empty';
             return $found;
         }
-        if (preg_match_all('/<link\b[^>]*href=["\']((?:https?:)?\/\/fonts\.(?:googleapis\.com|bunny\.net)\/css[^"\']*)["\']/i', $html, $lm)) {
-            foreach (array_unique($lm[1]) as $l) {
-                $l = html_entity_decode((string) $l, ENT_QUOTES);
-                if (strpos($l, '//') === 0) { $l = 'https:' . $l; }
-                $found['googleFontsStylesheets'][] = $l;
+        $sheets = self::providerSheetsIn($html);
+        $gstatic = $this->gstaticIn($html);
+        $budget = self::SCAN_TOTAL_BYTES;
+        foreach (array_slice($this->linkedSheets($html), 0, self::SCAN_SHEET_LIMIT) as $href) {
+            if ($budget <= 0) {
+                break;
+            }
+            $css = $corpus->own_sheet_text($href, min(self::SCAN_SHEET_BYTES, $budget));
+            $budget -= strlen($css);
+            if ($css === '') {
+                continue;
+            }
+            $stripped = preg_replace('~/\*.*?\*/~s', '', $css);
+            $css = is_string($stripped) ? $stripped : $css;
+            $sheets = array_merge($sheets, $this->importedProviderSheets($css));
+            $gstatic = array_merge($gstatic, $this->gstaticIn($css));
+        }
+        foreach ($sheets as $sheet) {
+            $sheet = strpos($sheet, '//') === 0 ? 'https:' . $sheet : $sheet;
+            if (!in_array($sheet, $found['googleFontsStylesheets'], true)) {
+                $found['googleFontsStylesheets'][] = $sheet;
             }
         }
-        if (preg_match_all('/https?:\/\/fonts\.gstatic\.com\/[^"\'\s)>{}]+\.woff2?/i', $html, $gm)) {
-            $found['gstaticUrls'] = array_values(array_unique($gm[0]));
-        }
+        $found['gstaticUrls'] = array_values(array_unique($gstatic));
         return $found;
     }
 
-    public function scanForFonts($response)
+    /**
+     * localScan() of $url, and every stylesheet it found read, downloaded and mapped
+     * (readGoogleStylesheet). The one door every scan goes through, the automatic and the manual
+     * paths alike. With $purgeFirst the stored map is dropped, but only once the page has been
+     * read: a page that cannot be read leaves the stored fonts as they are. Answers
+     * ['found' => bool, 'failed' => localScan's reason or ''].
+     */
+    public function scanAndLocalize($url, $purgeFirst = false)
     {
-
-
-        if (is_string($response)) {
-            $response = json_decode($response, true);
+        $found = $this->localScan($url);
+        $result = ['found' => false, 'failed' => (string) $found['failed']];
+        if ($result['failed'] !== '') {
+            return $result;
         }
-
-        // Validate response structure
-        if (!is_array($response) || !isset($response['found']) || !is_array($response['found'])) {
-            return array();
+        if ($purgeFirst) {
+            delete_option(WPS_IC_FONTS_MAP);
+            $this->stylesheetMap = get_option(WPS_IC_FONTS_MAP);
         }
-
-        $found = array();
-
-        // Store google fonts stylesheets if present
-        if (!empty($response['found']['googleFontsStylesheets'])) {
-            $found['googleFontsStylesheets'] = array_values($response['found']['googleFontsStylesheets']);
-        } else {
-            $found['googleFontsStylesheets'] = array();
+        $result['found'] = !empty($found['googleFontsStylesheets']) || !empty($found['gstaticUrls']);
+        if ($result['found']) {
+            $this->readGoogleStylesheet($found);
         }
+        return $result;
+    }
 
-
-        if (!empty($response['found']['gstaticUrls'])) {
-            $found['gstaticUrls'] = array_values($response['found']['gstaticUrls']);
-        } else {
-            $found['gstaticUrls'] = array();
+    /** The Google Fonts (or Bunny Fonts) stylesheets $css @imports, as written in the @import. */
+    private function importedProviderSheets($css)
+    {
+        $out = [];
+        if (preg_match_all('~@import\s*(?:url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)\s]*))\s*\)|"([^"]*)"|\'([^\']*)\')~i', (string) $css, $im, PREG_SET_ORDER)) {
+            foreach ($im as $match) {
+                $href = '';
+                for ($i = 1; $i <= 5; $i++) {
+                    if (isset($match[$i]) && $match[$i] !== '') {
+                        $href = trim($match[$i]);
+                        break;
+                    }
+                }
+                if (preg_match('~^(?:https?:)?//fonts\.(?:googleapis\.com|bunny\.net)/css~i', $href)) {
+                    $out[] = $href;
+                }
+            }
         }
+        return $out;
+    }
 
-        $this->foundFonts = $found;
-        return $found;
+    /** The fonts.gstatic.com font files (.woff, .woff2) named in $text, once each. */
+    private function gstaticIn($text)
+    {
+        if (preg_match_all('/https?:\/\/fonts\.gstatic\.com\/[^"\'\s)>{}]+\.woff2?/i', (string) $text, $gm)) {
+            return array_values(array_unique($gm[0]));
+        }
+        return [];
+    }
+
+    /** The href of every <link rel="stylesheet"> in $html, once each, as the page wrote it. */
+    private function linkedSheets($html)
+    {
+        $out = [];
+        if (preg_match_all('/<link\b[^>]*>/i', (string) $html, $tags)) {
+            foreach ($tags[0] as $tag) {
+                if (!preg_match('/\brel\s*=\s*["\']?[^"\'>]*\bstylesheet\b/i', $tag)
+                    || !preg_match('/\bhref\s*=\s*(?:"([^"]*)"|\'([^\']*)\')/i', $tag, $h)) {
+                    continue;
+                }
+                $href = html_entity_decode($h[1] !== '' ? $h[1] : (isset($h[2]) ? $h[2] : ''), ENT_QUOTES);
+                if ($href !== '') {
+                    $out[$href] = 1;
+                }
+            }
+        }
+        return array_keys($out);
     }
 
     public function readGoogleStylesheet($array)
     {
         if (!empty($array['googleFontsStylesheets'])) {
+            $refused = 0;
             foreach ($array['googleFontsStylesheets'] as $font) {
+                if (!$this->mapAdmits($font)) {
+                    $refused++;
+                    continue;
+                }
                 // Read CSS Stylesheet
                 $this->stylesheet = null;
                 $download = $this->read($font);
@@ -956,6 +1069,9 @@ class wps_ic_fonts
                     $this->replaceInStylesheet($stylesheet['stylesheetPath'], $urlReplacement[0], $urlReplacement[1]);
                 }
 
+            }
+            if ($refused > 0 && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('font-map-capped', '', '', ['refused' => $refused, 'max' => self::MAP_MAX]);
             }
 
             return 'downloaded';
@@ -1067,7 +1183,9 @@ class wps_ic_fonts
         $stylesheetFilename = md5(basename($styleSheetURL)) . '.css';
 
         // Map the stylesheet URL to Filename
-        $this->mapStylesheets($styleSheetURL, $dir, $stylesheetFilename);
+        if (!$this->mapStylesheets($styleSheetURL, $dir, $stylesheetFilename)) {
+            return false;
+        }
 
         // Create directory
         wp_mkdir_p($stylesheetPath);
@@ -1082,9 +1200,11 @@ class wps_ic_fonts
         $fd = (is_array($fdOpts) && !empty($fdOpts['font-display'])) ? strtolower((string) $fdOpts['font-display']) : 'swap';
         // v7.10.401: resolve through the effective value so a validated metrics-matched
         // fallback upgrades swap -> optional (kills the font-swap CLS on Divi headings).
+        $fdKept = function_exists('wpc_font_display_site_kept')
+            && wpc_font_display_site_kept(is_array($fdOpts) && isset($fdOpts['font-display']) ? $fdOpts['font-display'] : '');
         if ($fd !== 'off' && function_exists('wpc_font_display_effective')) { $fd = wpc_font_display_effective($fd); }
 
-        if ($fd !== 'off') {
+        if ($fd !== 'off' && !$fdKept) {
             if (!in_array($fd, ['swap', 'block', 'auto', 'optional', 'fallback'], true)) {
                 $fd = 'swap';
             }
@@ -1142,7 +1262,10 @@ class wps_ic_fonts
             $map = [];
         }
 
-        foreach ($map as $rd) {
+        $fdKept = function_exists('wpc_font_display_site_kept')
+            && wpc_font_display_site_kept(is_array($fdOpts) && isset($fdOpts['font-display']) ? $fdOpts['font-display'] : '');
+
+        foreach ($map as $sheetUrl => $rd) {
             if (empty($rd['dir']) || empty($rd['filename'])) {
                 continue;
             }
@@ -1152,6 +1275,20 @@ class wps_ic_fonts
             }
             $css = @file_get_contents($path);
             if (!is_string($css) || $css === '') {
+                continue;
+            }
+            if ($fdKept) {
+                $declared = self::providerDeclaredDisplay($sheetUrl);
+                if ($declared === null) {
+                    continue;
+                }
+                $declaredBaked = preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($m) use ($declared) {
+                    $face = (string) preg_replace('/font-display\s*:\s*[^;}]+;?/i', '', $m[0]);
+                    return $declared === '' ? $face : (string) preg_replace('/@font-face\s*\{/i', '@font-face{font-display:' . $declared . ';', $face, 1);
+                }, $css);
+                if (is_string($declaredBaked) && $declaredBaked !== $css && wpc_fs_put($path, $declaredBaked) !== false) {
+                    $rebakedCount++;
+                }
                 continue;
             }
             $baked = preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($m) use ($fd) {
@@ -1172,6 +1309,10 @@ class wps_ic_fonts
             }
         }
 
+
+        if ($fdKept) {
+            return $rebakedCount;
+        }
 
         foreach ((array) @glob(rtrim(WPS_IC_FONTS_DIR, '/') . '/*/*.css') as $familySheetPath) {
             if (!@is_writable($familySheetPath)) {
@@ -1201,11 +1342,108 @@ class wps_ic_fonts
         return $rebakedCount;
     }
 
+    /** The font-display a provider stylesheet's address asks for (its display= parameter), '' when it asks for none, null when the address is not a Google Fonts or Bunny Fonts one. */
+    private static function providerDeclaredDisplay($sheetUrl)
+    {
+        $sheetUrl = html_entity_decode((string) $sheetUrl, ENT_QUOTES);
+        if (!preg_match('~^(?:https?:)?//fonts\.(?:googleapis\.com|bunny\.net)/css~i', $sheetUrl)) {
+            return null;
+        }
+        if (preg_match('/[?&]display=([a-z-]+)/i', $sheetUrl, $asked)) {
+            $asked = strtolower($asked[1]);
+            return in_array($asked, ['swap', 'block', 'auto', 'optional', 'fallback'], true) ? $asked : '';
+        }
+        return '';
+    }
+
+    /** The Google Fonts (or Bunny Fonts) stylesheets $html links, as the page wrote them (entities decoded, a protocol-relative address made https), once each. The one reader of a page's provider links: the scan and the render's note both ask it. */
+    public static function providerSheetsIn($html)
+    {
+        $out = [];
+        if (preg_match_all('/<link\b[^>]*href=["\']((?:https?:)?\/\/fonts\.(?:googleapis\.com|bunny\.net)\/css[^"\']*)["\']/i', (string) $html, $lm)) {
+            foreach (array_unique($lm[1]) as $l) {
+                $sheet = html_entity_decode((string) $l, ENT_QUOTES);
+                $out[] = strpos($sheet, '//') === 0 ? 'https:' . $sheet : $sheet;
+            }
+        }
+        return array_values(array_unique($out));
+    }
+
+    /** Whether $url has the shape of an address the localizer would ever read: a Google Fonts or Bunny Fonts css address of at most 700 characters, https, with the characters of a font query only. */
+    public static function isProviderSheet($url)
+    {
+        return is_string($url) && $url !== '' && strlen($url) <= 700
+            && preg_match('#^https://fonts\.(googleapis\.com|bunny\.net)/css2?\?[A-Za-z0-9&=:;,+%@._\-]+$#', $url) === 1;
+    }
+
+    /** Records the provider sheets of $urls that a render or the scan found on the site's own pages, the last SEEN_MAX of them. Answers how many were new. */
+    public function noteSheets(array $urls)
+    {
+        $known = get_option(self::SEEN_SHEETS);
+        if (!is_array($known)) {
+            $known = [];
+        }
+        $added = [];
+        foreach ($urls as $url) {
+            if (self::isProviderSheet($url) && !in_array($url, $known, true) && !in_array($url, $added, true)) {
+                $added[] = $url;
+            }
+        }
+        if ($added === []) {
+            return 0;
+        }
+        update_option(self::SEEN_SHEETS, array_slice(array_merge($known, $added), -self::SEEN_MAX), false);
+        return count($added);
+    }
+
+    /** Whether the anonymous door and the rescan keep to the sheets the site's own pages reference; the cohort off_font_seen_only (1) lifts that and leaves BEACON_RESERVE as the only bound. */
+    public static function beaconSeenRequired()
+    {
+        return !(function_exists('wpc_policy_cohort') && wpc_policy_cohort('off_font_seen_only') === 1);
+    }
+
+    /** The addresses of $urls that a render or the scan found on the site's own pages (every provider sheet of $urls when beaconSeenRequired() is false). The one answer to whether a sheet is one the site references. */
+    public function seenOnly(array $urls)
+    {
+        if (!self::beaconSeenRequired()) {
+            return array_values(array_filter($urls, function ($url) {
+                return wps_ic_fonts::isProviderSheet($url);
+            }));
+        }
+        $known = get_option(self::SEEN_SHEETS);
+        if (!is_array($known) || $known === []) {
+            return [];
+        }
+        return array_values(array_filter($urls, function ($url) use ($known) {
+            return is_string($url) && in_array($url, $known, true);
+        }));
+    }
+
+    /** Whether the anonymous door may queue $url while $queued addresses already wait: the map holds it already, or the map and the queue together leave BEACON_RESERVE of the MAP_MAX slots free for the sheets the scan finds (so a full map admits no new address, as mapAdmits says). */
+    public function beaconAdmits($url, $queued)
+    {
+        $map = get_option(WPS_IC_FONTS_MAP);
+        $held = is_array($map) ? count($map) : 0;
+        return (is_array($map) && array_key_exists((string) $url, $map)) || $held + (int) $queued < self::MAP_MAX - self::BEACON_RESERVE;
+    }
+
+    public function mapAdmits($url)
+    {
+        $map = get_option(WPS_IC_FONTS_MAP);
+
+        return !is_array($map) || array_key_exists((string) $url, $map) || count($map) < self::MAP_MAX;
+    }
+
     public function mapStylesheets($url, $dir, $filename)
     {
+        if (!$this->mapAdmits($url)) {
+            return false;
+        }
         $this->stylesheetMap = get_option(WPS_IC_FONTS_MAP);
         $this->stylesheetMap[$url] = ['dir' => $dir, 'filename' => $filename];
         update_option(WPS_IC_FONTS_MAP, $this->stylesheetMap);
+
+        return true;
     }
 
 

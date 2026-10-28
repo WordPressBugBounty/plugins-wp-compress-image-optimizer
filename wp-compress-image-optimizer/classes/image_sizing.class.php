@@ -53,6 +53,9 @@ final class wps_ic_image_sizing
     /** File reads (getimagesize / SVG head) allowed per request. */
     const MEASURE_LIMIT = 40;
 
+    /** Original-size header reads the crop guard may make per request, apart from MEASURE_LIMIT. */
+    const CROP_PROBE_LIMIT = 400;
+
     /** Why sizesFor() withheld: the reasons the receipt counts. */
     const WITHHELD_REASONS = ['multi-use', 'no-observation', 'one-leg', 'aspect'];
 
@@ -80,6 +83,9 @@ final class wps_ic_image_sizing
     private static $fileFacts = [];
     /** @var int  File reads made this request (bounded by MEASURE_LIMIT). */
     private static $filesMeasured = 0;
+
+    /** @var int  Header reads made by cropProbe() this request (bounded by CROP_PROBE_LIMIT). */
+    private static $cropProbes = 0;
 
     /**
      * @param string|null $device    'mobile' | 'desktop'; null = the render's device
@@ -336,6 +342,52 @@ final class wps_ic_image_sizing
     }
 
     /**
+     * Is $src a -WxH rendition whose aspect differs from the attachment's full-size aspect by
+     * more than 1% (a hard crop)? $meta is wp_get_attachment_metadata(). A ladder built from the
+     * attachment would be uncropped, so the lanes that build one add no rung or <source> for such a tag.
+     */
+    public static function hardCropSrc($src, $meta)
+    {
+        if (!is_array($meta) || empty($meta['width']) || empty($meta['height']) || (int) $meta['width'] <= 0 || (int) $meta['height'] <= 0) {
+            return false;
+        }
+        $path = (string) parse_url(preg_replace('/[?#].*$/', '', html_entity_decode((string) $src, ENT_QUOTES)), PHP_URL_PATH);
+        $name = (string) preg_replace('/(\.(?:jpe?g|png|gif|webp|avif))+$/i', '', basename($path));
+        if (!preg_match('/-(\d{1,5})x(\d{1,5})$/', $name, $suffix) || (int) $suffix[1] <= 0 || (int) $suffix[2] <= 0) {
+            return false;
+        }
+        $full = (int) $meta['width'] / (int) $meta['height'];
+        $crop = (int) $suffix[1] / (int) $suffix[2];
+        return abs($crop - $full) / $full > 0.01;
+    }
+
+    /**
+     * The pixel-attribute rule: a width or height attribute names pixels when its whole value is
+     * one to five digits with an optional `px`; a percentage, another unit, a fraction, an empty
+     * value or a missing attribute is unknown (0). The one reader of a tag's height for every
+     * caller of sizesFor() (the unlazy pass, image_sizes, the census slot, Negotiated Delivery).
+     */
+    public static function pixelValue($attributeValue)
+    {
+        return preg_match('/^\s*(\d{1,5})(?:px)?\s*$/i', (string) $attributeValue, $m) ? (int) $m[1] : 0;
+    }
+
+    /** pixelValue() of the named attribute of an <img> tag's markup (quoted either way or bare). */
+    public static function tagPixels($tag, $attribute)
+    {
+        $pattern = '/\s' . preg_quote((string) $attribute, '/') . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+))/i';
+        if (!preg_match($pattern, (string) $tag, $m)) {
+            return 0;
+        }
+        foreach ([1, 2, 3] as $group) {
+            if (isset($m[$group]) && $m[$group] !== '') {
+                return self::pixelValue($m[$group]);
+            }
+        }
+        return 0;
+    }
+
+    /**
      * Does a tag's inline style set its width or height (any value)? Such a tag gets no width or
      * height attribute: the style already sizes the box, and an attribute beside it becomes the
      * constraint on the axis the style left open. staging.wpcompress.com /wp-rocket-alternative/ on
@@ -383,6 +435,31 @@ final class wps_ic_image_sizing
         return (string) preg_replace('/[?#].*$/', '', html_entity_decode((string) $src, ENT_QUOTES));
     }
 
+    /** The absolute disk path of a same-site file URL, or '' for another host, a path with '..' or no path. */
+    private static function diskPath($key)
+    {
+        if (!defined('ABSPATH') || !function_exists('site_url')) {
+            return '';
+        }
+        $site = parse_url((string) site_url());
+        $url = parse_url(preg_match('#^//#', $key) ? 'https:' . $key : $key);
+        if (!is_array($url) || !is_array($site) || empty($url['path'])) {
+            return '';
+        }
+        if (!empty($url['host']) && (empty($site['host']) || strcasecmp($url['host'], $site['host']) !== 0)) {
+            return '';
+        }
+        $relative = (string) $url['path'];
+        $sitePath = isset($site['path']) ? trim((string) $site['path'], '/') : '';
+        if ($sitePath !== '' && strpos(ltrim($relative, '/'), $sitePath . '/') === 0) {
+            $relative = substr(ltrim($relative, '/'), strlen($sitePath));
+        }
+        if (strpos($relative, '..') !== false) {
+            return '';
+        }
+        return rtrim((string) ABSPATH, '/') . '/' . ltrim(rawurldecode($relative), '/');
+    }
+
     /** One read of a same-site file, memoised per request and capped at MEASURE_LIMIT. */
     private static function measure($src)
     {
@@ -391,31 +468,47 @@ final class wps_ic_image_sizing
             return self::$fileFacts[$key];
         }
         self::$fileFacts[$key] = null;
-        if (!function_exists('wpc_image_file_dims') || !defined('ABSPATH') || !function_exists('site_url')) {
+        if (!function_exists('wpc_image_file_dims')) {
             return null;
         }
-        $site = parse_url((string) site_url());
-        $url = parse_url(preg_match('#^//#', $key) ? 'https:' . $key : $key);
-        if (!is_array($url) || !is_array($site) || empty($url['path'])) {
-            return null;
-        }
-        if (!empty($url['host']) && (empty($site['host']) || strcasecmp($url['host'], $site['host']) !== 0)) {
-            return null;
-        }
-        $relative = (string) $url['path'];
-        $sitePath = isset($site['path']) ? trim((string) $site['path'], '/') : '';
-        if ($sitePath !== '' && strpos(ltrim($relative, '/'), $sitePath . '/') === 0) {
-            $relative = substr(ltrim($relative, '/'), strlen($sitePath));
-        }
-        if (strpos($relative, '..') !== false || self::$filesMeasured >= self::MEASURE_LIMIT) {
+        $path = self::diskPath($key);
+        if ($path === '' || self::$filesMeasured >= self::MEASURE_LIMIT) {
             return null;
         }
         self::$filesMeasured++;
-        $dims = wpc_image_file_dims(rtrim((string) ABSPATH, '/') . '/' . ltrim(rawurldecode($relative), '/'));
+        $dims = wpc_image_file_dims($path);
         if (is_array($dims) && isset($dims[0], $dims[1]) && $dims[0] > 0 && $dims[1] > 0) {
             self::$fileFacts[$key] = ['w' => $dims[0], 'h' => $dims[1], 'source' => 'measured'];
         }
         return self::$fileFacts[$key];
+    }
+
+    /**
+     * The size of a same-site raster original for the crop guard: what the sizing pass already read, else one header
+     * read of its own counted by CROP_PROBE_LIMIT and never by MEASURE_LIMIT. null when the file cannot be read,
+     * false when the probe bound is spent.
+     */
+    public static function cropProbe($url)
+    {
+        $key = self::fileKey($url);
+        if (preg_match('/\.svg$/i', $key)) {
+            return null;
+        }
+        $known = isset(self::$fileFacts[$key]) ? self::$fileFacts[$key] : null;
+        if (is_array($known)) {
+            return ['width' => (int) $known['w'], 'height' => (int) $known['h']];
+        }
+        $path = function_exists('wpc_image_file_dims') ? self::diskPath($key) : '';
+        if ($path === '') {
+            return null;
+        }
+        if (self::$cropProbes >= self::CROP_PROBE_LIMIT) {
+            return false;
+        }
+        self::$cropProbes++;
+        $dims = wpc_image_file_dims($path);
+        return (is_array($dims) && isset($dims[0], $dims[1]) && $dims[0] > 0 && $dims[1] > 0)
+            ? ['width' => (int) $dims[0], 'height' => (int) $dims[1]] : null;
     }
 
     // ── (c) the aspect pin and the receipt ───────────────────────────────────────────────────

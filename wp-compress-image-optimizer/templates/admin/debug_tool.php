@@ -7,24 +7,6 @@ if (!current_user_can('manage_options')) {
 global $wps_ic, $wpdb;
 $wpc_debug_dumps = get_option('wpc_show_hidden_menus') == 'true';   // raw dumps below only with the hidden menus on
 
-// v7.10.651 — these action links hardcoded admin.php?page=<slug>, but the menu registers
-// EITHER top-level (add_menu_page) OR under Settings (add_submenu_page 'options-general.php')
-// depending on configuration — so on Settings-registered installs every debug link 403'd
-// ("not allowed to access this page"). Pre-existing, and unrelated to the nonce work, but
-// found while verifying it. menu_page_url() returns whichever base is real.
-if (!function_exists('wpc_debug_tool_base_url')) {
-    function wpc_debug_tool_base_url($slug)
-    {
-        if (function_exists('menu_page_url')) {
-            $u = menu_page_url($slug, false);
-            if (!empty($u)) {
-                return $u;
-            }
-        }
-        return admin_url('options-general.php?page=' . $slug);
-    }
-}
-
 // ── v7.10.651 — CVE-2026-17608: CSRF → arbitrary option deletion (and its siblings) ──
 // The reported hole was `?delete_option=<any option>` with no nonce: one forged link
 // clicked by a logged-in admin could delete siteurl/home/active_plugins. The sweep found
@@ -786,26 +768,26 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 <h3><?php esc_html_e('Automatic Preloads found by API (can edit)', WPS_IC_TEXTDOMAIN); ?></h3>
                 <textarea name="preloads_lcp" style="width:100%;height:150px;"><?php
                     if (!empty($preloads['lcp'])) {
-                        echo implode("\n", $preloads['lcp']);
+                        echo esc_textarea(implode("\n", (array) $preloads['lcp']));
                     }
                     ?></textarea>
                 <h3><?php esc_html_e('Manual Desktop Preloads (can edit)', WPS_IC_TEXTDOMAIN); ?></h3>
                 <textarea name="preloads" style="width:100%;height:150px;"><?php
                     if (!empty($preloads['custom']) && is_array($preloads['custom'])) {
-                        echo implode("\n", $preloads['custom']);
+                        echo esc_textarea(implode("\n", $preloads['custom']));
                     }
                     ?></textarea>
 
                 <h3><?php esc_html_e('Automatic Mobile Preloads found by API (can edit)', WPS_IC_TEXTDOMAIN); ?></h3>
                 <textarea name="preloadsMobile_lcp" style="width:100%;height:150px;"><?php
                 if (!empty($preloadsMobile['lcp'])) {
-                    echo implode("\n", $preloadsMobile['lcp']);
+                    echo esc_textarea(implode("\n", (array) $preloadsMobile['lcp']));
                 }
                     ?></textarea>
                 <h3><?php esc_html_e('Manual Mobile Preloads (can edit)', WPS_IC_TEXTDOMAIN); ?></h3>
                 <textarea name="preloadsMobile" style="width:100%;height:150px;"><?php
                     if (!empty($preloadsMobile['custom']) && is_array($preloadsMobile['custom'])) {
-                        echo implode("\n", $preloadsMobile['custom']);
+                        echo esc_textarea(implode("\n", $preloadsMobile['custom']));
                     }
                     ?></textarea>
                 <input type="submit" value="<?php esc_attr_e('Save Preloads', WPS_IC_TEXTDOMAIN); ?>" name="savePreloads" class="button-primary"
@@ -818,8 +800,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         <td colspan="3">
             <form method="post" action="">
                 <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
-                <input type="text" name="cache_refresh_time" value="<?php echo
-                $settings['cache_refresh_time']; ?>">
+                <input type="text" name="cache_refresh_time" value="<?php echo esc_attr($settings['cache_refresh_time']); ?>">
                 <input type="submit" value="<?php esc_attr_e('Save cache refresh', WPS_IC_TEXTDOMAIN); ?>" name="save" class="button-primary"
                        style="float:right">
             </form>
@@ -960,200 +941,6 @@ $wpcOverviewMeta = [
         <?php endforeach; ?>
     </tbody>
 </table>
-
-<?php
-
-
-$wpcLadderStats = get_option('wpc_ladder_stats', []);
-$wpcLadderQueue = get_option('wpc_ladder_gen_queue', []);
-if (!is_array($wpcLadderQueue)) $wpcLadderQueue = [];
-$wpcLadderGenLog = get_option('wpc_variant_gen_log', []);
-if (!is_array($wpcLadderGenLog)) $wpcLadderGenLog = [];
-$wpcLadderPrewarm = get_option('wpc_prewarm_status', []);
-if (!is_array($wpcLadderPrewarm)) $wpcLadderPrewarm = [];
-
-$wpcLadderFleet    = isset($wpcLadderStats['fleet']) && is_array($wpcLadderStats['fleet']) ? $wpcLadderStats['fleet'] : [];
-$wpcLadderTiming   = isset($wpcLadderStats['timing']) && is_array($wpcLadderStats['timing']) ? $wpcLadderStats['timing'] : [];
-$wpcLadderQueueStat = isset($wpcLadderStats['queue']) && is_array($wpcLadderStats['queue']) ? $wpcLadderStats['queue'] : [];
-$wpcLadderTriggers = isset($wpcLadderStats['triggers']) && is_array($wpcLadderStats['triggers']) ? $wpcLadderStats['triggers'] : [];
-
-$wpcLadderSamples = (int) ($wpcLadderTiming['samples'] ?? 0);
-$wpcLadderAvgMs   = $wpcLadderSamples > 0 ? (int) round(($wpcLadderTiming['sum_ms'] ?? 0) / $wpcLadderSamples) : 0;
-$wpcLadderP95Ms   = function_exists('wpc_ladder_stats_p95') ? wpc_ladder_stats_p95($wpcLadderStats) : 0;
-$wpcLadderMaxMs   = (int) ($wpcLadderTiming['max_ms'] ?? 0);
-
-$wpcLadderTotalFired     = (int) ($wpcLadderFleet['total_backfills_fired'] ?? 0);
-$wpcLadderTotalSucceeded = (int) ($wpcLadderFleet['total_backfills_succeeded'] ?? 0);
-$wpcLadderTotalFailed    = (int) ($wpcLadderFleet['total_backfills_failed'] ?? 0);
-?>
-<h2 style="margin-top:40px;">Modern Delivery Ladder Status</h2>
-<table class="wp-list-table widefat fixed striped">
-    <thead>
-    <tr>
-        <th style="width:260px;">Metric</th>
-        <th>Value</th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr>
-        <td><strong>Current queue depth</strong></td>
-        <td><?php echo count($wpcLadderQueue); ?> attachment(s) — <?php echo get_option('wpc_ladder_gen_queue_has_items') ? 'worker has work' : 'idle'; ?></td>
-    </tr>
-    <tr>
-        <td><strong>Max queue depth ever</strong></td>
-        <td>
-            <?php echo (int) ($wpcLadderQueueStat['max_depth_ever'] ?? 0); ?>
-            <?php if (!empty($wpcLadderQueueStat['max_depth_at'])): ?>
-                (last reached <?php echo esc_html(date('Y-m-d H:i:s', (int) $wpcLadderQueueStat['max_depth_at'])); ?> UTC)
-            <?php endif; ?>
-        </td>
-    </tr>
-    <tr>
-        <td><strong>Backfills fired</strong></td>
-        <td>
-            <?php echo $wpcLadderTotalFired; ?> total
-            — <span style="color:#2a7a2a;"><?php echo $wpcLadderTotalSucceeded; ?> succeeded</span>
-            / <span style="color:#a00;"><?php echo $wpcLadderTotalFailed; ?> failed</span>
-        </td>
-    </tr>
-    <tr>
-        <td><strong>Variants generated</strong></td>
-        <td>
-            <?php echo (int) ($wpcLadderFleet['total_variants_avif'] ?? 0); ?> AVIF
-            + <?php echo (int) ($wpcLadderFleet['total_variants_webp'] ?? 0); ?> WebP
-            <?php if (!empty($wpcLadderFleet['total_variants_jpg'])): ?>
-                + <?php echo (int) $wpcLadderFleet['total_variants_jpg']; ?> JPG
-            <?php endif; ?>
-        </td>
-    </tr>
-    <tr>
-        <td><strong>Backfill duration</strong></td>
-        <td>
-            avg <?php echo $wpcLadderAvgMs; ?>ms
-            · p95 <?php echo $wpcLadderP95Ms; ?>ms
-            · max <?php echo $wpcLadderMaxMs; ?>ms
-            <?php if ($wpcLadderSamples > 0): ?>
-                (<?php echo $wpcLadderSamples; ?> samples)
-            <?php endif; ?>
-        </td>
-    </tr>
-    <tr>
-        <td><strong>Trigger attribution</strong></td>
-        <td>
-            <?php
-            $triggerOrder = ['loopback', 'shutdown', 'admin', 'cron', 'manual', 'prewarm', 'cli-force', 'unknown'];
-            $parts = [];
-            foreach ($triggerOrder as $trig) {
-                $count = (int) ($wpcLadderTriggers[$trig] ?? 0);
-                if ($count > 0) $parts[] = $trig . ' <strong>' . $count . '</strong>';
-            }
-            echo $parts ? implode(' · ', $parts) : '<em>no fires yet</em>';
-            ?>
-        </td>
-    </tr>
-    <tr>
-        <td><strong>Last backfill</strong></td>
-        <td>
-            <?php if (!empty($wpcLadderFleet['last_backfill_at'])): ?>
-                <?php echo esc_html(date('Y-m-d H:i:s', (int) $wpcLadderFleet['last_backfill_at'])); ?> UTC
-                (<?php echo human_time_diff((int) $wpcLadderFleet['last_backfill_at'], time()); ?> ago)
-            <?php else: ?>
-                <em>never fired</em>
-            <?php endif; ?>
-        </td>
-    </tr>
-    <tr>
-        <td><strong>Activation pre-warm</strong></td>
-        <td>
-            <?php if (!empty($wpcLadderPrewarm['state'])): ?>
-                state=<?php echo esc_html($wpcLadderPrewarm['state']); ?>
-                · prewarmed=<?php echo (int) ($wpcLadderPrewarm['prewarmed'] ?? 0); ?>
-                <?php if (!empty($wpcLadderPrewarm['completed_at'])): ?>
-                    · done <?php echo esc_html(date('Y-m-d H:i:s', (int) $wpcLadderPrewarm['completed_at'])); ?> UTC
-                <?php endif; ?>
-                <?php if (!empty($wpcLadderPrewarm['failed_pages'])): ?>
-                    · failed_pages=<?php echo (int) $wpcLadderPrewarm['failed_pages']; ?>
-                <?php endif; ?>
-            <?php else: ?>
-                <em>not yet fired</em>
-            <?php endif; ?>
-        </td>
-    </tr>
-    </tbody>
-</table>
-
-<?php if (!empty($wpcLadderQueue)): ?>
-    <h3 style="margin-top:30px;">Current queue (<?php echo count($wpcLadderQueue); ?>)</h3>
-    <table class="wp-list-table widefat fixed striped">
-        <thead><tr><th style="width:120px;">Attachment ID</th><th>Widths pending</th></tr></thead>
-        <tbody>
-        <?php foreach (array_slice($wpcLadderQueue, 0, 25, true) as $aid => $widths): ?>
-            <tr>
-                <td><?php echo (int) $aid; ?></td>
-                <td><?php echo esc_html(implode(', ', array_map('intval', (array) $widths))); ?></td>
-            </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
-    <?php if (count($wpcLadderQueue) > 25): ?>
-        <p><em>… and <?php echo count($wpcLadderQueue) - 25; ?> more. Showing first 25.</em></p>
-    <?php endif; ?>
-<?php endif; ?>
-
-<?php if (!empty($wpcLadderGenLog)): ?>
-    <h3 style="margin-top:30px;">Recent backfill events (last 10)</h3>
-    <table class="wp-list-table widefat fixed striped">
-        <thead>
-        <tr>
-            <th style="width:150px;">Time (UTC)</th>
-            <th style="width:90px;">Attachment</th>
-            <th>Widths</th>
-            <th style="width:110px;">Formats</th>
-            <th style="width:90px;">Duration</th>
-            <th style="width:90px;">Trigger</th>
-            <th style="width:70px;">OK?</th>
-        </tr>
-        </thead>
-        <tbody>
-        <?php foreach (array_slice($wpcLadderGenLog, -10) as $entry): ?>
-            <?php
-            $widthsDisplay = '';
-            if (!empty($entry['widths_delivered']) && is_array($entry['widths_delivered'])) {
-                $widthsDisplay = implode(', ', array_map('intval', $entry['widths_delivered']));
-            } elseif (is_array($entry['w'] ?? null)) {
-                $widthsDisplay = implode(', ', array_map('intval', $entry['w']));
-            } elseif (!empty($entry['w'])) {
-                $widthsDisplay = (string) (int) $entry['w'];
-            }
-
-            $formatsDisplay = '';
-            if (!empty($entry['formats_delivered']) && is_array($entry['formats_delivered'])) {
-                $fmtParts = [];
-                foreach ($entry['formats_delivered'] as $fmt => $cnt) {
-                    if ((int) $cnt > 0) $fmtParts[] = $fmt . '×' . (int) $cnt;
-                }
-                $formatsDisplay = implode(' ', $fmtParts);
-            } elseif (!empty($entry['f'])) {
-                $formatsDisplay = is_array($entry['f']) ? implode(',', $entry['f']) : (string) $entry['f'];
-            }
-
-            $dur = isset($entry['duration_ms']) ? ((int) $entry['duration_ms']) . 'ms' : '—';
-            $trg = isset($entry['trigger_source']) ? (string) $entry['trigger_source'] : (isset($entry['ctx']) ? (string) $entry['ctx'] : '—');
-            $ok  = !isset($entry['success']) ? '—' : ($entry['success'] ? '✓' : '✗');
-            ?>
-            <tr>
-                <td><?php echo esc_html(date('Y-m-d H:i:s', (int) ($entry['t'] ?? 0))); ?></td>
-                <td>#<?php echo (int) ($entry['aid'] ?? 0); ?></td>
-                <td><?php echo esc_html($widthsDisplay); ?></td>
-                <td><?php echo esc_html($formatsDisplay); ?></td>
-                <td><?php echo esc_html($dur); ?></td>
-                <td><?php echo esc_html($trg); ?></td>
-                <td><?php echo $ok; ?></td>
-            </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
-<?php endif; ?>
 
 <?php
 
@@ -1319,6 +1106,60 @@ $wpcRestoreFailed    = (int) ($wpcRestoreFleet['total_restores_failed'] ?? 0);
             alert('<?php echo esc_js(__('Copied to Clipboard', WPS_IC_TEXTDOMAIN)); ?>');
         })
 
+    });
+</script>
+<h3 style="margin-top:24px;"><?php echo esc_html__('Support', WPS_IC_TEXTDOMAIN); ?></h3>
+<p style="max-width:640px;">
+    <?php echo esc_html__('Resync from WP Compress asks the service for a fresh generation of everything it holds for this site; the rest lands over about five minutes and pages keep serving throughout. Delete critical CSS removes every page\'s critical CSS and clears every page\'s saved copy. View as Visitor opens the homepage in a new tab the way a logged-out visitor is served it.', WPS_IC_TEXTDOMAIN); ?>
+</p>
+<p>
+    <button type="button" class="button button-secondary" id="wpc-support-resync"><?php echo esc_html__('Resync from WP Compress', WPS_IC_TEXTDOMAIN); ?></button>
+    <button type="button" class="button" id="wpc-support-delete-crit" style="margin-left:6px;"><?php echo esc_html__('Delete critical CSS', WPS_IC_TEXTDOMAIN); ?></button>
+    <a class="button" id="wpc-support-view-as-visitor" style="margin-left:6px;" target="_blank" rel="noopener" href="<?php echo esc_url(add_query_arg('wpc_visitor_mode', 'true', home_url('/'))); ?>"><?php echo esc_html__('View as Visitor', WPS_IC_TEXTDOMAIN); ?></a>
+    <span id="wpc-support-state" style="margin-left:8px;"></span>
+</p>
+<script type="text/javascript">
+    jQuery(function ($) {
+        var st = $('#wpc-support-state');
+        $('#wpc-support-resync').on('click', function () {
+            var b = $(this);
+            b.prop('disabled', true);
+            st.text('<?php echo esc_js(__('Resyncing…', WPS_IC_TEXTDOMAIN)); ?>');
+            $.post(wpc_ajaxVar.ajaxurl || ajaxurl, {
+                action: 'wpc_crit_selftest',
+                refetch: 'resync',
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, null, 'json').done(function (r) {
+                if (r && r.refetch) {
+                    st.text('<?php echo esc_js(__('Resync started:', WPS_IC_TEXTDOMAIN)); ?> ' + r.refetch.join(', '));
+                } else {
+                    st.text('<?php echo esc_js(__('Resync failed:', WPS_IC_TEXTDOMAIN)); ?> ' + ((r && r.error) || '<?php echo esc_js(__('unexpected reply', WPS_IC_TEXTDOMAIN)); ?>'));
+                }
+            }).fail(function (x) {
+                st.text('<?php echo esc_js(__('Resync failed (HTTP', WPS_IC_TEXTDOMAIN)); ?> ' + (x && x.status) + ')');
+            }).always(function () {
+                b.prop('disabled', false);
+            });
+        });
+        $('#wpc-support-delete-crit').on('click', function () {
+            var b = $(this);
+            if (!window.confirm('<?php echo esc_js(__("Delete critical CSS for every page?\n\nThis deletes every page's critical CSS and clears every page's saved copy. Pages load without critical CSS, which is slower, until new versions land. Images and the CDN are not touched.", WPS_IC_TEXTDOMAIN)); ?>')) {
+                return;
+            }
+            b.prop('disabled', true);
+            st.text('<?php echo esc_js(__('Deleting…', WPS_IC_TEXTDOMAIN)); ?>');
+            $.post(wpc_ajaxVar.ajaxurl || ajaxurl, {
+                action: 'wps_ic_purge_critical_css',
+                hard_purge: '1',
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, null, 'json').done(function (r) {
+                st.text(r && r.success ? '<?php echo esc_js(__('Critical CSS deleted. Fresh versions land automatically.', WPS_IC_TEXTDOMAIN)); ?>' : '<?php echo esc_js(__('Delete failed:', WPS_IC_TEXTDOMAIN)); ?> ' + ((r && r.data) || '<?php echo esc_js(__('unexpected reply', WPS_IC_TEXTDOMAIN)); ?>'));
+            }).fail(function (x) {
+                st.text('<?php echo esc_js(__('Delete failed (HTTP', WPS_IC_TEXTDOMAIN)); ?> ' + (x && x.status) + ')');
+            }).always(function () {
+                b.prop('disabled', false);
+            });
+        });
     });
 </script>
 <?php

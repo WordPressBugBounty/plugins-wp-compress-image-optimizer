@@ -230,9 +230,11 @@ jQuery(document).ready((function($) {
             var name = r ? r.action : k;
             var required = r ? r.tier === "req" : k === "Zone Read" || k === "Cache Purge";
             var does = r ? '<small class="wpc-cfperm-does">' + wpcEsc(r.allows) + "<br>" + wpcEsc(r.missing) + "</small>" : "";
-            rows += '<li class="' + (ok ? "wpc-cf-diag-ok" : "wpc-cf-diag-fail") + '">' + '<span class="wpc-cf-diag-icon">' + (ok ? "✓" : "✕") + "</span>" + '<span class="wpc-cf-diag-name">' + wpcEsc(name) + (required ? " (required)" : "") + does + "</span>" + "</li>";
+            var cls = ok ? "wpc-cf-diag-ok" : (required ? "wpc-cf-diag-fail" : "wpc-cf-diag-skipped");
+            var icon = ok ? "✓" : (required ? "✕" : "–");
+            rows += '<li class="' + cls + '">' + '<span class="wpc-cf-diag-icon">' + icon + "</span>" + '<span class="wpc-cf-diag-name">' + wpcEsc(name) + (required ? " (required)" : (ok ? "" : " · Not added")) + does + "</span>" + "</li>";
         }));
-        return rows ? '<ul class="wpc-cf-diag">' + rows + "</ul>" : "";
+        return rows ? '<ul class="wpc-cf-diag-list">' + rows + "</ul>" : "";
     }
     // One row per component of the Connect/Refresh report (ajax.class.php wpc_ic_refreshCFConnection).
     // Every row is {ok, mode, detail}; corp_guard is a bare verdict string. A row the server did not
@@ -422,6 +424,35 @@ jQuery(document).ready((function($) {
             delete wpcAdvPendingChanges[name];
         }
     }));
+    function wpcOfferUnviewedImages() {
+        if (typeof WPCSwal === "undefined") return;
+        $.post(ajaxurl, {
+            action: "wpc_ic_unviewed_images_count",
+            nonce: wpc_ajaxVar.nonce
+        }, (function(r) {
+            if (!r || !r.success || !r.data || !(r.data.count > 0) || !r.data.message) return;
+            WPCSwal.fire({
+                title: "",
+                text: r.data.message,
+                showCancelButton: true,
+                confirmButtonText: "Yes",
+                cancelButtonText: "No",
+                allowOutsideClick: true,
+                customClass: {
+                    container: "no-padding-popup-bottom-bg switch-legacy-popup wpc-popup-v6"
+                }
+            }).then((function(res) {
+                if (!res || !res.value) return;
+                $.post(ajaxurl, {
+                    action: "wpc_ic_start_bulk_compress",
+                    nonce: wpc_ajaxVar.nonce,
+                    unviewed: 1
+                }, (function(s) {
+                    if (s && s.success && r.data.bulk_url) window.location.href = r.data.bulk_url;
+                }));
+            }));
+        }));
+    }
     $(".wpc-save-button").on("click", (function(e) {
         e.preventDefault();
         var $btn = $(this);
@@ -531,6 +562,9 @@ jQuery(document).ready((function($) {
         var changeKeys = changes.map((function(c) {
             return c.name;
         }));
+        var modeFrom = String(wpcAdvInitialStates["options[wpc_optimization_mode]"] || "");
+        var modeTo = String($("#wpcOptimizationMode").val() || "");
+        var offerUnviewed = changeKeys.indexOf("wpc_optimization_mode") !== -1 && modeFrom.indexOf("lazy") === 0 && modeTo === "legacy";
         var saveStartTime = Date.now();
         $.ajax({
             url: ajaxurl,
@@ -590,6 +624,7 @@ jQuery(document).ready((function($) {
                 wps_ic_nonce: wpc_ajaxVar.nonce,
                 changed_keys: changeKeys
             });
+            if (offerUnviewed) wpcOfferUnviewedImages();
             var elapsed = Date.now() - saveStartTime;
             var savingDelay = Math.max(0, 800 - elapsed);
             setTimeout((function() {
@@ -1570,9 +1605,12 @@ jQuery(document).ready((function($) {
                     } else if (ok) {
                         el.className = "wpc-cfperm-status is-ok";
                         el.textContent = "✓ Granted";
-                    } else {
+                    } else if (el.getAttribute("data-required") === "1") {
                         el.className = "wpc-cfperm-status is-fail";
                         el.textContent = "✕ Missing";
+                    } else {
+                        el.className = "wpc-cfperm-status is-unknown";
+                        el.textContent = "Not added";
                     }
                     var row = el.closest ? el.closest(".wpc-cfperm-row") : null;
                     if (row) {
@@ -1589,8 +1627,8 @@ jQuery(document).ready((function($) {
                         cls = "is-fail";
                         txt = reqMiss + " required permission(s) missing";
                     } else if (optMiss) {
-                        cls = "is-warn";
-                        txt = "Required granted · " + optMiss + " optional missing";
+                        cls = "is-unknown";
+                        txt = optMiss + " optional";
                     } else if (unknown) {
                         cls = "is-unknown";
                         txt = "Not verified yet";
@@ -1636,11 +1674,6 @@ jQuery(document).ready((function($) {
                 if (res && res.success && res.data && res.data.privileges && res.data.privileges.tests) {
                     acc.setAttribute("data-checked", String(Math.floor(Date.now() / 1e3)));
                     resolveRows(res.data.privileges.tests);
-                    var tk = res.data.privileges.token;
-                    var idLine = document.getElementById("wpc-cf-token-identity");
-                    if (idLine && tk) {
-                        idLine.textContent = tk.id ? "Token id: " + tk.id + ", status: " + (tk.status || "") + ", checked just now" : "Token id: Cloudflare did not confirm it, status: " + (tk.status || "unverified") + ", checked just now";
-                    }
                     var pv = res.data.purge_verified;
                     done("Verified just now via live Cloudflare API checks." + (pv && pv.t ? " · HTML purge verified working end-to-end (Cache-Tag)." : ""));
                 } else {

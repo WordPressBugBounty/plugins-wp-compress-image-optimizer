@@ -175,6 +175,9 @@ if (!function_exists('wpc_maybe_trigger_optimize')) {
             if ($inst->is_already_compressed($attachmentId)) return;
         }
 
+        if (class_exists('wps_ic_image_variants') ? wps_ic_image_variants::restore_held($attachmentId) : (string) get_post_meta($attachmentId, 'ic_status', true) === 'restored') return;
+        if ((string) get_post_meta($attachmentId, 'wps_ic_exclude_live', true) !== '') return;
+
         // Gate 2: permanent-fail cooldown (24h after retry ceiling hit)
         if (get_transient('wpc_failed_' . $attachmentId)) return;
 
@@ -1052,7 +1055,12 @@ if (!function_exists('wpc_regen_thumbs_hook')) {
             }
 
             $t_start = microtime(true);
-            $newMeta = wp_generate_attachment_metadata($imageID, $regenSource);
+            $GLOBALS['wpc_premint_skip'][$imageID] = true;
+            try {
+                $newMeta = wp_generate_attachment_metadata($imageID, $regenSource);
+            } finally {
+                unset($GLOBALS['wpc_premint_skip'][$imageID]);
+            }
             if ($newMeta && !is_wp_error($newMeta)) {
                 wp_update_attachment_metadata($imageID, $newMeta);
             }
@@ -2669,12 +2677,12 @@ class wps_local_compress
      * Or set an option 'wpc_api_key'.
      */
     public function wpc_get_expected_api_key($apikey) {
-        $options = get_option(WPS_IC_OPTIONS);
-         $expected_token = $options['api_key'];
-
-        if (empty($apikey) || $apikey !== $expected_token) {
+        if (!wpc_site_key_matches($apikey)) {
             wp_send_json_error('Unauthorized: apikey ' . $apikey, 403);
         }
+
+        $options = get_option(WPS_IC_OPTIONS);
+        $expected_token = is_array($options) && isset($options['api_key']) ? $options['api_key'] : '';
 
 
         $this->raiseLimits();
@@ -2808,6 +2816,7 @@ class wps_local_compress
                 }
             }
         }
+        wps_ic_image_variants::delete_twins($post_id);
         delete_transient('wpc_queued_' . $post_id);
         delete_transient('wpc_failed_' . $post_id);
         if (function_exists('wp_cache_delete')) {
@@ -2889,6 +2898,9 @@ class wps_local_compress
         static $fired = [];
 
         $attachment_id = (int) $attachment_id;
+        if ($attachment_id > 0 && function_exists('wpc_sized_trigger_tombstones_clear_attachment')) {
+            wpc_sized_trigger_tombstones_clear_attachment($attachment_id, $data);
+        }
         if ($attachment_id <= 0 || isset($fired[$attachment_id])) {
             return $data;
         }
@@ -2968,7 +2980,7 @@ class wps_local_compress
             'timeout'   => 3,
             'headers'   => ['x-api-key' => $api_key],
             'body'      => ['image_id' => 0],
-            'sslverify' => false,
+            'sslverify' => wpc_service_sslverify(rest_url('wpc/v1/fetch')),
         ]);
 
         $code = wp_remote_retrieve_response_code($response);
@@ -3137,6 +3149,7 @@ class wps_local_compress
         $backupMode = get_post_meta($imageID, 'wpc_backup_mode', true);
         if ($backupMode === 'off') {
             error_log('[WPC Restore] BLOCKED image=' . $imageID . ' — backup mode was off, compression is permanent');
+            delete_transient('wpc_restoring_' . $imageID);
             return ['ok' => false, 'reason' => 'backup-off'];
         }
 
@@ -3226,7 +3239,8 @@ class wps_local_compress
         }
 
 
-        $journal_dropped = $this->cleanRestoreMeta($imageID);
+        $cleaned = $this->cleanRestoreMeta($imageID);
+        $journal_dropped = (int) $cleaned['journal_dropped'];
 
 
         if (!$restored) {
@@ -3265,7 +3279,7 @@ class wps_local_compress
 
 
         if (function_exists('wpc_v2_purge_html_for_attachment')) {
-            wpc_v2_purge_html_for_attachment((int) $imageID, 'restoreV4');
+            wpc_v2_purge_html_for_attachment((int) $imageID, 'restoreV4', 'hard', function_exists('wpc_v2_restore_sd_on') && wpc_v2_restore_sd_on());
         }
 
         // Clear lazy_cdn sha256 dedup transients tied to variants
@@ -3277,20 +3291,12 @@ class wps_local_compress
         }
 
 
-        if (apply_filters('wpc_restore_purge_cdn', false, (int) $imageID)
-            && function_exists('wpc_purge_cdn_urls')) {
-            wpc_purge_cdn_urls((int) $imageID);
-            if (function_exists('wpc_diagnostic_log')) {
-                wpc_diagnostic_log('RESTORE_CDN_PURGE', 'fired for image_id=' . (int) $imageID);
-            }
-        }
-
         if (!$restored) {
             return ['ok' => false, 'reason' => 'restore-failed'];
         }
         $deferred = (bool) get_post_meta($imageID, '_wpc_pending_thumb_regen', true);
         if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log('image-restored', 'site', '', ['id' => (int) $imageID, 'mode' => $restore_source === 'variants-only' ? 'variants-only' : 'from-copy', 'source' => $restore_source, 'deferred' => $deferred ? 1 : 0, 'journal_dropped' => (int) $journal_dropped]);
+            wpc_cache_first_log('image-restored', 'site', '', ['id' => (int) $imageID, 'mode' => $restore_source === 'variants-only' ? 'variants-only' : 'from-copy', 'source' => $restore_source, 'deferred' => $deferred ? 1 : 0, 'journal_dropped' => (int) $journal_dropped, 'twins' => (int) $cleaned['twins']]);
         }
         return ['ok' => true, 'source' => $restore_source, 'deferred' => $deferred];
     }
@@ -3654,12 +3660,12 @@ class wps_local_compress
     /**
      * Clean all optimization metadata and variants. Used by every restore exit path.
      * Guarantees the image is never stuck in a compressed/optimizing state.
-     * Answers how many journal files the variant owner dropped (the image-restored receipt).
+     * Answers ['journal_dropped' => how many journal files the variant owner dropped,
+     * 'twins' => how many .jpg twins of a non-JPEG source it deleted] (the image-restored receipt).
      */
     private function cleanRestoreMeta($imageID) {
-        // Restore finished: release the in-flight micro-lock (every exit path
-        // runs through here). The next render may re-trigger immediately.
-        delete_transient('wpc_restoring_' . $imageID);
+        delete_post_meta($imageID, 'wpc_reopt_intent');
+        $twins = 0;
 
 
         global $wpdb;
@@ -3673,16 +3679,10 @@ class wps_local_compress
 
         $attachedFile = get_attached_file($imageID);
         if ($attachedFile) {
-            $dir = dirname($attachedFile);
-            $baseName = pathinfo(wp_get_original_image_path($imageID) ?: $attachedFile, PATHINFO_FILENAME);
-            // Mime-guard: for a webp SOURCE, {base}*.webp matches the original itself and
-            // WP's own thumbnails — restore must never glob-delete the source format
             $wpc_rg_mime = (string) get_post_mime_type($imageID);
-            if ($wpc_rg_mime !== 'image/webp') {
-                foreach (glob($dir . '/' . $baseName . '*.webp') as $webp) { if (function_exists('wpc_add_twin_bytes')) { wpc_add_twin_bytes(-(int) @filesize($webp)); } @unlink($webp); }
-            }
-            if ($wpc_rg_mime !== 'image/avif') {
-                foreach (glob($dir . '/' . $baseName . '*.avif') as $avif) { if (function_exists('wpc_add_twin_bytes')) { wpc_add_twin_bytes(-(int) @filesize($avif)); } @unlink($avif); }
+            wps_ic_image_variants::delete_twins($imageID, 'restore');
+            if ($wpc_rg_mime !== 'image/jpeg') {
+                $twins = $this->delete_jpg_twins($imageID, $attachedFile);
             }
         }
 
@@ -3752,7 +3752,9 @@ class wps_local_compress
             }
         }
 
+        wps_ic_image_variants::stamp_restore($imageID);
         update_post_meta($imageID, 'ic_status', 'restored');
+        delete_transient('wpc_restoring_' . $imageID);
             if (function_exists('wpc_restore_cdn_purge')) { wpc_restore_cdn_purge($imageID); }
 
 
@@ -3762,7 +3764,70 @@ class wps_local_compress
 
         if (function_exists('wpc_invalidate_local_cache')) { wpc_invalidate_local_cache(); }
 
-        return $journal_dropped;
+        return ['journal_dropped' => $journal_dropped, 'twins' => $twins];
+    }
+
+    /**
+     * Deletes the .jpg twins the plugin wrote beside a non-JPEG attachment's own files and answers
+     * how many it deleted. The set is exact, never a glob ({base}*.jpg would match base-2.jpg,
+     * another attachment's original): the attached file, the unscaled original and every
+     * registered size with its extension replaced by .jpg, plus <stem>-WxH.jpg for every bare
+     * WxH key in ic_local_variants (a jpeg entry's key is its size label, wpc_v2_variant_key: the
+     * envelope rungs the dispatch added that are not registered sizes). Called before
+     * wps_ic_image_variants::clear() drops that set. A twin is deleted only when it exists and is
+     * not one of the attachment's own files.
+     *
+     * Rule: a PNG (or any non-JPEG) dispatch asked for a jpeg output named stem.jpg, so a .jpg
+     * beside a non-JPEG source is ours, and a restore removes what the optimization added.
+     * Observed (gmob.ca, ticket 12231, 2026-10-14): the restore put the PNG back and deleted its
+     * webp/avif, and the July jpg twins (flattened to black) stayed to answer the webp requests
+     * through the fast-404 redirect.
+     */
+    private function delete_jpg_twins($imageID, $attachedFile)
+    {
+        $dir = dirname($attachedFile);
+        $original = function_exists('wp_get_original_image_path') ? (string) wp_get_original_image_path($imageID) : '';
+        $own = [$attachedFile => true];
+        if ($original !== '') {
+            $own[$original] = true;
+        }
+        $meta = function_exists('wp_get_attachment_metadata') ? wp_get_attachment_metadata($imageID) : [];
+        if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
+            foreach ($meta['sizes'] as $size) {
+                if (!empty($size['file'])) {
+                    $own[$dir . '/' . basename((string) $size['file'])] = true;
+                }
+            }
+        }
+
+        $twins = [];
+        foreach (array_keys($own) as $file) {
+            $twins[preg_replace('/\.[^.\/]+$/', '', $file) . '.jpg'] = true;
+        }
+        $stem = preg_replace('/-scaled$/', '', (string) pathinfo($attachedFile, PATHINFO_FILENAME));
+        $set = get_post_meta($imageID, 'ic_local_variants', true);
+        if (is_array($set)) {
+            foreach (array_keys($set) as $key) {
+                if (preg_match('/^(\d+)x(\d+)$/', (string) $key, $m)) {
+                    $twins[$dir . '/' . $stem . '-' . $m[1] . 'x' . $m[2] . '.jpg'] = true;
+                }
+            }
+        }
+
+        $deleted = 0;
+        foreach (array_keys($twins) as $twin) {
+            if (isset($own[$twin]) || !@is_file($twin)) {
+                continue;
+            }
+            $bytes = (int) @filesize($twin);
+            if (@unlink($twin)) {
+                if (function_exists('wpc_add_twin_bytes')) {
+                    wpc_add_twin_bytes(-$bytes);
+                }
+                $deleted++;
+            }
+        }
+        return $deleted;
     }
 
 }

@@ -88,9 +88,11 @@ class WPC_Modern_Delivery
     {
         if (empty($img_url)) return 0;
 
-        // Fast path: WP convention — class="wp-image-{id}" is authoritative
-        if (!empty($class_attr) && preg_match('/\bwp-image-(\d+)\b/', $class_attr, $m)) {
-            return (int) $m[1];
+        if (!empty($class_attr)) {
+            $class_id = wpc_image_attachment_for($img_url, $class_attr);
+            if ($class_id > 0) {
+                return $class_id;
+            }
         }
 
         $key = md5($img_url);
@@ -219,8 +221,7 @@ class WPC_Modern_Delivery
         }
 
 
-        $custom_cname = get_option('ic_custom_cname');
-        $cdn_host = !empty($custom_cname) ? trim($custom_cname) : trim((string) get_option('ic_cdn_zone_name'));
+        $cdn_host = wpc_cdn_host();
 
         if (empty($cdn_host)) {
             return self::$serving_base_url_cache = $origin_base_url;
@@ -901,8 +902,7 @@ class WPC_Modern_Delivery
         if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
             return '';
         }
-        $custom_cname = trim((string) get_option('ic_custom_cname'));
-        $cdn_zone = $custom_cname ?: trim((string) get_option('ic_cdn_zone_name'));
+        $cdn_zone = wpc_cdn_host();
         if (empty($cdn_zone)) {
             // CDN OFF — fall back to bare origin URL (browsers fetch unoptimized but works)
             return self::append_version($origin_url, $attachment_id);
@@ -1045,6 +1045,7 @@ class WPC_Modern_Delivery
 
         $meta = self::resolve_metadata($attachment_id);
         if (empty($meta) || empty($meta['file']) || empty($meta['sizes'])) return null;
+        if (class_exists('wps_ic_image_sizing') && wps_ic_image_sizing::hardCropSrc($original_src, $meta)) return null;
 
         $variants = get_post_meta($attachment_id, 'ic_local_variants', true);
         if (!is_array($variants)) $variants = [];
@@ -1179,6 +1180,11 @@ class WPC_Modern_Delivery
 
         // Build preserved attrs string for inner <img> (L13)
         $skip_attrs = ['src', 'srcset', 'sizes', 'data-src', 'data-srcset', 'data-sizes', 'width', 'height', 'loading', 'fetchpriority'];
+        // The page's own data-src is not ours to drop: WooCommerce's gallery zoom reads it as the
+        // full-size file (ticket 12244). Only a lazy loader's slot is skipped.
+        if (!wps_ic_lazy_verdict::dataSrcIsLazySlot($img_tag_html)) {
+            $skip_attrs = array_values(array_diff($skip_attrs, ['data-src']));
+        }
         $extra_attrs = '';
         foreach ($preserved_attrs as $k => $v) {
             if (in_array($k, $skip_attrs, true)) continue;
@@ -1196,9 +1202,25 @@ class WPC_Modern_Delivery
             $fallback_src = $original_src;
         }
 
-        // Loading + fetchpriority
-        $loading = $is_lcp ? 'eager' : 'lazy';
+        // Loading: the lazy verdict's pre-buffer answer (exclude list, author markers, logo,
+        // the theme's loading="eager", lazy loading off or owned elsewhere); this builder's own
+        // LCP test decides the eager case it leaves open. It used to write lazy on everything but
+        // its LCP candidate, whatever the author had excluded.
+        $lazyVerdictForTag = wps_ic_lazy_verdict::forTagPreBuffer($img_tag_html, $original_src);
+        $loading = ($is_lcp || $lazyVerdictForTag['loading'] === 'eager') ? 'eager'
+            : ($lazyVerdictForTag['loading'] === 'keep' ? (isset($preserved_attrs['loading']) ? (string) $preserved_attrs['loading'] : '') : 'lazy');
         $fetch = $is_lcp ? ' fetchpriority="high"' : '';
+        $heroVerdict = wps_ic_lazy_verdict::forRequest();
+        if ($fetch !== '' && $heroVerdict->measuredBelow($img_tag_html, $original_src)) {
+            $fetch = '';
+        }
+        if ($heroVerdict->heroPriorityOn()) {
+            $fetch = $heroVerdict->priorityFor($img_tag_html, $original_src, $heroVerdict->firstImageOpen(0), ['loading' => $loading, 'why' => $lazyVerdictForTag['why']]) === 'high'
+                ? ' fetchpriority="high"' : '';
+        }
+        if ($fetch !== '' && class_exists('wps_cdn_rewrite') && !wps_cdn_rewrite::first_n_high_allowed($heroVerdict, $img_tag_html, $original_src)) {
+            $fetch = '';
+        }
 
         // Capture LCP for preload emission
         if ($is_lcp) {
@@ -1241,7 +1263,7 @@ class WPC_Modern_Delivery
         $pageHeight = isset($preserved_attrs['height']) ? trim((string) $preserved_attrs['height']) : '';
         if ($pageWidth !== '')  $html .= ' width="' . esc_attr($pageWidth) . '"';
         if ($pageHeight !== '') $html .= ' height="' . esc_attr($pageHeight) . '"';
-        $html .= ' loading="' . $loading . '"' . $fetch;
+        $html .= ($loading !== '' ? ' loading="' . esc_attr($loading) . '"' : '') . $fetch;
         $html .= ' decoding="async"';
         $html .= $extra_attrs;
         $html .= ' />';
@@ -1316,10 +1338,7 @@ class WPC_Modern_Delivery
         $src_host    = (string) wp_parse_url($clean, PHP_URL_HOST);
         if ($origin_host === '' || $src_host === '' || strcasecmp($src_host, $origin_host) !== 0) return null;
 
-        // Zone host: ic_custom_cname → ic_cdn_zone_name (host only).
-        $cdn_host = trim((string) get_option('ic_custom_cname'));
-        if ($cdn_host === '') $cdn_host = trim((string) get_option('ic_cdn_zone_name'));
-        $cdn_host = rtrim(preg_replace('#^https?://#', '', $cdn_host), '/');
+        $cdn_host = rtrim(preg_replace('#^https?://#', '', wpc_cdn_host()), '/');
         if ($cdn_host === '' || strcasecmp($cdn_host, $origin_host) === 0) return null;
 
 
@@ -1349,12 +1368,21 @@ class WPC_Modern_Delivery
 
         // Preserve original attrs on the fallback <img> (minus the ones we own).
         $skip = ['src', 'srcset', 'sizes', 'data-src', 'data-srcset', 'loading', 'decoding', 'onerror', 'data-wpc-fb'];
+        // The page's own data-src is copied (ticket 12244, see build_picture); a lazy slot is not.
+        if (!wps_ic_lazy_verdict::dataSrcIsLazySlot($original_tag)) {
+            $skip = array_values(array_diff($skip, ['data-src']));
+        }
         $extra = '';
         foreach ($attrs as $k => $v) {
             if (in_array($k, $skip, true)) continue;
             $extra .= ' ' . $k . '="' . esc_attr($v) . '"';
         }
-        $loading = (isset($attrs['loading']) && $attrs['loading'] === 'eager') ? 'eager' : 'lazy';
+        // Loading: the lazy verdict's pre-buffer answer; the page's own loading="eager" is this
+        // builder's eager test. It used to write lazy on every other image, listed or not.
+        $lazyVerdictForTag = wps_ic_lazy_verdict::forTagPreBuffer($original_tag, $src);
+        $pageLoading = isset($attrs['loading']) ? (string) $attrs['loading'] : '';
+        $loading = ($pageLoading === 'eager' || $lazyVerdictForTag['loading'] === 'eager') ? 'eager'
+            : ($lazyVerdictForTag['loading'] === 'keep' ? $pageLoading : 'lazy');
 
         $html  = '<picture class="wpc-picture modern-delivery wpc-offloaded">';
         if ($avif_ok) $html .= '<source type="image/avif" srcset="' . esc_attr($swap('avif') . $hint) . '">';
@@ -1367,7 +1395,7 @@ class WPC_Modern_Delivery
         // nodes before restoring src — swapping src alone never takes effect
 
         $html .= ' onerror="this.onerror=null;var p=this.parentNode;if(p&&p.tagName===\'PICTURE\'){var s;while(s=p.getElementsByTagName(\'source\')[0])s.parentNode.removeChild(s);}this.removeAttribute(\'srcset\');this.src=this.getAttribute(\'data-wpc-fb\');"';
-        $html .= ' loading="' . $loading . '" decoding="async"';
+        $html .= ($loading !== '' ? ' loading="' . esc_attr($loading) . '"' : '') . ' decoding="async"';
         $html .= $extra;
         $html .= ' />';
         $html .= '</picture>';

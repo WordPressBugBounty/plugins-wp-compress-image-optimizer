@@ -1839,83 +1839,12 @@
       }
     }
 
-    // Mode pill — ghost outline with dropdown arrow
-    .wpc-local-mode-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 20px;
-      min-height: 36px;
-      background: transparent;
-      border: 1.5px solid var(--wpc-brand-primary, @color-blue);
-      border-radius: @radius-md;
-      color: var(--wpc-brand-primary, @color-blue);
-      font-family: @font-semibold;
-      font-size: @font-size-sm;
-      cursor: pointer;
-      transition: @transition-fast;
-      box-shadow: none;
-      outline: none;
-      flex-shrink: 0;
-
-      &:hover {
-        background: var(--wpc-brand-primary, @color-blue);
-        color: @color-white;
-        box-shadow: 0 2px 8px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.25));
-
-        &::after {
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-        }
-      }
-
-      &::after {
-        content: "";
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234273f0' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: center;
-        background-size: contain;
-        opacity: 0.85;
-      }
-    }
-
     // Collapsible body — full width below header
     .wpc-local-opt-body {
       flex-basis: 100%;
       padding: 16px 0 0;
       border-top: 1px solid fade(@color-border, 40%);
       margin-top: 20px;
-    }
-
-    // Optimization Goal card (inside body)
-    .wpc-local-goal-card {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 20px 24px;
-      margin: 0 40px 4px;
-      box-shadow: none;
-
-      .wpc-local-goal-inner { .wpc-standalone-card-inner(); }
-      .wpc-local-goal-icon {
-        width: 48px;
-        height: 48px;
-        box-sizing: border-box;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-        background: #F5F5F5;
-        border: none;
-        border-radius: @radius-input;
-        color: var(--wpc-brand-primary, @color-blue);
-        box-shadow: none;
-
-        svg { width: 24px; height: 24px; }
-      }
-      .wpc-local-goal-text { .wpc-standalone-card-text(); }
     }
 
   }
@@ -1932,16 +1861,6 @@
 
     .wpc-local-opt-body {
       padding: 12px 0 0;
-    }
-
-    .wpc-local-goal-card {
-      margin: 0 0 4px;
-      padding: 16px;
-      flex-wrap: wrap;
-      gap: 12px;
-
-      .wpc-local-goal-inner { flex: 1 1 auto; min-width: 0; }
-      .wpc-local-mode-pill { flex-shrink: 0; }
     }
 
     .wpc-perf-grid {
@@ -1967,17 +1886,6 @@
         width: 100%;
         justify-content: center;
         padding: 14px 20px;
-      }
-    }
-
-    .wpc-local-goal-card {
-      flex-direction: column;
-      text-align: center;
-      align-items: center;
-
-      .wpc-local-goal-inner {
-        flex-direction: column;
-        align-items: center;
       }
     }
   }
@@ -2024,6 +1932,180 @@
         font-family: @font-regular;
         font-size: 12px;
         color: @color-gray-muted;
+      }
+    }
+
+    // Image optimization — segmented choice
+    .wpc-opt-mode-box {
+      flex-wrap: wrap;
+
+      .wpc-opt-mode-desc,
+      .wpc-opt-mode-lock {
+        flex: 0 0 100%;
+        margin: 0;
+        font-family: @font-regular;
+        font-size: 13px;
+        line-height: 1.5;
+        color: @color-text-secondary;
+      }
+
+      .wpc-opt-mode-lock a {
+        color: var(--wpc-brand-primary, @color-blue-vivid);
+        text-decoration: underline;
+      }
+    }
+
+    .wpc-seg {
+      display: inline-flex;
+      flex-shrink: 0;
+      padding: 3px;
+      gap: 2px;
+      background: @color-bg-frost;
+      border: 1px solid @color-border;
+      border-radius: @radius-full;
+    }
+
+    .wpc-seg-opt {
+      padding: 7px 16px;
+      border: none;
+      border-radius: @radius-full;
+      background: transparent;
+      font-family: @font-semibold;
+      font-size: 14px;
+      color: @color-text-secondary;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: @transition-fast;
+      outline: none;
+
+      &:hover {
+        color: @color-text-dark;
+      }
+
+      &:focus-visible {
+        box-shadow: @shadow-focus-ring;
+      }
+
+      &.wpc-active {
+        background: @color-white;
+        color: var(--wpc-brand-primary, @color-blue-vivid);
+        box-shadow: @shadow-sm;
+      }
+
+      &.wpc-seg-locked {
+        color: @color-gray-text;
+        cursor: not-allowed;
+
+        &:hover {
+          color: @color-gray-text;
+        }
+      }
+    }
+
+    .wpc-policy-box {
+      @media screen and (max-width: 640px) {
+        flex-wrap: wrap;
+      }
+    }
+
+    .wpc-policy-keep {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: @space-xs;
+      flex-shrink: 0;
+      max-width: 22em;
+      text-align: right;
+
+      .wpc-policy-keep-dropdown .wpc-custom-dropdown-menu { text-align: left; }
+
+      .wpc-policy-keep-dropdown.wpc-open + .wpc-policy-keep-hint { visibility: hidden; }
+
+      .wpc-policy-keep-dropdown .wpc-gray-lock {
+        display: block;
+        width: 14px;
+        height: 14px;
+        margin: 2px;
+        background-color: @color-gray-text;
+        opacity: 0.7;
+        -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'><rect x='4' y='11' width='16' height='10' rx='2'/><path d='M8 11V7a4 4 0 0 1 8 0v4'/></svg>") center / contain no-repeat;
+        mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'><rect x='4' y='11' width='16' height='10' rx='2'/><path d='M8 11V7a4 4 0 0 1 8 0v4'/></svg>") center / contain no-repeat;
+      }
+
+      @media screen and (max-width: 640px) {
+        flex: 0 0 100%;
+        max-width: 100%;
+        align-items: stretch;
+        text-align: left;
+
+        .wpc-policy-keep-dropdown .wpc-custom-dropdown-trigger {
+          width: 100%;
+          justify-content: space-between;
+        }
+
+        .wpc-policy-keep-dropdown .wpc-custom-dropdown-menu {
+          left: 0;
+          right: 0;
+          min-width: 0;
+        }
+
+        .wpc-policy-keep-dropdown .wpc-custom-dropdown-item {
+          white-space: normal;
+        }
+
+        .wpc-policy-keep-dropdown .wpc-dropdown-item-label {
+          flex-wrap: wrap;
+          white-space: normal;
+        }
+      }
+
+      .wpc-policy-keep-dropdown .wpc-custom-dropdown-item.wpc-policy-keep-locked {
+        cursor: not-allowed;
+        color: @color-gray-text;
+
+        &:hover {
+          background: transparent;
+          color: @color-gray-text;
+        }
+
+        .wpc-dropdown-badge { opacity: 0.6; }
+
+        .wpc-policy-keep-lock-note {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          margin-top: 2px;
+          font-family: @font-regular;
+          font-size: 12px;
+          line-height: 1.4;
+          color: @color-gray-text;
+
+          .wpc-gray-lock {
+            width: 12px;
+            height: 12px;
+            margin: 0;
+            flex-shrink: 0;
+          }
+        }
+      }
+
+      .wpc-policy-keep-hint[hidden] { display: none; }
+
+      .wpc-policy-keep-hint,
+      .wpc-policy-served {
+        font-family: @font-regular;
+        font-size: @font-size-sm;
+        color: @color-text-secondary;
+      }
+
+      .wpc-policy-served a { color: var(--wpc-brand-primary, @color-blue-vivid); }
+
+      .wpc-policy-error {
+        justify-content: flex-end;
+        text-align: left;
+        font-size: @font-size-sm;
+
+        &[hidden] { display: none; }
       }
     }
 
@@ -2222,132 +2304,6 @@
     }
   }
 }
-
-// ─── Local Preset Card Elements (inside popup columns) ───────────────────
-
-// Icon badge square at top of each preset card
-.wpc-preset-icon-badge {
-  width: 44px;
-  height: 44px;
-  border-radius: @radius-md;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 14px;
-  color: @color-white;
-
-  svg {
-    width: 22px;
-    height: 22px;
-  }
-
-  &.wpc-preset-icon-recommended {
-    background: linear-gradient(135deg, #34D399, #059669);
-    box-shadow: 0 6px 12px -3px fade(#059669, 35%);
-  }
-
-  &.wpc-preset-icon-save-space {
-    background: linear-gradient(135deg, @color-primary, @color-blue-deep);
-    box-shadow: 0 6px 12px -3px fade(@color-blue-deep, 35%);
-  }
-
-  &.wpc-preset-icon-maximum {
-    background: linear-gradient(135deg, #FF8A65, #E64A19);
-    box-shadow: 0 6px 12px -3px fade(#E64A19, 35%);
-  }
-
-  &.wpc-preset-icon-custom {
-    background: linear-gradient(135deg, @color-gray-muted, @color-gray-dim);
-    box-shadow: 0 6px 12px -3px fade(@color-gray-dim, 35%);
-  }
-}
-
-// Goal popup — save button centered below cards
-.wpc-local-goal-popup {
-  .cdn-popup-content-full {
-    padding-top: 10px;
-  }
-
-  .wpc-goal-popup-footer {
-    display: flex;
-    justify-content: center;
-    padding: 24px 20px 10px;
-    margin-top: 20px;
-    border-top: 1px solid fade(@color-border, 50%);
-
-    .cdn-popup-save-btn {
-      margin: 0;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-  }
-}
-
-// Card header (icon + title + subtitle inside the ul card)
-.wpc-preset-card-header {
-  text-align: left;
-  padding-bottom: 14px !important; // FORCED: override li padding
-  margin-bottom: 6px;
-
-  &::before { display: none !important; } // FORCED: hide the dot
-
-  h3 {
-    font-family: @font-bold;
-    font-size: 17px;
-    margin: 0 0 4px;
-  }
-
-  p {
-    font-family: @font-regular;
-    font-size: 13px;
-    margin: 0;
-    opacity: 0.7;
-  }
-}
-
-// Footer meta inside the card
-.wpc-preset-card-footer {
-  padding-top: 14px !important; // FORCED: override li padding
-  margin-top: 6px;
-  border-top: 1px solid fade(@color-border, 40%);
-
-  &::before { display: none !important; } // FORCED: hide the dot
-
-  strong {
-    display: block;
-    font-family: @font-semibold;
-    font-size: 13px;
-    margin-bottom: 2px;
-  }
-
-  span {
-    font-family: @font-regular;
-    font-size: 12px;
-    opacity: 0.7;
-  }
-}
-
-// Active column overrides for header/footer text
-.wpc-popup-column.wpc-active {
-  .wpc-preset-card-header {
-    h3 { color: @color-white !important; } // FORCED: dark theme
-    p { color: fade(@color-white, 70%) !important; } // FORCED: dark theme
-  }
-
-  .wpc-preset-card-footer {
-    border-top-color: fade(@color-white, 15%);
-
-    strong { color: @color-white !important; } // FORCED: dark theme
-    span { color: fade(@color-white, 60%) !important; } // FORCED: dark theme
-  }
-
-  .wpc-preset-icon-badge {
-    background: fade(@color-white, 15%);
-    box-shadow: none;
-  }
-}
-
 
 // ─── Custom Column Inline Settings ──────────────────────────────────────
 .wpc-custom-settings {
@@ -3404,7 +3360,7 @@ body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
     background: @color-white;
     border: 1px solid @color-border;
     border-radius: @radius-card;
-    padding: 32px;
+    padding: 18px 24px;
 
     // ── Top: title + segmented Off / On ──
     .wpc-ngd-control {
@@ -3413,7 +3369,7 @@ body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
       justify-content: space-between;
       flex-wrap: wrap;
       gap: 12px;
-      margin-bottom: 24px;
+      margin-bottom: 0;
       .wpc-switch { margin-top: 0; } // sliding On/Off switch sits inline with the title
     }
     .wpc-ngd-title {
@@ -3462,6 +3418,11 @@ body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
       }
     }
 
+  }
+
+  .wpc-ngd-status-section {
+    .wpc-ngd-status { min-width: 0; }
+
     // ── HERO — value-prop cascade AVIF → WebP → JPEG leads the section ──
     .wpc-ngd-hero {
       // v7.02.19 — brand-accent the cascade box (was hardcoded blue @color-ice / @color-border-blue,
@@ -3470,8 +3431,8 @@ body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
       background: color-mix(in srgb, var(--wpc-brand-primary, @color-blue) 8%, #ffffff);
       border: 1px solid var(--wpc-brand-primary, @color-border-blue);
       border-radius: @radius-input;
-      padding: 24px;
-      margin-bottom: 24px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
     }
     .wpc-ngd-hero-label {
       display: block;
@@ -3479,7 +3440,7 @@ body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
       font-size: 14px;
       color: @color-text-heading;
       line-height: 1.4;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
     .wpc-ngd-formats {
       display: flex;
@@ -3523,11 +3484,11 @@ body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
         animation-duration: 0.22s;
         animation-timing-function: ease-out;
       }
-      > :nth-child(1) { animation-delay: 0.04s; }
-      > :nth-child(2) { animation-delay: 0.22s; }
-      > :nth-child(3) { animation-delay: 0.33s; }
-      > :nth-child(4) { animation-delay: 0.5s; }
-      > :nth-child(5) { animation-delay: 0.61s; }
+      > :nth-child(1) { animation-delay: 0.02s; }
+      > :nth-child(2) { animation-delay: 0.12s; }
+      > :nth-child(3) { animation-delay: 0.18s; }
+      > :nth-child(4) { animation-delay: 0.28s; }
+      > :nth-child(5) { animation-delay: 0.34s; }
     }
     // a11y — later in the cascade so it wins at equal specificity, no !important needed
     @media (prefers-reduced-motion: reduce) {
@@ -3539,18 +3500,30 @@ body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
     }
 
     // ── Status row + sub ──
+    .wpc-ngd-method-card {
+      margin-bottom: 20px;
+      padding: 16px 20px;
+      background: @color-white;
+      border: 1px solid @color-border;
+      border-radius: @radius-input;
+      .wpc-ngd-sub { margin-bottom: 12px; }
+      .wpc-ngd-fix { margin-bottom: 12px; }
+      .wpc-ngd-meta { margin-bottom: 0; }
+    }
     .wpc-ngd-row {
       display: flex;
       align-items: center;
       gap: 12px;
       margin-bottom: 6px;
     }
-    .wpc-ngd-method {
+    .wpc-ngd-method,
+    .wpc-ngd-line {
       font-family: @font-semibold;
       font-size: 15px;
       color: @color-text-heading;
     }
-    .wpc-ngd-badge {
+    .wpc-ngd-badge,
+    .wpc-ngd-pill {
       display: inline-flex;
       align-items: center;
       font-family: @font-semibold;
@@ -3563,6 +3536,61 @@ body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
       white-space: nowrap;
       letter-spacing: 0.02em;
     }
+    .wpc-ngd-pill {
+      &.is-warn { background: fade(@color-warning, 16%); color: darken(@color-warning, 8%); }
+      &.is-off { background: @color-bg-frost; color: @color-gray-text; }
+    }
+    .wpc-ngd-lede {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 2px 12px;
+      margin: 0;
+    }
+    .wpc-ngd-lede .wpc-ngd-line {
+      font-family: @font-regular;
+      font-size: @font-size-sm;
+      color: @color-text-secondary;
+    }
+    .wpc-ngd-lede .wpc-ngd-link { font-size: @font-size-sm; }
+    .wpc-checkbox-description h4 .wpc-ngd-pill { margin-left: 10px; }
+    .wpc-ngd-tiles {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+      &.wpc-ngd-tiles--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    .wpc-ngd-stat.wpc-stat-tile {
+      min-width: 0;
+      flex-direction: row;
+      align-items: center;
+      text-align: left;
+      gap: 14px;
+      padding: 16px;
+      background: @wpc-sd-tile-bg;
+      border: 1px solid @color-bg-frost;
+      border-radius: @radius-md;
+    }
+    .wpc-ngd-tile-icon {
+      flex: 0 0 auto;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: @radius-input;
+      background: @wpc-sd-tile-icon-bg;
+      color: @wpc-sd-link;
+      svg { width: 22px; height: 22px; }
+    }
+    .wpc-ngd-tile-text {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .wpc-ngd-stat .wpc-stat-value { font-size: 22px; overflow-wrap: anywhere; }
     .wpc-ngd-sub {
       font-family: @font-regular;
       font-size: 14px;
@@ -3585,7 +3613,8 @@ body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
       gap: 8px;
       margin-bottom: 24px;
     }
-    .wpc-ngd-recheck {
+    .wpc-ngd-recheck,
+    .wpc-ngd-link {
       border: 0;
       background: none;
       box-shadow: none;
@@ -3613,9 +3642,9 @@ body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
 
     // ── Advanced (override) — full-bleed divider above, content re-inset ──
     .wpc-ngd-advanced {
-      margin: 0 -32px;
-      padding: 24px 32px 0;
-      border-top: 1px solid @color-border;
+      margin: 0 -40px;
+      padding: 20px 40px 0;
+      border-top: 1px solid @color-bg-frost;
       summary {
         cursor: pointer;
         font-family: @font-semibold;
@@ -3712,5 +3741,50 @@ body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
     }
     &.wpc-ngd-state-pending .wpc-ngd-badge { background: fade(@color-primary, 14%); color: @color-primary; }
     &.wpc-ngd-state-off .wpc-ngd-badge { background: @color-bg-frost; color: @color-gray-text; }
+  }
+}
+
+
+.wpc-advanced-settings-container-v4 {
+  .wpc-ngd-diag-label {
+    font-family: @font-semibold;
+    font-size: @font-size-sm;
+    color: @color-text-heading;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .wpc-advanced-settings-container-v4 .wpc-ngd-status-section .wpc-ngd-lede {
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+  }
+}
+@media screen and (max-width: 640px) {
+  .wpc-advanced-settings-container-v4 .wpc-ngd-card {
+    padding: 14px 16px;
+    .wpc-ngd-control { flex-wrap: nowrap; }
+    .wpc-ngd-title { flex-wrap: wrap; row-gap: 4px; }
+  }
+  .wpc-advanced-settings-container-v4 .wpc-ngd-status-section {
+    .wpc-ngd-tiles { gap: 8px; &.wpc-ngd-tiles--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .wpc-ngd-stat.wpc-stat-tile { flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px 10px; }
+    .wpc-ngd-tile-icon { width: 32px; height: 32px; border-radius: @radius-md; svg { width: 18px; height: 18px; } }
+    .wpc-ngd-stat .wpc-stat-value { font-size: 17px; }
+    .wpc-ngd-stat .wpc-stat-label { font-size: 9px; letter-spacing: 0.04em; white-space: normal; line-height: 1.3; }
+    .wpc-ngd-hero { padding: 16px; }
+    .wpc-ngd-formats { gap: 6px; flex-wrap: nowrap; }
+    .wpc-ngd-fmt { padding: 8px 10px; font-size: 13px; }
+    .wpc-ngd-arrow { font-size: 14px; }
+    .wpc-ngd-method-card { padding: 14px; }
+    .wpc-ngd-advanced { margin: 0 -16px; padding: 16px 16px 0; }
+  }
+  .wpc-advanced-settings-container-v4 .wpc-tab-content-box.wpc-optimization-level-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: @space-base;
+    padding: 24px;
+    .wpc-opt-level-slider { width: 100%; }
   }
 }

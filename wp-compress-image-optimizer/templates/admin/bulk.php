@@ -6,17 +6,9 @@ if (!empty($_GET['reset'])) {
     delete_option('wps_ic_bulk_process');
 }
 
-$live_cdn = false;
-if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == '1') {
-    $live_cdn = true;
-}
-// Also check CF CDN setting
-if (!$live_cdn) {
-    $cfSettings = get_option(WPS_IC_CF);
-    if (!empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1') {
-        $live_cdn = true;
-    }
-}
+$wpc_bulk_mode = function_exists('wpc_get_optimization_mode') ? wpc_get_optimization_mode() : 'legacy';
+$wpc_bulk_smart = ($wpc_bulk_mode === 'lazy_cdn');
+$wpc_sd_page = function_exists('wpc_sd_state') && wpc_sd_state() !== 'other';
 
 ?>
 <div class="wrap">
@@ -122,10 +114,21 @@ if (!$live_cdn) {
 
                 ?>
 
+                <?php if ($wpc_sd_page) { include __DIR__ . '/bulk-smart.php'; } else { ?>
                 <!-- v7.03 — Twin-cards splash. Compress = primary, Restore = destructive.
                      Single empty state when both counts are 0. #bulk-start-container ID and
                      .button-start-bulk-* class hooks kept for the existing JS bindings. -->
                 <?php $bothEmpty = ($uncompressedImages === 0 && $compressedImages === 0); ?>
+                <?php
+                $wpc_eov_note = '';
+                if (function_exists('wpc_encode_on_view_formats_off') && wpc_encode_on_view_formats_off('bulk')) {
+                    $wpc_eov_format = function_exists('wpc_encode_on_view_format_now') && wpc_encode_on_view_format_now() === 'webp' ? 'WebP' : 'AVIF';
+                    $wpc_eov_note = sprintf(__('%s copies are now made the first time a page shows each image, so bulk optimization no longer creates them.', WPS_IC_TEXTDOMAIN), $wpc_eov_format);
+                    if (function_exists('wpc_should_rewrite_jpeg_inplace') && wpc_should_rewrite_jpeg_inplace()) {
+                        $wpc_eov_note .= ' ' . __('Original files are still compressed.', WPS_IC_TEXTDOMAIN);
+                    }
+                }
+                ?>
                 <div class="<?php echo $bothEmpty ? 'wpc-bulk-splash-empty-wrap' : 'wpc-bulk-splash'; ?>" id="bulk-start-container" style="<?php echo $bulk; ?>">
 
                     <?php if ($bothEmpty) { ?>
@@ -135,7 +138,15 @@ if (!$live_cdn) {
                                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
                             </div>
                             <h2 class="wpc-bulk-splash-empty-title"><?php esc_html_e('Your library is fully optimized', WPS_IC_TEXTDOMAIN); ?></h2>
-                            <p class="wpc-bulk-splash-empty-subtitle"><?php esc_html_e('All your images have been compressed and there are no compressed images to restore. New uploads are optimized automatically — return here any time.', WPS_IC_TEXTDOMAIN); ?></p>
+                            <p class="wpc-bulk-splash-empty-subtitle"><?php
+                                if ($wpc_bulk_smart) {
+                                    esc_html_e('All your images are optimized and there are no compressed images to restore. New uploads are optimized when visitors first view them — return here any time.', WPS_IC_TEXTDOMAIN);
+                                } elseif ($wpc_bulk_mode === 'manual') {
+                                    esc_html_e('All your images have been compressed and there are no compressed images to restore. Compress new uploads from the Media Library — return here any time.', WPS_IC_TEXTDOMAIN);
+                                } else {
+                                    esc_html_e('All your images have been compressed and there are no compressed images to restore. New uploads are optimized automatically — return here any time.', WPS_IC_TEXTDOMAIN);
+                                }
+                            ?></p>
                             <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug); ?>" class="wpc-bulk-splash-empty-cta">
                                 <?php esc_html_e('Return to Dashboard', WPS_IC_TEXTDOMAIN); ?>
                                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -162,7 +173,9 @@ if (!$live_cdn) {
                                     <?php echo number_format_i18n((int) $uncompressedImages); ?>
                                 </span>
                                 <span class="wpc-bulk-splash-count-label">
-                                    <?php if ($uncompressedImages > 0) {
+                                    <?php if ($uncompressedImages > 0 && $wpc_bulk_smart) {
+                                        echo esc_html(_n('image waiting for a first view', 'images waiting for a first view', $uncompressedImages, WPS_IC_TEXTDOMAIN));
+                                    } elseif ($uncompressedImages > 0) {
                                         echo esc_html(_n('image ready to optimize', 'images ready to optimize', $uncompressedImages, WPS_IC_TEXTDOMAIN));
                                     } else {
                                         esc_html_e('images already optimized', WPS_IC_TEXTDOMAIN);
@@ -172,8 +185,14 @@ if (!$live_cdn) {
                             <div class="wpc-bulk-splash-meta">
                                 <div class="wpc-bulk-splash-meta-row">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                                    <?php esc_html_e('Modern AVIF / WebP variants generated alongside originals', WPS_IC_TEXTDOMAIN); ?>
+                                    <?php if ($wpc_bulk_smart) { esc_html_e('Smart Delivery is on: images are optimized as visitors view them', WPS_IC_TEXTDOMAIN); } elseif ($wpc_eov_note !== '') { echo esc_html($wpc_eov_note); } else { esc_html_e('Modern AVIF / WebP variants generated alongside originals', WPS_IC_TEXTDOMAIN); } ?>
                                 </div>
+                                <?php if ($wpc_bulk_smart && $wpc_eov_note !== '') { ?>
+                                <div class="wpc-bulk-splash-meta-row">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                                    <?php echo esc_html($wpc_eov_note); ?>
+                                </div>
+                                <?php } ?>
                                 <div class="wpc-bulk-splash-meta-row">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                                     <?php esc_html_e('Originals are kept — restore any time', WPS_IC_TEXTDOMAIN); ?>
@@ -185,7 +204,7 @@ if (!$live_cdn) {
                             <?php if ($uncompressedImages > 0) { ?>
                                 <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&action=compress'); ?>"
                                    class="button button-primary button-start-bulk-compress">
-                                    <span class="wpc-bulk-splash-btn-text"><?php esc_html_e('Start Bulk Compress', WPS_IC_TEXTDOMAIN); ?></span>
+                                    <span class="wpc-bulk-splash-btn-text"><?php if ($wpc_bulk_smart) { esc_html_e('Optimize waiting images now', WPS_IC_TEXTDOMAIN); } else { esc_html_e('Start Bulk Compress', WPS_IC_TEXTDOMAIN); } ?></span>
                                     <svg class="wpc-bulk-splash-btn-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                 </a>
                             <?php } else { ?>
@@ -281,6 +300,7 @@ if (!$live_cdn) {
                     });
                 })();
                 </script>
+                <?php } ?>
 
                 <!-- Bulk Area When something is running -->
                 <div class="bulk-area-inner" style="<?php echo $show_bulk; ?>">
@@ -707,7 +727,7 @@ if (!$live_cdn) {
                                 <div class="icon"></div>
                                 <div class="data">
                                     <h3>0/0</h3>
-                                    <h5><?php esc_html_e('Total Images', WPS_IC_TEXTDOMAIN); ?></h5>
+                                    <h5><?php esc_html_e('Image files incl. sizes', WPS_IC_TEXTDOMAIN); ?></h5>
                                 </div>
                             </div>
                             <div class="bulk-total-savings">
@@ -832,7 +852,7 @@ if (!$live_cdn) {
                                         </div>
                                         <div class="wpc-stat-tile">
                                             <div class="wpc-stat-value"><span class="wpc-bulk-variants">0</span></div>
-                                            <div class="wpc-stat-label"><?php esc_html_e('Total Images', WPS_IC_TEXTDOMAIN); ?></div>
+                                            <div class="wpc-stat-label"><?php esc_html_e('Image files incl. sizes', WPS_IC_TEXTDOMAIN); ?></div>
                                         </div>
                                         <div class="wpc-stat-tile">
                                             <div class="wpc-stat-value"><span class="wpc-bulk-savings-bytes">0 B</span></div>

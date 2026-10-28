@@ -398,6 +398,22 @@ jQuery(document).ready(function ($) {
     });
 
 
+    // A save the server refused, or that never answered, keeps its popup open and says why.
+    // The exclude, purge-hook, cookie and query-parameter popups stayed on their spinner, so a
+    // refused save (an expired nonce, "Forbidden.") looked like one still running and the
+    // change was lost without a word. The text is the server's own when it sent one.
+    function popupSaveFailed(popup, response, fallback) {
+        var data = response && response.data;
+        var said = (typeof data === 'string' && data !== '') ? data : ((data && (data.msg || data.message)) || fallback);
+        var form = $('.wpc-save-popup-data', popup);
+        var content = $('.cdn-popup-content', popup);
+        $('.wpc-popup-save-error', popup).remove();
+        $('<p class="error wpc-popup-save-error"></p>').css('color', '#d63638').text(said).prependTo(form.length ? form : content);
+        // The click's fadeOut callback starts the spinner; finish it first so it cannot start after this.
+        content.stop(true, true);
+        $('.cdn-popup-loading', popup).stop(true, true).fadeOut(150, function () { content.fadeIn(150); });
+    }
+
     function savePopup(popup) {
         var save = $('.btn-save', popup);
         var loading = $('.cdn-popup-loading', popup);
@@ -469,14 +485,18 @@ jQuery(document).ready(function ($) {
                 min_mobile_width: min_mobile_width,
                 apikey: wpc_ajaxVar.apikey || ''
             }, function(response) {
-                if (response.success) {
+                if (response && response.success) {
                     // Toggle override tint on the configure link
                     if (lastConfigureTrigger && lastConfigureTrigger.length) {
                         var hasData = excludes && excludes.trim().length > 0;
                         lastConfigureTrigger.toggleClass('wpc-has-overrides', hasData);
                     }
                     WPCSwal.close();
+                    return;
                 }
+                popupSaveFailed(popup, response, 'The excludes were not saved. Nothing was changed.');
+            }).fail(function (xhr) {
+                popupSaveFailed(popup, xhr && xhr.responseJSON, 'The save did not answer. Nothing was changed.');
             });
 
             return false;
@@ -588,9 +608,13 @@ jQuery(document).ready(function ($) {
                 wps_ic_nonce: wpc_ajaxVar.nonce,
                 apikey: wpc_ajaxVar.apikey || '',
             }, function (response) {
-                if (response.success){
+                if (response && response.success){
                     WPCSwal.close();
+                    return;
                 }
+                popupSaveFailed(popup, response, 'The purge settings were not saved. Nothing was changed.');
+            }).fail(function (xhr) {
+                popupSaveFailed(popup, xhr && xhr.responseJSON, 'The save did not answer. Nothing was changed.');
             });
 
             return false;
@@ -664,16 +688,10 @@ jQuery(document).ready(function ($) {
                     return;
                 }
                 // The save answers {code, msg} when keys refused the host (cf-token-missing and
-                // friends, keys d9b24cde). The popup used to stay on its spinner, so a refused
-                // change looked like one still saving.
-                var said = response && response.data && response.data.msg ? response.data.msg : 'The host was not saved. Nothing was changed.';
-                $('.wpc-cf-cdn-error', popup).remove();
-                $('<p class="error wpc-cf-cdn-error"></p>').text(said).prependTo(form);
-                $(loading).fadeOut(150, function() { $(content).fadeIn(150); });
+                // friends, keys d9b24cde).
+                popupSaveFailed(popup, response, 'The host was not saved. Nothing was changed.');
             }).fail(function () {
-                $('.wpc-cf-cdn-error', popup).remove();
-                $('<p class="error wpc-cf-cdn-error"></p>').text('The save did not answer. Nothing was changed.').prependTo(form);
-                $(loading).fadeOut(150, function() { $(content).fadeIn(150); });
+                popupSaveFailed(popup, null, 'The save did not answer. Nothing was changed.');
             });
 
             return false;
@@ -728,9 +746,13 @@ jQuery(document).ready(function ($) {
                 wps_ic_nonce: wpc_ajaxVar.nonce,
                 apikey: wpc_ajaxVar.apikey || '',
             }, function (response) {
-                if (response.success){
+                if (response && response.success){
                     WPCSwal.close();
+                    return;
                 }
+                popupSaveFailed(popup, response, 'The cookie lists were not saved. Nothing was changed.');
+            }).fail(function (xhr) {
+                popupSaveFailed(popup, xhr && xhr.responseJSON, 'The save did not answer. Nothing was changed.');
             });
 
             return false;
@@ -782,9 +804,13 @@ jQuery(document).ready(function ($) {
                 wps_ic_nonce: wpc_ajaxVar.nonce,
                 apikey: wpc_ajaxVar.apikey || '',
             }, function (response) {
-                if (response.success){
+                if (response && response.success){
                     WPCSwal.close();
+                    return;
                 }
+                popupSaveFailed(popup, response, 'The query parameter lists were not saved. Nothing was changed.');
+            }).fail(function (xhr) {
+                popupSaveFailed(popup, xhr && xhr.responseJSON, 'The save did not answer. Nothing was changed.');
             });
 
             return false;
@@ -798,6 +824,7 @@ jQuery(document).ready(function ($) {
         const exportExcludes = $('.wps-export-excludes').prop('checked');
         const exportCache = $('.wps-export-cache').prop('checked');
         const exportCookies = $('.wps-export-cache-cookies').prop('checked');
+        const exportQueryParams = $('.wps-export-cache-query-params').prop('checked');
 
         $.ajax({
             url: ajaxurl,
@@ -808,6 +835,7 @@ jQuery(document).ready(function ($) {
                 excludes: exportExcludes,
                 cache: exportCache,
                 cookies: exportCookies,
+                query_params: exportQueryParams,
                 wps_ic_nonce: wpc_ajaxVar.nonce,
                 apikey: wpc_ajaxVar.apikey || ''
             },

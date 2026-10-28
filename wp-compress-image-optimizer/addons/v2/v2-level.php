@@ -45,6 +45,16 @@ if (!function_exists('wpc_v2_normalize_quality')) {
     }
 }
 
+if (!function_exists('wpc_cdn_quality_letter')) {
+    /** The quality letter a CDN image URL carries: `l`, `i` or `u`, and `i` for a value that names no level. */
+    function wpc_cdn_quality_letter($raw)
+    {
+        $letters = ['lossless' => 'l', 'intelligent' => 'i', 'ultra' => 'u'];
+        $level = (is_string($raw) || is_int($raw)) ? wpc_v2_level_for_setting($raw) : null;
+        return $level === null ? 'i' : $letters[$level];
+    }
+}
+
 if (!function_exists('wpc_v2_level')) {
     /**
      * The level every /optimize-v2 request carries: the site's `optimization` setting, or

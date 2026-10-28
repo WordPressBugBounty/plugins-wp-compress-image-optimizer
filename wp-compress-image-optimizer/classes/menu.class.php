@@ -74,6 +74,9 @@ class wps_ic_menu extends wps_ic
             return;
         }
 
+        $page_context = $this->wpc_current_page_context($options);
+        $page_status = $page_context !== null ? $this->wpc_page_status($page_context) : null;
+
         if (current_user_can('manage_wpc_settings') || current_user_can('manage_wpc_purge')) {
             $title_html = '<div id="wpc-ic-icon-admin-menu" class="ab-item wpc-ic-logo svg"><span class="screen-reader-text"></span></div>';
 
@@ -91,29 +94,15 @@ class wps_ic_menu extends wps_ic
                 $title_html .= '<span class="wpc-admin-bar-title" style="margin-left:0;padding-right:6px;font-size:13px;font-weight:400;display:inline-flex;align-items:center;height:100%;">' . esc_html($menu_title) . '</span>';
             }
 
-            $admin_bar->add_menu(['id' => 'wp-compress', 'title' => $title_html, 'href' => wpc_settings_page_url(), 'meta' => ['title' => __(''), 'html' => '<div class="wp-compress-admin-bar-icon"></div>'],]);
+            $icon_html = '<div class="wp-compress-admin-bar-icon">' . ($page_status !== null ? '<span class="wpc-bar-dot wpc-bar-dot-top wpc-bar-dot-' . $page_status['dot'] . '"></span>' : '') . '</div>';
+            $admin_bar->add_menu(['id' => 'wp-compress', 'title' => $title_html, 'href' => wpc_settings_page_url(), 'meta' => ['title' => $page_status !== null ? $page_status['text'] : __(''), 'html' => $icon_html],]);
         }
 
-        $page_context = $this->wpc_current_page_context($options);
-
-        if (!is_admin() && current_user_can('manage_wpc_purge')) {
-            // Show options in frontend
-
+        if (current_user_can('manage_wpc_settings') || current_user_can('manage_wpc_purge')) {
             if ($page_context !== null) {
-                $this->wpc_add_admin_bar_page_items($admin_bar, $options, $page_context);
+                $this->wpc_add_admin_bar_page_items($admin_bar, $page_context);
             }
             $this->wpc_add_admin_bar_purge_menu($admin_bar, $options);
-
-            $admin_bar->add_menu(['id' => 'wp-compress-view-as-visitor', 'parent' => 'wp-compress', 'title' => __('View as Visitor', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('View as Visitor', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-view-as-visitor'],]);
-
-        } elseif (current_user_can('manage_wpc_settings') ||current_user_can('manage_wpc_purge')) {
-            // Shows if user is logged in!
-
-            if ($page_context !== null) {
-                $this->wpc_add_admin_bar_page_items($admin_bar, $options, $page_context);
-            }
-            $this->wpc_add_admin_bar_purge_menu($admin_bar, $options);
-
         }
 
         if (current_user_can('manage_wpc_settings')) {
@@ -176,56 +165,41 @@ class wps_ic_menu extends wps_ic
         ];
     }
 
-    // v7.10.725 — the per-page group: one honest status line + the two per-page actions.
-    // Refresh = the free lane (HTML layers only). Rebuild = the paid lane (one service
-    // generation for THIS url; its HTML purge rides the land, never the click, so the
-    // page keeps serving until the new version actually exists).
-    private function wpc_add_admin_bar_page_items($admin_bar, $options, $page_context)
+    private function wpc_page_status($page_context)
     {
-        $page_url_attr = esc_attr(esc_url($page_context['url']));
-        if ($page_context['crit_on']) {
-            if ($page_context['inflight']) {
-                $status_dot = 'busy';
-                $status_text = __('Optimizing this page…', WPS_IC_TEXTDOMAIN);
-                $status_tip = __('A fresh optimization is being generated — it applies automatically when it lands.', WPS_IC_TEXTDOMAIN);
-            } elseif ($page_context['has'] && !$page_context['stale']) {
-                $status_dot = 'ok';
-                $status_text = __('This page is optimized', WPS_IC_TEXTDOMAIN);
-                $status_tip = __('Served with optimized CSS and cached HTML.', WPS_IC_TEXTDOMAIN);
-            } elseif ($page_context['has']) {
-                $status_dot = 'busy';
-                $status_text = __('Optimized — update on the way', WPS_IC_TEXTDOMAIN);
-                $status_tip = __('The current version keeps serving until the refreshed one lands automatically.', WPS_IC_TEXTDOMAIN);
-            } else {
-                $status_dot = 'off';
-                $status_text = __('Not optimized yet', WPS_IC_TEXTDOMAIN);
-                $status_tip = __('This page optimizes automatically on its next visits — or use Rebuild This Page.', WPS_IC_TEXTDOMAIN);
-            }
-            $admin_bar->add_menu(['id' => 'wp-compress-status', 'parent' => 'wp-compress',
-                'title' => '<span class="wpc-bar-dot wpc-bar-dot-' . $status_dot . '"></span>' . esc_html($status_text),
-                'href' => '#', 'meta' => ['title' => $status_tip, 'target' => '_self', 'class' => 'wp-compress-bar-status'],]);
+        if (!$page_context['crit_on']) {
+            return null;
         }
-
-        $admin_bar->add_menu(['id' => 'wp-compress-refresh-page', 'parent' => 'wp-compress',
-            'title' => '<span class="wpc-bar-label" data-wpc-url="' . $page_url_attr . '">' . esc_html__('Refresh This Page', WPS_IC_TEXTDOMAIN) . '</span><span class="wpc-bar-sub">' . esc_html__('Serve the newest version — instant, nothing re-optimizes', WPS_IC_TEXTDOMAIN) . '</span>',
-            'href' => '#', 'meta' => ['title' => __('Drops this page\'s cached copy and prepares a fresh one. Use after an edit that isn\'t showing.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-refresh-page wpc-bar-2line'],]);
-
-        if ($page_context['crit_on']) {
-            $rebuild_sub = $page_context['inflight']
-                ? __('Already rebuilding — the new version lands automatically', WPS_IC_TEXTDOMAIN)
-                : __('Regenerate this page\'s optimized CSS — about a minute', WPS_IC_TEXTDOMAIN);
-            $admin_bar->add_menu(['id' => 'wp-compress-rebuild-page', 'parent' => 'wp-compress',
-                'title' => '<span class="wpc-bar-label" data-wpc-url="' . $page_url_attr . '">' . esc_html__('Rebuild This Page', WPS_IC_TEXTDOMAIN) . '</span><span class="wpc-bar-sub">' . esc_html($rebuild_sub) . '</span>',
-                'href' => '#', 'meta' => ['title' => __('Only needed when this page looks wrong. The page switches to plain theme styling right away, and the optimized version returns automatically once rebuilt (about a minute).', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-rebuild-page wpc-bar-2line' . ($page_context['inflight'] ? ' wpc-bar-inflight' : ''),]]);
+        if ($page_context['inflight']) {
+            return ['dot' => 'busy', 'text' => __("Optimizing this page\u{2026}", WPS_IC_TEXTDOMAIN)];
         }
+        if ($page_context['has'] && !$page_context['stale']) {
+            return ['dot' => 'ok', 'text' => __('This page is optimized', WPS_IC_TEXTDOMAIN)];
+        }
+        if ($page_context['has']) {
+            return ['dot' => 'busy', 'text' => __("Optimized \u{2014} update on the way", WPS_IC_TEXTDOMAIN)];
+        }
+        return ['dot' => 'off', 'text' => __('Not optimized yet', WPS_IC_TEXTDOMAIN)];
     }
 
-    // v7.10.725 — site-wide controls ALL live under Advanced (kept builder name for suite
-    // continuity). The primary surface is per-page (wpc_add_admin_bar_page_items): every
-    // legitimate site-wide trigger is a hookable event we already automate, so site-wide
-    // purging is the escape hatch, not the front door — cache hit rate and service gens
-    // are the resources the menu shape protects. Handler ids/classes are unchanged, so
-    // existing JS and support flows keep working.
+    private function wpc_add_admin_bar_page_items($admin_bar, $page_context)
+    {
+        $page_url_attr = esc_attr(esc_url($page_context['url']));
+        $admin_bar->add_menu(['id' => 'wp-compress-refresh-page', 'parent' => 'wp-compress',
+            'title' => '<span data-wpc-url="' . $page_url_attr . '">' . esc_html__('Purge this page', WPS_IC_TEXTDOMAIN) . '</span>',
+            'href' => '#', 'meta' => ['title' => __('Serves the newest version of this page.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-refresh-page'],]);
+    }
+
+    private function wpc_clear_item_tip($tip, $state)
+    {
+        return $state['label'] !== '' ? $tip . " \u{00B7} " . $state['label'] : $tip;
+    }
+
+    private function wpc_confirm_html($title, $body, $cancel, $ok)
+    {
+        return '<span class="wpc-bar-confirm" hidden data-title="' . esc_attr($title) . '" data-body="' . esc_attr($body) . '" data-cancel="' . esc_attr($cancel) . '" data-ok="' . esc_attr($ok) . '"></span>';
+    }
+
     private function wpc_add_admin_bar_purge_menu($admin_bar, $options)
     {
         $crit_on = !empty($options['critical']['css']) && $options['critical']['css'] == '1';
@@ -240,21 +214,31 @@ class wps_ic_menu extends wps_ic
             }
         }
 
-        $admin_bar->add_menu(['id' => 'wp-compress-advanced', 'parent' => 'wp-compress', 'title' => __('Advanced', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Site-wide controls. Rarely needed — updates, edits and plugin changes already refresh things automatically.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-advanced'],]);
+        $admin_bar->add_menu(['id' => 'wp-compress-clear-menu', 'parent' => 'wp-compress', 'title' => __('Purge cache', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['target' => '_self', 'class' => 'wp-compress-bar-clear-menu'],]);
 
-        $admin_bar->add_menu(['id' => 'wp-compress-purge-html-cache', 'parent' => 'wp-compress-advanced', 'title' => __('Purge & Preload All Pages', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Drop every cached page and re-warm them. Critical CSS and the image CDN are not touched.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-purge-html-cache'],]);
+        $page_state = wpc_clear_state('page');
+        $admin_bar->add_menu(['id' => 'wp-compress-purge-html-cache', 'parent' => 'wp-compress-clear-menu',
+            'title' => esc_html__('Purge HTML Page Cache', WPS_IC_TEXTDOMAIN),
+            'href' => '#', 'meta' => ['title' => $this->wpc_clear_item_tip(__('Every page rebuilds on its next visit.', WPS_IC_TEXTDOMAIN), $page_state), 'target' => '_self', 'class' => 'wp-compress-bar-purge-html-cache'],]);
 
-        // v7.10.516 — ONE primary intent. Rebuild does the whole correct sequence and is
-        // situational: it purges only layers that are actually stale, and never the
-        // image CDN (re-optimization + origin bandwidth is not collateral we can spend).
-        if ($crit_on) {
-            $admin_bar->add_menu(['id' => 'wp-compress-pull-latest', 'parent' => 'wp-compress-advanced', 'title' => __('Pull Latest Optimizations', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Re-fetch the newest cloud artifacts (critical, fonts, used-CSS) without purging. Automation does this on its own — use it to skip the wait.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-pull-latest'],]);
-            $admin_bar->add_menu(['id' => 'wp-compress-rebuild', 'parent' => 'wp-compress-advanced', 'title' => __('Rebuild All Optimizations', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Fetch fresh optimizations for the whole site and drop stale cached pages. Images and the CDN are not touched.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-rebuild'],]);
-            $admin_bar->add_menu(['id' => 'wp-compress-purge-critical-css', 'parent' => 'wp-compress-advanced', 'title' => __('Purge Critical CSS', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Mark every page\'s Critical CSS for regeneration. The current version keeps serving until each fresh one lands — pages never render unstyled.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-purge-critical-css'],]);
-            $admin_bar->add_menu(['id' => 'wp-compress-remove-critical-css', 'parent' => 'wp-compress-advanced', 'title' => __('Remove Critical CSS', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Remove Critical CSS from every page now. Pages render with full theme CSS (correct but slower) until fresh versions land automatically.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-remove-critical-css'],]);
-        }
         if ($cdn_on) {
-            $admin_bar->add_menu(['id' => 'wp-compress-clear-cache', 'parent' => 'wp-compress-advanced', 'title' => __('Purge CDN Images', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Rarely needed. Re-fetches every optimized image from origin — only use this if IMAGES are wrong, not CSS or HTML', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-clear-cache'],]);
+            $cdn_state = wpc_clear_state('cdn');
+            $cdn_confirm = wpc_cdn_clear_confirm();
+            $cdn_tip = $cdn_state['wait'] > 0 ? $cdn_state['label'] : $this->wpc_clear_item_tip(__('Images, CSS and JS are fetched again.', WPS_IC_TEXTDOMAIN), $cdn_state);
+            $admin_bar->add_menu(['id' => 'wp-compress-clear-cache', 'parent' => 'wp-compress-clear-menu',
+                'title' => esc_html__('Purge CDN Network Cache', WPS_IC_TEXTDOMAIN),
+                'href' => '#', 'meta' => ['title' => $cdn_tip, 'target' => '_self', 'class' => 'wp-compress-bar-clear-cache' . ($cdn_state['wait'] > 0 ? ' wpc-bar-disabled' : ''),
+                    'html' => $this->wpc_confirm_html($cdn_confirm['title'], $cdn_confirm['body'], $cdn_confirm['cancel'], $cdn_confirm['ok'])],]);
+        }
+
+        if ($crit_on) {
+            $crit_state = wpc_clear_state('crit');
+            $crit_busy = get_transient('wpc_crit_regen_pending') && function_exists('wpc_crit_dispatch_census') && wpc_crit_dispatch_census()['pending'] > 0;
+            $crit_tip = $crit_busy ? __("Rebuilding\u{2026}", WPS_IC_TEXTDOMAIN) : $this->wpc_clear_item_tip(__('Rebuilt in the background; pages stay fast.', WPS_IC_TEXTDOMAIN), $crit_state);
+            $admin_bar->add_menu(['id' => 'wp-compress-purge-critical-css', 'parent' => 'wp-compress-clear-menu',
+                'title' => esc_html__('Purge Critical CSS', WPS_IC_TEXTDOMAIN),
+                'href' => '#', 'meta' => ['title' => $crit_tip, 'target' => '_self', 'class' => 'wp-compress-bar-purge-critical-css' . ($crit_busy ? ' wpc-bar-disabled' : ''),
+                    'html' => $this->wpc_confirm_html(__('Rebuild critical CSS?', WPS_IC_TEXTDOMAIN), __('Pages keep their current version until each one is rebuilt.', WPS_IC_TEXTDOMAIN), __('Cancel', WPS_IC_TEXTDOMAIN), __('Rebuild', WPS_IC_TEXTDOMAIN))],]);
         }
     }
 
@@ -342,7 +326,14 @@ class wps_ic_menu extends wps_ic
         if (empty($GLOBALS['pagenow']) || $GLOBALS['pagenow'] !== 'options-general.php') {
             return;
         }
-        if (!isset($_GET['page']) || $_GET['page'] !== $this::$slug) {
+        $own_pages = [$this::$slug];
+        if (function_exists('wpc_settings_page_target')) {
+            $own_target = wpc_settings_page_target();
+            if ($own_target['base'] === 'admin.php') {
+                $own_pages[] = $own_target['slug'];
+            }
+        }
+        if (!isset($_GET['page']) || !in_array($_GET['page'], $own_pages, true)) {
             return;
         }
         $query_args = [];

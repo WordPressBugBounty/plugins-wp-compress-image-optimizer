@@ -85,10 +85,9 @@ class wps_ic_elementor
     public function runIntegration($html)
     {
 
-        // The overlay stamp is undone only by the delay-v3 loader — insertJS() below is dead
-        // code, never called from anywhere. checkCache() returns early for every logged-in
-        // request, so the rewriter never emits that loader and the stamp would become
-        // permanent. Defer only when something is actually going to undo the deferral.
+        // The overlay stamp is undone only by the delay-v3 loader. checkCache() returns early
+        // for every logged-in request, so the rewriter never emits that loader and the stamp
+        // would become permanent. Defer only when something is actually going to undo the deferral.
         if (!(function_exists('is_user_logged_in') && is_user_logged_in())) {
 
             $html = $this->delayBackgrounds($html);
@@ -125,18 +124,6 @@ class wps_ic_elementor
         );
 
         return is_string($out) ? $out : $html;
-    }
-
-    public function insertJS($html)
-    {
-        $js_file_path = WPS_IC_DIR . 'integrations/js/elementor.js';
-
-        if (file_exists($js_file_path)) {
-            $js_content = file_get_contents($js_file_path);
-            $script_tag = "<script type='text/javascript'>\n" . $js_content . "\n</script>\n</head>";
-            $html = str_replace('</head>', $script_tag, $html);
-        }
-        return $html;
     }
 
     /**

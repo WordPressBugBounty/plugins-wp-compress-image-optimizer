@@ -139,6 +139,16 @@ final class wps_ic_render_stage
  *    its grace window and locks the fallback permanently); an eager face that declares swap keeps
  *    the site's policy through wpc_font_display_effective; a face that declares no display keeps
  *    none, except from the font localizer's live-faces lane, the one lane that ever injected one.
+ *    An eager network face that declares optional is written swap when the first screen paints a
+ *    weight and style of its family that no embedded face covers (needTuples).
+ *  - a face of a key the render's first-screen claim holds (same family, style and weight span;
+ *    holdTuples) is written in neither block: one with its own bytes is dropped, one that needs the
+ *    network goes to the hand-over's data (handoverFaces), and no written weight span covers a held
+ *    weight;
+ *  - a face of a key belowTuples() holds, when every face of the key can go, is written in neither
+ *    block: below() answers it as the hand-over's entry, which the loader loads and adds after the
+ *    window load event; the first-paint block carries one stand-in-metric face for the key in its
+ *    place, which also keeps a written weight span from covering its weight;
  *
  * Nothing in here touches the document: it holds CSS, and stage_emit_font_faces writes the two
  * blocks. One instance per render, on wps_ic_render_context::$fontFaces.
@@ -159,19 +169,39 @@ final class wps_ic_font_face_set
      *  have waited for a deferred sheet anyway; a live carrier was never deferred. */
     const ORIGIN_LIVE_CARRIER = 'live-carrier';
 
+    /** Tag of a face absorbed from a Google Fonts sheet the font rescan localized (wp-cio-fonts). */
+    const TAG_RESCAN_SHEET = 'rescan-sheet';
+
     /** @var array  tuple key => [css, family, rank, origin, eager, seq] in insertion order. */
     private $faces = [];
     /** @var array  lowercase family => why, for families a pass asked to be served late. */
     private $demotedFamilies = [];
     /** @var int  Monotonic insert counter, so emit order is registration order. */
     private $sequence = 0;
+    /** @var int  Counter of the faces added ahead of every other (add with $first), below any $sequence. */
+    private $headSequence = -1000000;
     /** @var int  Faces dropped at emit (unbacked family, pruned range, evicted late twin). */
     private $droppedCount = 0;
+    /** @var array  [family, low weight, high weight, style] tuples the document declares inline
+     *  at its head (holdTuples). */
+    private $heldTuples = [];
+    /** @var array|null  The first-screen faces claim of this render (claimAtf). */
+    private $atfClaim = null;
+    /** @var bool  Whether a text face that fetches a file and declares no display is written swap (swapUndeclared). */
+    private $swapUndeclared = false;
+    /** @var array  [family, weight, style] tuples the first screen paints with (needTuples). */
+    private $needTuples = [];
+    /** @var array  [family, low weight, high weight, style] tuples no first screen paints with (belowTuples). */
+    private $belowTuples = [];
+    /** @var array  [family, weight, style] tuples the first screen paints with, for the faces tagged TAG_RESCAN_SHEET (lateUnlessFirstScreen). */
+    private $rescanTuples = [];
 
     /** Take every @font-face block in $css into the set. $origin names the pass for the receipt;
      *  $eager is that pass's intent — false means "this face was never a first-paint declaration".
-     *  Returns the number of blocks taken. Anything that is not a face block is ignored. */
-    public function add($css, $origin, $eager = true)
+     *  Returns the number of blocks taken. Anything that is not a face block is ignored. $first
+     *  puts the faces ahead of every face registered so far and every one registered later, in the order given.
+     *  $tag marks the faces of this call for lateUnlessFirstScreen(). */
+    public function add($css, $origin, $eager = true, $first = false, $tag = '')
     {
         $css = (string) $css;
         if ($css === '' || stripos($css, '@font-face') === false) { return 0; }
@@ -180,6 +210,10 @@ final class wps_ic_font_face_set
             $healed = wps_cdn_rewrite::wpc_heal_css_host_twin($css);
             if (is_string($healed) && $healed !== '') { $css = $healed; }
         }
+        if (stripos($css, 'fonts.gstatic.com') !== false && class_exists('wps_ic_fonts') && method_exists('wps_ic_fonts', 'localizeFaceUrls')) {
+            $localized = (new wps_ic_fonts())->localizeFaceUrls($css);
+            if (is_string($localized) && $localized !== '') { $css = $localized; }
+        }
         if (!preg_match_all('/@font-face\s*\{[^{}]*\}/is', $css, $blocks)) { return 0; }
         $taken = 0;
         foreach ($blocks[0] as $block) {
@@ -187,35 +221,14 @@ final class wps_ic_font_face_set
             if ($family === '') { continue; }
             $pieces = $this->cutFallbackSpan($block, $family, $origin, $eager);
             if ($pieces !== null) {
-                foreach ($pieces as $piece) { $taken += $this->add($piece, $origin, $eager); }
+                foreach ($pieces as $piece) { $taken += $this->add($piece, $origin, $eager, $first, $tag); }
                 continue;
             }
             $base = self::baseKey($block, $family);
             $range = self::rangeOf($block);
-            $subset = $range !== '' && self::hasEmbeddedSource($block);
-            // A range is part of a face's identity only against another ranged face. Where one
-            // side declares a range and the other does not, they are the same face delivered two
-            // ways, and the one that carries its own bytes for a declared slice of the alphabet
-            // is the one the page was built to use: the embedded subset wins, and the full-file
-            // twin that would fetch the same glyphs over the network goes. Whichever arrives
-            // first. Ranged against ranged keeps every range (that is coverage, not duplication),
-            // and rangeless against rangeless is the ordinary contest below.
-            $shadowed = false;
-            foreach ($this->faces as $siblingKey => $sibling) {
-                if ($sibling['base'] !== $base) { continue; }
-                if ($subset && $sibling['range'] === '' && !self::hasEmbeddedSource($sibling['css'])) {
-                    unset($this->faces[$siblingKey]);
-                    $this->droppedCount++;
-                    continue;
-                }
-                if ($range === '' && !self::hasEmbeddedSource($block)
-                    && $sibling['range'] !== '' && self::hasEmbeddedSource($sibling['css'])) {
-                    $shadowed = true;
-                }
-            }
-            if ($shadowed) { continue; }
             $key = $base . '|' . $range;
             $rank = self::rankOf($block);
+            $faceTag = (string) $tag;
             // Higher rank wins the tuple; between equal ranks the last writer wins, so a pass
             // that runs later and knows more replaces what an earlier one registered. One
             // exception: a face already registered for first paint is not deferred by a twin
@@ -228,6 +241,7 @@ final class wps_ic_font_face_set
                     if ($rank === $current['rank']) { continue; }
                     $eager = true;
                     $origin = $current['origin'];
+                    $faceTag = isset($current['tag']) ? $current['tag'] : '';
                 }
             }
             $this->faces[$key] = [
@@ -238,7 +252,8 @@ final class wps_ic_font_face_set
                 'rank' => $rank,
                 'origin' => (string) $origin,
                 'eager' => (bool) $eager,
-                'seq' => isset($this->faces[$key]) ? $this->faces[$key]['seq'] : $this->sequence++,
+                'tag' => $faceTag,
+                'seq' => isset($this->faces[$key]) ? $this->faces[$key]['seq'] : ($first ? $this->headSequence++ : $this->sequence++),
             ];
             $taken++;
         }
@@ -350,8 +365,10 @@ final class wps_ic_font_face_set
      *  ever leaves its author's block. For an icon family only an embedded subset counts: a
      *  metric stand-in paints text, not glyphs, so an icon face moved late behind one shows
      *  the raw codepoint (Divi's menu button as the letter "a" on webdesign4u.com.au
-     *  /contact-us/, which carries the ETmodules stand-in but no subset). */
-    public function pinsFamily($family)
+     *  /contact-us/, which carries the ETmodules stand-in but no subset). With $subsetOnly a
+     *  stand-in is not a pin either: the family counts only when the set holds an embedded subset
+     *  of it. */
+    public function pinsFamily($family, $subsetOnly = false)
     {
         $family = self::normaliseFamily($family);
         if ($family === '') { return false; }
@@ -361,7 +378,7 @@ final class wps_ic_font_face_set
             $pinned = substr($face['family'], -9) === ' fallback'
                 ? rtrim(substr($face['family'], 0, -9)) : $face['family'];
             if ($pinned !== $family) { continue; }
-            if ($iconFamily ? self::hasEmbeddedSource($face['css']) : self::isGatePin($face['css'], $face['family'])) {
+            if ($iconFamily || $subsetOnly ? self::hasEmbeddedSource($face['css']) : self::isGatePin($face['css'], $face['family'])) {
                 return true;
             }
         }
@@ -440,6 +457,602 @@ final class wps_ic_font_face_set
         }
     }
 
+    /** The code point spans of the scripts a text family is split into subsets for (Latin extended, Greek, Cyrillic, Hebrew, Arabic, Devanagari, Thai, Georgian, Armenian, Hangul, kana, CJK). */
+    private static $scriptSpans = [
+        [0x100, 0x2AF], [0x370, 0x3FF], [0x400, 0x52F], [0x530, 0x58F], [0x590, 0x6FF], [0x900, 0x97F], [0xE00, 0xE7F], [0x10A0, 0x10FF],
+        [0x1C80, 0x1C8F], [0x1E00, 0x1FFF], [0x2C60, 0x2C7F], [0x2DE0, 0x2DFF], [0x3040, 0x30FF], [0x4E00, 0x9FFF], [0xA640, 0xA69F], [0xA720, 0xA7FF], [0xAC00, 0xD7AF],
+    ];
+
+    /** Drop the network faces of a script subset the document has no character for. $codepoints is the sorted list of the code points
+     *  (U+0080 and up) the document holds; a face goes only when its unicode-range reaches into a script of $scriptSpans, none of its
+     *  spans meets a printable ASCII character or a held code point, and its source is a network url (an embedded subset, a local
+     *  stand-in and a face with no range stay). Returns how many went. */
+    public function pruneRanges(array $codepoints)
+    {
+        $held = array_values($codepoints);
+        $count = count($held);
+        $gone = 0;
+        foreach ($this->faces as $key => $face) {
+            if ($face['range'] === '' || substr($face['family'], -9) === ' fallback'
+                || self::hasEmbeddedSource($face['css']) || !self::hasNetworkSource($face['css'])) { continue; }
+            $spans = self::rangeSpans($face['range']);
+            if (!$spans) { continue; }
+            $script = false;
+            $meets = false;
+            foreach ($spans as $span) {
+                if ($span[0] <= 0x7E && $span[1] >= 0x20) { $meets = true; break; }
+                foreach (self::$scriptSpans as $block) {
+                    if ($span[0] <= $block[1] && $block[0] <= $span[1]) { $script = true; break; }
+                }
+                $low = 0;
+                $high = $count;
+                while ($low < $high) {
+                    $mid = ($low + $high) >> 1;
+                    if ($held[$mid] < $span[0]) { $low = $mid + 1; } else { $high = $mid; }
+                }
+                if ($low < $count && $held[$low] <= $span[1]) { $meets = true; break; }
+            }
+            if ($meets || !$script) { continue; }
+            unset($this->faces[$key]);
+            $this->droppedCount++;
+            $gone++;
+        }
+
+        return $gone;
+    }
+
+    /** Tell the set which tuples the document declares inline at the top of its head
+     *  (wps_cdn_rewrite::emit_font_faces): [family, low weight, high weight, style], family
+     *  lower case. From then on a face of exactly one of them is not written: one that carries
+     *  its own bytes is dropped (the inline copy is the one declaration), one that needs the
+     *  network leaves for handoverFaces(), and none is a first-paint declarer of its family.
+     *  A tuple holds a face of the same family and style whose weight span is the same span.
+     *  A face written in a weight span never covers the weight of a held face (weightSpans). A
+     *  "<Family> Fallback" stand-in is never held. */
+    public function holdTuples(array $tuples)
+    {
+        $this->heldTuples = array_values($tuples);
+    }
+
+    /** The first-screen faces claim this render's critical css carried (wps_rewriteLogic::wpc_atf_faces_cut). */
+    public function claimAtf(array $claim)
+    {
+        $this->atfClaim = $claim;
+    }
+
+    /** The claim, or null when this render has none or has given it up. */
+    public function atfClaim()
+    {
+        return $this->atfClaim;
+    }
+
+    /** Give the claim up: nothing is held and the set writes every face as it would without one. */
+    public function releaseAtf()
+    {
+        $this->atfClaim = null;
+        $this->heldTuples = [];
+        $this->swapUndeclared = false;
+    }
+
+    /** From now on a text face that fetches a file and declares no display is written swap, in
+     *  either block, unless the person switched font-display handling off. A declared display, an
+     *  icon face and a stand-in are left as they are. */
+    public function swapUndeclared($on = true)
+    {
+        $this->swapUndeclared = (bool) $on;
+    }
+
+    /** The key a face declares: ['family' => lower case without quotes, 'low', 'high' => its weight
+     *  span, 'style' => normal|italic]; null when the family or the weight is unreadable. */
+    public static function keyOf($css)
+    {
+        $family = self::familyOf($css);
+        $span = self::weightSpan($css);
+        if ($family === '' || !$span) { return null; }
+
+        return ['family' => $family, 'low' => (int) $span[0], 'high' => (int) $span[1],
+            'style' => self::normaliseStyle(self::descriptor($css, 'font-style'))];
+    }
+
+    /** keyOf() for a "Family|weight|style" key as the service writes it (the weight is the face's
+     *  own descriptor, so a variable face reads "200 800"); null when it is not one. */
+    public static function keyFromString($key)
+    {
+        $parts = explode('|', (string) $key);
+        if (count($parts) < 3) { return null; }
+        $style = array_pop($parts);
+        $weight = array_pop($parts);
+        $css = '{font-family:"' . str_replace(['"', '\\'], '', implode('|', $parts)) . '";font-weight:' . str_replace([';', '}'], '', (string) $weight)
+            . ';font-style:' . str_replace([';', '}'], '', (string) $style) . '}';
+
+        return self::keyOf($css);
+    }
+
+    /** A unicode-range descriptor as [[low, high], …]; [] when there is none, null when it does not parse. */
+    public static function rangeSpans($range)
+    {
+        $range = strtolower(trim((string) $range));
+        if ($range === '') { return []; }
+        $spans = [];
+        foreach (explode(',', $range) as $part) {
+            if (!preg_match('/^\s*u\+([0-9a-f?]{1,6})(?:-([0-9a-f]{1,6}))?\s*$/', $part, $m)) { return null; }
+            if (strpos($m[1], '?') !== false) {
+                $spans[] = [hexdec(str_replace('?', '0', $m[1])), hexdec(str_replace('?', 'f', $m[1]))];
+            } else {
+                $spans[] = [hexdec($m[1]), hexdec(isset($m[2]) && $m[2] !== '' ? $m[2] : $m[1])];
+            }
+        }
+
+        return $spans;
+    }
+
+    /** True when two unicode-range descriptors share a code point; a face without one covers all. */
+    public static function rangesMeet($a, $b)
+    {
+        $left = self::rangeSpans($a);
+        $right = self::rangeSpans($b);
+        if ($left === null || $right === null) { return true; }
+        if ($left === [] || $right === []) { return true; }
+        foreach ($left as $l) {
+            foreach ($right as $r) {
+                if ($l[0] <= $r[1] && $r[0] <= $l[1]) { return true; }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The held faces that fetch their bytes, as the entries the hand-over script reads
+     * (family, weight, style, src, unicodeRange, stretch), split by whether they serve an inline
+     * face: $inline is [['family','low','high','style','range'], …] for the faces the document
+     * declares inline. For each inline face, the held faces of its key whose unicode-range is the
+     * same descriptor are its full faces; with none of those, the ones whose range meets its
+     * range. Every other held face of a held key is a later one ('late').
+     * 'unserved' lists the indexes of the inline faces no full face serves, 'refused' the reasons
+     * a held face cannot be handed over (a descriptor the hand-over does not carry, a source
+     * that is not a url()). Each entry also carries 'urls', the file URLs of its src.
+     */
+    public function handoverFaces(array $inline)
+    {
+        $faces = $this->faces;
+        uasort($faces, function ($a, $b) { return $a['seq'] - $b['seq']; });
+        $held = [];
+        $refused = [];
+        foreach ($faces as $face) {
+            if (!$this->isHeld($face) || self::hasEmbeddedSource($face['css'])) { continue; }
+            $entry = self::handoverEntry($face['css']);
+            if (!is_array($entry)) { $refused[] = (string) $entry; continue; }
+            $held[] = ['entry' => $entry, 'key' => self::keyOf($face['css']), 'range' => $face['range']];
+        }
+        $full = [];
+        $served = [];
+        foreach ($inline as $index => $declared) {
+            $same = [];
+            $meets = [];
+            foreach ($held as $at => $one) {
+                if ($declared['family'] !== $one['key']['family'] || $declared['low'] !== $one['key']['low']
+                    || $declared['high'] !== $one['key']['high'] || $declared['style'] !== $one['key']['style']) { continue; }
+                if (self::rangeId($declared['range']) === self::rangeId($one['range'])) { $same[] = $at; }
+                elseif (self::rangesMeet($declared['range'], $one['range'])) { $meets[] = $at; }
+            }
+            $use = $same ?: $meets;
+            foreach ($use as $at) { $full[$at] = true; }
+            if ($use) { $served[$index] = true; }
+        }
+        $fulls = [];
+        $lates = [];
+        foreach ($held as $at => $one) {
+            $id = md5(json_encode($one['entry']));
+            if (isset($full[$at])) { $fulls[$id] = $one['entry']; } else { $lates[$id] = $one['entry']; }
+        }
+        $unserved = [];
+        foreach ($inline as $index => $declared) {
+            if (!isset($served[$index])) { $unserved[] = $index; }
+        }
+
+        return ['full' => array_values($fulls), 'late' => array_values(array_diff_key($lates, $fulls)), 'unserved' => $unserved, 'refused' => $refused];
+    }
+
+    /** A unicode-range descriptor by what it names, whatever its case, spacing and order. */
+    private static function rangeId($range)
+    {
+        $parts = array_filter(explode(',', strtolower((string) preg_replace('/\s+/', '', (string) $range))), 'strlen');
+        sort($parts);
+
+        return implode(',', $parts);
+    }
+
+    /** One face as a hand-over entry, or the reason it cannot be one. */
+    private static function handoverEntry($css)
+    {
+        if (preg_match('/(?:ascent-override|descent-override|line-gap-override|size-adjust|font-feature-settings|font-variation-settings|font-variant|font-language-override)\s*:/i', $css)) {
+            return 'descriptor';
+        }
+        if (!preg_match('/font-family\s*:\s*(["\']?)([^;"\'}]+)\1/i', $css, $familyMatch) || trim($familyMatch[2]) === '' || strlen(trim($familyMatch[2])) > 64) {
+            return 'family';
+        }
+        $weight = preg_match('/font-weight\s*:\s*([^;}]+)/i', $css, $m) ? trim((string) preg_replace('/\s+/', ' ', $m[1])) : '400';
+        $style = preg_match('/font-style\s*:\s*([^;}]+)/i', $css, $m) ? trim((string) preg_replace('/\s+/', ' ', $m[1])) : 'normal';
+        if (!preg_match('/^(?:normal|bold|\d{1,4}(?: \d{1,4})?)$/i', $weight) || !preg_match('/^(?:normal|italic|oblique(?: -?\d+(?:\.\d+)?deg)?)$/i', $style)) {
+            return 'descriptor';
+        }
+        $entry = ['family' => trim($familyMatch[2]), 'weight' => $weight, 'style' => $style];
+        if (preg_match('/font-stretch\s*:\s*([^;}]+)/i', $css, $m)) {
+            $stretch = trim((string) preg_replace('/\s+/', ' ', $m[1]));
+            if (!preg_match('/^[a-z0-9%. -]{1,40}$/i', $stretch)) { return 'descriptor'; }
+            if (strtolower($stretch) !== 'normal' && $stretch !== '100%') { $entry['stretch'] = $stretch; }
+        }
+        if (!preg_match('/src\s*:\s*([^;}]+)/i', $css, $srcMatch)
+            || !preg_match_all('/url\(\s*(["\']?)([^"\')]*)\1\s*\)(?:\s*format\(\s*(["\']?)([^"\')]*)\3\s*\))?/i', $srcMatch[1], $sources, PREG_SET_ORDER)) {
+            return 'src';
+        }
+        if (substr_count(strtolower($srcMatch[1]), 'url(') !== count($sources)) { return 'src'; }
+        $list = [];
+        $urls = [];
+        foreach ($sources as $source) {
+            $url = trim($source[2]);
+            if ($url === '' || stripos($url, 'data:') === 0 || !preg_match('~\A[^\s\'"\\\\<>()\x00-\x1f\x7f]{1,2048}\z~', $url)) { return 'src'; }
+            $format = isset($source[4]) ? trim($source[4]) : '';
+            if ($format !== '' && !preg_match('/^[a-z0-9-]{1,16}$/i', $format)) { return 'src'; }
+            $urls[] = $url;
+            $list[] = "url('" . $url . "')" . ($format !== '' ? " format('" . $format . "')" : '');
+        }
+        $entry['src'] = implode(', ', $list);
+        if (preg_match('/unicode-range\s*:\s*([^;}]+)/i', $css, $m)) {
+            $range = trim((string) preg_replace('/\s+/', ' ', $m[1]));
+            if (self::rangeSpans($range) === null) { return 'descriptor'; }
+            if ($range !== '') { $entry['unicodeRange'] = $range; }
+        }
+        $entry['urls'] = $urls;
+
+        return $entry;
+    }
+
+    /** The [family, weight, style] tuples the service's census says the first screen paints: family
+     *  lower case, weight a number, style normal or italic. An eager network face that declares
+     *  optional and whose family, style and weight span include one of them is written swap unless
+     *  an embedded face of the family paints that weight and style. No tuples, no change. */
+    public function needTuples(array $tuples)
+    {
+        $this->needTuples = [];
+        foreach ($tuples as $tuple) {
+            if (!is_array($tuple) || count($tuple) < 3) { continue; }
+            $family = self::normaliseFamily($tuple[0]);
+            $weight = (int) $tuple[1];
+            if ($family === '' || $weight < 1 || $weight > 1000) { continue; }
+            $this->needTuples[] = [$family, $weight, self::normaliseStyle($tuple[2])];
+        }
+    }
+
+    /** The [family, weight, style] tuples the first screen of this render paints with, for the faces
+     *  add() took with TAG_RESCAN_SHEET: from then on such a face no tuple needs is written late.
+     *  No tuples, no change. */
+    public function lateUnlessFirstScreen(array $tuples)
+    {
+        $this->rescanTuples = [];
+        foreach ($tuples as $tuple) {
+            if (!is_array($tuple) || count($tuple) < 3) { continue; }
+            $family = self::normaliseFamily($tuple[0]);
+            $weight = (int) $tuple[1];
+            if ($family === '' || $weight < 1 || $weight > 1000) { continue; }
+            $this->rescanTuples[] = [$family, $weight, self::normaliseStyle($tuple[2])];
+        }
+    }
+
+    /** Keys of the TAG_RESCAN_SHEET faces split() writes late. A face stays eager when a tuple of its
+     *  family and style falls inside its weight span, when it is a rangeless twin of an embedded
+     *  subset ($twinBases), or when an eager face fetches the same file. A family stays wholly eager
+     *  when one of its tuples would be left without an eager face to paint it. Fallbacks, icon fonts,
+     *  and faces that paint without the network or fetch no file are never moved. */
+    private function rescanLateKeys(array $faces, array $twinBases)
+    {
+        if (!$this->rescanTuples) { return []; }
+        $byFamily = [];
+        foreach ($faces as $key => $face) {
+            if (!isset($face['tag']) || $face['tag'] !== self::TAG_RESCAN_SHEET || !$face['eager']
+                || substr($face['family'], -9) === ' fallback'
+                || ($face['range'] === '' && isset($twinBases[$face['base']]))
+                || self::paintsWithoutNetwork($face['css'], $face['family']) || !self::hasNetworkSource($face['css'])
+                || (function_exists('wpc_css_is_icon_font') && wpc_css_is_icon_font($face['family']))) { continue; }
+            $byFamily[$face['family']][$key] = $face;
+        }
+        $late = [];
+        foreach ($byFamily as $family => $list) {
+            $need = [];
+            foreach ($this->rescanTuples as $tuple) {
+                if ($tuple[0] === $family) { $need[] = $tuple; }
+            }
+            $moved = [];
+            foreach ($list as $key => $face) {
+                if (!self::spanHoldsAny($face, $need)) { $moved[$key] = true; }
+            }
+            foreach ($need as $tuple) {
+                $painted = false;
+                foreach ($faces as $key => $face) {
+                    if ($face['family'] === $family && $face['eager'] && !isset($moved[$key])
+                        && self::spanHoldsAny($face, [$tuple])) { $painted = true; break; }
+                }
+                if (!$painted) { $moved = []; break; }
+            }
+            $late += $moved;
+        }
+        if ($late) {
+            $stayUrls = [];
+            foreach ($faces as $key => $face) {
+                if (!isset($late[$key]) && $face['eager']) {
+                    foreach (self::faceUrls($face['css']) as $url) { $stayUrls[$url] = true; }
+                }
+            }
+            foreach (array_keys($late) as $key) {
+                foreach (self::faceUrls($faces[$key]['css']) as $url) {
+                    if (isset($stayUrls[$url])) { unset($late[$key]); break; }
+                }
+            }
+        }
+
+        return $late;
+    }
+
+    private static function spanHoldsAny(array $face, array $tuples)
+    {
+        $span = self::weightSpan($face['css']);
+        if (!$span) { return true; }
+        $style = self::normaliseStyle(self::descriptor($face['css'], 'font-style'));
+        foreach ($tuples as $tuple) {
+            if ($tuple[2] === $style && $tuple[1] >= $span[0] && $tuple[1] <= $span[1]) { return true; }
+        }
+
+        return false;
+    }
+
+    /** The font files only the faces lateUnlessFirstScreen() moved fetch, so a preload of one can go with it. [] without tuples. */
+    public function rescanLateUrls()
+    {
+        if (!$this->rescanTuples) { return []; }
+        $split = $this->split();
+        $eagerUrls = [];
+        foreach ($split[0] as $face) {
+            foreach (self::faceUrls($face['css']) as $url) { $eagerUrls[$url] = true; }
+        }
+        $urls = [];
+        foreach ($split[1] as $face) {
+            if (empty($face['rescan_late'])) { continue; }
+            foreach (self::faceUrls($face['css']) as $url) {
+                if (!isset($eagerUrls[$url])) { $urls[$url] = $url; }
+            }
+        }
+
+        return array_values($urls);
+    }
+
+    private static function faceUrls($css)
+    {
+        return preg_match_all('/url\(\s*["\']?([^"\')]+)["\']?\s*\)/i', (string) $css, $m) ? (array) $m[1] : [];
+    }
+
+    /** Tell the set which tuples the service says no first screen paints ([family, low weight,
+     *  high weight, style], family lower case, as keyOf() answers). From then on a face of exactly
+     *  one of them leaves both written blocks and is answered by below(), when its tuple can go
+     *  whole: every face of it fetches a file the hand-over can carry, is not an embedded subset,
+     *  an icon face, was not written by the critical css and is not a held key, and the document
+     *  keeps a "<Family> Fallback" face for its family: eager() then carries a placeholder under
+     *  the family itself, cut from that face, so no other weight of the family answers the moved
+     *  one. A tuple with one face that cannot go stays as it is. */
+    public function belowTuples(array $tuples)
+    {
+        $this->belowTuples = array_values($tuples);
+    }
+
+    /** The faces belowTuples() took out of the blocks, as the hand-over's entries (family, weight,
+     *  style, src, unicodeRange, stretch), once each, in registration order. [] without tuples. */
+    public function below()
+    {
+        $entries = [];
+        foreach ($this->belowEntries() as $id => $entry) {
+            unset($entry['urls']);
+            $entries[] = $entry;
+        }
+
+        return $entries;
+    }
+
+    /** The file URLs of the faces below() answers. */
+    public function belowUrls()
+    {
+        $urls = [];
+        foreach ($this->belowEntries() as $entry) {
+            foreach ($entry['urls'] as $url) { $urls[$url] = $url; }
+        }
+
+        return array_values($urls);
+    }
+
+    /** One face of below() as CSS, or '' when the entry is not one this set could have written. */
+    public static function entryCss(array $entry)
+    {
+        $family = isset($entry['family']) ? str_replace(['"', '\\', '<', '>', '{', '}', ';', "\r", "\n"], '', (string) $entry['family']) : '';
+        $css = '@font-face{font-family:"' . $family . '";font-style:' . (isset($entry['style']) ? (string) $entry['style'] : 'normal')
+            . ';font-weight:' . (isset($entry['weight']) ? (string) $entry['weight'] : '400')
+            . (isset($entry['stretch']) ? ';font-stretch:' . (string) $entry['stretch'] : '')
+            . ';src:' . (isset($entry['src']) ? (string) $entry['src'] : '')
+            . (isset($entry['unicodeRange']) ? ';unicode-range:' . (string) $entry['unicodeRange'] : '') . '}';
+
+        return $family !== '' && is_array(self::handoverEntry($css)) && substr_count($css, '{') === 1 && substr_count($css, '}') === 1 ? $css : '';
+    }
+
+    /** id => entry (with 'urls') of the faces in the below bucket. */
+    private function belowEntries()
+    {
+        if (!$this->belowTuples) { return []; }
+        $split = $this->split();
+        $entries = [];
+        foreach ($split[4] as $face) {
+            $entry = self::handoverEntry($face['css']);
+            if (is_array($entry)) { $entries[md5(json_encode($entry))] = $entry; }
+        }
+
+        return $entries;
+    }
+
+    /** True when $face is a key belowTuples() holds, by the same equality isHeld() uses. */
+    private function isBelow(array $face)
+    {
+        if (!$this->belowTuples || substr($face['family'], -9) === ' fallback') { return false; }
+        $span = self::weightSpan($face['css']);
+        if (!$span) { return false; }
+        $style = self::normaliseStyle(self::descriptor($face['css'], 'font-style'));
+        foreach ($this->belowTuples as $tuple) {
+            if ($tuple[0] === $face['family'] && $tuple[3] === $style && $span[0] === $tuple[1] && $span[1] === $tuple[2]) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The tuples that go below, as [keys of their faces in $faces, the placeholder face that holds
+     * their weight at first paint], for each tuple that can go whole: every face of it fetches a
+     * file the hand-over can carry, none is embedded, none was written by the critical css, the
+     * family is not an icon family, and the document keeps a metric stand-in the placeholder is
+     * cut from. A face with no url() (a stand-in, an earlier placeholder) is neither moved nor a veto.
+     */
+    private function belowGroups(array $faces)
+    {
+        $groups = [];
+        foreach ($faces as $key => $face) {
+            if (!$this->isBelow($face) || preg_match('/src\s*:[^;}]*\burl\(/i', $face['css']) !== 1) { continue; }
+            $span = self::weightSpan($face['css']);
+            $style = self::normaliseStyle(self::descriptor($face['css'], 'font-style'));
+            $id = $face['family'] . '|' . $span[0] . '|' . $span[1] . '|' . $style;
+            if (!isset($groups[$id])) {
+                $groups[$id] = ['keys' => [], 'ok' => true, 'family' => $face['family'], 'low' => $span[0], 'high' => $span[1], 'style' => $style, 'raw' => $face['css'], 'seq' => $face['seq']];
+            }
+            $groups[$id]['keys'][] = $key;
+            $groups[$id]['ok'] = $groups[$id]['ok']
+                && $face['origin'] !== 'crit'
+                && !self::hasEmbeddedSource($face['css'])
+                && is_array(self::handoverEntry($face['css']))
+                && !(function_exists('wpc_css_is_icon_font') && wpc_css_is_icon_font($face['family']));
+        }
+        $out = [];
+        foreach ($groups as $group) {
+            if (!$group['ok']) { continue; }
+            $placeholder = $this->placeholderFor($group);
+            if ($placeholder !== null) { $out[] = ['keys' => $group['keys'], 'placeholder' => $placeholder]; }
+        }
+
+        return $out;
+    }
+
+    /**
+     * The face that holds a moved tuple's weight and style until its real faces are added: the
+     * family's "<Family> Fallback" face that names the weight (a single weight before a span), else
+     * the one that names none, written under the family itself, with the tuple's weight and style
+     * and no unicode-range. Without it the browser answers the missing weight with another weight
+     * of the family that is declared, and loads that file. null when the set has no stand-in to
+     * cut it from; false when it already holds a face with no url() for the family, weight and
+     * style (written by an earlier pass over the same document), which is then the placeholder.
+     */
+    private function placeholderFor(array $group)
+    {
+        $standIn = null;
+        $rank = 0;
+        foreach ($this->faces as $face) {
+            if ($face['family'] !== $group['family'] . ' fallback' || preg_match('/url\(/i', $face['css'])) { continue; }
+            $style = self::descriptor($face['css'], 'font-style');
+            if ($style !== '' && self::normaliseStyle($style) !== $group['style']) { continue; }
+            if (self::descriptor($face['css'], 'font-weight') === '') {
+                $candidate = 1;
+            } else {
+                $span = self::weightSpan($face['css']);
+                if (!$span || $span[0] > $group['low'] || $span[1] < $group['high']) { continue; }
+                $candidate = $span[0] === $span[1] ? 3 : 2;
+            }
+            if ($candidate > $rank) { $standIn = $face; $rank = $candidate; }
+        }
+        if ($standIn === null) { return null; }
+        foreach ($this->faces as $face) {
+            if ($face['family'] === $group['family'] && preg_match('/url\(/i', $face['css']) !== 1
+                && self::weightSpan($face['css']) === [$group['low'], $group['high']]
+                && self::normaliseStyle(self::descriptor($face['css'], 'font-style')) === $group['style']) {
+                return false;
+            }
+        }
+        $name = preg_match('/font-family\s*:\s*(["\']?)([^;"\'}]+)\1/i', $group['raw'], $named) ? trim($named[2]) : '';
+        if ($name === '') { return null; }
+        $css = (string) preg_replace('/(?:font-family|font-weight|font-style|unicode-range)\s*:[^;}]*;?/i', '', $standIn['css']);
+        $css = (string) preg_replace('/\{/', '{font-family:"' . $name . '";font-weight:'
+            . ($group['low'] === $group['high'] ? $group['low'] : $group['low'] . ' ' . $group['high'])
+            . ';font-style:' . $group['style'] . ';', $css, 1);
+
+        return ['css' => $css, 'family' => $group['family'], 'base' => '', 'range' => '', 'rank' => 0,
+            'origin' => 'below-placeholder', 'eager' => true, 'seq' => $group['seq']];
+    }
+
+    /** A text face that fetches its bytes and declares optional: the only kind needTuples may
+     *  write swap. */
+    private static function swappable(array $face)
+    {
+        return substr($face['family'], -9) !== ' fallback'
+            && preg_match('/font-display\s*:\s*optional\b/i', $face['css']) === 1
+            && preg_match('/src\s*:[^;}]*url\(/i', $face['css']) === 1
+            && !self::hasEmbeddedSource($face['css'])
+            && !(function_exists('wpc_css_is_icon_font') && wpc_css_is_icon_font($face['family']));
+    }
+
+    /** Faces that differ in nothing but their numeric weight and display are one file served for
+     *  several weights (the grouping weightSpans() writes as one face). */
+    private static function sameFileKey($css)
+    {
+        return md5((string) preg_replace('/\s+/', ' ', (string) preg_replace('/font-(?:weight|display)\s*:[^;}]*;?/i', '', $css)));
+    }
+
+    /** True when $face is a swappable eager face that a first-screen tuple needs and no embedded
+     *  face covers. $eager is the split's first-paint list. */
+    private function needsRealFace(array $face, array $eager)
+    {
+        if (!$this->needTuples || !self::swappable($face)) {
+            return false;
+        }
+        $span = self::weightSpan($face['css']);
+        if (!$span) { return false; }
+        $style = self::normaliseStyle(self::descriptor($face['css'], 'font-style'));
+        foreach ($this->needTuples as $need) {
+            if ($need[0] !== $face['family'] || $need[2] !== $style
+                || $need[1] < $span[0] || $need[1] > $span[1]) { continue; }
+            if (!$this->paintsEmbedded($face['family'], $need[1], $style, $eager)) { return true; }
+        }
+        return false;
+    }
+
+    /** True when a face that carries its own bytes paints this family at this weight and style. */
+    private function paintsEmbedded($family, $weight, $style, array $eager)
+    {
+        foreach ($eager as $other) {
+            if ($other['family'] !== $family || !self::hasEmbeddedSource($other['css'])
+                || self::normaliseStyle(self::descriptor($other['css'], 'font-style')) !== $style) { continue; }
+            $span = self::weightSpan($other['css']);
+            if ($span && $weight >= $span[0] && $weight <= $span[1]) { return true; }
+        }
+        return false;
+    }
+
+    private function isHeld(array $face)
+    {
+        if (!$this->heldTuples || substr($face['family'], -9) === ' fallback') { return false; }
+        $span = self::weightSpan($face['css']);
+        if (!$span) { return false; }
+        $style = self::normaliseStyle(self::descriptor($face['css'], 'font-style'));
+        foreach ($this->heldTuples as $tuple) {
+            if ($tuple[0] === $face['family'] && $tuple[3] === $style && $span[0] === $tuple[1] && $span[1] === $tuple[2]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** The CSS that paints at first paint. */
     public function eager() { return $this->render(false); }
 
@@ -450,21 +1063,49 @@ final class wps_ic_font_face_set
     public function counts()
     {
         $split = $this->split();
-        return [
-            'eager' => count(self::writeFaces($split[0], false)),
-            'late' => count(self::writeFaces($split[1], true)),
+        $spans = self::weightSpans($split);
+        $counts = [
+            'eager' => count(self::writeFaces($split[0], false, $spans)),
+            'late' => count(self::writeFaces($split[1], true, $spans)),
             'dropped' => $this->droppedCount + count($split[2]),
             'demoted' => count($this->demotedFamilies),
         ];
+        if ($this->belowTuples) { $counts['below'] = count($split[4]); }
+        if ($this->rescanTuples) {
+            $moved = 0;
+            foreach ($split[1] as $face) { $moved += empty($face['rescan_late']) ? 0 : 1; }
+            $counts['rescan_late'] = $moved;
+        }
+
+        return $counts;
     }
 
     /* --------------------------------------------------------------------------------------- */
 
-    /** Split the set into [eager, late, evicted], in registration order. */
+    /** Split the set into [eager, late, evicted, held, below], in registration order. */
     private function split()
     {
         $faces = $this->faces;
         uasort($faces, function ($a, $b) { return $a['seq'] - $b['seq']; });
+        $held = [];
+        if ($this->heldTuples) {
+            foreach ($faces as $key => $face) {
+                if (!$this->isHeld($face)) { continue; }
+                $held[$key] = $face;
+                unset($faces[$key]);
+            }
+        }
+        $below = [];
+        $placeholders = [];
+        if ($this->belowTuples) {
+            foreach ($this->belowGroups($faces) as $group) {
+                foreach ($group['keys'] as $key) {
+                    $below[$key] = $faces[$key];
+                    unset($faces[$key]);
+                }
+                if ($group['placeholder'] !== false) { $placeholders[] = $group['placeholder']; }
+            }
+        }
         // Pass one: which families paint in something of their own before the network answers.
         // A "<Family> Fallback" stand-in pins the family it stands in FOR, not its own name.
         // $gatePinned is the face gate's fail-closed test — an embedded subset or a metric
@@ -489,18 +1130,29 @@ final class wps_ic_font_face_set
         // Pass two: which families keep a real first-paint declarer once pass three has moved
         // the pinned ones. A late twin of one of those never binds and only evicts it.
         $declared = [];
-        foreach ($faces as $face) {
+        foreach ($faces as $key => $face) {
             if (!$face['eager'] || isset($demoted[$face['family']])
                 || (isset($gatePinned[$face['family']]) && !self::isLiveCarrier($face))
                 || self::paintsWithoutNetwork($face['css'], $face['family'])
                 || !self::hasNetworkSource($face['css'])) { continue; }
             $declared[$face['family']] = 1;
         }
+        $subsetBases = [];
+        foreach ($faces as $face) {
+            if ($face['range'] !== '' && self::hasEmbeddedSource($face['css'])) { $subsetBases[$face['base']] = 1; }
+        }
         $eager = [];
         $late = [];
         $evicted = [];
-        foreach ($faces as $face) {
+        $twins = [];
+        $rescanLate = $this->rescanLateKeys($faces, $subsetBases);
+        foreach ($faces as $key => $face) {
+            if ($face['range'] === '' && isset($subsetBases[$face['base']]) && self::hasNetworkSource($face['css'])) {
+                $twins[$face['base']] = $face;
+                continue;
+            }
             if (self::paintsWithoutNetwork($face['css'], $face['family'])) { $eager[] = $face; continue; }
+            if (isset($rescanLate[$key])) { $face['rescan_late'] = true; $late[] = $face; continue; }
             $servedLate = !$face['eager']
                 || isset($demoted[$face['family']])
                 || (isset($gatePinned[$face['family']]) && self::hasNetworkSource($face['css'])
@@ -511,69 +1163,195 @@ final class wps_ic_font_face_set
             if (isset($declared[$face['family']])) { $evicted[] = $face; continue; }
             $late[] = $face;
         }
-        return [$eager, $late, $evicted];
+        if ($twins) {
+            $ordered = [];
+            foreach ($eager as $face) {
+                if ($face['range'] !== '' && isset($twins[$face['base']]) && self::hasEmbeddedSource($face['css'])) {
+                    $ordered[] = $twins[$face['base']];
+                    unset($twins[$face['base']]);
+                }
+                $ordered[] = $face;
+            }
+            $eager = $ordered;
+        }
+        foreach ($placeholders as $placeholder) { $eager[] = $placeholder; }
+        if ($this->needTuples) {
+            $files = [];
+            foreach ($eager as $index => $face) {
+                if ($this->needsRealFace($face, $eager)) {
+                    $eager[$index]['swap'] = true;
+                    $files[self::sameFileKey($face['css'])] = 1;
+                }
+            }
+            if ($files) {
+                foreach ($eager as $index => $face) {
+                    if (empty($eager[$index]['swap']) && self::swappable($face) && isset($files[self::sameFileKey($face['css'])])) {
+                        $eager[$index]['swap'] = true;
+                    }
+                }
+            }
+        }
+        if ($this->swapUndeclared) {
+            $mark = function (array $list) {
+                foreach ($list as $index => $face) {
+                    if (substr($face['family'], -9) !== ' fallback' && !preg_match('/font-display\s*:/i', $face['css'])
+                        && preg_match('/src\s*:[^;}]*url\(\s*(?!["\']?data:)/i', $face['css'])
+                        && !(function_exists('wpc_css_is_icon_font') && wpc_css_is_icon_font($face['family']))) {
+                        $list[$index]['none_swap'] = true;
+                    }
+                }
+
+                return $list;
+            };
+            $eager = $mark($eager);
+            $late = $mark($late);
+        }
+
+        return [$eager, $late, $evicted, array_values($held), array_values($below)];
     }
 
     private function render($wantLate)
     {
         $split = $this->split();
 
-        return implode('', self::writeFaces($split[$wantLate ? 1 : 0], $wantLate));
+        return implode('', self::writeFaces($split[$wantLate ? 1 : 0], $wantLate, self::weightSpans($split)));
+    }
+
+    /** The CSS of one block's faces, in registration order. A face weightSpans() puts in a span
+     *  is written once, at its group's first position, with the group's span as its weight. */
+    private static function writeFaces(array $faces, $isLate, array $spans)
+    {
+        $out = [];
+        foreach ($faces as $face) {
+            $css = self::applyDisplayPolicy($face, $isLate);
+            if (isset($spans[$face['seq']])) {
+                list($first, $low, $high) = $spans[$face['seq']];
+                if ($face['seq'] !== $first) { continue; }
+                $css = (string) preg_replace('/(font-weight\s*:\s*)\d{1,4}(?:\s+\d{1,4})?/i',
+                    '${1}' . $low . ' ' . $high, $css, 1);
+            }
+            $out[] = $css;
+        }
+
+        return $out;
     }
 
     /**
-     * The CSS of one block's faces, in order, one face per file.
+     * seq => [seq of the group's first face, low, high] for every face written inside a weight
+     * span. $split is [eager, late, evicted, held, below]; both written blocks land in the same document.
      *
-     * Rule: faces whose written CSS is identical except for a numeric font-weight are one file
-     * served for several weights, so they are written once, at the first one's position, with
-     * font-weight set to the lowest and highest weight of the group. The browser matches every
-     * weight in the span to that file, which is what the separate faces said, and fetches it
-     * once. Only the weight may differ: a different src, unicode-range, style, stretch or
-     * display is a different face and stays one. A face with no url() src is not a file (the
-     * local() metric stand-ins carry per-weight overrides) and is written as registered. The tuple key keeps the per-weight faces, so
-     * every contest, demotion and coverage question above still sees what was registered.
+     * Rule: faces of one block whose written CSS is identical except for a numeric font-weight
+     * are one file served for several weights, so they are written once, at the first one's
+     * position, with font-weight set to the lowest and highest weight of the group. The browser
+     * matches every weight in the span to that file, which is what the separate faces said, and
+     * fetches it once. Only the weight may differ: a different src, unicode-range, style, stretch
+     * or display is a different face and stays one. A face with no url() src is not a file (the
+     * local() metric stand-ins carry per-weight overrides) and is written as registered. The
+     * tuple key keeps the per-weight faces, so every contest, demotion and coverage question
+     * above still sees what was registered.
      *
      * Observed failure (7.24.09 to 7.24.54, wpcompress.com/pricing/): Elementor's Roboto sheet,
      * localized from Google's v1 API, declares 9 weights × 18 subset files; the block shipped
      * 162 Roboto faces (121 KB in the head, "Reduce unused CSS 23.7 KiB") where 7.24.04 shipped
      * 18 span faces (14.5 KB). The merge lived in font_face_dedupe180 (v7.21.191) and went when
      * that pass was deleted with the owner's arrival.
+     *
+     * Rule: a browser narrows a family to ONE face per requested weight, style and stretch before
+     * it reads unicode-range, and only faces with identical weight, style and stretch descriptors
+     * form that face (CSS Fonts 4 §5.2, the composite face); a character the chosen composite
+     * does not cover goes to the next family in font-family, never to another composite of the
+     * same family. A span is therefore written only when every other face of the same family,
+     * style and stretch in the document (either block; url, data: or local() src) that declares
+     * a weight inside the span is itself written in exactly that span; otherwise the group is
+     * written as registered, so no weight is claimed by two composites. A single face that
+     * declares exactly the group's span (an embedded subset written "400 900") is in that span,
+     * so the group is written to it and the two are one composite.
+     * A group whose member weights leave a step of more than 100 between them is not one span
+     * and is written as registered.
+     *
+     * Observed failure (crit lab, Oxygen copy, 2026-10-15): the inline Playfair Display subset
+     * declared 400 900 and the six per-weight faces of the variable file were written one per
+     * weight; letters the subset leaves out ("F" in a below-fold h2) fell to Times New Roman for
+     * the whole visit.
+     *
+     * Observed failure (dbmwebdesign.de, 2026-10-09): Astra's Manrope sheet, 6 subset
+     * files × weights 400 and 500. The data: inliner embedded the first three subsets at 400, the
+     * latin, latin-ext and vietnamese files merged to "400 500" and the other three stayed at
+     * 500; Chrome matched 400 and 500 to the single-weight composites, which have no Latin range,
+     * and painted every Latin character in Arial.
      */
-    private static function writeFaces(array $faces, $isLate)
+    private static function weightSpans(array $split)
     {
-        $written = [];
-        $groupOf = [];
-        foreach ($faces as $face) {
-            $css = self::applyDisplayPolicy($face, $isLate);
-            if (!preg_match('/src\s*:[^;}]*url\(/i', $css)
-                || !preg_match('/font-weight\s*:\s*(\d{1,4})(?:\s+(\d{1,4}))?\s*(?=[;}])/i', $css, $weight)) {
-                $written[] = ['css' => $css];
-                continue;
-            }
-            $low = (int) $weight[1];
-            $high = isset($weight[2]) && $weight[2] !== '' ? (int) $weight[2] : $low;
-            $signature = md5((string) preg_replace('/\s+/', ' ',
-                (string) preg_replace('/font-weight\s*:\s*\d{1,4}(?:\s+\d{1,4})?\s*;?/i', '', $css)));
-            if (!isset($groupOf[$signature])) {
-                $groupOf[$signature] = count($written);
-                $written[] = ['css' => $css, 'low' => $low, 'high' => $high];
-                continue;
-            }
-            $at = $groupOf[$signature];
-            $written[$at]['low'] = min($written[$at]['low'], $low);
-            $written[$at]['high'] = max($written[$at]['high'], $high);
+        $groups = [];
+        $groupOfFace = [];
+        $claims = [];
+        foreach (isset($split[3]) ? $split[3] : [] as $heldFace) {
+            $composite = $heldFace['family'] . '|' . self::normaliseStyle(self::descriptor($heldFace['css'], 'font-style'))
+                . '|' . (self::descriptor($heldFace['css'], 'font-stretch') ?: 'normal');
+            $claimed = self::weightSpan($heldFace['css']);
+            if ($claimed) { $claims[$composite][] = [$heldFace['seq'], min($claimed), max($claimed)]; }
         }
-        $out = [];
-        foreach ($written as $entry) {
-            $css = $entry['css'];
-            if (isset($entry['low']) && $entry['high'] > $entry['low']) {
-                $css = (string) preg_replace('/(font-weight\s*:\s*)\d{1,4}(?:\s+\d{1,4})?/i',
-                    '${1}' . $entry['low'] . ' ' . $entry['high'], $css, 1);
+        foreach ([0, 1] as $block) {
+            foreach ($split[$block] as $face) {
+                $css = self::applyDisplayPolicy($face, $block === 1);
+                $composite = $face['family'] . '|' . self::normaliseStyle(self::descriptor($css, 'font-style'))
+                    . '|' . (self::descriptor($css, 'font-stretch') ?: 'normal');
+                $claimed = self::weightSpan($css);
+                if ($claimed) { $claims[$composite][] = [$face['seq'], min($claimed), max($claimed)]; }
+                if (!preg_match('/src\s*:[^;}]*url\(/i', $css)
+                    || !preg_match('/font-weight\s*:\s*(\d{1,4})(?:\s+(\d{1,4}))?\s*(?=[;}])/i', $css, $weight)) {
+                    continue;
+                }
+                $low = (int) $weight[1];
+                $high = isset($weight[2]) && $weight[2] !== '' ? (int) $weight[2] : $low;
+                $id = $block . md5((string) preg_replace('/\s+/', ' ',
+                    (string) preg_replace('/font-weight\s*:\s*\d{1,4}(?:\s+\d{1,4})?\s*;?/i', '', $css)));
+                if (!isset($groups[$id])) {
+                    $groups[$id] = ['composite' => $composite, 'first' => $face['seq'],
+                        'low' => $low, 'high' => $high, 'members' => []];
+                }
+                $groups[$id]['low'] = min($groups[$id]['low'], $low);
+                $groups[$id]['high'] = max($groups[$id]['high'], $high);
+                $groups[$id]['members'][$face['seq']] = [$low, $high];
+                $groupOfFace[$face['seq']] = $id;
             }
-            $out[] = $css;
+        }
+        foreach ($groups as $id => $group) {
+            $memberSpans = array_values($group['members']);
+            sort($memberSpans);
+            $reach = $memberSpans[0][1];
+            $gap = false;
+            foreach ($memberSpans as $memberSpan) {
+                if ($memberSpan[0] > $reach + 100) { $gap = true; break; }
+                $reach = max($reach, $memberSpan[1]);
+            }
+            if (count($group['members']) < 2 || $gap) { unset($groups[$id]); }
+        }
+        // A group given up is written per weight, which can contest a span another group kept,
+        // so repeat until no group is given up.
+        do {
+            $givenUp = false;
+            foreach ($groups as $id => $group) {
+                foreach ($claims[$group['composite']] as $claim) {
+                    list($seq, $low, $high) = $claim;
+                    if (isset($group['members'][$seq]) || $low > $group['high'] || $high < $group['low']
+                        || ($low === $group['low'] && $high === $group['high'])) { continue; }
+                    $other = isset($groupOfFace[$seq], $groups[$groupOfFace[$seq]]) ? $groups[$groupOfFace[$seq]] : null;
+                    if ($other && $other['low'] === $group['low'] && $other['high'] === $group['high']) { continue; }
+                    unset($groups[$id]);
+                    $givenUp = true;
+                    continue 2;
+                }
+            }
+        } while ($givenUp);
+        $spans = [];
+        foreach ($groups as $group) {
+            foreach ($group['members'] as $seq => $member) {
+                $spans[$seq] = [$group['first'], $group['low'], $group['high']];
+            }
         }
 
-        return $out;
+        return $spans;
     }
 
     /** A face that paints before the network answers: an embedded subset, a metric stand-in, or
@@ -616,9 +1394,17 @@ final class wps_ic_font_face_set
             // that declared none is the font localizer's live-faces half, which arms a deferred
             // sheet's faces at first paint and needs them to replace fallback text rather than
             // hide it; it is the only origin that gets the injection here.
-            return (self::ORIGIN_DISPLAY_INJECTED === $face['origin'] && self::siteFontDisplayOn())
+            $injects = (self::ORIGIN_DISPLAY_INJECTED === $face['origin'] || !empty($face['none_swap'])) && self::siteFontDisplayOn();
+            if ($injects && !$isLate && function_exists('wpc_font_display_site_kept') && wpc_font_display_site_kept()) {
+                $injects = false;
+            }
+            return $injects
                 ? (string) preg_replace('/\{/', '{font-display:swap;', $css, 1)
                 : $css;
+        }
+        if (!$isLate && $declared === 'optional' && (!empty($face['swap'])
+            || (self::swappable($face) && function_exists('wpc_font_subset_swap') && wpc_font_subset_swap($family)))) {
+            return (string) preg_replace('/font-display\s*:\s*optional/i', 'font-display:swap', $css);
         }
         if ($isLate) {
             // optional's grace window opens when the face is first needed; a block armed after
@@ -628,15 +1414,16 @@ final class wps_ic_font_face_set
                 : $css;
         }
         if ($declared !== 'swap' || !function_exists('wpc_font_display_effective')) { return $css; }
-        $effective = wpc_font_display_effective('swap', $family);
+        $effective = function_exists('wpc_font_display_on_page') ? wpc_font_display_on_page('swap', $family) : wpc_font_display_effective('swap', $family);
         if (!is_string($effective) || $effective === 'swap'
             || !in_array($effective, ['optional', 'fallback', 'block', 'auto'], true)) { return $css; }
         return (string) preg_replace('/font-display\s*:\s*swap\b/i', 'font-display:' . $effective, $css);
     }
 
     /** False when the site has switched font-display handling off, which is the one setting that
-     *  stops the live-faces lane putting swap on a face that declares no display. */
-    private static function siteFontDisplayOn()
+     *  stops the live-faces lane putting swap on a face that declares no display and the
+     *  first-screen swap rewriting a face that declares optional. */
+    public static function siteFontDisplayOn()
     {
         if (!function_exists('get_option') || !defined('WPS_IC_SETTINGS')) { return true; }
         $settings = get_option(WPS_IC_SETTINGS);
@@ -754,6 +1541,9 @@ final class wps_ic_image_preload_set
     const RANK_CRIT_BACKGROUND = 9;  // the first background url() in the crit (wpc-crit-bg-preload)
     const RANK_LCP_GUESS = 10;       // the one fetchpriority=high <img>, no measurement (wpc-lcp-img-preload)
 
+    /** The writers whose preload keeps fetchpriority=high only when it is the measured LCP, or the page's one high when nothing is measured (capBackgroundHigh). */
+    const CAPPED_ORIGINS = ['atf-bg', 'header-logo', 'hero-hint', 'crit-bg', 'modern-delivery'];
+
     const KIND_IMAGE = 'img';
     const KIND_BACKGROUND = 'bg';
 
@@ -768,6 +1558,17 @@ final class wps_ic_image_preload_set
     private $registeredCount = 0;
     /** @var array  why => count, for the receipt. */
     private $droppedCounts = [];
+    /** @var array  device => the lcp-slot candidate that was written for it, as resolved. */
+    private $written = [];
+    const MARK_OPEN = '<!--wpc-img-preloads-->';
+    const MARK_CLOSE = '<!--/wpc-img-preloads-->';
+    /** @var array|null  [offset, length] of the tags the last emit() wrote, null when it wrote none. */
+    private $span = null;
+    /** @var array  device => the file the service's browser painted for that device's measured background hero. */
+    private $painted = [];
+
+    /** Writers whose href is the url() of a pin they wrote themselves: the painted file is theirs to name. */
+    const PIN_OWNED_ORIGINS = ['lcp-bg', 'lcp-bg-derived', 'wire-fallback'];
 
     /**
      * Register a candidate. $id and $href are attribute-ready (the writer escaped them); $device
@@ -776,8 +1577,14 @@ final class wps_ic_image_preload_set
      * 'kind' (KIND_*, default image), 'imagesrcset', 'imagesizes', 'type', 'fetchpriority'
      * (default 'high', '' for none), 'arms' (a <picture>'s per-source preloads: a list of
      * ['imagesrcset','imagesizes','media','type'], written as $id, $id-2, $id-3), 'key' (the
-     * picture's identity when neither $href nor imagesrcset names it). Returns false when there
-     * is nothing to preload.
+     * picture's identity when neither $href nor imagesrcset names it), 'paints' (a background
+     * candidate's list of `<style id>` pins that put this picture on the box: at emit the href
+     * is the url() of the pin that is last in the document, because that is the file the
+     * browser paints), 'supersedes' (slots whose candidate stands down on every device this one
+     * wins: a measured hero keeps the above-the-fold background guess from adding a second
+     * high-priority preload), 'exact' (the candidate is dropped when its href, after resolution, is
+     * not a URL the document carries: a preload names what the document paints or nothing).
+     * Returns false when there is nothing to preload.
      */
     public function add($id, $href, $device, $origin, $rank, array $extras = [])
     {
@@ -792,6 +1599,10 @@ final class wps_ic_image_preload_set
         } else {
             $named = ($href !== '') ? $href : (string) preg_split('/[\s,]+/', $imagesrcset)[0];
             $key = self::imageKey($named);
+        }
+        if ($this->vetoes($key)) {
+            $this->dropped($this->vetoed[$key]);
+            return false;
         }
         $slot = isset($extras['slot']) ? (string) $extras['slot'] : self::SLOT_LCP;
         if ($slot === self::SLOT_CUSTOM) {
@@ -818,9 +1629,83 @@ final class wps_ic_image_preload_set
             'type'          => isset($extras['type']) ? (string) $extras['type'] : '',
             'fetchpriority' => array_key_exists('fetchpriority', $extras) ? (string) $extras['fetchpriority'] : 'high',
             'arms'          => $arms,
+            'paints'        => (isset($extras['paints']) && is_array($extras['paints'])) ? array_values(array_filter(array_map('strval', $extras['paints']), 'strlen')) : [],
+            'supersedes'    => (isset($extras['supersedes']) && is_array($extras['supersedes'])) ? array_values(array_map('strval', $extras['supersedes'])) : [],
+            'exact'         => !empty($extras['exact']),
         ];
         $this->registeredCount++;
         return true;
+    }
+
+    /**
+     * The file the service's browser painted for each device's measured background hero (device =>
+     * address, wps_ic_atf_observation::lcpPaintedUrl). A candidate for that picture that no pin of
+     * its writer paints takes this address at emit when the document paints exactly that address, so
+     * the preload and the paint are one file; a document that does not paint it leaves the candidate
+     * as it was.
+     */
+    public function followPainted(array $byDevice)
+    {
+        $this->painted = [];
+        foreach (['mobile', 'desktop'] as $device) {
+            if (isset($byDevice[$device]) && is_string($byDevice[$device]) && $byDevice[$device] !== '') {
+                $this->painted[$device] = $byDevice[$device];
+            }
+        }
+    }
+
+    /** @var callable|null  address => the address of the one file a phone's background hero is named by, '' to leave it as it is (policy.hero_one_url). */
+    private $heroForm = null;
+
+    /**
+     * The renaming policy.hero_one_url asks of a phone's hero. A candidate that serves the phone alone (or a render built for one) and is not pinned
+     * by its own writer takes the address $form answers with ('' leaves it as it is), href and single-address imagesrcset alike, unless the document
+     * paints that rendition. A writer whose href is the url() of a pin it wrote has named the one file there already.
+     */
+    public function followHero($form)
+    {
+        $this->heroForm = is_callable($form) ? $form : null;
+    }
+
+    /** @var callable|null  (address, another high is on the page) => whether a capped writer's preload (CAPPED_ORIGINS) may keep fetchpriority=high. */
+    private $backgroundHigh = null;
+
+    /** @var callable|null  (an <img> tag carrying high) => whether that high stays (the priority owner); null: every one counts. */
+    private $documentHighKept = null;
+
+    /**
+     * The one-high rule for the capped writers' preloads (CAPPED_ORIGINS): $allow answers for the address, told whether the document or another
+     * winner already carries a high; $keptHigh says which of the document's high <img> tags keep theirs. A high the owner refuses is stripped
+     * later and does not count: on greenvalleytint.com (2026-10-28) WordPress core's high on the logo cost the CDN-off lane its background preload's high.
+     */
+    public function capBackgroundHigh($allow, $keptHigh = null)
+    {
+        $this->backgroundHigh = is_callable($allow) ? $allow : null;
+        $this->documentHighKept = is_callable($keptHigh) ? $keptHigh : null;
+    }
+
+    /** @var array  picture key => why, the pictures no preload may name in this render. */
+    private $vetoed = [];
+
+    /**
+     * A picture no preload may name in this render, whoever writes it and whenever: a candidate for it is
+     * refused by add(), one already held is withdrawn, and emit() keeps it out of the document (a tag the
+     * page wrote for it included). The rule is on the picture, so no writer's position decides it.
+     */
+    public function veto($key, $why)
+    {
+        $key = strtolower((string) $key);
+        if ($key === '') {
+            return 0;
+        }
+        $this->vetoed[$key] = (string) $why;
+        return $this->dropKey($key, $why);
+    }
+
+    /** True when $key is a picture veto() closed to preloads. */
+    public function vetoes($key)
+    {
+        return $key !== '' && isset($this->vetoed[strtolower((string) $key)]);
     }
 
     /** Withdraw every candidate naming this picture: a writer made the file unnecessary (it
@@ -857,6 +1742,17 @@ final class wps_ic_image_preload_set
             }
         }
         return false;
+    }
+
+    /** The href of the first candidate registered under $id that serves $device, as the writer registered it; '' when none. */
+    public function hrefOf($id, $device)
+    {
+        foreach ($this->candidates as $candidate) {
+            if ($candidate['id'] === (string) $id && $candidate['href'] !== '' && self::serves($candidate, $device)) {
+                return $candidate['href'];
+            }
+        }
+        return '';
     }
 
     /** True when an lcp candidate better than $rank serves $device ('both' = any device). */
@@ -912,13 +1808,97 @@ final class wps_ic_image_preload_set
     }
 
     /**
+     * True when the document PAINTS a URL for the very rendition $href names: the same picture
+     * (imageKey()) and the same rendition (renditionName()), in a <style> block's url(), an
+     * <img>'s src or srcset, a <source>'s srcset or an inline style's background. A link a person
+     * can follow, a <link> (prefetch, another preload), a <noscript>, <script> or <template> body and a comment name a
+     * file without painting it, and a file only a linked sheet paints is not in the document.
+     */
+    public static function documentNames($html, $href)
+    {
+        if (!is_string($html) || self::imageKey($href) === '' || self::renditionName($href) === '') {
+            return false;
+        }
+        foreach (self::paintedUrls($html) as $url) {
+            if (self::sameRendition($url, $href)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** True when the document paints exactly this address (see documentNames(), which reads two spellings of one rendition as one). */
+    private static function paintsUrl($html, $url)
+    {
+        $url = html_entity_decode((string) $url, ENT_QUOTES);
+        return $url !== '' && in_array($url, self::paintedUrls((string) $html), true);
+    }
+
+    /** Every URL the document paints, in document order (see documentNames()). */
+    private static function paintedUrls($html)
+    {
+        foreach (['#<!--.*?-->#s', '#<noscript\b[^>]*>.*?</noscript>#is', '#<script\b[^>]*>.*?</script>#is', '#<template\b[^>]*>.*?</template>#is'] as $strip) {
+            $stripped = preg_replace($strip, '', $html);
+            if (is_string($stripped)) {
+                $html = $stripped;
+            }
+        }
+        $urls = [];
+        $cssUrls = function ($css) use (&$urls) {
+            if (preg_match_all('/url\(\s*(["\']?)([^"\')\s]+)\1\s*\)/i', $css, $found)) {
+                foreach ($found[2] as $url) {
+                    $urls[] = html_entity_decode($url, ENT_QUOTES);
+                }
+            }
+        };
+        if (preg_match_all('/<style\b[^>]*>(.*?)<\/style>/is', $html, $styles)) {
+            foreach ($styles[1] as $css) {
+                $cssUrls($css);
+            }
+        }
+        if (preg_match_all('/<(img|source)\b[^>]*>/i', $html, $tags, PREG_SET_ORDER)) {
+            foreach ($tags as $tag) {
+                $attributes = strtolower($tag[1]) === 'img' ? ['src', 'srcset'] : ['srcset'];
+                foreach ($attributes as $attribute) {
+                    if (!preg_match('/(?<![-\w])' . $attribute . '\s*=\s*(["\'])(.*?)\1/is', $tag[0], $value)) {
+                        continue;
+                    }
+                    foreach (preg_split('/\s*,\s*/', html_entity_decode($value[2], ENT_QUOTES)) as $part) {
+                        $part = trim((string) preg_replace('/\s+\d+(?:\.\d+)?[wx]$/', '', trim($part)));
+                        if ($part !== '' && stripos($part, 'data:') !== 0) {
+                            $urls[] = $part;
+                        }
+                    }
+                }
+            }
+        }
+        if (preg_match_all('/\sstyle\s*=\s*(["\'])(.*?)\1/is', $html, $inline)) {
+            foreach ($inline[2] as $style) {
+                if (preg_match_all('/background(?:-image)?\s*:[^;]*/i', html_entity_decode($style, ENT_QUOTES), $declarations)) {
+                    foreach ($declarations[0] as $declaration) {
+                        $cssUrls($declaration);
+                    }
+                }
+            }
+        }
+        return $urls;
+    }
+
+    /** True when two URLs name the same picture (imageKey()) in the same rendition (size suffix kept, next-gen and original extension and query ignored). */
+    public static function sameRendition($a, $b)
+    {
+        $key = self::imageKey($a);
+        return $key !== '' && $key === self::imageKey($b) && self::renditionName($a) === self::renditionName($b);
+    }
+
+    /**
      * The identity of the PICTURE a URL names, not of the file: the path from /wp-content/ (or
      * the basename), the next-gen and original extension, the -WxH suffix and -scaled/-rotated
      * stripped, the zone transform wrapper (/u:https://…, /m:0/a:https://…) unwrapped. Two
      * renditions of one image compete for one paint, so for preload purposes they are one.
      * '' when the URL carries no path to read.
      */
-    public static function imageKey($url)
+    public static function imageKey($url, $widthNames = false)
     {
         $u = html_entity_decode((string) $url, ENT_QUOTES);
         $inner = strrpos($u, '/u:http');
@@ -932,6 +1912,14 @@ final class wps_ic_image_preload_set
         if ($path === '') {
             return '';
         }
+        // A site that hides its uploads path (Hide My WP serving /storage/) names one picture two
+        // ways, under /wp-content/uploads/ and under its own base, and either form can be the one
+        // lcp.json measured or the one the preload carries. Keying the hidden form on its basename
+        // made the two differ, so the measured background never counted as preloaded and the
+        // homepage was refused every store (ticket 12239, no-store-lcp-bg-preload-missing). Every
+        // upload base the site may serve from therefore reads as /wp-content/uploads before the
+        // rule below.
+        $path = self::canonicalUploadsPath($path);
         // The PATH is the identity, not the basename: two uploads months can hold the same file
         // name, and a key that collided would collapse two different pictures into one.
         $at = strrpos($path, '/wp-content/');
@@ -939,8 +1927,52 @@ final class wps_ic_image_preload_set
         $id = (string) preg_replace('/\.(avif|webp)$/i', '', $id);
         $id = (string) preg_replace('/\.[a-z0-9]{2,5}$/i', '', $id);
         $id = (string) preg_replace('/-\d+x\d+$/', '', $id);
+        if ($widthNames) {
+            $id = (string) preg_replace('/-\d+w$/', '', $id);
+        }
         $id = (string) preg_replace('/-(?:scaled|rotated)$/i', '', $id);
         return strlen($id) > 1 ? strtolower($id) : '';
+    }
+
+    /**
+     * $path with an upload base the site may serve from (wpc_v2_upload_base_paths(): the site's
+     * upload dir, /storage, the wpc_v2_upload_paths filter) replaced by /wp-content/uploads,
+     * matched at a segment boundary, longest base first, ignoring case. A path that already
+     * carries /wp-content/ is returned as it is, and so are bases under /wp-content/ (a
+     * subdirectory install's /blog/wp-content/uploads, a multisite /wp-content/uploads/sites/2):
+     * the /wp-content/ rule keys those already, and a /storage/ folder inside a theme is not an
+     * upload. Without the v2 layer the path is returned as it is.
+     */
+    private static function canonicalUploadsPath($path)
+    {
+        // Read once per request: every preload candidate of every render asks.
+        static $bases = null;
+        if ($bases === null) {
+            if (!function_exists('wpc_v2_upload_base_paths')) {
+                return $path;
+            }
+            $bases = [];
+            foreach ((array) wpc_v2_upload_base_paths() as $base) {
+                $base = '/' . trim((string) $base, '/');
+                if ($base !== '/' && stripos($base . '/', '/wp-content/') === false) {
+                    $bases[] = $base;
+                }
+            }
+            $bases = array_values(array_unique($bases));
+            usort($bases, function ($a, $b) {
+                return strlen($b) - strlen($a);
+            });
+        }
+        if ($bases === [] || stripos($path, '/wp-content/') !== false) {
+            return $path;
+        }
+        foreach ($bases as $base) {
+            $at = stripos($path, $base . '/');
+            if ($at !== false) {
+                return '/wp-content/uploads' . substr($path, $at + strlen($base));
+            }
+        }
+        return $path;
     }
 
     /**
@@ -965,10 +1997,30 @@ final class wps_ic_image_preload_set
         $pageCandidates = [];
         $html = $this->adoptPageTags($html, $renderDevice, $images, $pageCandidates, $pageCounts);
 
+        // A device whose LCP the service identified (a measured or derived LCP candidate, or the
+        // service's own hero hint, registered for it) keeps fetchpriority=high for the LCP alone,
+        // whether or not that candidate ships: a theme preload of the hero drops ours as
+        // page-authored, and our header logo then won the slot at high beside the hero
+        // (mvcustom.be, 2026-10-23). Read before resolution for that reason.
+        $lcpIdentified = [];
+        foreach ($devices as $device) {
+            foreach ($this->candidates as $candidate) {
+                if ($candidate['slot'] === self::SLOT_LCP && $candidate['rank'] <= self::RANK_HERO_HINT
+                    && self::serves($candidate, $device)) {
+                    $lcpIdentified[$device] = true;
+                    break;
+                }
+            }
+        }
+
         // Resolve every candidate against the document first, so a candidate that cannot be
         // used never holds a slot a usable one could have had.
         $usable = [];
         foreach ($this->candidates as $seq => $candidate) {
+            if ($this->vetoes($candidate['key'])) {
+                $this->dropped($this->vetoed[$candidate['key']]);
+                continue;
+            }
             if (!$combined && $candidate['device'] !== 'both' && $candidate['device'] !== $renderDevice) {
                 $this->dropped('other-device');
                 continue;
@@ -980,7 +2032,10 @@ final class wps_ic_image_preload_set
                 $this->dropped('page-authored');
                 continue;
             }
-            $resolved = $this->resolve($candidate, $html, $images, $documentUrls, $renderDevice);
+            if ($this->heroForm !== null) {
+                $candidate = $this->heroOwned($candidate, $renderDevice, $combined, $html);
+            }
+            $resolved = $this->resolve($candidate, $html, $images, $documentUrls, $renderDevice, $devices);
             if ($resolved !== null) {
                 $usable[$seq] = $resolved;
             }
@@ -1007,10 +2062,28 @@ final class wps_ic_image_preload_set
                 // One picture, one preload: the above-the-fold background stands down for the
                 // picture the lcp slot already preloads (the same hero as its .jpg url() and as
                 // its image-set .webp was a dead high-priority fetch).
-                if ($best === null || $candidate['key'] === '' || $candidate['key'] !== $best['key']) {
+                if ($best === null || ($candidate['key'] === '' || $candidate['key'] !== $best['key'])
+                    && !in_array(self::SLOT_ATF_BG, $best['supersedes'], true)) {
                     $won[$candidate['seq']][] = $device;
                 }
                 break;
+            }
+        }
+        if ($combined && $this->painted !== []) {
+            foreach ($won as $seq => $wonDevices) {
+                if ($usable[$seq]['device'] !== 'both' || count($wonDevices) !== 1) {
+                    continue;
+                }
+                $followed = $this->followed($usable[$seq], $html, $wonDevices);
+                if ($followed === null) {
+                    continue;
+                }
+                $usable[$seq] = $followed;
+                foreach ($lcpWinners as $device => $winner) {
+                    if ($winner['seq'] === $seq) {
+                        $lcpWinners[$device] = $followed;
+                    }
+                }
             }
         }
         foreach ($usable as $seq => $candidate) {
@@ -1025,6 +2098,35 @@ final class wps_ic_image_preload_set
             }
         }
 
+        if ($this->backgroundHigh !== null) {
+            $documentHigh = false;
+            if (preg_match_all('/<img\b[^>]*\sfetchpriority\s*=\s*(["\']?)high\1[^>]*>/i', $html, $highTags)) {
+                foreach ($highTags[0] as $highTag) {
+                    $documentHigh = $documentHigh || $this->documentHighKept === null || call_user_func($this->documentHighKept, $highTag);
+                }
+            }
+            foreach ($won as $seq => $wonDevices) {
+                if ($usable[$seq]['fetchpriority'] !== 'high' || !in_array($usable[$seq]['origin'], self::CAPPED_ORIGINS, true)) {
+                    continue;
+                }
+                $anotherHigh = $documentHigh;
+                foreach ($lcpWinners as $winner) {
+                    if ($winner['fetchpriority'] === 'high' && $winner['key'] !== $usable[$seq]['key']) {
+                        $anotherHigh = true;
+                    }
+                }
+                $named = $usable[$seq]['href'] !== '' ? $usable[$seq]['href'] : (string) preg_split('/[\s,]+/', $usable[$seq]['imagesrcset'])[0];
+                if (!call_user_func($this->backgroundHigh, $named, $anotherHigh, $usable[$seq]['origin'] === 'header-logo')) {
+                    $usable[$seq]['fetchpriority'] = '';
+                    foreach ($lcpWinners as $device => $winner) {
+                        if ($winner['seq'] === $seq) {
+                            $lcpWinners[$device]['fetchpriority'] = '';
+                        }
+                    }
+                }
+            }
+        }
+
         // The lcp slot first, then the above-the-fold background, then the site's own list.
         $bySlot = [self::SLOT_LCP => [], self::SLOT_ATF_BG => [], self::SLOT_CUSTOM => []];
         foreach ($usable as $seq => $candidate) {
@@ -1036,6 +2138,13 @@ final class wps_ic_image_preload_set
         $emitted = 0;
         foreach ($bySlot as $entries) {
             foreach ($entries as $entry) {
+                // A winner below the LCP's own ranks (atf-unlazy, header logo, Modern Delivery,
+                // crit background, the guess) on devices whose LCP is identified is not the LCP:
+                // it still preloads, at the default priority, so it stops competing with the LCP.
+                if ($entry[0]['slot'] === self::SLOT_LCP && $entry[0]['rank'] > self::RANK_WIRE_FALLBACK
+                    && count(array_diff($entry[1], array_keys($lcpIdentified))) === 0) {
+                    $entry[0]['fetchpriority'] = '';
+                }
                 $tags .= self::tagsFor($entry[0], $entry[1], $combined);
                 $emitted++;
             }
@@ -1048,6 +2157,8 @@ final class wps_ic_image_preload_set
             }
             $emitted = 0;
         }
+        $this->written = $at < 0 ? [] : $lcpWinners;
+        $this->span = $at < 0 ? null : [$at, strlen($tags)];
 
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('preload-set', '', '', [
@@ -1066,10 +2177,57 @@ final class wps_ic_image_preload_set
         return $at < 0 ? $html : substr($html, 0, $at) . $tags . substr($html, $at);
     }
 
+    /**
+     * The lcp-slot candidates emit() wrote take the address $swap answers with ('' keeps one), href and single-address imagesrcset alike: for a pass that
+     * changed the document after the set wrote it (a phone's background source) and whose readers ask what the set wrote (writtenLcp).
+     */
+    public function retargetWritten($swap)
+    {
+        if (!is_callable($swap)) {
+            return;
+        }
+        $escape = function ($address) {
+            return function_exists('esc_url') ? (string) esc_url($address) : htmlspecialchars($address, ENT_QUOTES);
+        };
+        foreach ($this->written as $device => $candidate) {
+            $named = $candidate['href'] !== '' ? (string) call_user_func($swap, $candidate['href']) : '';
+            if ($named !== '') {
+                $this->written[$device]['href'] = $escape($named);
+            }
+            if ($candidate['imagesrcset'] !== '' && !preg_match('/[\s,]/', $candidate['imagesrcset'])) {
+                $named = (string) call_user_func($swap, $candidate['imagesrcset']);
+                if ($named !== '') {
+                    $this->written[$device]['imagesrcset'] = $escape($named);
+                }
+            }
+        }
+    }
+
     /** Receipt counts, for the debug views and scratch checks. */
     public function counts()
     {
         return ['registered' => $this->registeredCount, 'held' => count($this->candidates), 'dropped' => $this->droppedCounts];
+    }
+
+    /**
+     * What emit() wrote in the lcp slot, per device: ['mobile' => [...], 'desktop' => [...]] with the
+     * href, imagesrcset, imagesizes and picture identity (key) of the preload that is in the document.
+     * A device with no preload written is absent. Empty before emit() and when it wrote nothing.
+     */
+    public function writtenLcp()
+    {
+        $out = [];
+        foreach ($this->written as $device => $candidate) {
+            $out[$device] = [
+                'href'        => (string) $candidate['href'],
+                'imagesrcset' => (string) $candidate['imagesrcset'],
+                'imagesizes'  => (string) $candidate['imagesizes'],
+                'key'         => (string) $candidate['key'],
+                'kind'        => (string) $candidate['kind'],
+                'rank'        => (int) $candidate['rank'],
+            ];
+        }
+        return $out;
     }
 
     /**
@@ -1078,7 +2236,7 @@ final class wps_ic_image_preload_set
      * writer's id, the page's own tag, no id); a tag with no device media counts for both. The
      * identity is imageKey(), so origin, zone and custom-cname forms of one picture match.
      */
-    public static function preloadedPictures($html)
+    public static function preloadedPictures($html, $widthNames = false)
     {
         $pictures = ['mobile' => [], 'desktop' => []];
         if (!is_string($html) || stripos($html, 'preload') === false
@@ -1091,7 +2249,7 @@ final class wps_ic_image_preload_set
             }
             $href = preg_match('/\bhref\s*=\s*(["\'])(.*?)\1/i', $tag, $hrefMatch) ? trim($hrefMatch[2]) : '';
             $srcset = preg_match('/\bimagesrcset\s*=\s*(["\'])(.*?)\1/i', $tag, $srcsetMatch) ? trim($srcsetMatch[2]) : '';
-            $key = self::imageKey(($href !== '') ? $href : (string) preg_split('/[\s,]+/', $srcset)[0]);
+            $key = self::imageKey(($href !== '') ? $href : (string) preg_split('/[\s,]+/', $srcset)[0], $widthNames);
             if ($key === '') {
                 continue;
             }
@@ -1159,6 +2317,12 @@ final class wps_ic_image_preload_set
             $device = ($maxWidth && !$minWidth) ? 'mobile' : (($minWidth && !$maxWidth) ? 'desktop' : 'both');
             if ($device !== 'both' && $device !== $renderDevice) {
                 $pageCandidates[] = ['key' => $key, 'device' => $device];
+                continue;
+            }
+            if ($this->vetoes($key)) {
+                $pageCounts['dropped']++;
+                $this->dropped($this->vetoed[$key]);
+                $replacements[] = [$link[1], strlen($tag), ''];
                 continue;
             }
             $new = $tag;
@@ -1236,6 +2400,31 @@ final class wps_ic_image_preload_set
         return false;
     }
 
+    /** The candidate with the address of the hero's one file where it names another rendition of the picture, for a candidate that serves the phone alone and whose rendition the document does not paint. */
+    private function heroOwned(array $candidate, $renderDevice, $combined, $html)
+    {
+        $phone = $candidate['device'] === 'mobile' || ($candidate['device'] === 'both' && !$combined && $renderDevice === 'mobile');
+        if (!$phone || !empty($candidate['arms']) || !empty($candidate['paints']) || in_array($candidate['origin'], self::PIN_OWNED_ORIGINS, true)
+            || !in_array($candidate['slot'], [self::SLOT_LCP, self::SLOT_ATF_BG], true)) {
+            return $candidate;
+        }
+        $form = $this->heroForm;
+        $escape = function ($address) {
+            return function_exists('esc_url') ? (string) esc_url($address) : htmlspecialchars($address, ENT_QUOTES);
+        };
+        $named = ($candidate['href'] !== '' && !self::documentNames($html, $candidate['href'])) ? (string) $form(html_entity_decode($candidate['href'], ENT_QUOTES)) : '';
+        if ($named !== '') {
+            $candidate['href'] = $escape($named);
+        }
+        if ($candidate['imagesrcset'] !== '' && !preg_match('/[\s,]/', $candidate['imagesrcset']) && !self::documentNames($html, $candidate['imagesrcset'])) {
+            $named = (string) $form(html_entity_decode($candidate['imagesrcset'], ENT_QUOTES));
+            if ($named !== '') {
+                $candidate['imagesrcset'] = $escape($named);
+            }
+        }
+        return $candidate;
+    }
+
     private function dropped($why)
     {
         $this->droppedCounts[$why] = (isset($this->droppedCounts[$why]) ? $this->droppedCounts[$why] : 0) + 1;
@@ -1250,7 +2439,7 @@ final class wps_ic_image_preload_set
      * The candidate with its href resolved against the final document, or null when it was
      * dropped. $documentUrls is filled on first use.
      */
-    private function resolve(array $candidate, $html, array $images, &$documentUrls, $renderDevice)
+    private function resolve(array $candidate, $html, array $images, &$documentUrls, $renderDevice, array $devices = [])
     {
         if (!empty($candidate['arms'])) {
             return $candidate;
@@ -1278,6 +2467,32 @@ final class wps_ic_image_preload_set
             $candidate['type'] = '';
             return $candidate;
         }
+        if ($candidate['kind'] === self::KIND_BACKGROUND && !empty($candidate['paints'])) {
+            $painted = self::paintedBy($candidate['paints'], $html);
+            $paintedHref = $painted === '' ? '' : (function_exists('esc_url') ? (string) esc_url($painted) : htmlspecialchars($painted, ENT_QUOTES));
+            if ($paintedHref !== '') {
+                $candidate['href'] = $paintedHref;
+                $candidate['imagesrcset'] = '';
+                $candidate['type'] = '';
+                return $candidate;
+            }
+        }
+        $followed = $this->followed($candidate, $html, $devices === [] ? [$renderDevice] : $devices);
+        if ($followed !== null) {
+            return $followed;
+        }
+        if ($candidate['kind'] === self::KIND_BACKGROUND && $candidate['imagesrcset'] === '' && $candidate['href'] !== '') {
+            $armed = self::imageSetArm($html, $candidate['href']);
+            if ($armed === false) {
+                $this->dropped('imageset-mismatch');
+                return null;
+            }
+            if ($armed !== '') {
+                $candidate['href'] = function_exists('esc_url') ? (string) esc_url($armed) : htmlspecialchars($armed, ENT_QUOTES);
+                $candidate['type'] = 'image/avif';
+                return $candidate;
+            }
+        }
         // Everything else takes the rendition of its URL that the document names: the URL passes
         // (zone, naturalize, next-gen hint, disk pick, first-party) rewrote that same URL where
         // the page's CSS and markup carry it.
@@ -1285,7 +2500,18 @@ final class wps_ic_image_preload_set
             if ($documentUrls === null) {
                 $documentUrls = self::documentUrls($html);
             }
-            $candidate['href'] = self::renditionInDocument($candidate['href'], $documentUrls);
+            $registeredHref = $candidate['href'];
+            $candidate['href'] = self::renditionInDocument($candidate['href'], $documentUrls, $candidate['kind'] === self::KIND_BACKGROUND);
+            if ($candidate['href'] !== $registeredHref && $candidate['imagesrcset'] === '') {
+                $resolvedMime = self::mimeOfFormat(self::formatOf($candidate['href']));
+                if ($resolvedMime !== '' && self::formatOf($candidate['href']) !== self::formatOf($registeredHref)) {
+                    $candidate['type'] = $resolvedMime;
+                }
+            }
+            if ($candidate['exact'] && !self::appearsAsUrl($html, $candidate['href'])) {
+                $this->dropped('not-in-doc');
+                return null;
+            }
         }
         // A single-URL imagesrcset (a CSS background's next-gen candidate) is what a browser
         // preloads instead of the href, so it names the document's own URL for that file or
@@ -1310,6 +2536,96 @@ final class wps_ic_image_preload_set
             $candidate['imagesrcset'] = $resolvedSrcset;
         }
         return $candidate;
+    }
+
+    /** The candidate with the address the service painted its hero at when it is one to follow and the document paints exactly that address, else null. */
+    private function followed(array $candidate, $html, array $devices)
+    {
+        $paintedFile = $this->paintedFor($candidate, $devices);
+        if ($paintedFile === '' || !self::paintsUrl($html, $paintedFile)) {
+            return null;
+        }
+        $candidate['href'] = function_exists('esc_url') ? (string) esc_url($paintedFile) : htmlspecialchars($paintedFile, ENT_QUOTES);
+        $candidate['imagesrcset'] = '';
+        $candidate['imagesizes'] = '';
+        $candidate['type'] = '';
+        return $candidate;
+    }
+
+    /**
+     * The file the service's browser painted for the measured hero this candidate names, '' when the
+     * candidate is not one to follow it: another slot than the lcp slot or the above-the-fold
+     * background, a writer that pins its own paint, a candidate for another picture, or one that serves
+     * devices whose painted files differ (a device-blind render's both-devices candidate).
+     */
+    private function paintedFor(array $candidate, array $devices)
+    {
+        if ($this->painted === [] || $candidate['key'] === ''
+            || !in_array($candidate['slot'], [self::SLOT_LCP, self::SLOT_ATF_BG], true)
+            || in_array($candidate['origin'], self::PIN_OWNED_ORIGINS, true)) {
+            return '';
+        }
+        $served = [];
+        foreach ($devices as $device) {
+            if (self::serves($candidate, $device)) {
+                $served[] = isset($this->painted[$device]) ? $this->painted[$device] : '';
+            }
+        }
+        $served = array_unique($served);
+        if (count($served) !== 1 || $served[0] === '' || self::imageKey($served[0]) !== $candidate['key']) {
+            return '';
+        }
+        return $served[0];
+    }
+
+    /**
+     * The one url() of the pin that paints the box: of the `<style id>` blocks named by $ids, the
+     * last one in the document (the cascade's winner between pins of equal specificity), read after
+     * every URL pass has run. '' when no named block is there or the winner carries not exactly one
+     * distinct url().
+     */
+    private static function paintedBy(array $ids, $html)
+    {
+        $winner = null;
+        foreach ($ids as $id) {
+            if (!preg_match_all('#<style\b[^>]*\bid\s*=\s*(["\'])' . preg_quote((string) $id, '#') . '\1[^>]*>(.*?)</style>#is', $html, $blocks, PREG_OFFSET_CAPTURE)) {
+                continue;
+            }
+            $last = count($blocks[0]) - 1;
+            if ($winner === null || $blocks[0][$last][1] > $winner[0]) {
+                $winner = [$blocks[0][$last][1], $blocks[2][$last][0]];
+            }
+        }
+        if ($winner === null || !preg_match_all('/url\(\s*(["\']?)([^"\')\s]+)\1\s*\)/i', $winner[1], $found)) {
+            return '';
+        }
+        $urls = array_values(array_unique($found[2]));
+        return count($urls) === 1 ? html_entity_decode($urls[0], ENT_QUOTES) : '';
+    }
+
+    /**
+     * The address the plugin's own phone pin puts on the box of the picture $key: of the `<style id="wpc-lcp-bg-authority…">` and
+     * `<style id="wpc-lcp-bg-rung">` blocks whose rule is wrapped in `@media` MEDIA_MOBILE and names that picture in exactly one distinct
+     * url(), the last one in the document. The pins are `!important`, so a phone paints that file whatever the critical CSS names.
+     * '' when no phone pin names the picture.
+     */
+    public static function phonePin($html, $key)
+    {
+        $key = strtolower((string) $key);
+        if (!is_string($html) || $key === ''
+            || !preg_match_all('#<style\b[^>]*\bid\s*=\s*(["\'])wpc-lcp-bg-(?:authority|rung)[\w-]*\1[^>]*>\s*@media\s*' . preg_quote(self::MEDIA_MOBILE, '#') . '\s*\{(.*?)</style>#is', $html, $blocks, PREG_SET_ORDER)) {
+            return '';
+        }
+        $pin = '';
+        foreach ($blocks as $block) {
+            if (preg_match_all('/url\(\s*(["\']?)([^"\')\s]+)\1\s*\)/i', $block[2], $found)) {
+                $urls = array_values(array_unique($found[2]));
+                if (count($urls) === 1 && self::imageKey($urls[0]) === $key) {
+                    $pin = html_entity_decode($urls[0], ENT_QUOTES);
+                }
+            }
+        }
+        return $pin;
     }
 
     /**
@@ -1387,8 +2703,10 @@ final class wps_ic_image_preload_set
      * than one it cannot tell apart. Several are told apart by format: an image-set names the
      * same rendition as `X.webp` and `X.avif?src=webp`, and the one in $href's format is the
      * one it means (acrystalglass.com, 2026-09-29: two matches left the preload on the origin).
+     * A background's preload ($nextGenOnMismatch) whose format none of them has takes the
+     * document's one AVIF address: the crit paints the zone's forms, never the origin file.
      */
-    private static function renditionInDocument($href, array $documentUrls)
+    private static function renditionInDocument($href, array $documentUrls, $nextGenOnMismatch = false)
     {
         $key = self::imageKey($href);
         $rendition = self::renditionName($href);
@@ -1404,9 +2722,17 @@ final class wps_ic_image_preload_set
             }
             if (count($found) > 1) {
                 $format = self::formatOf($href);
+                $all = $found;
                 foreach (array_keys($found) as $url) {
                     if (self::formatOf($url) !== $format) {
                         unset($found[$url]);
+                    }
+                }
+                if (count($found) === 0 && $nextGenOnMismatch) {
+                    foreach (array_keys($all) as $url) {
+                        if (self::formatOf($url) === 'avif') {
+                            $found[$url] = true;
+                        }
                     }
                 }
                 if (count($found) !== 1) {
@@ -1421,6 +2747,161 @@ final class wps_ic_image_preload_set
     }
 
     /**
+     * The AVIF address the document's image-set paints first for the picture $href names at $href's rendition, '' when no image-set
+     * of the document leads with such an AVIF, false when the document's image-sets lead with a different rendition of the picture
+     * (or with several AVIF addresses of this one) and so $href cannot name what they paint. Only an image-set in a top-level rule
+     * of a style block for every medium, on a selector with no lazy-load class, counts, and only while no plain url() of that
+     * picture and rendition is painted outside the rule that carries the image-set: otherwise '' (the registered address stays).
+     */
+    private static function imageSetArm($html, $href)
+    {
+        $key = self::imageKey($href);
+        $rendition = self::renditionName($href);
+        if ($key === '' || $rendition === '' || !preg_match_all('/<style\b([^>]*)>(.*?)<\/style>/is', (string) $html, $styles, PREG_SET_ORDER)) {
+            return '';
+        }
+        $plainOf = function ($text) use ($key, $rendition) {
+            $text = (string) preg_replace('/(?<![\w-])(?:-webkit-)?image-set\(((?:[^()]|\([^()]*\))*)\)/i', '', (string) $text);
+            if (!preg_match_all('/url\(\s*(["\']?)([^"\')\s]+)\1\s*\)/i', $text, $plain)) {
+                return false;
+            }
+            foreach ($plain[2] as $url) {
+                $url = html_entity_decode($url, ENT_QUOTES);
+                if (self::imageKey($url) === $key && self::renditionName($url) === $rendition) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        $same = [];
+        $other = false;
+        $blocked = false;
+        $plainElsewhere = false;
+        foreach ($styles as $style) {
+            $forAll = !preg_match('/\bmedia\s*=\s*(["\'])(.*?)\1/i', $style[1], $mediaAttr) || in_array(strtolower(trim($mediaAttr[2])), ['', 'all'], true);
+            foreach (self::cssRules($style[2], $forAll) as $rule) {
+                $carries = false;
+                if (preg_match_all('/(?<![\w-])(?:-webkit-)?image-set\(((?:[^()]|\([^()]*\))*)\)/i', $rule['body'], $sets)) {
+                    foreach ($sets[1] as $body) {
+                        if (!preg_match_all('/url\(\s*(["\']?)([^"\')\s]+)\1\s*\)/i', $body, $arms)) {
+                            continue;
+                        }
+                        $urls = array_map(function ($url) {
+                            return html_entity_decode($url, ENT_QUOTES);
+                        }, $arms[2]);
+                        $named = false;
+                        $ownRendition = false;
+                        foreach ($urls as $url) {
+                            if (self::imageKey($url) === $key) {
+                                $named = true;
+                                $ownRendition = $ownRendition || self::renditionName($url) === $rendition;
+                            }
+                        }
+                        if (!$named) {
+                            continue;
+                        }
+                        if (!$rule['top'] || self::lazySelector($rule['sel'])) {
+                            $blocked = true;
+                            continue;
+                        }
+                        $carries = true;
+                        if (self::imageKey($urls[0]) !== $key) {
+                            continue;
+                        }
+                        if (self::renditionName($urls[0]) === $rendition) {
+                            if (self::formatOf($urls[0]) === 'avif') {
+                                $same[$urls[0]] = true;
+                            }
+                        } elseif ($ownRendition) {
+                            $other = true;
+                        }
+                    }
+                }
+                if (!$carries && $plainOf($rule['body'])) {
+                    $plainElsewhere = true;
+                }
+            }
+        }
+        $outside = (string) preg_replace('/<style\b[^>]*>.*?<\/style>/is', '', (string) $html);
+        if ($blocked || $plainElsewhere || $plainOf($outside)) {
+            return '';
+        }
+        if (count($same) === 1) {
+            $url = (string) key($same);
+            return self::formatOf($href) === 'avif' && html_entity_decode((string) $href, ENT_QUOTES) === $url ? '' : $url;
+        }
+        return count($same) > 1 || $other ? false : '';
+    }
+
+    /** True when a selector carries a class a lazy-load script holds its background behind: the plugin's own background lazy class, a library class word of the lazy verdict, or any class word spelling lazy. */
+    private static function lazySelector($selector)
+    {
+        $words = ['lazy', 'wpc-bglazy'];
+        if (class_exists('wps_ic_lazy_verdict')) {
+            $words = array_merge($words, wps_ic_lazy_verdict::LIBRARY_CLASS_WORDS);
+        }
+        foreach ($words as $word) {
+            if (stripos((string) $selector, (string) $word) !== false) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The rules of a stylesheet's text that carry declarations, [['top' => bool, 'sel' => selector, 'body' => declarations]]: a rule inside
+     * any at-rule block (@media, @supports, @container, @layer, @keyframes) is not top-level; top-level rules keep $top.
+     */
+    private static function cssRules($css, $top = true)
+    {
+        $css = (string) preg_replace('~/\*.*?\*/~s', '', (string) $css);
+        $rules = [];
+        $depth = 0;
+        $start = 0;
+        $bodyStart = 0;
+        $prelude = '';
+        $quote = '';
+        $length = strlen($css);
+        for ($i = 0; $i < $length; $i++) {
+            $char = $css[$i];
+            if ($quote !== '') {
+                if ($char === '\\') {
+                    $i++;
+                } elseif ($char === $quote) {
+                    $quote = '';
+                }
+                continue;
+            }
+            if ($char === '"' || $char === "'") {
+                $quote = $char;
+            } elseif ($char === '{') {
+                if ($depth === 0) {
+                    $prelude = trim(substr($css, $start, $i - $start));
+                    $bodyStart = $i + 1;
+                }
+                $depth++;
+            } elseif ($char === '}') {
+                if ($depth > 0 && --$depth === 0) {
+                    $body = substr($css, $bodyStart, $i - $bodyStart);
+                    if ($prelude !== '' && $prelude[0] === '@') {
+                        foreach (self::cssRules($body, false) as $inner) {
+                            $rules[] = $inner;
+                        }
+                    } else {
+                        $rules[] = ['top' => $top, 'sel' => $prelude, 'body' => $body];
+                    }
+                    $start = $i + 1;
+                } elseif ($depth === 0) {
+                    $start = $i + 1;
+                }
+            } elseif ($char === ';' && $depth === 0) {
+                $start = $i + 1;
+            }
+        }
+        return $rules;
+    }
+
+    /**
      * True when $url occurs in $html as a whole URL, not as the start of a longer one. A
      * substring test read cloud-bg.webp as present because the crit CSS carried
      * cloud-bg.webp?src=png (staging-home, local lane): the preload named the bare .webp the CSS
@@ -1429,6 +2910,13 @@ final class wps_ic_image_preload_set
     private static function appearsAsUrl($html, $url)
     {
         return (bool) preg_match('~' . preg_quote((string) $url, '~') . '(?=["\')\s,<>]|$)~', (string) $html);
+    }
+
+    /** The MIME type of an image file extension the preload set names, '' for any other. */
+    private static function mimeOfFormat($format)
+    {
+        $types = ['avif' => 'image/avif', 'webp' => 'image/webp', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif'];
+        return isset($types[$format]) ? $types[$format] : '';
     }
 
     /** The file extension of the innermost URL's path, lower case, query ignored. */
@@ -1497,11 +2985,86 @@ final class wps_ic_image_preload_set
             . '>';
     }
 
+    /** True unless the constant, the cohort off_preload_before_crit or the filter wpc_preload_before_crit restores the earlier position. */
+    private static function beforeCritOn()
+    {
+        if (defined('WPC_PRELOAD_BEFORE_CRIT_OFF') && WPC_PRELOAD_BEFORE_CRIT_OFF) {
+            return false;
+        }
+        if (function_exists('wpc_policy_cohort') && wpc_policy_cohort('off_preload_before_crit') === 1) {
+            return false;
+        }
+        return !function_exists('apply_filters') || (bool) apply_filters('wpc_preload_before_crit', true);
+    }
+
+    /** Offset just past the last of the head's charset and viewport metas, 0 when it has neither. */
+    private static function metasEnd($html)
+    {
+        $headEnd = stripos($html, '</head>');
+        $head = $headEnd === false ? $html : substr($html, 0, $headEnd);
+        $end = 0;
+        foreach (['/<meta\b[^>]*\bname\s*=\s*["\']?viewport["\']?[^>]*>/i', '/<meta\b[^>]*(?:\bcharset\b|http-equiv=["\']content-type)[^>]*>/i'] as $pattern) {
+            if (preg_match($pattern, $head, $meta, PREG_OFFSET_CAPTURE)) {
+                $end = max($end, (int) $meta[0][1] + strlen($meta[0][0]));
+            }
+        }
+        return $end;
+    }
+
     /**
-     * Where the preloads go: after <head>, the charset meta when the head opens with it, and the
-     * run of <meta> tags that follows — the first bytes the preload scanner reads. Anywhere later
-     * and the scanner meets them behind the inline CSS: on aliiadventureshack the hero preload
-     * sat at byte 101,737 and Lighthouse measured 1,720 ms of LCP load delay with it present.
+     * Brackets the tags the last emit() wrote in $html with marker comments, for placeFirst() to
+     * find after every later pass has rewritten them. Brackets nothing when the position is off
+     * or emit() wrote nothing.
+     */
+    public function markEmitted($html)
+    {
+        $span = $this->span;
+        $this->span = null;
+        if ($span === null || $span[1] === 0 || !self::beforeCritOn() || substr($html, $span[0], $span[1]) === false) {
+            return $html;
+        }
+        return substr($html, 0, $span[0]) . self::MARK_OPEN . substr($html, $span[0], $span[1]) . self::MARK_CLOSE . substr($html, $span[0] + $span[1]);
+    }
+
+    /**
+     * The one owner of where the image preloads sit on the final buffer: the bracketed tags go
+     * right after the head's charset and viewport metas and the run of metas and
+     * preconnect/dns-prefetch hints that follows them, ahead of every plugin-inserted style,
+     * script and stylesheet link. The brackets are always removed; a span already at or ahead of
+     * that position stays where it is.
+     */
+    public static function placeFirst($html)
+    {
+        if (!is_string($html) || (strpos($html, self::MARK_OPEN) === false && strpos($html, self::MARK_CLOSE) === false)) {
+            return $html;
+        }
+        $close = strpos($html, self::MARK_CLOSE);
+        $open = $close === false ? false : strrpos(substr($html, 0, $close), self::MARK_OPEN);
+        if ($close === false || $open === false) {
+            return str_replace([self::MARK_OPEN, self::MARK_CLOSE], '', $html);
+        }
+        $tags = substr($html, $open + strlen(self::MARK_OPEN), $close - $open - strlen(self::MARK_OPEN));
+        $rest = substr($html, 0, $open) . substr($html, $close + strlen(self::MARK_CLOSE));
+        $rest = str_replace([self::MARK_OPEN, self::MARK_CLOSE], '', $rest);
+        $at = $open;
+        if (self::beforeCritOn() && preg_match('/<head\b[^>]*>/i', $rest, $head, PREG_OFFSET_CAPTURE)) {
+            $headAt = $head[0][1] + strlen($head[0][0]);
+            $target = max($headAt, self::metasEnd($rest));
+            if (preg_match('/^(?:\s*(?:<meta\b[^>]*>|<link\b[^>]*\brel\s*=\s*["\']?(?:preconnect|dns-prefetch)["\']?[^>]*>))+/i', substr($rest, $target, 4000), $run)) {
+                $target += strlen($run[0]);
+            }
+            if ($target < $open) {
+                $at = $target;
+            }
+        }
+        return substr($rest, 0, $at) . $tags . substr($rest, $at);
+    }
+
+    /**
+     * Where the preloads go: after the head's viewport meta, else after <head> and the charset meta
+     * when the head opens with it; then past the run of <meta> tags that follows — the first
+     * bytes the preload scanner reads. Anywhere later and the scanner meets them behind the
+     * inline CSS: on aliiadventureshack the hero preload sat at byte 101,737 and Lighthouse measured 1,720 ms of LCP load delay with it present.
      * -1 when the buffer has no <head>.
      */
     private static function insertPosition($html)
@@ -1511,7 +3074,21 @@ final class wps_ic_image_preload_set
         }
         $headAt = $head[0][1] + strlen($head[0][0]);
         $at = $headAt;
-        if (preg_match('/<meta\b[^>]*(?:\bcharset\b|http-equiv=["\']content-type)[^>]*>/i', substr($html, $headAt, 4096), $charset, PREG_OFFSET_CAPTURE)) {
+        // A DEVICE-SCOPED PRELOAD GOES AFTER THE VIEWPORT META. Chrome evaluates a preload's
+        // media when the parser meets the tag; before <meta name="viewport"> the layout viewport
+        // is still the 980 px default, so a phone fetches a `(min-width: 768px)` preload and skips
+        // a `(max-width: 767.98px)` one (headless Chrome, 412 px phone emulation: the same link
+        // before the viewport meta is fetched, after it is not). hartwood.biz (ticket 12072,
+        // 2026-10-20): the theme's charset and viewport metas sat at lines 22-23, behind the
+        // injected crit block, the charset search below found nothing in its window, the preloads
+        // went in at line 5, and phones fetched the 258 KB desktop rendition. So the whole head is
+        // searched for the viewport meta, and the charset rule is the fallback for a head without
+        // one. The run of <meta> tags right after it is skipped as before.
+        $headEnd = stripos($html, '</head>', $headAt);
+        $headText = substr($html, $headAt, ($headEnd === false ? strlen($html) : $headEnd) - $headAt);
+        if (preg_match('/<meta\b[^>]*\bname\s*=\s*["\']?viewport["\']?[^>]*>/i', $headText, $viewport, PREG_OFFSET_CAPTURE)) {
+            $at = $headAt + $viewport[0][1] + strlen($viewport[0][0]);
+        } elseif (preg_match('/<meta\b[^>]*(?:\bcharset\b|http-equiv=["\']content-type)[^>]*>/i', substr($html, $headAt, 4096), $charset, PREG_OFFSET_CAPTURE)) {
             $at = $headAt + $charset[0][1] + strlen($charset[0][0]);
         }
         if (preg_match('/^(?:\s*<meta\b[^>]*>)+/i', substr($html, $at, 600), $metas)) {
@@ -1563,6 +3140,15 @@ final class wps_ic_render_context
     public $pictureStash = [];
     /** @var array  Markup parked by Negotiated Delivery, keyed by placeholder. */
     public $negotiatedStash = [];
+    /** @var array  The <link> and <script> start tags that carry integrity= which stage_integrity_stash parked, keyed by token. The 'integrity_pins' window's closer gives them back and clears it, at stage_integrity_restore on a full run or from the runner's finally on a stop, a bail or a throw. */
+    public $integrityStash = [];
+    /** @var array  The <use> start tags stage_use_tags_stash parked, keyed by token. The 'use_tags'
+     *              window's closer gives them back and clears it, at stage_use_tags_restore on a
+     *              full run or from the runner's finally on a stop, a bail or a throw. */
+    public $useTagStash = [];
+    /** @var array  Slider Revolution 7 <sr7-module> blocks parked by stage_slider_module_stash,
+     *              keyed by placeholder; the 'sr7_modules' window puts them back. */
+    public $sliderModuleStash = [];
     /** @var bool  The buffer is an AMP document, as the AMP settings squash found it. Stages that
      *              inject markup AMP forbids read this through gate_not_amp; it stays false on a
      *              run that stopped before the squash, so nothing claims a page is AMP unasked.
@@ -1572,7 +3158,7 @@ final class wps_ic_render_context
     public $isAmp = false;
     /** @var mixed  Lazy loading for this render ('1' on): the request's value from mainInit(),
      *              seeded by stage_prelude, turned '0' by the AMP squash. Read by
-     *              local_image_tags and by is_excluded() through cdn_rewrite_url. */
+     *              local_image_tags and by the lazy verdict's seed ($lazyVerdict). */
     public $lazyEnabled = null;
     /** @var mixed  Adaptive image sizing for this render ('1' on): seeded and squashed like
      *              $lazyEnabled. Read by local_image_tags. */
@@ -1601,6 +3187,8 @@ final class wps_ic_render_context
     public $criticalExists = null;
     /** @var object|null  The critical CSS instance, shared so stages do not rebuild it. */
     public $criticalInstance = null;
+    /** @var string  The crit state code of this render ('' until the critical setup stage ran), printed in the freshness marker as cs:<code>. */
+    public $critState = '';
     /** @var object|null  The combine instance, shared so stages do not rebuild it. */
     public $combineInstance = null;
     /** @var bool  Delay JS is active for this render. The yield pass works it out; with one
@@ -1646,9 +3234,17 @@ final class wps_ic_render_context
      *                            and the aspect pin. A pass that writes one of those asks here.
      *                            Written once in the render's receipt (img-sizing). */
     public $imageSizing;
-    /** @var string[]  The LCP image stems lcp_img_preload identified (one per measured device);
-     *                 lcp_demote_competitors strips fetchpriority="high" from every other <img>. */
-    public $lcpKeepPriorityStems = [];
+    /** @var wps_ic_lazy_verdict|null  The one owner of every <img>'s lazy/eager verdict, seeded by
+     *                                  stage_prelude. Every writer of `loading` asks it once per tag
+     *                                  and writes through its applyLoading(); written once in the
+     *                                  render's receipt (lazy-verdict). */
+    public $lazyVerdict;
+    /** @var array|null  The inline hero placeholder stage_hero_lqip wrote on this phone render: ['sel' => the
+     *                   placeholder's selector, 'url' => the hero's file, 'key' => the picture's preload key,
+     *                   'sig' => the record's signature]. null on every render that wrote none. Read by the
+     *                   hero-gated starters and the hero lists, which treat the box as the hero (the hero's
+     *                   own file is not requested before the swap). */
+    public $heroLqip = null;
 
     /** @var array  Open windows as a LIFO stack of [name, closer]; one name may be open twice. */
     private $windows = [];

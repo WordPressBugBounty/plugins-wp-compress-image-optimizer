@@ -181,7 +181,7 @@ if (!class_exists('wps_ic_doctor_cache')) {
         public static function fetch_once($url, $device)
         {
             $args = ['timeout' => 10, 'redirection' => 0, 'sslverify' => false, 'cookies' => [],
-                'headers' => ['X-WPC-Diag' => '1', 'User-Agent' => self::PROBE_AGENTS[$device] ?? self::PROBE_AGENTS['desktop'], 'Cache-Control' => 'no-cache']];
+                'headers' => ['X-WPC-Diag' => function_exists('wpc_warm_header_for') ? wpc_warm_header_for($url, 'diag') : '1', 'User-Agent' => self::PROBE_AGENTS[$device] ?? self::PROBE_AGENTS['desktop'], 'Cache-Control' => 'no-cache']];
             $began = microtime(true);
             if (function_exists('wpc_render_guard_self_fetch')) {
                 wpc_render_guard_self_fetch($url);

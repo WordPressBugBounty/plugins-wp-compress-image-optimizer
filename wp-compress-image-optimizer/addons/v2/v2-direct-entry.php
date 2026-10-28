@@ -3,6 +3,7 @@ include_once __DIR__ . '/../cache/wpc-fs.php';
 if (!defined('ABSPATH')) {
     exit;
 }
+require_once __DIR__ . '/v2-service.php';
 
 if (!function_exists('wpc_v2_callback_url')) {
 
@@ -115,6 +116,46 @@ function wpc_v2_probe_direct_entry($force = false) {
 }
 
 
+function wpc_v2_door_probe_cron()
+{
+    if (!function_exists('wpc_encode_on_view_on') || !wpc_encode_on_view_on()) return false;
+    $probed_at = get_option('wpc_v2_direct_entry_probe_at', null);
+    $healthy = (bool) get_option('wpc_v2_direct_entry_healthy', false);
+    $backoff = get_option('wpc_v2_direct_entry_backoff', null);
+    if ($healthy && $backoff !== null) {
+        delete_option('wpc_v2_direct_entry_backoff');
+        $backoff = null;
+    }
+    $due = $probed_at === null
+        || ($healthy && (time() - (int) $probed_at) > WEEK_IN_SECONDS)
+        || (!$healthy && (!is_array($backoff) || time() >= (int) (isset($backoff['next']) ? $backoff['next'] : 0)));
+    if ($due) {
+        $res = wpc_v2_probe_direct_entry($probed_at === null);
+        if (get_option('wpc_v2_direct_entry_healthy', false)) {
+            delete_option('wpc_v2_direct_entry_backoff');
+        } elseif (!is_array($res) || !isset($res['reason']) || $res['reason'] !== 'cached') {
+            $misses = (is_array($backoff) && isset($backoff['n']) ? (int) $backoff['n'] : 0) + 1;
+            $wait = min(DAY_IN_SECONDS, HOUR_IN_SECONDS * (1 << min($misses - 1, 5)));
+            update_option('wpc_v2_direct_entry_backoff', ['n' => $misses, 'next' => time() + $wait], false);
+        }
+    }
+    if (function_exists('wpc_sized_report_arm_settle')) {
+        wpc_sized_report_arm_settle();
+    }
+    return false;
+}
+
+add_action('wpc_v2_pull_cron', 'wpc_v2_door_probe_cron', 22);
+
+function wpc_v2_probe_after_update()
+{
+    wpc_v2_probe_direct_entry();
+    if (function_exists('wpc_sized_report_arm_settle')) {
+        wpc_sized_report_arm_settle();
+    }
+    return false;
+}
+
 // Plugin activation hook (fires once on activate)
 register_activation_hook(WPC_CC_PLUGIN_FILE, function () {
     wpc_v2_probe_direct_entry(true);
@@ -183,6 +224,35 @@ function wpc_v2_journal_state_file() {
     return is_dir($dir) ? $dir . '/.drain_state' : '';
 }
 
+function wpc_v2_journal_hold_file() {
+    $f = wpc_v2_journal_state_file();
+    return $f === '' ? '' : dirname($f) . '/.reap_hold';
+}
+
+function wpc_v2_journal_hold_on() {
+    return (bool) apply_filters('wpc_v2_journal_hold', !(defined('WPC_V2_JOURNAL_HOLD_OFF') && WPC_V2_JOURNAL_HOLD_OFF));
+}
+
+function wpc_v2_journal_ttl_seconds() {
+    return defined('WPC_V2_JOURNAL_FILE_TTL_S') ? max(60, (int) WPC_V2_JOURNAL_FILE_TTL_S) : 1800;
+}
+
+function wpc_v2_journal_hold_max_seconds() {
+    $max = defined('WPC_V2_JOURNAL_HOLD_MAX_S') ? (int) WPC_V2_JOURNAL_HOLD_MAX_S : 86400;
+    return max(wpc_v2_journal_ttl_seconds(), $max);
+}
+
+function wpc_v2_journal_hold_until() {
+    $f = wpc_v2_journal_hold_file();
+    return ($f !== '' && @is_file($f)) ? (int) trim((string) @file_get_contents($f)) : 0;
+}
+
+function wpc_v2_journal_hold_note($until) {
+    $f = wpc_v2_journal_hold_file();
+    if ($f === '') return;
+    wpc_fs_put($f, (string) (max((int) $until, time()) + wpc_v2_journal_ttl_seconds()));
+}
+
 function wpc_v2_journal_backoff_until() {
     $f = wpc_v2_journal_state_file();
     if ($f === '' || !@is_file($f)) return 0;
@@ -205,6 +275,136 @@ function wpc_v2_journal_note_progress($drained, $remaining) {
         error_log(sprintf('[wpc_v2_journal_drain] no-progress x%d — backing off until %s (files=%d)', $n, gmdate('H:i:s', $until), $remaining));
     }
     wpc_fs_put($f, json_encode(['noprog' => $n, 'until' => $until]));
+    wpc_v2_journal_hold_note($until);
+}
+
+function wpc_v2_journal_abandon_payload($file) {
+    $payload = json_decode((string) @file_get_contents($file), true);
+    if (!is_array($payload) || empty($payload['imageID']) || !isset($payload['entries']) || !is_array($payload['entries'])) return [];
+    $inner = isset($payload['entries']['entries']) ? $payload['entries']['entries'] : $payload['entries'];
+    if (!is_array($inner)) return [];
+    $out = [];
+    foreach ($inner as $e) {
+        if (!is_array($e) || (isset($e['type']) ? (string) $e['type'] : '') !== 'persisted_pending_bytes') continue;
+        if (empty($e['sizeLabel']) || empty($e['format']) || empty($e['filename']) || empty($e['dest_dir'])) continue;
+        $dest = rtrim((string) $e['dest_dir'], '/\\') . '/' . basename((string) $e['filename']);
+        if (@is_file($dest)) continue;
+        $out[] = [
+            'imageID' => (int) $payload['imageID'],
+            'size'    => (string) $e['sizeLabel'],
+            'format'  => (string) $e['format'],
+            'dest'    => $dest,
+            'lane'    => isset($e['source']) ? (string) $e['source'] : 'journal',
+            'job'     => isset($payload['jobId']) ? (string) $payload['jobId'] : '',
+            'sha256'  => isset($e['bytes_sha256']) ? (string) $e['bytes_sha256'] : '',
+        ];
+    }
+    return $out;
+}
+
+function wpc_v2_journal_attachment_exists($imageID) {
+    if (!function_exists('get_post')) {
+        return true;
+    }
+    $post = get_post((int) $imageID);
+    return is_object($post) && isset($post->post_type) && $post->post_type === 'attachment';
+}
+
+function wpc_v2_journal_abandon_receipts(array $items) {
+    $failed = [];
+    foreach ($items as $it) {
+        if (function_exists('wpc_v2_landed_failure') && wpc_v2_journal_hold_on()) {
+            wpc_v2_landed_failure($it['imageID'], $it['size'], $it['format'], $it['dest'], $it['lane'], $it['job'], 'pull_abandoned');
+        }
+        if ($it['sha256'] !== '' && function_exists('wpc_v2_ack_landed_only') && wpc_v2_ack_landed_only() && wpc_v2_journal_attachment_exists($it['imageID'])) {
+            $failed[$it['sha256']] = [
+                'imageID'   => (string) $it['imageID'],
+                'sizeLabel' => $it['size'],
+                'format'    => $it['format'],
+                'reason'    => 'pull_abandoned',
+                'sha256'    => $it['sha256'],
+            ];
+        }
+    }
+    return $failed;
+}
+
+function wpc_v2_journal_reap_stale(&$deferred_receipts = false) {
+    $abandoned   = 0;
+    $ttl_seconds = wpc_v2_journal_ttl_seconds();
+    $hold_on     = wpc_v2_journal_hold_on();
+    $held        = $hold_on && wpc_v2_journal_hold_until() > time();
+    $hard_ttl    = wpc_v2_journal_hold_max_seconds();
+    $cap         = wpc_v2_journal_max_files();
+    $files       = wpc_v2_journal_list_files($cap + 1000);
+    $over        = max(0, count($files) - $cap);
+    if ($over > 0) {
+        $mt = [];
+        foreach ($files as $f) {
+            $mt[$f] = (int) @filemtime($f);
+        }
+        usort($files, function ($x, $y) use ($mt) {
+            return $mt[$x] === $mt[$y] ? strcmp($x, $y) : ($mt[$x] < $mt[$y] ? -1 : 1);
+        });
+    }
+    $failed_receipts = [];
+    foreach ($files as $i => $stale_check) {
+        $force = $i < $over;
+        $mtime = is_file($stale_check) ? filemtime($stale_check) : false;
+        if ($mtime === false) {
+            continue;
+        }
+        $age = time() - $mtime;
+        if (!$force) {
+            if ($age <= $ttl_seconds) {
+                continue;
+            }
+            if ($held && $age <= $hard_ttl) {
+                continue;
+            }
+        }
+        clearstatcache(true, $stale_check);
+        $items = wpc_v2_journal_abandon_payload($stale_check);
+        if (!is_file($stale_check) || !unlink($stale_check)) {
+            continue;
+        }
+        $abandoned++;
+        foreach (wpc_v2_journal_abandon_receipts($items) as $sha => $row) {
+            $failed_receipts[$sha] = $row;
+        }
+        error_log(sprintf(
+            '[wpc_v2_journal_drain] abandoned stale file=%s age_s=%d (TTL=%d)%s',
+            basename($stale_check), $age, $ttl_seconds, $force ? ' over_cap' : ''
+        ));
+    }
+    if (func_num_args() > 0) {
+        $deferred_receipts = array_values($failed_receipts);
+    } else {
+        wpc_v2_journal_send_abandon_acks(array_values($failed_receipts));
+    }
+    return $abandoned;
+}
+
+function wpc_v2_journal_send_abandon_acks(array $receipts) {
+    if (empty($receipts) || !function_exists('wpc_v2_pull_manifest_ack')) {
+        return;
+    }
+    foreach (array_chunk($receipts, 50) as $chunk) {
+        wpc_v2_pull_manifest_ack([], ['seen' => count($chunk), 'ingested' => 0, 'failed' => $chunk]);
+    }
+}
+
+function wpc_v2_journal_file_pulled(array $entries, array $pulled_bytes_by_url) {
+    foreach ($entries as $e) {
+        if (!is_array($e) || empty($e['sizeLabel']) || empty($e['format'])) continue;
+        if (isset($e['source']) && $e['source'] === 'lazycdn') continue;
+        if ((isset($e['type']) ? (string) $e['type'] : 'persisted') !== 'persisted_pending_bytes') continue;
+        $url = isset($e['fetch_url']) ? (string) $e['fetch_url'] : '';
+        if ($url === '' || !isset($pulled_bytes_by_url[$url]) || !is_string($pulled_bytes_by_url[$url]) || $pulled_bytes_by_url[$url] === '') {
+            return false;
+        }
+    }
+    return true;
 }
 
 /**
@@ -212,6 +412,9 @@ function wpc_v2_journal_note_progress($drained, $remaining) {
  * directly (no HMAC needed when triggered by cron).
  */
 function wpc_v2_journal_drain_run() {
+    if (function_exists('wpc_landed_pages_drain')) {
+        wpc_landed_pages_drain();
+    }
     @ini_set('memory_limit', '256M');
     @ini_set('max_execution_time', '30');
     @ignore_user_abort(true);
@@ -248,11 +451,6 @@ function wpc_v2_journal_drain_run() {
     }
 
 
-    // GET_LOCK — a backed-off drain costs one file stat, no DB contention, no loopback.
-    if (wpc_v2_journal_backoff_until() > time()) {
-        return;
-    }
-
     global $wpdb;
     $got = wpc_worker_lock('wpc_v2_journal_drain', 0) ? 1 : 0;
     if (!$got) {
@@ -260,30 +458,22 @@ function wpc_v2_journal_drain_run() {
         return;
     }
 
+    $abandon_receipts = [];
     try {
+        $total_files_abandoned = wpc_v2_journal_reap_stale($abandon_receipts);
+        if (wpc_v2_journal_backoff_until() > time()) {
+            return;
+        }
         $started = microtime(true);
         $wall_budget_s = 8.0;
         $total_files_drained = 0;
         $total_images = 0;
         $total_files_retained = 0;
-        $total_files_abandoned = 0;
-
-
-        $ttl_seconds = defined('WPC_V2_JOURNAL_FILE_TTL_S') ? max(60, (int) WPC_V2_JOURNAL_FILE_TTL_S) : 1800;
-        foreach (wpc_v2_journal_list_files(200) as $stale_check) {
-            if (file_exists($stale_check) && (time() - filemtime($stale_check)) > $ttl_seconds) {
-                $age = time() - filemtime($stale_check);
-                @unlink($stale_check);
-                $total_files_abandoned++;
-                error_log(sprintf(
-                    '[wpc_v2_journal_drain] abandoned stale file=%s age_s=%d (TTL=%d)',
-                    basename($stale_check), $age, $ttl_seconds
-                ));
-            }
-        }
 
 
         $attempted_this_run = [];
+        $retry_names = array_flip(array_map('strval', (array) get_option('wpc_v2_journal_retry', [])));
+        $retained_names = [];
 
         while ((microtime(true) - $started) < $wall_budget_s) {
             $files = wpc_v2_journal_list_files(50);
@@ -291,6 +481,18 @@ function wpc_v2_journal_drain_run() {
                 $files = array_values(array_diff($files, $attempted_this_run));
             }
             if (empty($files)) break;
+            if (!empty($retry_names)) {
+                $fresh_files = [];
+                $again_files = [];
+                foreach ($files as $listed) {
+                    if (isset($retry_names[basename($listed)])) {
+                        $again_files[] = $listed;
+                    } else {
+                        $fresh_files[] = $listed;
+                    }
+                }
+                $files = array_merge($fresh_files, $again_files);
+            }
 
             // Group entries by imageID
             $by_image = [];
@@ -311,8 +513,10 @@ function wpc_v2_journal_drain_run() {
                         'jobId'   => isset($payload['jobId']) ? (string) $payload['jobId'] : '',
                         'entries' => [],
                         'files'   => [],
+                        'file_entries' => [],
                     ];
                 }
+                $by_image[$imageID]['file_entries'][$file] = [];
                 // Each file's payload['entries'] is a wrapped structure:
                 //   ['flush_reason' => ..., 'received_ms' => ..., 'entries' => [...actual entries...]]
                 if (isset($payload['entries']) && is_array($payload['entries'])) {
@@ -320,6 +524,7 @@ function wpc_v2_journal_drain_run() {
                     if (is_array($inner)) {
                         foreach ($inner as $entry) {
                             $by_image[$imageID]['entries'][] = $entry;
+                            $by_image[$imageID]['file_entries'][$file][] = $entry;
                         }
                     }
                 }
@@ -340,7 +545,7 @@ function wpc_v2_journal_drain_run() {
                         if (!is_array($entry)) continue;
                         if (($entry['type'] ?? '') !== 'persisted_pending_bytes') continue;
                         $url = isset($entry['fetch_url']) ? (string) $entry['fetch_url'] : '';
-                        if ($url === '' || isset($pulls_by_url[$url])) continue;
+                        if ($url === '' || isset($pulls_by_url[$url]) || !wpc_v2_pull_fetch_allowed($url)) continue;
                         $pulls_by_url[$url] = $url;
                         $pull_meta_by_url[$url] = [
                             'size'   => isset($entry['bytes_size'])   ? (int) $entry['bytes_size']   : null,
@@ -352,7 +557,9 @@ function wpc_v2_journal_drain_run() {
                     $t_pull_start  = microtime(true);
                     $urls_indexed  = array_values($pulls_by_url);
                     $meta_indexed  = array_values($pull_meta_by_url);
-                    $pulled        = wpc_v2_parallel_pull($urls_indexed, $meta_indexed);
+                    $pulled        = wpc_v2_parallel_pull($urls_indexed, $meta_indexed, [
+                        'overall_timeout_ms' => max(1000, (int) floor(($wall_budget_s - (microtime(true) - $started)) * 1000)),
+                    ]);
                     foreach ($urls_indexed as $i => $u) {
                         if (isset($pulled[$i])) {
                             $pulled_bytes_by_url[$u] = $pulled[$i];
@@ -376,22 +583,32 @@ function wpc_v2_journal_drain_run() {
                 $result = wpc_v2_journal_merge_for_image($imageID, $group['jobId'], $group['entries'], $pulled_bytes_by_url);
 
 
-                if ($result['ok'] && empty($result['any_pull_failed'])) {
+                if ($result['ok']) {
+                    $kept = 0;
                     foreach ($group['files'] as $file) {
-                        @unlink($file);
-                        $total_files_drained++;
+                        if (empty($result['any_pull_failed']) || wpc_v2_journal_file_pulled($group['file_entries'][$file], $pulled_bytes_by_url)) {
+                            @unlink($file);
+                            $total_files_drained++;
+                        } else {
+                            $kept++;
+                            $retained_names[basename($file)] = 1;
+                        }
                     }
-                    $total_images++;
-                } else if ($result['ok'] && !empty($result['any_pull_failed'])) {
-                    $total_files_retained += count($group['files']);
-                    error_log(sprintf(
-                        '[wpc_v2_journal_drain] retaining_for_retry imageID=%d files=%d',
-                        $imageID, count($group['files'])
-                    ));
+                    if ($kept < count($group['files'])) {
+                        $total_images++;
+                    }
+                    if ($kept > 0) {
+                        $total_files_retained += $kept;
+                        error_log(sprintf(
+                            '[wpc_v2_journal_drain] retaining_for_retry imageID=%d files=%d',
+                            $imageID, $kept
+                        ));
+                    }
                 } else {
                     $total_files_retained += count($group['files']);
                     foreach ($group['files'] as $retained_file) {
                         @touch($retained_file);
+                        $retained_names[basename($retained_file)] = 1;
                     }
                     error_log(sprintf(
                         '[wpc_v2_journal_drain] retaining_after_failure imageID=%d files=%d reason=%s',
@@ -400,6 +617,14 @@ function wpc_v2_journal_drain_run() {
                     ));
                 }
             }
+        }
+
+        if (empty($retained_names)) {
+            if (!empty($retry_names)) {
+                delete_option('wpc_v2_journal_retry');
+            }
+        } else {
+            update_option('wpc_v2_journal_retry', array_map('strval', array_keys($retained_names)), false);
         }
 
         error_log(sprintf(
@@ -412,6 +637,11 @@ function wpc_v2_journal_drain_run() {
         ));
     } finally {
         wpc_worker_unlock('wpc_v2_journal_drain');
+        wpc_v2_journal_send_abandon_acks($abandon_receipts);
+    }
+
+    if (function_exists('wpc_v2_landed_flush') && function_exists('wpc_v2_landed_detached') && wpc_v2_landed_detached()) {
+        wpc_v2_landed_flush();
     }
 
     // Self-chain if files remain OR a pending-fire marker is set. The marker is
@@ -440,6 +670,10 @@ function wpc_v2_journal_drain_run() {
 function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array $pulled_bytes_by_url = []) {
     if (empty($entries)) {
         return ['ok' => true, 'merged' => 0, 'reason' => 'no_entries'];
+    }
+    if (class_exists('wps_ic_image_variants') && wps_ic_image_variants::landing_refused((int) $imageID)) {
+        wps_ic_image_variants::landing_refused_receipt((int) $imageID, 'journal');
+        return ['ok' => true, 'merged' => 0, 'reason' => 'restored'];
     }
     $merged = 0;
     $merged_keys = [];
@@ -540,9 +774,12 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
             if (file_exists($dest) && filesize($dest) === strlen($raw)
                 && hash_file('sha256', $dest) === hash('sha256', $raw)) {
                 $skip_write = true;
+                if (function_exists('wpc_v2_landed_receipt')) {
+                    wpc_v2_landed_receipt($imageID, $sz, $fmt, $dest, (string) ($e['source'] ?? 'journal'), (string) $jobId);
+                }
             }
             if (!$skip_write) {
-                $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $sz, 'fmt' => $fmt, 'src' => (string) ($e['source'] ?? 'journal'), 'claim' => wpc_v2_variant_claim($e)]]);
+                $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $sz, 'fmt' => $fmt, 'src' => (string) ($e['source'] ?? 'journal'), 'job' => (string) $jobId, 'claim' => wpc_v2_variant_claim($e)]]);
                 if (!empty($put['settled'])) {
                     // Settled by the store (no improvement, out of pending): nothing lands.
                     $any_drain_complete_signal = true;
@@ -787,26 +1024,6 @@ function wpc_v2_journal_list_files($limit = 50) {
     closedir($dh);
     sort($files);
     return $files;
-}
-
-/**
- * Cheap count of .jsonl files (no full readdir loop — just for the
- * "should we self-chain?" check).
- */
-function wpc_v2_journal_count_files() {
-    $up = wp_get_upload_dir();
-    if (empty($up['basedir'])) return 0;
-    $dir = rtrim($up['basedir'], '/\\') . '/wpci-journal';
-    if (!is_dir($dir)) return 0;
-    $n = 0;
-    $dh = @opendir($dir);
-    if (!$dh) return 0;
-    while (($f = readdir($dh)) !== false) {
-        if (substr($f, -6) === '.jsonl') $n++;
-        if ($n > 1000) break;
-    }
-    closedir($dh);
-    return $n;
 }
 
 /**

@@ -10,7 +10,7 @@ class wps_ic_preload
 
         if (!is_admin()) {
             $this->apikey = get_option(WPS_IC_OPTIONS)['api_key'];
-            if (!isset($_GET['apikey']) || $_GET['apikey'] != $this->apikey) {
+            if (!wpc_site_key_matches(wpc_get_string('apikey'))) {
                 die ('Failed authentication.');
             }
         }

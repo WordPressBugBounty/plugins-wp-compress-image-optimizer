@@ -32,15 +32,10 @@ if (!function_exists('wpc_detect_foreign_page_cache')) {
             return 'sg-optimizer';
         }
         // A non-WPC advanced-cache.php drop-in = another full-page cache owns the drop-in.
-        if (defined('WP_CACHE') && WP_CACHE && defined('WP_CONTENT_DIR') && @is_readable(WP_CONTENT_DIR . '/advanced-cache.php')) {
-            $head = @file_get_contents(WP_CONTENT_DIR . '/advanced-cache.php', false, null, 0, 4096);
-            if (is_string($head) && $head !== ''
-                && stripos($head, 'wp-compress') === false
-                && stripos($head, 'wps_ic') === false
-                && stripos($head, 'wpc_') === false
-                && stripos($head, 'advancedCache') === false) {
-                return 'foreign-advanced-cache';
-            }
+        if (defined('WP_CACHE') && WP_CACHE && defined('WP_CONTENT_DIR') && @is_readable(WP_CONTENT_DIR . '/advanced-cache.php')
+            && function_exists('wpc_advanced_cache_dropin_state')
+            && wpc_advanced_cache_dropin_state(WP_CONTENT_DIR . '/advanced-cache.php') === 'foreign') {
+            return 'foreign-advanced-cache';
         }
         return false;
     }
@@ -269,7 +264,9 @@ if (!function_exists('wpc_apply_link_preset')) {
                     continue;
                 }
             }
-            if (!isset($s[$k]) || $s[$k] === '' || $s[$k] === null) {
+            $wpc_blank_is_unset = isset($s[$k]) && $s[$k] === '' && (string) $ctx !== 'upgrade'
+                && !(function_exists('wpc_setting_chosen') && wpc_setting_chosen($k));
+            if (!isset($s[$k]) || $wpc_blank_is_unset) {
                 $s[$k] = $v;
                 $applied[$k] = $v;
             } else {
@@ -294,7 +291,9 @@ if (!function_exists('wpc_apply_link_preset')) {
         }
         if (!isset($s['cache']['advanced'])) {
             $foreign = wpc_detect_foreign_page_cache();
-            if ($foreign === false) {
+            if (function_exists('wpc_page_cache_blocked') && wpc_page_cache_blocked()) {
+                $skipped['cache.advanced'] = 'constant:WPC_NO_PAGE_CACHE';
+            } elseif ($foreign === false) {
                 $s['cache']['advanced'] = $levers['advanced_cache'];
                 $applied['cache.advanced'] = $levers['advanced_cache'];
             } else {
@@ -324,7 +323,8 @@ if (!function_exists('wpc_apply_link_preset')) {
         }
 
 
-        if ($wpc_fresh_link && get_option('wpc_install_fresh') === '1'
+        if ($wpc_fresh_link && in_array((string) $ctx, ['link', 'connect', 'connect-lite'], true)
+            && get_option('wpc_install_fresh') === '1'
             && get_option('wpc_auto_mode') === false
             && apply_filters('wpc_link_auto_mode', true)) {
             update_option('wpc_auto_mode', '1', false);

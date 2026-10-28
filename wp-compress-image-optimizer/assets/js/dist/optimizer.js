@@ -28,12 +28,26 @@ checkMobile();
  * Each bundle calls this once with its own rescan entry point; that entry point must be safe
  * to re-run, since it is called again for every injected batch.
  * childList only + the match test means a lane's own src writes cannot re-enter the callback.
+ *
+ * Armed only once the document has finished parsing: the initial markup is scanned by each
+ * bundle's own DOMContentLoaded pass, so the observer exists only for markup injected after
+ * that. These bundles run as a synchronous <script> in <head>; armed at execution, the
+ * observer saw every parser chunk that added a parked <img> as "injected", re-ran the scan,
+ * and each scan's getBoundingClientRect() reads forced a full layout of the half-parsed page
+ * (mvcustom.be, ticket 12247: 3-4 forced layouts of ~200 ms each before DOMContentLoaded at
+ * 4x CPU).
  */
 var wpcInjectedObserver = null;
 
 function wpcWatchInjected(rescan, sel) {
     try {
         if (wpcInjectedObserver || !window.MutationObserver) {
+            return;
+        }
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", function () {
+                wpcWatchInjected(rescan, sel);
+            }, {once: true});
             return;
         }
         wpcInjectedObserver = new MutationObserver(function (mutations) {
@@ -68,66 +82,8 @@ function wpcWatchInjected(rescan, sel) {
     }
 }
 
-var preloadRunned = false;
-var wpcWindowWidth = window.innerWidth;
 
 
-if (n489D_vars.linkPreload === 'true') {
-    document.addEventListener('DOMContentLoaded', function () {
-        const preloadedLinks = new Set(); // To avoid duplicate preloads
-
-        document.body.addEventListener('mouseover', function () {
-            // Check if the hovered element is a link
-            const link = event.target.closest('a');
-            if (!link || preloadedLinks.has(link.href)) return; // Skip if not a link or already preloaded
-
-            // Check if the link contains any excluded strings
-            // const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
-            //     link.href.includes(excludeStr)
-            // );
-            const isExcluded = n489D_vars.excludeLink.some(function(excludeStr) {
-                return link.href.indexOf(excludeStr) !== -1;
-            });
-
-            // Only preload if link is not excluded and is same origin
-            if (!isExcluded && link.origin === location.origin) {
-                preloadLink(link.href);
-            }
-        });
-
-        document.body.addEventListener('touchstart', function () {
-            const link = event.target.closest('a');
-            if (!link || preloadedLinks.has(link.href)) return;
-
-            // Check if the link contains any excluded strings
-            // const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
-            //     link.href.includes(excludeStr)
-            // );
-            const isExcluded = n489D_vars.excludeLink.some(function(excludeStr) {
-                return link.href.indexOf(excludeStr) !== -1;
-            });
-
-            // Only preload if link is not excluded and is same origin
-            if (!isExcluded && link.origin === location.origin) {
-                preloadLink(link.href);
-            }
-        });
-
-        function preloadLink(url) {
-            preloadedLinks.add(url); // Mark this URL as preloaded
-            fetch(url, {
-                method: 'GET',
-                mode: 'no-cors'
-            })
-                .then(function () { // Use traditional function syntax
-                    //console.log('Preloaded: ' + url);
-                })
-                .catch(function (err) { // Use traditional function syntax
-                    //console.error('Preload failed for: ' + url, err);
-                });
-        }
-    });
-}
 function SetupNewApiURL(newApiURL, imgWidth, imageElement) {
     if (imgWidth > 0 && !imageElement.classList.contains('wpc-excluded-adaptive')) {
         if (imgWidth > 2560) {

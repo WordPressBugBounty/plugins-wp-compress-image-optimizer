@@ -68,7 +68,8 @@ class wps_ic_asset_version
         } else {
             return '';
         }
-        return @is_file($f) ? $f : '';
+        $real = wpc_install_file_real($f);
+        return ($real !== '' && @is_file($real)) ? $real : '';
     }
 
     /** Invalidates every cached token: the next request re-reads mtime and size. */
@@ -77,6 +78,16 @@ class wps_ic_asset_version
         self::$memo = [];
         if (function_exists('update_option')) {
             update_option(self::SALT_OPTION, (string) time() . '.' . mt_rand(1000, 9999), false);
+        }
+    }
+
+    /** Drops one file's cached token: the next request re-reads its mtime and size. */
+    public static function forget($path)
+    {
+        $path = (string) $path;
+        unset(self::$memo[$path]);
+        if ($path !== '' && function_exists('delete_transient')) {
+            delete_transient('wpc_av_' . md5(self::salt() . '|' . $path));
         }
     }
 

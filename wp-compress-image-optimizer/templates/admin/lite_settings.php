@@ -171,21 +171,9 @@ $cf = get_option(WPS_IC_CF);
 if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedScore))) {
     ?>
     <script type="text/javascript">
-        jQuery(document).ready(function ($) {
-            var checkFetch = setInterval(function () {
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: { action: 'wps_fetchInitialTest', nonce: wpc_ajaxVar.nonce },
-                    success: function (response) {
-                        if (response.success) {
-                            clearInterval(checkFetch);
-                            window.location.reload();
-                        }
-                    }
-                });
-            }, 5000);
-        });
+        // One poller for this card and the Retest button (assets/v4/js/lite.js explains the
+        // back-off and the stop; a 5 s setInterval here polled forever, ticket 12241).
+        jQuery(function () { if (window.wpcGpsPoll) window.wpcGpsPoll.start({mode: 'initial'}); });
     </script>
 <?php } ?>
 
@@ -340,8 +328,9 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                         </div>
                         <div class="wpc-box-content">
                             <ul class="wpc-toggles">
-                                <li>
-                                    <?php echo $gui::simpleCheckbox(esc_html__('Cache', WPS_IC_TEXTDOMAIN), '', false, '0', ['cache', 'advanced'], false); ?>
+                                <?php $pageCacheBlocked = function_exists('wpc_page_cache_blocked') && wpc_page_cache_blocked(); ?>
+                                <li<?php echo $pageCacheBlocked ? ' style="opacity:.55;pointer-events:none"' : ''; ?>>
+                                    <?php echo $gui::simpleCheckbox(esc_html__('Cache', WPS_IC_TEXTDOMAIN), $pageCacheBlocked ? esc_html__('Disabled by WPC_NO_PAGE_CACHE in wp-config.php', WPS_IC_TEXTDOMAIN) : '', false, '0', ['cache', 'advanced'], false); ?>
                                 </li>
                                 <li>
                                     <?php echo $gui::simpleCheckbox(esc_html__('CSS', WPS_IC_TEXTDOMAIN), '', false, '0', ['critical', 'css'], false); ?>

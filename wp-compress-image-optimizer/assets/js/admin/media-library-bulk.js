@@ -63,6 +63,7 @@ jQuery(document).ready(function ($) {
     }
 
     function _wpcConfirmRestoreStart(count) {
+        if (window.WPCRestoreAll) { return window.WPCRestoreAll.confirm(count); }
         // v7.04.68 — Body text bumped to 15px (was 14px-via-wrapper but SA2 base
         // styles can scale it smaller). Tightened hierarchy: lead paragraph in
         // primary text color, secondary paragraph in muted slate with the
@@ -270,7 +271,7 @@ jQuery(document).ready(function ($) {
         $.ajax({
             url: ajaxurl,
             type: 'POST',
-            data: {action: 'wpc_ic_start_bulk_restore', nonce: nonce},
+            data: {action: 'wpc_ic_start_bulk_restore', nonce: nonce, pause_sd: (window.WPCRestoreAll && window.WPCRestoreAll.pause) ? 1 : 0},
             // v7.04.71 — Re-enable Restore button on ANY response so user
             // can retry immediately after a 409/error instead of waiting
             // 8s for the debounce failsafe. Defensive null-checks because

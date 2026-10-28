@@ -75,13 +75,120 @@ jQuery(document).ready((function($) {
             }
         };
     }
-    $("body").on("click", ".wp-compress-view-as-visitor>a", (function(e) {
-        e.preventDefault();
-        var url = new URL(window.location.href);
-        url.searchParams.set("wpc_visitor_mode", "true");
-        url = url.toString();
-        window.open(url);
-    }));
+    function wpcBarTip(item) {
+        var a = item.children("a, .ab-item").first();
+        var base = a.attr("data-wpc-tip");
+        if (base === undefined) {
+            base = String(a.attr("title") || "").split(" · ")[0];
+            a.attr("data-wpc-tip", base);
+        }
+        return {
+            a: a,
+            base: base
+        };
+    }
+    function wpcBarStamp(item, label, wait) {
+        try {
+            var t = wpcBarTip(item);
+            label = label || "Purged just now";
+            t.a.attr("title", wait && wait > 0 ? label : t.base + " · " + label);
+            if (wait && wait > 0) {
+                item.addClass("wpc-bar-disabled");
+                t.a.attr("aria-disabled", "true");
+            }
+        } catch (e) {}
+    }
+    function wpcBarRebuilding(item, label) {
+        try {
+            var t = wpcBarTip(item);
+            item.addClass("wpc-bar-disabled");
+            t.a.attr("aria-disabled", "true").attr("title", "Rebuilding…");
+            setTimeout((function() {
+                item.removeClass("wpc-bar-disabled");
+                t.a.removeAttr("aria-disabled");
+                t.a.attr("title", label ? t.base + " · " + label : t.base);
+            }), 18e4);
+        } catch (e) {}
+    }
+    function wpcBarConfirm(item, onConfirm) {
+        var data = item.find(".wpc-bar-confirm");
+        if (!data.length) {
+            onConfirm();
+            return;
+        }
+        var opener = document.activeElement;
+        var overlay = document.createElement("div");
+        overlay.className = "wpc-bar-modal";
+        var box = document.createElement("div");
+        box.className = "wpc-bar-modal-box";
+        box.setAttribute("role", "dialog");
+        box.setAttribute("aria-modal", "true");
+        box.setAttribute("aria-labelledby", "wpc-bar-modal-title");
+        box.setAttribute("aria-describedby", "wpc-bar-modal-body");
+        var title = document.createElement("h2");
+        title.className = "wpc-bar-modal-title";
+        title.id = "wpc-bar-modal-title";
+        title.textContent = data.attr("data-title");
+        var body = document.createElement("p");
+        body.className = "wpc-bar-modal-body";
+        body.id = "wpc-bar-modal-body";
+        body.textContent = data.attr("data-body");
+        var actions = document.createElement("div");
+        actions.className = "wpc-bar-modal-actions";
+        var cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.className = "wpc-bar-modal-cancel";
+        cancel.textContent = data.attr("data-cancel");
+        var ok = document.createElement("button");
+        ok.type = "button";
+        ok.className = "wpc-bar-modal-ok";
+        ok.textContent = data.attr("data-ok");
+        actions.appendChild(cancel);
+        actions.appendChild(ok);
+        box.appendChild(title);
+        box.appendChild(body);
+        box.appendChild(actions);
+        overlay.appendChild(box);
+        function close() {
+            document.removeEventListener("keydown", onKey, true);
+            if (overlay.parentNode) {
+                overlay.parentNode.removeChild(overlay);
+            }
+            try {
+                if (opener && opener.focus) {
+                    opener.focus();
+                }
+            } catch (e) {}
+        }
+        function onKey(ev) {
+            if (ev.key === "Escape") {
+                ev.preventDefault();
+                ev.stopPropagation();
+                close();
+            } else if (ev.key === "Tab") {
+                ev.preventDefault();
+                (document.activeElement === ok ? cancel : ok).focus();
+            } else if (ev.key === "Enter" && document.activeElement !== cancel) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                close();
+                onConfirm();
+            }
+        }
+        cancel.onclick = close;
+        ok.onclick = function() {
+            close();
+            onConfirm();
+        };
+        overlay.onclick = function(ev) {
+            if (ev.target === overlay) {
+                close();
+            }
+        };
+        document.addEventListener("keydown", onKey, true);
+        document.body.appendChild(overlay);
+        ok.focus();
+    }
     $("body").on("click", ".wp-compress-bar-generate-critical-css>a", (function(e) {
         e.preventDefault();
         var done = wpcBarBusy("Generating Critical...");
@@ -116,21 +223,18 @@ jQuery(document).ready((function($) {
     }
     function wpcErrText(response, d) {
         if (d && d.message) { return d.message; }
+        if (response && response.data && response.data.message) { return response.data.message; }
         if (response && typeof response.data === "string" && response.data) { return response.data; }
         return "unexpected reply";
     }
-    $("body").on("click", ".wp-compress-bar-status>a", (function(e) {
-        e.preventDefault();
-        return false;
-    }));
     $("body").on("click", ".wp-compress-bar-refresh-page>a", (function(e) {
         e.preventDefault();
         var url = wpcPageUrl(this);
         if (!url) {
-            wpcBarNotice("Could not work out which page to refresh.", "error");
+            wpcBarNotice("Could not work out which page to purge.", "error");
             return false;
         }
-        var done = wpcBarBusy("Refreshing page...");
+        var done = wpcBarBusy("Purging page...");
         $.post(wpc_ajaxVar.ajaxurl, {
             action: "wps_ic_purge_html",
             page_url: url,
@@ -140,60 +244,23 @@ jQuery(document).ready((function($) {
             var d = (response && response.data) ? response.data : {};
             if (response && response.success) {
                 if (window.console && console.info) {
-                    console.info("WPC Refresh page:", d.situation, d.layers);
+                    console.info("WPC Clear page:", d.situation, d.layers);
                 }
-                wpcBarNotice(d.message || "This page's cache was refreshed.",
+                wpcBarNotice(d.message || "This page's cache was purged.",
                     d.situation === "just-refreshed" ? "info" : "success");
             } else {
-                wpcBarNotice("Refresh failed: " + wpcErrText(response, d), "error");
+                wpcBarNotice("Purging the page failed: " + wpcErrText(response, d), "error");
             }
         })).fail((function(x) {
             done();
-            wpcBarNotice("Refresh request failed (HTTP " + (x && x.status) + ") — server/hosting issue.", "error");
-        }));
-        return false;
-    }));
-    $("body").on("click", ".wp-compress-bar-rebuild-page>a", (function(e) {
-        e.preventDefault();
-        var li = $(this).closest("li");
-        if (li.hasClass("wpc-bar-inflight")) {
-            wpcBarNotice("A fresh version of this page is already being generated — it applies automatically when it lands.", "info");
-            return false;
-        }
-        var url = wpcPageUrl(this);
-        if (!url) {
-            wpcBarNotice("Could not work out which page to rebuild.", "error");
-            return false;
-        }
-        var done = wpcBarBusy("Rebuilding page...");
-        $.post(wpc_ajaxVar.ajaxurl, {
-            action: "wps_ic_rebuild_optimizations",
-            page_url: url,
-            wps_ic_nonce: wpc_ajaxVar.nonce
-        }, (function(response) {
-            done();
-            var d = (response && response.data) ? response.data : {};
-            if (response && response.success) {
-                if (window.console && console.info) {
-                    console.info("WPC Rebuild page:", d.situation, d.did);
-                }
-                wpcBarNotice(d.message || "Rebuilding this page.",
-                    d.situation === "rebuilding-page" ? "success" : "info");
-                if (d.situation === "rebuilding-page" || d.situation === "already-regenerating") {
-                    li.addClass("wpc-bar-inflight");
-                }
-            } else {
-                wpcBarNotice("Rebuild failed: " + wpcErrText(response, d), "error");
-            }
-        })).fail((function(x) {
-            done();
-            wpcBarNotice("Rebuild request failed (HTTP " + (x && x.status) + ") — server/hosting issue.", "error");
+            wpcBarNotice("Purging the page failed (HTTP " + (x && x.status) + ") — server/hosting issue.", "error");
         }));
         return false;
     }));
     $("body").on("click", ".wp-compress-bar-purge-html-cache>a", (function(e) {
         e.preventDefault();
-        var done = wpcBarBusy("Purging cache...");
+        var item = $(this).closest("li");
+        var done = wpcBarBusy("Purging page cache...");
         $.post(wpc_ajaxVar.ajaxurl, {
             action: "wps_ic_purge_html",
             wps_ic_nonce: wpc_ajaxVar.nonce
@@ -208,17 +275,20 @@ jQuery(document).ready((function($) {
                     return String(l).indexOf("FAIL") !== -1;
                 }));
                 if (fails.length) {
-                    wpcBarNotice("Purge HTML: a cache layer FAILED — " + fails.join(", ") + " (details in browser console)", "error");
+                    wpcBarNotice("Page cache: a cache layer FAILED — " + fails.join(", ") + " (details in browser console)", "error");
+                } else {
+                    wpcBarNotice("Page cache purged. Pages rebuild on their next visit.", "success");
                 }
+                wpcBarStamp(item, response.data && response.data.label, 0);
                 if ($("#optimizationTable").find("div").length > 0) {
                     location.reload();
                 }
             } else {
-                wpcBarNotice("Purge HTML failed: " + (response.data || "unknown error"), "error");
+                wpcBarNotice("Purging the page cache failed: " + wpcErrText(response), "error");
             }
         })).fail((function(x) {
             done();
-            wpcBarNotice("Purge HTML request failed (HTTP " + (x && x.status) + ") — server/hosting issue.", "error");
+            wpcBarNotice("Page cache request failed (HTTP " + (x && x.status) + ") — server/hosting issue.", "error");
         }));
         return false;
     }));
@@ -251,128 +321,67 @@ jQuery(document).ready((function($) {
         wpcCfDebug("doctor", "Doctor");
         return false;
     }));
-    // "Advanced" is a container, not an action.
-    $("body").on("click", ".wp-compress-bar-advanced>a", (function(e) {
+    // "Clear cache" is a container, not an action.
+    $("body").on("click", ".wp-compress-bar-clear-menu>a", (function(e) {
         e.preventDefault();
-    }));
-    // The one primary intent: "my optimizations are wrong, fix them." The server decides
-    // situationally which layers to touch, so there is nothing for the operator to sequence.
-    $("body").on("click", ".wp-compress-bar-rebuild>a", (function(e) {
-        e.preventDefault();
-        var done = wpcBarBusy("Rebuilding...");
-        $.post(wpc_ajaxVar.ajaxurl, {
-            action: "wps_ic_rebuild_optimizations",
-            wps_ic_nonce: wpc_ajaxVar.nonce
-        }, (function(response) {
-            done();
-            var d = (response && response.data) ? response.data : {};
-            if (response && response.success) {
-                if (window.console && console.info) {
-                    console.info("WPC Rebuild:", d.situation, d.did);
-                }
-                wpcBarNotice(d.message || "Rebuild started.",
-                    d.situation === "already-regenerating" ? "info" : "success");
-            } else {
-                wpcBarNotice("Rebuild failed: " + ((d && d.message) || "unexpected reply"), "error");
-            }
-        })).fail((function(x) {
-            done();
-            wpcBarNotice("Rebuild request failed (HTTP " + (x && x.status) + ") — server/hosting issue.", "error");
-        }));
-    }));
-    $("body").on("click", ".wp-compress-bar-remove-critical-css>a", (function(e) {
-        e.preventDefault();
-        if (!window.confirm("Reset Critical CSS?\n\nThis marks every critical artifact stale and DROPS CACHED PAGES so they re-render. Pages render with full theme CSS (correct but slower) until fresh versions land. Images and the CDN are not touched.\n\nMost of the time \"Rebuild Optimizations\" is what you want instead.")) {
-            return false;
-        }
-        var done = wpcBarBusy("Removing...");
-        $.post(wpc_ajaxVar.ajaxurl, {
-            action: "wps_ic_purge_critical_css",
-            hard_purge: "1",
-            wps_ic_nonce: wpc_ajaxVar.nonce
-        }, (function(response) {
-            done();
-            if (response.success) {
-                wpcBarNotice("Critical CSS fully removed — pages render with full theme CSS until fresh versions land automatically.", "success");
-            } else {
-                wpcBarNotice("Remove Critical CSS failed: " + (response.data || "unknown error"), "error");
-            }
-        })).fail((function(x) {
-            done();
-            wpcBarNotice("Remove Critical CSS request failed (HTTP " + (x && x.status) + ") — server/hosting issue.", "error");
-        }));
-        return false;
     }));
     $("body").on("click", ".wp-compress-bar-purge-critical-css>a", (function(e) {
         e.preventDefault();
-        var done = wpcBarBusy("Purging cache...");
-        $.post(wpc_ajaxVar.ajaxurl, {
-            action: "wps_ic_purge_critical_css",
-            wps_ic_nonce: wpc_ajaxVar.nonce
-        }, (function(response) {
-            done();
-            if (response.success) {
-                var mode = response.data && response.data.mode ? String(response.data.mode) : "";
-                if (window.console && console.info) {
-                    console.info("WPC Purge Critical:", mode || "ok");
+        var item = $(this).closest("li");
+        if (item.hasClass("wpc-bar-disabled")) {
+            return false;
+        }
+        wpcBarConfirm(item, (function() {
+            var done = wpcBarBusy("Rebuilding critical CSS...");
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: "wps_ic_purge_critical_css",
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, (function(response) {
+                done();
+                if (response.success) {
+                    var mode = response.data && response.data.mode ? String(response.data.mode) : "";
+                    if (window.console && console.info) {
+                        console.info("WPC Purge Critical:", mode || "ok");
+                    }
+                    wpcBarNotice("Critical CSS is rebuilding. Each page keeps its current version until the new one lands.", "success");
+                    wpcBarRebuilding(item, response.data && response.data.label);
+                } else {
+                    wpcBarNotice("Rebuilding critical CSS failed: " + wpcErrText(response), "error");
                 }
-                if (mode.indexOf("hard-deleted") === 0) {
-                    wpcBarNotice("Critical CSS fully removed — pages render with full theme CSS until fresh versions land automatically.", "success");
-                } else if (mode.indexOf("stale-marked") === 0) {
-                    wpcBarNotice("Critical CSS marked for regeneration — the current version keeps serving until the new one lands automatically.", "success");
-                } else if (mode.indexOf("nothing-to-mark") === 0) {
-                    wpcBarNotice("No Critical CSS on disk yet — regeneration dispatched; fresh versions land automatically.", "success");
-                }
-            } else {
-                wpcBarNotice("Purge Critical CSS failed: " + (response.data || "unknown error"), "error");
-            }
-        })).fail((function(x) {
-            done();
-            wpcBarNotice("Purge Critical CSS request failed (HTTP " + (x && x.status) + ") — server/hosting issue.", "error");
-        }));
-        return false;
-    }));
-    $("body").on("click", ".wp-compress-bar-pull-latest>a", (function(e) {
-        e.preventDefault();
-        var done = wpcBarBusy("Pulling latest...");
-        $.get(wpc_ajaxVar.ajaxurl, {
-            action: "wpc_crit_selftest",
-            refetch: "resync"
-        }, (function(response) {
-            done();
-            var r = response;
-            if (typeof r === "string") { try { r = JSON.parse(r); } catch (x) { r = {}; } }
-            if (r && r.refetch) {
-                if (window.console && console.info) { console.info("WPC Pull Latest:", r); }
-                wpcBarNotice("Full resync started (" + r.refetch.join(", ") + "). A fresh generation is being fetched now; everything else lands automatically over the next ~5 minutes — pages keep serving throughout.", "success");
-            } else {
-                wpcBarNotice("Pull Latest failed: " + ((r && r.error) || "unexpected reply") + " — is Critical CSS enabled?", "error");
-            }
-        })).fail((function(x) {
-            done();
-            wpcBarNotice("Pull Latest request failed (HTTP " + (x && x.status) + ") — server/hosting issue.", "error");
+            })).fail((function(x) {
+                done();
+                wpcBarNotice("Critical CSS request failed (HTTP " + (x && x.status) + ") — server/hosting issue.", "error");
+            }));
         }));
         return false;
     }));
     $("body").on("click", ".wp-compress-bar-clear-cache>a", (function(e) {
         e.preventDefault();
-        if (!window.confirm("Purge CDN Images?\n\nEvery optimized image is re-fetched from origin — this spends origin bandwidth and is rarely needed. Only use it if IMAGES are wrong, not CSS or HTML.")) {
+        var item = $(this).closest("li");
+        if (item.hasClass("wpc-bar-disabled")) {
             return false;
         }
-        var done = wpcBarBusy("Purging CDN...");
-        $.post(wpc_ajaxVar.ajaxurl, {
-            action: "wps_ic_purge_cdn",
-            wps_ic_nonce: wpc_ajaxVar.nonce
-        }, (function(response) {
-            done();
-            if (response.success) {
-                wpcBarNotice("CDN cache purged — optimized images re-fetch from origin as they are requested.", "success");
-            } else {
-                wpcBarNotice("Purge CDN failed: " + (response.data || "unknown error"), "error");
-            }
-        })).fail((function(x) {
-            done();
-            wpcBarNotice("Purge CDN request failed (HTTP " + (x && x.status) + ") — server/hosting issue.", "error");
+        wpcBarConfirm(item, (function() {
+            var done = wpcBarBusy("Purging the CDN...");
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: "wps_ic_purge_cdn",
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, (function(response) {
+                done();
+                if (response.success) {
+                    wpcBarNotice("CDN purged. Files are fetched again from your site as they are requested.", "success");
+                    wpcBarStamp(item, response.data && response.data.label, response.data && response.data.retry_in);
+                } else {
+                    var d = response && response.data;
+                    if (d && d.throttled) {
+                        wpcBarStamp(item, d.label, d.retry_in);
+                    }
+                    wpcBarNotice("Purging the CDN failed: " + wpcErrText(response), "error");
+                }
+            })).fail((function(x) {
+                done();
+                wpcBarNotice("CDN request failed (HTTP " + (x && x.status) + ") — server/hosting issue.", "error");
+            }));
         }));
         return false;
     }));

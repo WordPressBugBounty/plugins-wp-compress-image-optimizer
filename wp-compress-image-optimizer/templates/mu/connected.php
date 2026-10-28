@@ -36,19 +36,19 @@ else {
 }
 ?>
 <script type="text/javascript">
-  var wpc_siteID = "<?php echo $wpc_siteID; ?>";
+  var wpc_siteID = "<?php echo absint($wpc_siteID); ?>";
 </script>
 <form method="POST" action="#" class="wpc-ic-mu-settting-form">
 
-  <input type="hidden" name="siteID" value="<?php echo $wpc_siteID; ?>"/>
+  <input type="hidden" name="siteID" value="<?php echo absint($wpc_siteID); ?>"/>
 
   <div class="wpc-ic-mu-site-container ic-advanced-settings-v2">
     <div class="wpc-ic-mu-site-header">
       <div class="wpc-ic-mu-site-left-side">
         <div class="wpc-ic-mu-site-name">
           <span class="wpc-ic-mu-site-status-circle"></span>
-          <h3><?php echo $current_blog_details->blogname; ?></h3>
-          <h5><?php echo $current_blog_details->siteurl; ?></h5>
+          <h3><?php echo esc_html($current_blog_details->blogname); ?></h3>
+          <h5><?php echo esc_html($current_blog_details->siteurl); ?></h5>
         </div>
         <div style="display: inline-block;vertical-align: middle;margin-left:20px;">
           <div class="checkbox-container-v3-inverse wps-ic-ajax-checkbox" style="display: inline-block;">
@@ -64,7 +64,7 @@ else {
         </div>
       </div>
       <div class="wpc-ic-mu-site-right-side">
-        <a href="#" class="wpc-mu-individual-disconnect" data-site-id="<?php echo $wpc_siteID; ?>">Disconnect</a>
+        <a href="#" class="wpc-mu-individual-disconnect" data-site-id="<?php echo absint($wpc_siteID); ?>">Disconnect</a>
         <input type="submit" name="Save" value="Save" class="wpc-mu-save-settings"/>
       </div>
     </div>
@@ -77,7 +77,7 @@ else {
           <span class="ic-tooltip" title="Select your preferred balance of speed and quality. Over-Compression Prevention™ is included in all modes."><i class="fa fa-question-circle"></i></span>
 
           <div style="" class="wp-ic-select-box">
-            <input type="hidden" name="wp-ic-setting[optimization]" id="wp-ic-setting-optimization" value="<?php echo $settings['optimization']; ?>"/>
+            <input type="hidden" name="wp-ic-setting[optimization]" id="wp-ic-setting-optimization" value="<?php echo esc_attr($settings['optimization']); ?>"/>
             <ul>
               <li <?php echo $wps_ic_active_settings['optimization']['lossless']; ?>><a href="#" class="wps-ic-change-optimization" data-optimization_level="lossless">Lossless</a></li>
               <li <?php echo $wps_ic_active_settings['optimization']['intelligent']; ?>><a href="#" class="wps-ic-change-optimization" data-optimization_level="intelligent">Intelligent</a></li>
@@ -249,7 +249,7 @@ else {
                 </div>
                 <div class="setting-option wpc-checkbox" style="margin-top:20px;">
                   <div class="wp-ic-select-box full-width-box">
-                    <input type="hidden" name="wp-ic-setting[search-through]" id="wp-ic-search-through" value="<?php echo $settings['search-through']; ?>">
+                    <input type="hidden" name="wp-ic-setting[search-through]" id="wp-ic-search-through" value="<?php echo esc_attr($settings['search-through']); ?>">
                     <ul>
 											<?php
 											$options = ['html' => 'HTML Only', 'html+css' => 'HTML + CSS', 'all' => 'All URLs'];
@@ -293,6 +293,7 @@ else {
                 </div>
               </div>
 
+              <?php if (!function_exists('wpc_sd_mode_on') || !wpc_sd_mode_on()) : ?>
               <div class="setting-option">
                 <div class="setting-label">Optimize on Upload</div>
                 <div class="setting-value ic-custom-tooltip" title="Compress future image uploads with local mode settings.">
@@ -304,6 +305,7 @@ else {
                   </div>
                 </div>
               </div>
+              <?php endif; ?>
 
               <div class="setting-option">
                 <div class="setting-label">Disable WP Emoji Script</div>
@@ -386,7 +388,7 @@ else {
               </div>
 
               <div class="setting-value">
-                <p>We've detected your server is in <strong><?php echo $geolocation_text; ?></strong>.</p>
+                <p>We've detected your server is in <strong><?php echo esc_html($geolocation_text); ?></strong>.</p>
               </div>
 
               <a href="#" class="wps-ic-configure-popup" data-popup-width="600" data-popup="geo-location"><i class="svg-icon icon-configure"></i> Configure</a>
@@ -432,7 +434,7 @@ else {
 							if ( ! empty($zone_name)) {
 								?>
                 <div class="setting-value setting-configured cname-configured">
-                  <strong>Connected Domain: </strong><br/><?php echo $zone_name; ?><br/>
+                  <strong>Connected Domain: </strong><br/><?php echo esc_html($zone_name); ?><br/>
                 </div>
                 <div class="setting-value setting-configure" style="display: none;">
                   <p>Use <strong>any domain</strong> you own to serve images and assets.</p>
@@ -442,7 +444,7 @@ else {
 							else {
 								?>
                 <div class="setting-value setting-configured cname-configured" style="display: none;">
-                  <strong>Connected Domain: </strong><br/><?php echo $zone_name; ?><br/>
+                  <strong>Connected Domain: </strong><br/><?php echo esc_html($zone_name); ?><br/>
                 </div>
                 <div class="setting-value setting-configure">
                   <p>Use <strong>any domain</strong> you own to serve images and assets.</p>
@@ -494,7 +496,7 @@ else {
       </div>
 
       <div class="cdn-popup-content">
-        <p class="wpc-dynamic-text">We have detected that your server is located in <?php echo $geolocation_text; ?>, if that's not correct, please select the nearest region below.</p>
+        <p class="wpc-dynamic-text">We have detected that your server is located in <?php echo esc_html($geolocation_text); ?>, if that's not correct, please select the nearest region below.</p>
         <form method="post" action="#">
           <select name="location-select">
 						<?php
@@ -552,7 +554,7 @@ else {
 							$external_url_exclude = implode("\n", $external_url_exclude);
 						}
 						?>
-            <textarea name="exclude-list-textarea" class="exclude-list-textarea-value" placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"><?php echo $external_url_exclude; ?></textarea>
+            <textarea name="exclude-list-textarea" class="exclude-list-textarea-value" placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"><?php echo esc_textarea(is_string($external_url_exclude) ? $external_url_exclude : ''); ?></textarea>
             <div class="wps-empty-row">&nbsp;</div>
 
           </div>
@@ -562,12 +564,11 @@ else {
               <h3>Exclude from Lazy</h3>
             </div>
 						<?php
-						$lazy_exclude = get_option('wpc-ic-lazy-exclude');
-						if ( ! empty($lazy_exclude)) {
-							$lazy_exclude = implode("\n", $lazy_exclude);
-						}
+						$lazy_exclude_option = get_option('wpc-excludes');
+						$lazy_exclude = is_array($lazy_exclude_option) && !empty($lazy_exclude_option['lazy']) && is_array($lazy_exclude_option['lazy'])
+							? implode("\n", $lazy_exclude_option['lazy']) : '';
 						?>
-            <textarea name="exclude-lazy-textarea" class="exclude-lazy-textarea-value" placeholder="e.g. wp-content/themes/folder/images, imagefilename.jpg"><?php echo $lazy_exclude; ?></textarea>
+            <textarea name="exclude-lazy-textarea" class="exclude-lazy-textarea-value" placeholder="e.g. wp-content/themes/folder/images, imagefilename.jpg"><?php echo esc_textarea(is_string($lazy_exclude) ? $lazy_exclude : ''); ?></textarea>
             <div class="wps-empty-row">&nbsp;</div>
           </div>
             <div class="cdn-popup-content">
@@ -581,7 +582,7 @@ else {
                     $delay_js_exclude = implode("\n", $delay_js_exclude);
                 }
                 ?>
-                <textarea name="delay-js-exclude-list-textarea" class="delay-js-exclude-list-textarea-value" placeholder="e.g. plugin-name/js/script.js, scripts.js, plugin-name/"><?php echo $delay_js_exclude; ?></textarea>
+                <textarea name="delay-js-exclude-list-textarea" class="delay-js-exclude-list-textarea-value" placeholder="e.g. plugin-name/js/script.js, scripts.js, plugin-name/"><?php echo esc_textarea(is_string($delay_js_exclude) ? $delay_js_exclude : ''); ?></textarea>
                 <div class="wps-empty-row">&nbsp;</div>
 
             </div>
@@ -628,14 +629,14 @@ else {
 						?>
             <ul>
               <li>1. Create a subdomain or domain that you wish to use.</li>
-              <li>2. Edit the DNS records for the domain to create a new CNAME pointed at <strong><?php echo $zone_name; ?></strong></li>
+              <li>2. Edit the DNS records for the domain to create a new CNAME pointed at <strong><?php echo esc_html(is_string($zone_name) ? $zone_name : ''); ?></strong></li>
               <li>3. Enter the url you've pointed below:</li>
             </ul>
             <form method="post" action="#" class="wpc-form-inline">
 							<?php
 							$custom_cname = get_option('ic_custom_cname');
 							?>
-              <input type="text" name="custom-cdn" placeholder="Example: cdn.mysite.com" value="<?php echo $custom_cname; ?>"/>
+              <input type="text" name="custom-cdn" placeholder="Example: cdn.mysite.com" value="<?php echo esc_attr($custom_cname); ?>"/>
               <input type="submit" value="Save" name="save"/>
             </form>
             <div class="custom-cdn-error-message wpc-error-text" style="display: none;">
@@ -660,14 +661,14 @@ else {
 						?>
             <ul>
               <li>1. Create a subdomain or domain that you wish to use.</li>
-              <li>2. Edit the DNS records for the domain to create a new CNAME pointed at <strong><?php echo $zone_name; ?></strong></li>
+              <li>2. Edit the DNS records for the domain to create a new CNAME pointed at <strong><?php echo esc_html(is_string($zone_name) ? $zone_name : ''); ?></strong></li>
               <li>3. Enter the url you've pointed below:</li>
             </ul>
             <form method="post" action="#" class="wpc-form-inline">
 							<?php
 							$custom_cname = get_option('ic_custom_cname');
 							?>
-              <input type="text" name="custom-cdn" placeholder="Example: cdn.mysite.com" value="<?php echo $custom_cname; ?>"/>
+              <input type="text" name="custom-cdn" placeholder="Example: cdn.mysite.com" value="<?php echo esc_attr($custom_cname); ?>"/>
               <input type="submit" value="Save" name="save"/>
             </form>
             <p class="wpc-error-text"><span class="icon-container close-toggle"><i class="icon-cancel"></i></span> Seems like you have issues with your custom CDN configuration.</p>
@@ -721,7 +722,7 @@ else {
       <img src="<?php echo WPS_IC_URI; ?>assets/mu/images/disconnect.svg" class="disconnect-logo"/>
       <h3>Are you sure you wish to disconnect?</h3>
       <p style="font-size:14px;">You may reconnect at any time. If you are in live mode, image optimization and delivery will stop immediately. If you've locally optimized images, images will remain in their current state after deactivation.</p>
-      <p style="color:#57A3E5;"><?php echo $current_blog_details->siteurl; ?></p>
+      <p style="color:#57A3E5;"><?php echo esc_html($current_blog_details->siteurl); ?></p>
     </div>
 
     <div class="cdn-popup-bottom-border">&nbsp;</div>

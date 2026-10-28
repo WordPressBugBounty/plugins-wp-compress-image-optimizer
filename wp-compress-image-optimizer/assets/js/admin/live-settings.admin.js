@@ -385,47 +385,6 @@ jQuery(document).ready(function ($) {
         });
     }
 
-    function ExcludeList() {
-        var popup = $('.exclude-list-popup');
-        var popupData = $('.swal2-container .exclude-list-popup');
-        var save = $('.btn-save', popup);
-        var loading = $('.cdn-popup-loading', popup);
-        var content = $('.cdn-popup-content', popup);
-        var top = $('.cdn-popup-top', popup);
-
-        $(save).on('click', function (e) {
-            e.preventDefault();
-            $(top).hide();
-            $(content).hide();
-            $(loading).show();
-
-            var excludeList = $('[name="exclude-list-textarea"]', popupData).val();
-            var lazyExcludeList = $('[name="exclude-lazy-textarea"]', popupData).val();
-            var delayExcludeList = $('[name="delay-js-exclude-list-textarea"]', popupData).val();
-
-            $.post(wpc_ajaxVar.ajaxurl, {
-                action: 'wps_ic_exclude_list',
-                excludeList: excludeList,
-                lazyExcludeList:lazyExcludeList,
-                delayExcludeList: delayExcludeList,
-                wps_ic_nonce: wpc_ajaxVar.nonce
-            }, function (response) {
-                if (response.success) {
-                    $('.exclude-list-textarea-value').text(excludeList);
-                    $('.exclude-lazy-textarea-value').text(lazyExcludeList);
-                    $('.delay-js-exclude-list-textarea-value').text(delayExcludeList);
-                    $(top).show();
-                    $(content).show();
-                    $(loading).hide();
-                    WPCSwal.close();
-                }
-
-            });
-
-            return false;
-        });
-    }
-
     function GeoLocation() {
         var popup = $('.swal2-container .geo-location-popup');
         var save = $('.btn-save-location', popup);

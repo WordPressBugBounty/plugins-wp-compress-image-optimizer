@@ -149,7 +149,7 @@ if (!function_exists('wpc_stale_serve_plan')) {
                     if ($stale_rewarm_count >= 4) {
                         return 'miss';
                     }
-                    return 'stale';
+                    return wpc_stale_assets_ok($dir, $prefix) ? 'stale' : 'miss';
                 }
             }
             if (!defined('WPS_IC_CACHE')) {
@@ -183,16 +183,31 @@ if (!function_exists('wpc_stale_serve_plan')) {
             if ($rewarm_count >= 4) {
                 return 'miss';
             }
-            return 'stale';
+            return wpc_stale_assets_ok($dir, $prefix) ? 'stale' : 'miss';
         } catch (\Throwable $e) {
             return 'fresh';
         }
     }
 
+    function wpc_stale_assets_ok($dir, $prefix = '')
+    {
+        if (!function_exists('wpc_cache_p1_flag') || !wpc_cache_p1_flag()) {
+            return true;
+        }
+        $missing = wpc_copy_assets_missing($dir, $prefix);
+        if ($missing !== [] && function_exists('wpc_fs_log')) {
+            wpc_fs_log('stale-assets-missing', basename(rtrim((string) $dir, '/')), ['variant' => (string) $prefix, 'missing' => $missing]);
+        }
+        return $missing === [];
+    }
+
     function wpc_stale_unlink_copies($dir, $prefix = '')
     {
         $dir = rtrim((string) $dir, '/') . '/';
-        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt', 'links.txt'] as $copy_file) {
+        if (defined('WPS_IC_CACHE') && function_exists('wpc_fs_link_below') && wpc_fs_link_below(WPS_IC_CACHE, $dir)) {
+            return;
+        }
+        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt', 'links.txt', 'head.json'] as $copy_file) {
             @unlink($dir . $prefix . $copy_file);
         }
     }
@@ -247,10 +262,21 @@ if (!function_exists('wpc_copy_links_scan')) {
      * own form or as the zone's transform of it (`<zone>/m:0/a:<site url>`), and that is a file on
      * disk now. A link to a file that is
      * already missing is never recorded, and neither are the files the plugin generates: their
-     * owners keep them as long as the copies that link them. The one generated file the record
-     * names is the delay registry sidecar, as `s:<file name>` (first, so the cap never drops it):
+     * owners keep them as long as the copies that link them (the sheet copies under cache/wpc-bgset,
+     * cache/wpc-hostfix and cache/wpc-fontsheet are recorded as c: tokens: their prune keeps the
+     * newest three of a stem, not the ones a page links). The generated files the record
+     * names are the delay registry sidecar, as `s:<file name>` (first, so the cap never drops it):
      * its owner (wps_ic_js_delay_v3::wpc_registry_sidecar_trim) keeps every sidecar a stored copy
-     * names, and the missing-asset audit does not read `s:` tokens.
+     * names; the files of the content-addressed stores, as `w:<css|js>/<file name>` (`w:*` when the
+     * page links more than 200 or a name this record cannot hold): their owner
+     * (wpc_processed_copy_gc) keeps every file a stored copy names; and the combined and bundled
+     * sheets, as `k:combine/<path>` and `k:critical/combined/<file name>`, and the used-css and
+     * sidecar sheets, as `k:critical/used-css/<file name>` (the rest sheet named only by a
+     * data-wpc-rest attribute included) and `k:critical/sidecar/<file name>`, which a stale copy is
+     * served only while they exist (wpc_copy_assets_missing). The missing-asset audit reads none of
+     * these. The body scripts' file
+     * (wpc-body-<hash>.js, policy.body_js_ext) is named the same way, as `b:<file name>` (the record's own `b:<bytes>` line is
+     * all digits), and kept by wpc_processed_copy_gc while a stored copy names it.
      */
     function wpc_copy_links_scan($html)
     {
@@ -264,8 +290,21 @@ if (!function_exists('wpc_copy_links_scan')) {
                     $found['s:' . $sidecar] = true;
                 }
             }
+            if (preg_match_all('#wpc-assets\\\\?/(wpc-body-[0-9a-f]{12}\.js)\b#', $html, $bodies)) {
+                foreach ($bodies[1] as $body) {
+                    $found['b:' . $body] = true;
+                }
+            }
             $values = preg_match_all('/(?<![\w:-])[\w:-]*(?:href|src)\s*=\s*(["\'])(.*?)\1/is', $html, $attributes) ? $attributes[2] : [];
             $values = array_merge($values, wpc_copy_links_registry_sources($html));
+            if (stripos($html, 'data-wpc-rest') !== false && preg_match_all('/\sdata-wpc-rest\s*=\s*(["\'])(.*?)\1/is', $html, $parked)) {
+                $restAll = function_exists('wpc_policy_cohort') && ((int) wpc_policy_cohort('hero_same_origin') === 1 || (int) wpc_policy_cohort('bg_mobile_src') === 1);
+                foreach ($parked[2] as $restValue) {
+                    if ($restAll || stripos($restValue, '/cache/critical/used-css/') !== false || preg_match('#\.phone-[0-9a-f]{12}\.css(?:[?\#]|$)#i', html_entity_decode($restValue, ENT_QUOTES, 'UTF-8'))) {
+                        $values[] = $restValue;
+                    }
+                }
+            }
             if ($values === []) {
                 return array_keys($found);
             }
@@ -288,6 +327,8 @@ if (!function_exists('wpc_copy_links_scan')) {
                 }
             }
             $known = [];
+            $stores = [];
+            $kept = [];
             foreach ($values as $value) {
                 if (stripos($value, '.css') === false && stripos($value, '.js') === false) {
                     continue;
@@ -324,8 +365,18 @@ if (!function_exists('wpc_copy_links_scan')) {
                         continue;
                     }
                     $relative = rawurldecode(substr($path, strlen($prefix) + 1));
+                    if ($relative !== '' && $root === 'c' && strpos($relative, '..') === false && preg_match('#^cache/wp-cio/(css|js)/(.+)$#', $relative, $store)) {
+                        $stores[count($stores) < 200 && preg_match('#^[A-Za-z0-9._/-]{1,200}$#', $store[2]) ? 'w:' . $store[1] . '/' . $store[2] : 'w:*'] = true;
+                        break;
+                    }
+                    if ($relative !== '' && $root === 'c' && strpos($relative, '..') === false && preg_match('#^cache/((?:combine|critical/(?:combined|used-css|sidecar))/.+)$#', $relative, $keep)) {
+                        if (count($kept) < 100 && preg_match('#^[A-Za-z0-9._/-]{1,200}$#', $keep[1])) {
+                            $kept['k:' . $keep[1]] = true;
+                        }
+                        break;
+                    }
                     if ($relative === '' || strpos($relative, '..') !== false || preg_match('/[\x00-\x1f\\\\]/', $relative)
-                        || preg_match('#^cache/(?:wp-cio|wp-cio-fonts|critical|combine|wpc-hostfix)/|(?:^|/)wpc-assets/#', $relative)) {
+                        || preg_match('#^cache/(?:wp-cio|wp-cio-fonts|critical|combine)/|(?:^|/)wpc-assets/#', $relative)) {
                         break;
                     }
                     $token = $root . ':' . $relative;
@@ -341,7 +392,7 @@ if (!function_exists('wpc_copy_links_scan')) {
         } catch (\Throwable $e) {
             return [];
         }
-        return array_keys($found);
+        return array_merge(array_keys($found), array_keys($stores), array_keys($kept));
     }
 
     /** The file a link token names, or '' when the token does not name one this site can resolve. */
@@ -373,33 +424,310 @@ if (!function_exists('wpc_copy_links_scan')) {
     }
 
     /**
-     * Writes the links a copy carries beside it ($file, the 'links' name of wpc_copy_names): one
-     * token per line, in one rename, and no file at all for a page that links none or when the write
-     * fails: a record of the copy before it is never left beside the copy that replaced it. Returns
-     * how many tokens it wrote.
+     * Writes the links a copy carries beside it ($file, the 'links' name of wpc_copy_names): `v:2`
+     * first, which says the writer listed every generated file the page links, `b:<bytes>`, the size
+     * of the document (the shrink check of the next store reads it), then one token per line, in one
+     * rename. A page that links nothing keeps the record with the marker alone, so a
+     * copy with no record is a copy whose writer did not record (wpc_stored_copies_survey holds
+     * every file for it). No file at all when the write fails: a record of the copy before it is
+     * never left beside the copy that replaced it. Returns how many tokens it wrote besides the
+     * marker.
      */
     function wpc_copy_links_record($file, $html)
     {
         try {
             $tokens = wpc_copy_links_scan($html);
-            if ($tokens === []) {
-                if (@is_file($file)) {
-                    @unlink($file);
-                }
-                return 0;
-            }
             $tmp = $file . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
-            if (wpc_fs_put($tmp, implode("\n", $tokens) . "\n") === false || !@rename($tmp, $file)) {
+            if (wpc_fs_put($tmp, implode("\n", array_merge(['v:2', 'b:' . strlen((string) $html)], $tokens)) . "\n") === false || !@rename($tmp, $file)) {
                 @unlink($tmp);
                 @unlink($file);
                 return 0;
             }
             if (function_exists('wpc_missing_asset_audit_arm')) {
-                wpc_missing_asset_audit_arm();
+                foreach ($tokens as $token) {
+                    if (strpos($token, 'w:') !== 0 && strpos($token, 'k:') !== 0) {
+                        wpc_missing_asset_audit_arm();
+                        break;
+                    }
+                }
             }
             return count($tokens);
         } catch (\Throwable $e) {
             return 0;
+        }
+    }
+}
+
+if (!function_exists('wpc_br_prestore')) {
+    /**
+     * Queues the Brotli copy of a page just stored: after the response is released, quality 11, the
+     * `_br` sibling of the gzip copy is written once, and only while the md5 sidecar still names this
+     * document (the sibling is always the current copy's pair: saveGzCache removes it before every
+     * write). The server needs no Brotli: the drop-in sends the bytes itself, as it does for the
+     * copies crit's land writes. Needs ext-brotli; a page larger than 1.5 MB is left to gzip.
+     */
+    function wpc_br_prestore($brFile, $md5File, $document)
+    {
+        if (!function_exists('brotli_compress') || !is_string($document) || strlen($document) > (int) apply_filters('wpc_br_prestore_max_bytes', 1500000)) {
+            return false;
+        }
+        if (empty($GLOBALS['wpc_br_prestore_queue'])) {
+            register_shutdown_function('wpc_br_prestore_run');
+        }
+        $GLOBALS['wpc_br_prestore_queue'][$brFile] = [$md5File, $document];
+        return true;
+    }
+
+    /** Writes the queued Brotli copies (see wpc_br_prestore); answers how many it wrote. */
+    function wpc_br_prestore_run()
+    {
+        $written = 0;
+        try {
+            $queue = isset($GLOBALS['wpc_br_prestore_queue']) ? (array) $GLOBALS['wpc_br_prestore_queue'] : [];
+            unset($GLOBALS['wpc_br_prestore_queue']);
+            if ($queue === []) {
+                return 0;
+            }
+            if (function_exists('wpc_finish_request') && empty($GLOBALS['wpc_response_released'])) {
+                wpc_finish_request();
+            }
+            if (function_exists('ignore_user_abort')) {
+                @ignore_user_abort(true);
+            }
+            foreach ($queue as $target => $job) {
+                if (strtolower(trim((string) @file_get_contents($job[0]))) !== md5($job[1])) {
+                    continue;
+                }
+                $packed = @brotli_compress($job[1], 11);
+                if (!is_string($packed) || $packed === '') {
+                    continue;
+                }
+                $tmp = $target . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
+                if (wpc_fs_put($tmp, $packed) === false) {
+                    @unlink($tmp);
+                    continue;
+                }
+                if (strtolower(trim((string) @file_get_contents($job[0]))) !== md5($job[1]) || !@rename($tmp, $target)) {
+                    @unlink($tmp);
+                    continue;
+                }
+                $written++;
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('br-prestored', basename(dirname($target)), '', ['bytes' => strlen($packed), 'device' => strpos(basename($target), 'mobile_') === 0 ? 'mobile' : 'desktop']);
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        return $written;
+    }
+}
+
+if (!function_exists('wpc_served_head_matcher')) {
+    /**
+     * The one list of what the plugin puts in a page's head, as three patterns: 'crit' tests an
+     * element's opening tag for the critical CSS and the inline faces, 'tag' tests it for any mark
+     * of the plugin (an id or class of ours, a data-wpc attribute, a wpc- type, rel or meta name, a
+     * file of ours, a hint link to the CDN host), and 'body' tests the first bytes of an inline
+     * style or script that carries none of those. An element matching none is the theme's.
+     */
+    function wpc_served_head_matcher()
+    {
+        $zone = '[^"\'\s\/>:]*\.zapwp\.(?:com|net)';
+        if (function_exists('wpc_cdn_host')) {
+            $host = (string) wpc_cdn_host();
+            if ($host !== '') {
+                $zone .= '|' . preg_quote($host, '~');
+            }
+        }
+        return [
+            'crit' => '~(?<![\w:-])id\s*=\s*["\']?wpc-(?:critical-css|font-faces|font-subsets|font-fallbacks|crit-faces|fonts-css|font-carrier|live-faces)~i',
+            'tag'  => '~' . implode('|', [
+                '(?<![\w:-])id\s*=\s*["\']?(?:wpc-|wpcompress|wps[-_]ic)',
+                '(?<![\w:-])class\s*=\s*(["\'])(?:(?!\1)[^>])*?(?<![\w-])(?:wpc-|wps-inline|wps-ic)',
+                '(?<=[\s"\'])data-(?:wpc|wps-ic)[\w-]*',
+                '(?<=[\s"\'])data-script-id\s*=',
+                '(?<![\w:-])(?:type|rel)\s*=\s*["\']?(?:text\/)?wpc[-\/]',
+                '(?<![\w:-])name\s*=\s*["\']?wpc-',
+                '(?<![\w:-])(?:src|href)\s*=\s*["\']?[^"\'\s>]*(?:\/plugins\/wp-compress-image-optimizer\/|\/cache\/wp-cio\/|\/wpc-assets\/|\/wpc-yield-)',
+                '^<link\b(?=[^>]*(?<![\w:-])rel\s*=\s*["\']?(?:dns-prefetch|preconnect|preload|prefetch|modulepreload)\b)[^>]*(?<![\w:-])href\s*=\s*["\']?(?:https?:)?\/\/(?:' . $zone . ')(?:[\/"\'\s>:]|$)',
+            ]) . '~i',
+            'theme' => '~(?<![\w:-])(?:type|rel)\s*=\s*["\']?wpc-(?:mobile-)?stylesheet\b~i',
+            'body' => '~^\s*(?:(?:picture)?\.wpc-|var\s+(?:n489D_vars|integrationActive)\b|window\.(?:__)?wpc|\(function\(\)\s*\{\s*\/\/\s*Flag to track if our handler is active)~i',
+        ];
+    }
+
+    /**
+     * The head of a document, <head> to </head>, split by whose elements they are, in document
+     * order: ['head' => the whole head, 'crit' => the critical CSS and the inline faces, 'wpc' =>
+     * every other element the plugin put there, 'other' => the rest: the theme's elements, the text
+     * between elements, the comments and the head's own tags]. Each byte of the head is in exactly
+     * one slice. Null when the document has no head that closes before its body.
+     */
+    function wpc_served_head_slices($html)
+    {
+        if (!is_string($html) || $html === '' || preg_match('~<head(?=[\s>/])~i', $html, $opening, PREG_OFFSET_CAPTURE) !== 1) {
+            return null;
+        }
+        $start = $opening[0][1];
+        $matcher = wpc_served_head_matcher();
+        $rawText = ['script' => 1, 'style' => 1, 'title' => 1, 'textarea' => 1, 'noscript' => 1, 'template' => 1];
+        $slices = ['crit' => '', 'wpc' => '', 'other' => ''];
+        if (preg_match('~\G<head\b(?:[^>"\']++|"[^"]*+"|\'[^\']*+\')*+>~i', $html, $tag, 0, $start) !== 1) {
+            return null;
+        }
+        $slices['other'] .= $tag[0];
+        $at = $start + strlen($tag[0]);
+        $limit = $start + 4194304;
+        while ($at < $limit) {
+            $lt = strpos($html, '<', $at);
+            if ($lt === false) {
+                return null;
+            }
+            if ($lt > $at) {
+                $slices['other'] .= substr($html, $at, $lt - $at);
+            }
+            $at = $lt;
+            $next = isset($html[$at + 1]) ? $html[$at + 1] : '';
+            if ($next === '!' && substr($html, $at, 4) === '<!--') {
+                $end = strpos($html, '-->', $at + 4);
+                if ($end === false) {
+                    return null;
+                }
+                $slices['other'] .= substr($html, $at, $end + 3 - $at);
+                $at = $end + 3;
+                continue;
+            }
+            if ($next === '!' || $next === '?') {
+                $end = strpos($html, '>', $at);
+                if ($end === false) {
+                    return null;
+                }
+                $slices['other'] .= substr($html, $at, $end + 1 - $at);
+                $at = $end + 1;
+                continue;
+            }
+            if ($next === '/') {
+                $closing = preg_match('~\G</([a-zA-Z][a-zA-Z0-9:-]*)[^>]*+>~', $html, $tag, 0, $at);
+                if ($closing === false) {
+                    return null;
+                }
+                if ($closing !== 1) {
+                    $slices['other'] .= '<';
+                    $at++;
+                    continue;
+                }
+                $slices['other'] .= $tag[0];
+                $at += strlen($tag[0]);
+                if (strtolower($tag[1]) === 'head') {
+                    return ['head' => substr($html, $start, $at - $start)] + $slices;
+                }
+                continue;
+            }
+            $opened = preg_match('~\G<([a-zA-Z][a-zA-Z0-9:-]*+)(?:[^>"\']++|"[^"]*+"|\'[^\']*+\')*+>~', $html, $tag, 0, $at);
+            if ($opened === false) {
+                return null;
+            }
+            if ($opened !== 1) {
+                $slices['other'] .= '<';
+                $at++;
+                continue;
+            }
+            $name = strtolower($tag[1]);
+            if ($name === 'body') {
+                return null;
+            }
+            $end = $at + strlen($tag[0]);
+            if (isset($rawText[$name])) {
+                $close = stripos($html, '</' . $name, $end);
+                $closeEnd = $close === false ? false : strpos($html, '>', $close);
+                if ($closeEnd === false) {
+                    return null;
+                }
+                $end = $closeEnd + 1;
+            }
+            $piece = substr($html, $at, $end - $at);
+            $owner = 'other';
+            $crit = preg_match($matcher['crit'], $tag[0]);
+            $mark = $crit === 1 ? 0 : preg_match($matcher['tag'], $name === 'noscript' || $name === 'template' ? $piece : $tag[0]);
+            if ($crit === false || $mark === false) {
+                return null;
+            }
+            if ($crit === 1) {
+                $owner = 'crit';
+            } elseif ($mark === 1 && !($name === 'style' && preg_match($matcher['theme'], $tag[0]) === 1)) {
+                $owner = 'wpc';
+            } elseif (($name === 'style' || $name === 'script') && stripos($tag[0], ' src') === false) {
+                $inline = preg_match($matcher['body'], substr($piece, strlen($tag[0]), 96));
+                if ($inline === false) {
+                    return null;
+                }
+                $owner = $inline === 1 ? 'wpc' : 'other';
+            }
+            $slices[$owner] .= $piece;
+            $at = $end;
+        }
+        return null;
+    }
+
+    /**
+     * The byte sizes of a document's head: raw and gzip level 6 for the whole head and for each
+     * slice of wpc_served_head_slices() alone (a slice with no bytes is 0, so the gzip sizes of the
+     * slices do not add up to the head's). Null when the head cannot be measured.
+     */
+    function wpc_served_head_measure($html, $device)
+    {
+        if (!function_exists('gzencode')) {
+            return null;
+        }
+        $slices = wpc_served_head_slices($html);
+        if ($slices === null) {
+            return null;
+        }
+        $gz = function ($bytes) {
+            return $bytes === '' ? 0 : strlen((string) gzencode($bytes, 6));
+        };
+        return [
+            'raw_b'        => strlen($slices['head']),
+            'gz6_b'        => $gz($slices['head']),
+            'crit_b'       => strlen($slices['crit']),
+            'crit_gz6_b'   => $gz($slices['crit']),
+            'wpc_b'        => strlen($slices['wpc']),
+            'wpc_gz6_b'    => $gz($slices['wpc']),
+            'other_b'      => strlen($slices['other']),
+            'other_gz6_b'  => $gz($slices['other']),
+            'device'       => $device === 'mobile' ? 'mobile' : 'desktop',
+            'stored_at'    => 0,
+        ];
+    }
+
+    /**
+     * Writes the head record of a copy beside it ($file, the 'head' name of wpc_copy_names), once,
+     * when the copy is stored: the sizes of $html's head for the device $prefix names, with the
+     * copy's modification time as stored_at. One rename; no record at all when the head cannot be
+     * measured or the write fails, so a record of the copy before is never left beside the copy
+     * that replaced it. Returns whether a record was written.
+     */
+    function wpc_served_head_record($file, $html, $prefix, $copyFile)
+    {
+        try {
+            $head = wpc_served_head_measure($html, strpos((string) $prefix, 'mobile') === 0 ? 'mobile' : 'desktop');
+            if ($head !== null) {
+                clearstatcache(true, $copyFile);
+                $head['stored_at'] = (int) @filemtime($copyFile);
+            }
+            if ($head === null || $head['stored_at'] <= 0) {
+                @unlink($file);
+                return false;
+            }
+            $tmp = $file . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
+            if (wpc_fs_put($tmp, json_encode($head)) === false || !@rename($tmp, $file)) {
+                @unlink($tmp);
+                @unlink($file);
+                return false;
+            }
+            return true;
+        } catch (\Throwable $e) {
+            return false;
         }
     }
 }
@@ -414,6 +742,7 @@ class wps_cacheHtml
 
     private $host;
     private $cachePath;
+    private $userFolder = '';
     private $options;
     private $url_key_class;
 
@@ -432,115 +761,9 @@ class wps_cacheHtml
         $this->url_key_class = new wps_ic_url_key();
         $this->urlKey = $this->url_key_class->setup();
 
-        // Append user cookie hash to the cache path if user is logged in
-        $user_hash = '';
-        if (defined('WPC_CACHE_LOGGED_IN') && WPC_CACHE_LOGGED_IN) {
-            foreach ($_COOKIE as $key => $value) {
-                if (strpos($key, 'wordpress_logged_in_') === 0) {
-                    $user_hash = md5($key . substr($value, 0, 10)) . '/';
-                    break;
-                }
-            }
+        $this->userFolder = wps_ic_url_key::userFolder();
 
-        }
-
-        // Add cookie variation to cache path
-        $cookie_string = '';
-        if (defined('WPC_CACHE_COOKIES') && WPC_CACHE_COOKIES !== false) {
-            $cookie_values = [];
-            $cache_cookies = WPC_CACHE_COOKIES;
-
-            foreach ($cache_cookies as $cookie_name) {
-                // Check if this is a prefix cookie (ends with _)
-                if (substr($cookie_name, -1) === '_') {
-                    // This is a prefix - find all cookies that start with this prefix
-                    $prefix = $cookie_name; // Keep the underscore for matching
-                    foreach ($_COOKIE as $actual_cookie_name => $cookie_value) {
-                        if (strpos($actual_cookie_name, $prefix) === 0 && !empty($cookie_value)) {
-                            // Get the suffix (part after the prefix)
-                            $suffix = substr($actual_cookie_name, strlen($prefix));
-
-                            // Create a 7-character hash of the suffix and append to cookie value
-                            $suffix_hash = substr(hash('md5', $suffix), 0, 7);
-                            $cookie_values[] = $cookie_value . '_' . $suffix_hash;
-                        }
-                    }
-                } else {
-                    // Regular cookie - exact match
-                    if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
-                        $cookie_values[] = $_COOKIE[$cookie_name];
-                    }
-                }
-            }
-
-            if (!empty($cookie_values)) {
-                $cookie_string = '_' . implode('_', $cookie_values);
-            }
-        }
-
-        $this->cachePath = WPS_IC_CACHE . $user_hash . $this->urlKey . $cookie_string . '/';
-    }
-
-    /**
-     * FrontEnd Editors Detection for various page builders
-     * @return bool
-     */
-    public static function isPageBuilder()
-    {
-        $page_builders = ['run_compress',
-            'run_restore',
-            'elementor-preview',
-            'fl_builder',
-            'et_fb',
-            'preview', //WP Preview
-            'builder',
-            'brizy',
-            'fb-edit',
-            'bricks',
-            'ct_template',
-            'ct_builder',
-            'cs-render',
-            'tatsu',
-            'trp-edit-translation',
-            'brizy-edit-iframe',
-            'ct_builder',
-            'livecomposer_editor',
-            'tatsu',
-            'tatsu-header',
-            'tatsu-footer',
-            'is-editor-iframe',
-            'tve'
-        ];
-
-        if ((!empty($_GET['action']) && $_GET['action'] == 'in-front-editor')) {
-
-            return true;
-        }
-
-        if ((!empty($_GET['action']) && sanitize_text_field($_GET['action']) == 'edit#op-builder') || !empty($_GET['op3editor'])) {
-
-            return true;
-        }
-
-        if (!empty($_SERVER['REQUEST_URI'])) {
-            if (strpos($_SERVER['REQUEST_URI'], 'wp-json') || strpos($_SERVER['REQUEST_URI'], 'rest_route')) {
-                return false;
-            }
-        }
-
-        if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], 'cornerstone') !== false) {
-            return true;
-        }
-
-        if (!empty($page_builders)) {
-            foreach ($page_builders as $page_builder) {
-                if (isset($_GET[$page_builder])) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        $this->cachePath = WPS_IC_CACHE . $this->userFolder . $this->urlKey . wps_ic_url_key::cookieSuffix() . '/';
     }
 
     /**
@@ -556,15 +779,6 @@ class wps_cacheHtml
         }
 
         return false;
-    }
-
-    public static function isFEBuilder()
-    {
-        if ((!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || !empty($_GET['trp-edit-translation']) || !empty($_GET['elementor-preview']) || !empty($_GET['tatsu']) || !empty($_GET['is-editor-iframe']) || !empty($_GET['preview']) || !empty($_GET['PageSpeed']) || !empty($_GET['tve']) || !empty($_GET['et_fb']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['ct_builder']) || !empty($_GET['fb-edit']) || !empty($_GET['bricks']) || !empty($_GET['brizy-edit-iframe']) || !empty($_GET['brizy-edit']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php") || (!empty($_GET['page']) && $_GET['page'] == 'livecomposer_editor')) {
-            return true;
-        } else {
-            return false;
-        }
     }
 
     public function init()
@@ -649,7 +863,7 @@ class wps_cacheHtml
             $prefix = $prefix . '_';
         }
 
-        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+        if (wpc_warm_request()) {
             if (function_exists('ignore_user_abort')) {
                 @ignore_user_abort(true);
             }
@@ -691,7 +905,9 @@ class wps_cacheHtml
     // fetchpriority=high; crit regenerates with the page, so the URL is always live.
     /**
      * Proposes the first background url() of the inlined crit as the page's preload
-     * (wpc-crit-bg-preload, below every measured candidate in the set's rank).
+     * (wpc-crit-bg-preload, below every measured candidate in the set's rank). A UI sprite
+     * first is passed over only for a later url() that is the rendition of the picture the
+     * service measured as the LCP of a device the render serves.
      */
     public static function critBgPreload($buffer, $imagePreloads = null)
     {
@@ -704,22 +920,85 @@ class wps_cacheHtml
             || !preg_match('/<style[^>]*id="wpc-critical-css"[^>]*>(.*?)<\/style>/s', $buffer, $wpc_pm)) {
             return $buffer;
         }
-        if (!preg_match('/background(?:-image)?\s*:\s*[^;{}]*url\(\s*([\'"]?)((?:https?:)?\/[^)\'"]{8,500}\.(?:jpe?g|png|webp|avif|svg)(?:\?[^)\'"]{0,120})?)\1/i', $wpc_pm[1], $wpc_pu)) {
+        $wpc_pick = self::critBgPick($wpc_pm[1]);
+        if ($wpc_pick === null) {
             return $buffer;
         }
-        // v7.21.58 — the FIRST bg url() in crit is not always a hero: ctfx preloaded
-        // WooCommerce's photoswipe default-skin.png sprite at fetchpriority=high through the
-        // q:i queue. UI-chrome sprites/skins/icons are never the LCP — veto them instead of
-        // spending the page's highest-priority fetch on one.
-        if (preg_match('/default-skin|photoswipe|sprite|\/icons?[\/.-]|loading|spinner|arrow/i', (string) $wpc_pu[2])) {
-            // The veto withholds the page's highest-priority fetch. The same crit vetoes on every
-            // render until it regenerates, so the line is sampled once an hour per page.
+        $wpc_chrome_veto = $wpc_pick['veto'];
+        if ($wpc_pick['url'] === '') {
             if (function_exists('wpc_belt_receipt')) {
-                wpc_belt_receipt('crit-bg-preload-vetoed', ['why' => 'ui-chrome', 'src' => substr((string) $wpc_pu[2], -120)], true);
+                wpc_belt_receipt('crit-bg-preload-vetoed', $wpc_chrome_veto, true);
             }
             return $buffer;
         }
-        $wpc_ph = html_entity_decode($wpc_pu[2], ENT_QUOTES);
+        // A MEASURED PAGE GETS NO GUESSED PRELOAD FOR A LEG THE SERVICE COULD NOT MEASURE. This
+        // fallback is for pages the service never measured (perkzilla, 2025). On a page with its
+        // own lcp.json the LCP lane fills the legs that were measured, and a null leg means "could
+        // not measure" (crit-push 3.198.346 contract: a challenged or timed-out leg), not "no
+        // image", so the crit's first background is a guess about a page we have facts for:
+        // hartwood.biz (ticket 12072, 2026-10-20), desktop measured as `::before` and mobile null
+        // (Turnstile blocks the pod on phones), got the full-size origin cover-2026.webp (379 KB)
+        // preloaded at high priority under the phone media query for a pseudo-element the crit
+        // sets to display:none on phones. Same file resolution as wps_ic_atf_observation's
+        // page-only document: the page's own lcp.json, never the home page's.
+        if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_page_lcp_json_file')
+            && (string) wps_rewriteLogic::wpc_page_lcp_json_file() !== '') {
+            // The page keeps its observation until it regenerates, so the line is sampled once an
+            // hour per page.
+            if (function_exists('wpc_belt_receipt')) {
+                wpc_belt_receipt('crit-bg-preload-skipped', ['why' => 'observation-present', 'src' => substr((string) $wpc_pick['url'], -120)], true);
+            }
+            return $buffer;
+        }
+        $wpc_text = $wpc_pick['text'];
+        $wpc_url = $wpc_pick['url'];
+        $wpc_matched = $wpc_pick['matched'];
+        $wpc_set = null;
+        if (class_exists('wps_rewriteLogic') && wps_rewriteLogic::bg_hero_match_on()) {
+            $wpc_set = self::critBgSet($wpc_pm[1], (int) strpos($wpc_pm[1], $wpc_text));
+            if ($wpc_set !== null && self::critBgDense($wpc_set)) {
+                if (function_exists('wpc_belt_receipt')) {
+                    wpc_belt_receipt('crit-bg-preload-vetoed', ['why' => 'density-set', 'src' => substr($wpc_set['url'], -120)]
+                        + ($wpc_chrome_veto === null ? [] : ['after' => 'ui-chrome']), true);
+                }
+                return $buffer;
+            }
+        }
+        if ($wpc_chrome_veto !== null && function_exists('wpc_belt_receipt')) {
+            wpc_belt_receipt('crit-bg-preload-vetoed', $wpc_chrome_veto, true);
+        }
+        $wpc_preload_device = 'both';
+        if (class_exists('wps_ic_atf_observation') && wps_ic_atf_observation::heroFold()) {
+            $wpc_standdown = [];
+            foreach (['mobile', 'desktop'] as $wpc_stand_device) {
+                if (wps_ic_atf_observation::lcpHeld($wpc_stand_device) || wps_ic_atf_observation::lcpUnknown($wpc_stand_device)) {
+                    $wpc_standdown[] = $wpc_stand_device;
+                }
+            }
+            if (!empty($wpc_standdown)) {
+                $wpc_combined = class_exists('wps_rewriteLogic') && wps_rewriteLogic::wpc_combined_crit_on();
+                $wpc_render_device = (function_exists('wpc_ua_is_mobile') && wpc_ua_is_mobile()) ? 'mobile' : 'desktop';
+                if (!$wpc_combined) {
+                    if (in_array($wpc_render_device, $wpc_standdown, true)) {
+                        $imagePreloads->declined('lcp-hold');
+                        return $buffer;
+                    }
+                } elseif (count($wpc_standdown) > 1) {
+                    $imagePreloads->declined('lcp-hold');
+                    return $buffer;
+                } else {
+                    $wpc_preload_device = $wpc_standdown[0] === 'mobile' ? 'desktop' : 'mobile';
+                }
+            }
+        }
+        if ($wpc_matched !== null && class_exists('wps_rewriteLogic') && wps_rewriteLogic::wpc_combined_crit_on()) {
+            if ($wpc_preload_device === 'both') {
+                $wpc_preload_device = count($wpc_matched) === 2 ? 'both' : $wpc_matched[0];
+            } elseif (!in_array($wpc_preload_device, $wpc_matched, true)) {
+                return $buffer;
+            }
+        }
+        $wpc_ph = html_entity_decode($wpc_url, ENT_QUOTES);
         if (strpos($wpc_ph, '//') === 0) {
             $wpc_ph = 'https:' . $wpc_ph;
         } elseif ($wpc_ph[0] === '/' && !empty($_SERVER['HTTP_HOST'])) {
@@ -731,9 +1010,152 @@ class wps_cacheHtml
                 $wpc_ph = $aligned_match[1];
             }
         }
-        $imagePreloads->add('wpc-crit-bg-preload', esc_url($wpc_ph), 'both', 'crit-bg',
-            wps_ic_image_preload_set::RANK_CRIT_BACKGROUND, ['kind' => wps_ic_image_preload_set::KIND_BACKGROUND]);
+        $wpc_type = '';
+        $wpc_painted = self::critBgPainted($wpc_set);
+        if ($wpc_painted !== null) {
+            $wpc_ph = $wpc_painted[0];
+            $wpc_type = $wpc_painted[1];
+        }
+        $imagePreloads->add('wpc-crit-bg-preload', esc_url($wpc_ph), $wpc_preload_device, 'crit-bg',
+            wps_ic_image_preload_set::RANK_CRIT_BACKGROUND, ['kind' => wps_ic_image_preload_set::KIND_BACKGROUND] + ($wpc_type !== '' ? ['type' => $wpc_type] : [])
+            + ($wpc_matched === null ? [] : ['supersedes' => [wps_ic_image_preload_set::SLOT_ATF_BG], 'exact' => true]));
         return $buffer;
+    }
+
+    /**
+     * The first background url() of a crit block that is not UI chrome (a sprite, skin or icon passed over for a later url() that
+     * is the rendition of the picture the service measured, critBgPastChrome): ['text' => the declaration, 'url' => the address as
+     * written, 'matched' => the devices that url() was matched to or null, 'veto' => the ui-chrome receipt fields or null]. 'url' is ''
+     * when only chrome was found, null is returned when the block holds no background url() at all.
+     */
+    public static function critBgPick($crit)
+    {
+        $wpc_rx = '/background(?:-image)?\s*:\s*[^;{}]*url\(\s*([\'"]?)((?:https?:)?\/[^)\'"]{8,500}\.(?:jpe?g|png|webp|avif|svg)(?:\?[^)\'"]{0,120})?)\1/i';
+        if (!is_string($crit) || !preg_match($wpc_rx, $crit, $wpc_pu, PREG_OFFSET_CAPTURE)) {
+            return null;
+        }
+        $wpc_text = $wpc_pu[0][0];
+        $wpc_url = $wpc_pu[2][0];
+        $wpc_matched = null;
+        $wpc_chrome_veto = null;
+        if (self::critBgChrome($wpc_url)) {
+            $wpc_next = self::critBgPastChrome($crit, $wpc_pu[0][1] + strlen($wpc_text), $wpc_rx);
+            $wpc_chrome_veto = ['why' => 'ui-chrome', 'src' => substr((string) $wpc_url, -120)]
+                + ($wpc_next === null ? [] : ['then' => substr((string) $wpc_next[1], -120)]);
+            if ($wpc_next === null) {
+                return ['text' => $wpc_text, 'url' => '', 'matched' => null, 'veto' => $wpc_chrome_veto];
+            }
+            list($wpc_text, $wpc_url, $wpc_matched) = $wpc_next;
+        }
+        return ['text' => $wpc_text, 'url' => $wpc_url, 'matched' => $wpc_matched, 'veto' => $wpc_chrome_veto];
+    }
+
+    private const CRIT_BG_CHROME = '/default-skin|photoswipe|sprite|\/icons?[\/.-]|loading|spinner|arrow/i';
+
+    private static function critBgChrome($url)
+    {
+        return preg_match(self::CRIT_BG_CHROME, (string) $url) === 1;
+    }
+
+    /**
+     * The first background url() of the crit after offset $from that is not UI chrome and names the rendition of the picture the service
+     * measured as the LCP of a device this render serves, as [matched text, url, the devices it is the LCP of], or null. Only the page's own
+     * lcp.json measures; nothing is looked for when no served device has a measured background LCP, or under policy.off_bg_preload_scan.
+     */
+    private static function critBgPastChrome($css, $from, $rx)
+    {
+        if (!class_exists('wps_ic_atf_observation') || !class_exists('wps_rewriteLogic') || wps_rewriteLogic::bg_preload_scan_off()) {
+            return null;
+        }
+        $devices = wps_rewriteLogic::wpc_combined_crit_on() ? ['mobile', 'desktop'] : [(function_exists('wpc_ua_is_mobile') && wpc_ua_is_mobile()) ? 'mobile' : 'desktop'];
+        $measured = [];
+        foreach ($devices as $device) {
+            $url = wps_ic_atf_observation::lcpBackgroundUrl($device);
+            if ($url !== '') {
+                $measured[$device] = $url;
+            }
+        }
+        if (!$measured || !preg_match_all($rx, (string) substr((string) $css, $from), $found, PREG_SET_ORDER)) {
+            return null;
+        }
+        foreach ($found as $candidate) {
+            if (self::critBgChrome($candidate[2])) {
+                continue;
+            }
+            $matched = [];
+            foreach ($measured as $device => $url) {
+                if (wps_ic_image_preload_set::sameRendition($candidate[2], $url)) {
+                    $matched[] = $device;
+                }
+            }
+            if ($matched) {
+                return [$candidate[0], $candidate[2], $matched];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The image-set() the browser takes for the crit rule that holds the offset: the last standard declaration of the rule, else the last prefixed one. As ['url' => its first
+     * candidate, 'type' => that candidate's mime type or '', 'args' => the text between the function's parentheses, null when the rule never closes them], or null.
+     */
+    private static function critBgSet($css, $offset)
+    {
+        $open = strrpos(substr((string) $css, 0, $offset), '{');
+        $close = strpos((string) $css, '}', $offset);
+        if ($open === false || $close === false) {
+            return null;
+        }
+        $block = substr((string) $css, $open + 1, $close - $open - 1);
+        foreach (['(?<![-\w])image-set', '-webkit-image-set'] as $function) {
+            if (!preg_match_all('/background(?:-image)?\s*:\s*[^;{}]*?(' . $function . ')\(\s*(?:url\(\s*(?<q>[\'"]?)(?<u>[^)\'"\s]+)\k<q>\s*\)|(?<sq>[\'"])(?<s>[^\'"]+)\k<sq>)(?:\s*type\(\s*(?<tq>[\'"])(?<t>[^\'"]+)\k<tq>\s*\))?/i', $block, $matches, PREG_OFFSET_CAPTURE)) {
+                continue;
+            }
+            $last = count($matches[0]) - 1;
+            $paren = $matches[1][$last][1] + strlen($matches[1][$last][0]);
+            $depth = 0;
+            $quote = '';
+            $args = null;
+            for ($i = $paren, $length = strlen($block); $i < $length; $i++) {
+                $char = $block[$i];
+                if ($quote !== '') {
+                    if ($char === '\\') {
+                        $i++;
+                    } elseif ($char === $quote) {
+                        $quote = '';
+                    }
+                } elseif ($char === '"' || $char === "'") {
+                    $quote = $char;
+                } elseif ($char === '(') {
+                    $depth++;
+                } elseif ($char === ')' && --$depth === 0) {
+                    $args = substr($block, $paren + 1, $i - $paren - 1);
+                    break;
+                }
+            }
+            $candidate = $matches['u'][$last][0] !== '' ? $matches['u'][$last][0] : $matches['s'][$last][0];
+            return ['url' => html_entity_decode($candidate, ENT_QUOTES), 'type' => isset($matches['t'][$last][0]) ? $matches['t'][$last][0] : '', 'args' => $args];
+        }
+        return null;
+    }
+
+    /** True when a candidate of the set carries a density descriptor (1x, 2x, 1.5x, 96dpi, dppx, dpcm): a screen at 2x paints another file than the first candidate. */
+    private static function critBgDense(array $set)
+    {
+        if ($set['args'] === null) {
+            return false;
+        }
+        $bare = preg_replace('/url\(\s*(?:"[^"]*"|\'[^\']*\'|[^)]*)\s*\)|"[^"]*"|\'[^\']*\'/i', ' ', $set['args']);
+        return is_string($bare) && preg_match('/(?<![\w.-])(?:\d+\.?\d*|\.\d+)(?:x|dpi|dppx|dpcm)(?![\w-])/i', $bare) === 1;
+    }
+
+    /** The file a browser paints for the set, as [url, mime type or ''], or null: no set, a set the rule never closes, or a url the UI-chrome veto holds back. */
+    private static function critBgPainted($set)
+    {
+        if (!is_array($set) || $set['args'] === null || self::critBgChrome($set['url'])) {
+            return null;
+        }
+        return [$set['url'], $set['type']];
     }
 
     // Bricks marks bg-image elements .bricks-lazy-hidden (background-image:none!important)
@@ -1075,8 +1497,9 @@ class wps_cacheHtml
                     $media = $media_match[1];
                 }
                 $id_attr = $style_id !== '' ? ' id="' . $style_id . '"' : '';
+                $hold_attr = preg_match('/\bdata-wpc-hold=["\']([a-z]{1,16})["\']/i', $style_match[1], $hold_match) ? ' data-wpc-hold="' . $hold_match[1] . '"' : '';
                 $link_tag = '<link rel="' . $style_match[2] . '"' . $id_attr
-                    . ' href="' . esc_url($sidecar_url) . '" media="' . esc_attr($media) . '" data-wpc-sc="1" />';
+                    . ' href="' . esc_url($sidecar_url) . '" media="' . esc_attr($media) . '" data-wpc-sc="1"' . $hold_attr . ' />';
                 $style_pos = strpos($buffer, $style_match[0]);
                 if ($style_pos === false) {
                     continue;
@@ -1224,35 +1647,24 @@ class wps_cacheHtml
         return is_string($out) ? $out : $buffer;
     }
 
+    // The personal-cookie list and its matcher live in wps_ic_url_key, which the advanced-cache
+    // drop-in loads before WordPress, so the drop-in and every reader here ask the same owner.
     public static function wpc_personal_cookie_names()
     {
-        $names = apply_filters('wpc_personal_cookies', ['simplefavorites', 'wp-postpass_', 'comment_author_']);
-        return is_array($names) ? $names : [];
+        return self::wpc_load_url_key() ? wps_ic_url_key::personalCookieNames() : [];
     }
 
     public static function wpc_matched_personal_cookie()
     {
-        if (empty($_COOKIE) || !is_array($_COOKIE)) {
-            return '';
+        return self::wpc_load_url_key() ? wps_ic_url_key::personalCookieMatch() : '';
+    }
+
+    private static function wpc_load_url_key()
+    {
+        if (!class_exists('wps_ic_url_key') && is_readable(dirname(__DIR__, 2) . '/traits/url_key.php')) {
+            include_once dirname(__DIR__, 2) . '/traits/url_key.php';
         }
-        $personalNames = self::wpc_personal_cookie_names();
-        foreach ($_COOKIE as $cookieName => $cookieValue) {
-            $cookieName = (string) $cookieName;
-            foreach ($personalNames as $personalName) {
-                $personalName = (string) $personalName;
-                if ($personalName === '') {
-                    continue;
-                }
-                if (substr($personalName, -1) === '_') {
-                    if (stripos($cookieName, $personalName) === 0) {
-                        return $cookieName;
-                    }
-                } elseif (strcasecmp($cookieName, $personalName) === 0) {
-                    return $cookieName;
-                }
-            }
-        }
-        return '';
+        return class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'personalCookieMatch');
     }
 
     /**
@@ -1277,7 +1689,7 @@ class wps_cacheHtml
      */
     private static function wpc_log_store_verdict(array $verdict, $urlKey)
     {
-        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM']) || !function_exists('wpc_cache_first_log')
+        if (wpc_warm_request() || !function_exists('wpc_cache_first_log')
             || !function_exists('get_transient') || (string) $urlKey === '') {
             return;
         }
@@ -1293,10 +1705,39 @@ class wps_cacheHtml
         ]);
     }
 
+    /**
+     * The size of the document the copy this render would replace was made from (the `b:` line of
+     * its links record), 0 when there is none or the checks are off.
+     */
+    private function storedCopyBytes()
+    {
+        if (!function_exists('wpc_cache_p1_on') || !wpc_cache_p1_on()) {
+            return 0;
+        }
+        $device = $this->is_mobile() ? 'mobile_' : '';
+        $record = wpc_copy_links_read($this->cachePath . $device . wpc_copy_family_on_disk($this->cachePath, $device) . 'links.txt');
+        foreach ($record === null ? [] : $record['tokens'] as $token) {
+            if (preg_match('/^b:(\d+)$/', $token, $size)) {
+                return (int) $size[1];
+            }
+        }
+        return 0;
+    }
+
     public function saveCache($buffer, $prefix = '')
     {
+        if (function_exists('wpc_page_cache_blocked') && wpc_page_cache_blocked()) {
+            return $buffer;
+        }
         if (function_exists('wpc_requote_crit_urls')) {
             $buffer = wpc_requote_crit_urls($buffer);
+        }
+        if (function_exists('wpc_lever_test_active') && wpc_lever_test_active()) {
+            if (function_exists('wpc_lever_test_headers')) {
+                wpc_lever_test_headers();
+            }
+            self::wpc_name_early_refusal('lever-test');
+            return $buffer;
         }
         // Mint gate: never create cache/crit state for query URLs beyond marketing params.
         // v7.10.598 — one predicate, shared with the READ gate in advancedCache::getCache() and
@@ -1328,7 +1769,7 @@ class wps_cacheHtml
 
         // Live showed warm-rx (arrival) without variants materializing; every exit below now
         // says WHICH gate dropped a warm render, and the write itself logs. Warm-only, bounded.
-        $isWarmRender = !empty($_SERVER['HTTP_X_WPC_CACHE_WARM']) && function_exists('wpc_cache_first_log');
+        $isWarmRender = wpc_warm_request() && function_exists('wpc_cache_first_log');
         $wpc_wgate = function ($g, $x = []) use ($isWarmRender, $prefix) {
 
 
@@ -1337,6 +1778,9 @@ class wps_cacheHtml
             }
             if ($isWarmRender) {
                 wpc_cache_first_log('warm-drop-' . $g, (string) $this->urlKey, '', array_merge(['variant' => (string) $prefix], $x));
+                if (function_exists('wpc_p2_note_refused')) {
+                    wpc_p2_note_refused((string) $this->urlKey, (string) $prefix, $g);
+                }
             }
         };
         if ($isWarmRender) {
@@ -1500,7 +1944,7 @@ class wps_cacheHtml
                         return $lm[0];
                     }
                     $path = trailingslashit(ABSPATH) . $rel;
-                    if (!@is_readable($path)) {
+                    if (wpc_install_file_real($path) === '' || !@is_readable($path)) {
                         return $lm[0];
                     }
                     $mt = (int) @filemtime($path);
@@ -1526,7 +1970,7 @@ class wps_cacheHtml
                         if (!$wpc_has_live_faces
                             && !((function_exists('wp_doing_ajax') && wp_doing_ajax())
                             || (defined('DOING_CRON') && DOING_CRON)
-                            || !empty($_SERVER['HTTP_X_WPC_CACHE_WARM']))) {
+                            || wpc_warm_request())) {
                             return $lm[0];
                         }
                         $css = (string) @file_get_contents($path);
@@ -1622,6 +2066,8 @@ class wps_cacheHtml
             ? wpc_store_verdict($buffer, [
                 'url_key' => (string) $this->urlKey,
                 'cache_logged_in' => $this->cacheLoggedIn(),
+                'user_keyed' => $this->userFolder !== '',
+                'old_bytes' => $this->storedCopyBytes(),
                 'ignore_server_control' => !empty($this->options['cache']['ignore-server-control'])
                     && $this->options['cache']['ignore-server-control'] != '0',
             ])
@@ -1781,13 +2227,13 @@ class wps_cacheHtml
 
 
         $wpc_map_file = $this->cachePath . 'url.txt';
-        if (!@file_exists($wpc_map_file) && class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'sanitizeSameHostUrl')) {
-            $wpc_map_url = wps_ic_url_key::sanitizeSameHostUrl(
-                (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '')
-                . strtok((string) (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/'), '?')
-            );
-            if ($wpc_map_url !== '') {
-                wpc_fs_put($wpc_map_file, $wpc_map_url);
+        if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'sanitizeSameHostUrl')) {
+            $wpc_map_url = wps_ic_url_key::sanitizeSameHostUrl(wps_ic_url_key::requestHostPath());
+            if ($wpc_map_url !== '' && (!@file_exists($wpc_map_file) || trim((string) @file_get_contents($wpc_map_file)) !== $wpc_map_url)) {
+                $wpc_map_tmp = $wpc_map_file . '.' . uniqid('tmp', true);
+                if (wpc_fs_put($wpc_map_tmp, $wpc_map_url) === false || !@rename($wpc_map_tmp, $wpc_map_file)) {
+                    @unlink($wpc_map_tmp);
+                }
             }
         }
 
@@ -1804,20 +2250,7 @@ class wps_cacheHtml
         }
 
         if (!empty($this->options['cache']['headers']) && $this->options['cache']['headers'] == '1') {
-            $headers = array();
-
-            foreach (headers_list() as $header) {
-                $parts = explode(':', $header, 2);
-                // X-WPC-CC describes this render's store verdict, and the file is shared by both
-                // devices and both copy families: replayed on another copy it would name the
-                // wrong one.
-                if (count($parts) == 2 && strcasecmp(trim($parts[0]), 'X-WPC-CC') !== 0) {
-                    $headers[trim($parts[0])] = trim($parts[1]);
-                }
-            }
-
-            $headersJson = json_encode($headers);
-            wpc_fs_put($this->cachePath . 'headers.json', $headersJson);
+            wpc_fs_put($this->cachePath . 'headers.json', json_encode(self::storedHeaderSet(headers_list())));
         }
 
         // Last transform before the write: every belt above still sees the inline CSS.
@@ -1834,6 +2267,26 @@ class wps_cacheHtml
         update_option('wps_ic_purge_rules', $purge_rules, false);
 
         return $buffer;
+    }
+
+    /**
+     * The header set stored beside a copy (the Headers row) from the lines of a response: the one
+     * place it is made, whatever branch the render took. X-WPC-CC describes this render's store
+     * verdict, and the file is shared by both devices and both copy families: replayed on another
+     * copy it would name the wrong one. Set-Cookie is one visitor's: a plugin's session start puts
+     * it on a render, and replayed it would hand that session to every visitor served the copy.
+     */
+    public static function storedHeaderSet(array $lines)
+    {
+        $headers = [];
+        foreach ($lines as $line) {
+            $parts = explode(':', (string) $line, 2);
+            if (count($parts) == 2 && strcasecmp(trim($parts[0]), 'X-WPC-CC') !== 0 && strcasecmp(trim($parts[0]), 'Set-Cookie') !== 0) {
+                $headers[trim($parts[0])] = trim($parts[1]);
+            }
+        }
+
+        return $headers;
     }
 
     public function cacheLoggedIn()
@@ -1905,8 +2358,14 @@ class wps_cacheHtml
      */
     public function saveGzCache($buffer, $prefix, $family = '', $reason = '')
     {
+        if (function_exists('wpc_page_cache_blocked') && wpc_page_cache_blocked()) {
+            return $buffer;
+        }
         if (!empty($_GET['disable_cache'])) {
             return true;
+        }
+        if ((string) $this->urlKey === '') {
+            return $buffer;
         }
         $family = (string) $family;
         // v7.10.660 (B3) — fold-split wrap at cache-write, behind wpc_fold_split (default false).
@@ -1928,6 +2387,7 @@ class wps_cacheHtml
         }
 
 
+        $wpc_stored = false;
         $wpc_names = wpc_copy_names($this->cachePath, (string) $prefix, $family);
         $final = $wpc_names['gzip'];
         // v7.10.647 — Brotli pairing invariant (R1): the _br sibling dies BEFORE any
@@ -1937,7 +2397,7 @@ class wps_cacheHtml
         $tmp   = $final . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
         $fp = @fopen($tmp, 'w+');
         if ($fp === false) {
-            if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM']) && function_exists('wpc_cache_first_log')) {
+            if (wpc_warm_request() && function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('warm-drop-fopen', '', '', ['variant' => (string) $prefix, 'path' => substr($final, -60)]);
             }
             return $buffer;
@@ -1946,34 +2406,25 @@ class wps_cacheHtml
         fclose($fp);
         if (!@rename($tmp, $final)) {
             @unlink($tmp);
-            if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM']) && function_exists('wpc_cache_first_log')) {
+            if (wpc_warm_request() && function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('warm-drop-rename', '', '', ['variant' => (string) $prefix, 'path' => substr($final, -60)]);
             }
         } else {
+            $wpc_stored = true;
             wpc_fs_put($wpc_names['md5'], md5($buffer));
             wpc_copy_links_record($wpc_names['links'], $buffer);
-            // The file serve names the reason this copy is private (X-WPC-CC), not a fixed label
-            // (webdesign4u.com.au, 2026-09-28: a device-mix copy was served as local-only-critless).
-            if ($family !== '' && preg_match('/^[a-z0-9-]{1,40}$/', (string) $reason)) {
-                wpc_fs_put($wpc_names['reason'], (string) $reason);
-            } else {
-                @unlink($wpc_names['reason']);
+            wpc_served_head_record($wpc_names['head'], $buffer, (string) $prefix, $final);
+            if ($family === '' && $this->userFolder === '' && defined('WPC_CACHE_LOGGED_IN') && function_exists('wpc_cache_phase_on') && wpc_cache_phase_on('p4')) {
+                wpc_br_prestore($wpc_names['br'], $wpc_names['md5'], $buffer);
             }
-            foreach (['rewarm', 'stale_br', 'stale_gzip', 'stale_html'] as $copyKey) {
-                @unlink($wpc_names[$copyKey]);
-            }
-            // The page is now exactly one family: the other one's copy, stale copy and rewarm
-            // counter for this device go.
-            foreach (wpc_copy_names($this->cachePath, (string) $prefix, $family === '' ? WPC_COPY_FAMILY_LOCALONLY : '') as $wpc_other) {
-                @unlink($wpc_other);
-            }
+            wpc_copy_settle($this->cachePath, (string) $prefix, $family, $reason);
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('copy-written', (string) $this->urlKey, '', [
                     'family' => $family === '' ? 'public' : 'localonly',
                     'device' => (string) $prefix === '' ? 'desktop' : rtrim((string) $prefix, '_'),
                 ]);
             }
-            if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM']) && function_exists('wpc_cache_first_log')) {
+            if (wpc_warm_request() && function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('warm-wrote', '', '', ['variant' => (string) $prefix, 'bytes' => (int) @filesize($final)]);
             }
             // v7.21.288 — WRITE RECEIPT, every successful write (warm or visitor): the one
@@ -1988,33 +2439,145 @@ class wps_cacheHtml
         }
 
 
-        if ($family === '') {
-            $this->writeStaticMirror($buffer, $prefix);
-        } else {
-            // The mirror is served by the web server with the mirror's own public headers, so a
-            // local-only page has none, and an older public one for this URL must go.
-            $this->unlinkStaticMirrorCopy($prefix);
+        $mirrorUri = $this->mirrorUri();
+        if ($mirrorUri !== null) {
+            if ($family === '') {
+                $this->writeStaticMirror($buffer, $prefix, $mirrorUri);
+            } else {
+                // The mirror is served by the web server with the mirror's own public headers, so a
+                // local-only page has none, and an older public one for this URL must go.
+                $this->unlinkStaticMirrorCopy($prefix, $mirrorUri);
+            }
+        }
+
+        if ($wpc_stored && $this->userFolder === '' && $this->cachePath === WPS_IC_CACHE . $this->urlKey . '/') {
+            if (function_exists('wpc_p2_note_stored')) {
+                wpc_p2_note_stored((string) $this->urlKey);
+            }
+            if ($family === '' && !wpc_warm_request() && function_exists('wpc_warm_note_miss')) {
+                wpc_warm_note_miss((string) $this->urlKey);
+            }
         }
 
         return $buffer;
     }
 
-    /** Remove the static-mirror copy of the current URL for one device, if the mirror is on. */
-    private function unlinkStaticMirrorCopy($prefix)
+    /**
+     * The path the web server hands the static mirror for, or null when this render's copy is not
+     * the one every anonymous visitor is served. The server serves <host>/<path>/index.html_gzip to
+     * any cookieless request for <path> with no query string, so a render writes or retires it only
+     * when it is that page and no other: the bare page key (no signed-in folder, no cookie
+     * segments), no signed-in visitor, and a key that is the key of the request's path alone, so a
+     * query string that varies the page (its own key) never reaches the mirror while a tracking
+     * parameter, which collapses onto the clean key, does. The path comes from the URL the key was
+     * made from (wps_ic_url_key::requestUrl(), locked in before a translation plugin rewrites
+     * REQUEST_URI), never from the live REQUEST_URI. '' is the home page. The server hands the
+     * folder of the site's own host to a request for any Host, so only a render whose Host header
+     * is a plain host name that is the site's own (hostIsSite) writes or retires it.
+     */
+    private function mirrorUri()
+    {
+        if ($this->cachePath !== WPS_IC_CACHE . $this->urlKey . '/') {
+            return null;
+        }
+        if (function_exists('is_user_logged_in') && is_user_logged_in()) {
+            return null;
+        }
+        $hostHeader = isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : '';
+        if (preg_match('/^[A-Za-z0-9._-]+(?::[0-9]{1,5})?\z/', $hostHeader) !== 1 || !self::hostIsSite($hostHeader)) {
+            return null;
+        }
+        $request = wps_ic_url_key::requestHostPath();
+        if (strpos($request, $hostHeader) !== 0 || $this->url_key_class->keyFor($request) !== (string) $this->urlKey) {
+            return null;
+        }
+        $uri = rtrim((string) substr($request, strlen($hostHeader)), '/');
+        if ($uri !== '' && ($uri[0] !== '/' || strpos($uri, '//') === 0)) {
+            return null;
+        }
+        if (strpos($uri, '..') !== false || strpos($uri, "\0") !== false) {
+            return null;
+        }
+
+        return $uri;
+    }
+
+    /**
+     * Whether a Host header names the site: the home host or the WordPress host, compared with
+     * wpc_canon_is_same_host (www- and case-insensitive), and the punycode form of either where intl
+     * is present. A port is admitted only when it is that of the address the host matched, or the
+     * scheme's default (80 for http, 443 for https) when that address names none. Nothing else is the
+     * site: not a subdomain, an internal name or an address, and X-Forwarded-Host is not read.
+     */
+    private static function hostIsSite($hostHeader)
+    {
+        if (!function_exists('wpc_canon_is_same_host') || !function_exists('home_url')) {
+            return false;
+        }
+        $port = preg_match('/:([0-9]+)\z/', $hostHeader, $found) === 1 ? $found[1] : '';
+        $owned = [(string) home_url()];
+        if (function_exists('site_url')) {
+            $owned[] = (string) site_url();
+        }
+        foreach ($owned as $ownUrl) {
+            $ownHost = (string) wp_parse_url($ownUrl, PHP_URL_HOST);
+            $ownPort = wp_parse_url($ownUrl, PHP_URL_PORT);
+            if (!$ownPort) {
+                $ownPort = strtolower((string) wp_parse_url($ownUrl, PHP_URL_SCHEME)) === 'http' ? 80 : 443;
+            }
+            if ($port !== '' && $port !== (string) $ownPort) {
+                continue;
+            }
+            $names = [$ownHost];
+            if ($ownHost !== '' && function_exists('idn_to_ascii') && defined('INTL_IDNA_VARIANT_UTS46')) {
+                $ascii = idn_to_ascii($ownHost, 0, INTL_IDNA_VARIANT_UTS46);
+                if (is_string($ascii) && $ascii !== '') {
+                    $names[] = $ascii;
+                }
+            }
+            foreach ($names as $name) {
+                if ($name !== '' && wpc_canon_is_same_host('https://' . $hostHeader . '/', 'https://' . $name . '/')) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The host folder of the static mirror: the site's own host, which the server's rule reads for a
+     * request that carries any Host. The writer, every retirer, the folder's header file and the
+     * Static Serve self-test name the folder through here. '' when it cannot be named.
+     */
+    public static function staticMirrorHost()
+    {
+        return self::mirrorFolderName(function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '');
+    }
+
+    /** The host as a folder name under the cache root, or '' when it is not one: empty, longer than a DNS name (253), a path segment (a leading dot), or holding a slash, a backslash, a space or a control character. */
+    private static function mirrorFolderName($host)
+    {
+        $host = (string) $host;
+
+        return ($host === '' || strlen($host) > 253 || $host[0] === '.' || preg_match('/[\\\\\/\x00-\x20\x7f]/', $host) === 1) ? '' : $host;
+    }
+
+    /** Remove the static-mirror copy of the page $uri (mirrorUri()) for one device, if the mirror is on. */
+    private function unlinkStaticMirrorCopy($prefix, $uri)
     {
         if (!apply_filters('wpc_static_serve', defined('WPC_STATIC_SERVE') && WPC_STATIC_SERVE) || !defined('WPS_IC_CACHE')) {
             return;
         }
-        $host = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : (string) ($_SERVER['HTTP_HOST'] ?? '');
-        $uri = rtrim((string) strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?'), '/');
-        if ($host === '' || strpos($uri, '..') !== false || strpos($uri, "\0") !== false || strpos($host, '/') !== false) {
+        $host = self::staticMirrorHost();
+        if ($host === '' || wpc_fs_link_below(WPS_IC_CACHE, WPS_IC_CACHE . $host . $uri)) {
             return;
         }
         $device = (strpos((string) $prefix, 'mobile') !== false) ? 'mobile_' : '';
         $removed = 0;
-        foreach (['index.html_gzip', 'index.html'] as $name) {
+        foreach (['index.html_gzip', 'index.html', 'links.txt'] as $name) {
             $path = WPS_IC_CACHE . $host . $uri . '/' . $device . $name;
-            if (@is_file($path) && @unlink($path)) {
+            if (@is_file($path) && @unlink($path) && $name !== 'links.txt') {
                 $removed++;
             }
         }
@@ -2024,7 +2587,7 @@ class wps_cacheHtml
     }
 
 
-    private function writeStaticMirror($buffer, $prefix)
+    private function writeStaticMirror($buffer, $prefix, $uri)
     {
         if (!apply_filters('wpc_static_serve', defined('WPC_STATIC_SERVE') && WPC_STATIC_SERVE)) {
             return;
@@ -2034,10 +2597,11 @@ class wps_cacheHtml
         // our PHP read floors never see it. Stand down AND retire any files already written.
         if (stripos((string) ($_SERVER['SERVER_SOFTWARE'] ?? ''), 'nginx') !== false
             && !apply_filters('wpc_mirror_on_nginx', false)) {
-            $mirrorHost = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '';
-            $mirrorPath = rtrim(strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?'), '/');
-            if ($mirrorHost !== '' && strpos($mirrorPath, '..') === false && strpos($mirrorPath, "\0") === false) {
-                foreach (['index.html_gzip', 'mobile_index.html_gzip', 'index.html', 'mobile_index.html'] as $mirrorFileName) {
+            $mirrorHost = self::staticMirrorHost();
+            $mirrorPath = $uri;
+            if ($mirrorHost !== '' && strpos($mirrorPath, '..') === false && strpos($mirrorPath, "\0") === false
+                && !wpc_fs_link_below(WPS_IC_CACHE, WPS_IC_CACHE . $mirrorHost . $mirrorPath)) {
+                foreach (['index.html_gzip', 'mobile_index.html_gzip', 'index.html', 'mobile_index.html', 'links.txt', 'mobile_links.txt'] as $mirrorFileName) {
                     $mirrorFilePath = WPS_IC_CACHE . $mirrorHost . $mirrorPath . '/' . $mirrorFileName;
                     if (@file_exists($mirrorFilePath)) {
                         @unlink($mirrorFilePath);
@@ -2048,15 +2612,13 @@ class wps_cacheHtml
         }
         // Canonical host (matches the htaccess $http_host = home_url host AND the dual-purge below). Using
         // the request HTTP_HOST would mis-key alias/www hits vs the fixed htaccess rule.
-        $host = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : (string) ($_SERVER['HTTP_HOST'] ?? '');
+        $host = self::staticMirrorHost();
         if ($host === '') {
             return;
         }
-        $uri  = strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?');
-        $uri  = rtrim($uri, '/');
         // Security: never let a crafted URI escape the cache dir. A '..' or NUL → skip the mirror
         // (the request still serves fine via the PHP drop-in). Normal WP paths are unaffected.
-        if (strpos($uri, '..') !== false || strpos($uri, "\0") !== false || strpos($host, '/') !== false) {
+        if (strpos($uri, '..') !== false || strpos($uri, "\0") !== false) {
             return;
         }
         // Map our variant prefix ('mobile-webp_' | 'mobile_' | 'webp_' | '') → the htaccess variant.
@@ -2084,6 +2646,8 @@ class wps_cacheHtml
         fclose($fp);
         if (!@rename($tmp, $final)) {
             @unlink($tmp);
+        } else {
+            wpc_copy_links_record($dir . $htPrefix . 'links.txt', $buffer);
         }
         // Each mirror dir gets its OWN .htaccess carrying THIS page's per-URL tag, so a per-URL purge
         // evicts exactly this page and a homepage purge does not over-evict subpages. $uri is
@@ -2115,8 +2679,8 @@ class wps_cacheHtml
         if (!defined('WPS_IC_CACHE') || !function_exists('home_url')) {
             return false;
         }
-        $host = (string) wp_parse_url(home_url(), PHP_URL_HOST);
-        if ($host === '' || strpos($host, '/') !== false) {
+        $host = self::staticMirrorHost();
+        if ($host === '') {
             return false;
         }
         // v7.10.673 — this .htaccess governs ONE mirror dir (the page it was written for), so it
@@ -2190,7 +2754,15 @@ class wps_cacheHtml
     public function getCache($prefix = '')
     {
 
-        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+        if (wpc_warm_request()) {
+            return;
+        }
+        // A request carrying a personal cookie is never served a shared copy. Both in-WordPress
+        // serve paths (checkCache at init, checkCache_plugins_loaded) end here, so the rule sits
+        // in the one reader they share. Without it a shopper the drop-in had let past (cart
+        // cookies) was served the stored empty-cart page from here (rosella.com.co,
+        // anacletababy.com, babypinkworld.com).
+        if (self::wpc_matched_personal_cookie() !== '') {
             return;
         }
         if (!empty($prefix)) {
@@ -2210,12 +2782,13 @@ class wps_cacheHtml
             if (file_exists($gzipFile) && is_readable($gzipFile)) {
                 $this->setupCacheHeaders($this->cachePath . $prefix . $baseFileName . '_gzip', $wpc_family);
                 wpc_hit_kick((string) $this->urlKey);
-                if ($stalePlan === 'stale' && wpc_serve_stale_copy($this->cachePath, $prefix) && function_exists('wpc_cache_first_log')) {
+                if ($stalePlan === 'stale' && wpc_serve_stale_copy($this->cachePath, $prefix, $this->userFolder !== '') && function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('stale-serve-rewarm', (string) $this->urlKey, '', ['variant' => (string) $prefix]);
                 }
                 if (function_exists('wpc_views_24h_bump')) { wpc_views_24h_bump((string) $this->urlKey); }
-                // Nginx instantly echoes readgzfile instead of saving it to variable.
-                readgzfile($this->cachePath . $prefix . $baseFileName . '_gzip');
+                if (!wpc_send_gzip_copy($gzipFile)) {
+                    readgzfile($gzipFile);
+                }
                 die();
             }
         }
@@ -2223,7 +2796,7 @@ class wps_cacheHtml
         if (file_exists($this->cachePath . $prefix . $baseFileName) && is_readable($this->cachePath . $prefix . $baseFileName)) {
             $this->setupCacheHeaders($this->cachePath . $prefix . $baseFileName, $wpc_family);
             wpc_hit_kick((string) $this->urlKey);
-            if ($stalePlan === 'stale' && wpc_serve_stale_copy($this->cachePath, $prefix) && function_exists('wpc_cache_first_log')) {
+            if ($stalePlan === 'stale' && wpc_serve_stale_copy($this->cachePath, $prefix, $this->userFolder !== '') && function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('stale-serve-rewarm', (string) $this->urlKey, '', ['variant' => (string) $prefix]);
             }
             if (function_exists('wpc_views_24h_bump')) { wpc_views_24h_bump((string) $this->urlKey); }
@@ -2263,9 +2836,11 @@ class wps_cacheHtml
      * Headers for a copy served from the file. $family is the copy family the reader found: a
      * local-only copy goes out private, with no s-maxage and no Cache-Tag, so no shared cache
      * holds it on the second request either — the file carries the verdict the render made.
+     * A copy kept in a signed-in visitor's folder goes out the same way, whatever its family.
      */
     public function setupCacheHeaders($cache_filepath, $family = '')
     {
+        $wpc_signed_in_copy = $this->userFolder !== '';
         // A session cookie (started by any plugin at boot) rides every PHP response and
         // makes CDNs refuse to store it — cached-file serves are anonymous by definition.
         // Same for the session engine's auto-sent Pragma: no-cache.
@@ -2276,10 +2851,13 @@ class wps_cacheHtml
         }
         wpc_send_header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($cache_filepath)) . ' GMT');
 
-        if ((string) $family !== '') {
+        if ((string) $family !== '' || $wpc_signed_in_copy) {
             wpc_send_header('Cache-Control: ' . WPC_CC_LOCAL_ONLY);
             wpc_send_header('Expires: ' . gmdate('D, d M Y H:i:s') . ' GMT');
-            wpc_send_header('X-WPC-CC: local-only-' . wpc_copy_reason_label($cache_filepath));
+            if (!wpc_off_flag('off_wire_gzip')) {
+                wpc_send_header('Vary: Accept-Encoding', false);
+            }
+            wpc_send_header('X-WPC-CC: local-only-' . ($wpc_signed_in_copy ? 'signed-in' : wpc_copy_reason_label($cache_filepath)));
             wpc_send_header('Server-Timing: wpc-cache;desc=hit', false);
             wpc_send_header('X-Cache-By: Advanced Cache - Gzip');
             return;
@@ -2290,7 +2868,9 @@ class wps_cacheHtml
         wpc_send_header('Cache-Control: ' . wpc_cc_freshness($browserMaxAge, $edgeMaxAge,
             function_exists('wpc_edge_swr') ? wpc_edge_swr() : 0));
         wpc_send_header('Expires: ' . gmdate('D, d M Y H:i:s', time() + $browserMaxAge) . ' GMT');
-
+        if (!wpc_off_flag('off_wire_gzip')) {
+            wpc_send_header('Vary: Accept-Encoding', false);
+        }
 
         $tagHost = strtolower((string) preg_replace('/:\d+$/', '', isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : ''));
         if (strpos($tagHost, 'www.') === 0) { $tagHost = substr($tagHost, 4); }
@@ -2308,13 +2888,46 @@ class wps_cacheHtml
         wpc_send_header('X-Cache-By: Advanced Cache - Gzip');
     }
 
+    /**
+     * A render the plugin started to rewarm a page found the page gone (it answered 404 or 410): the
+     * page leaves every layer, as any hard purge of one address does (wps_ic_cache_integrations::
+     * purgeUrlHtml: the page folder with its variants and stale copies, the static mirror, Varnish,
+     * the edge by URL), so the next request is answered by WordPress and not by a copy of a page that
+     * no longer exists. Without this a stale copy of a taken-down page is served until its window
+     * ends (WPC_STALE_SERVE_MAX), and a rewarm that answers 404 never replaces it. Answers whether
+     * there was anything to remove.
+     */
+    public function dropCopiesOfGonePage()
+    {
+        $held = false;
+        foreach ((array) @scandir($this->cachePath) as $name) {
+            if (preg_match('/(?:index|stale)\.html(?:_gzip|_br)?$/', (string) $name) === 1) {
+                $held = true;
+                break;
+            }
+        }
+        $mirrorUri = $this->mirrorUri();
+        if (!$held && $mirrorUri === null) {
+            return false;
+        }
+        $url = wps_ic_url_key::sanitizeSameHostUrl(wps_ic_url_key::requestHostPath());
+        if ($url === '' || !class_exists('wps_ic_cache_integrations')) {
+            return false;
+        }
+        if (wpc_page_address_differs($this->cachePath, $url)) {
+            return false;
+        }
+        wps_ic_cache_integrations::purgeUrlHtml((string) $this->urlKey, $url, ['context' => 'gone-page', 'warm' => false, 'force' => true]);
+        return true;
+    }
+
     public function removeCacheFiles($post_id, $mode = null)
     {
-        if ($post_id == 'home') {
+        if ($post_id === 'home') {
             $post_id = 0;
         }
 
-        if ($post_id == 'all') {
+        if (wpc_purge_scope_all($post_id)) {
             // The journal must survive the event it records — a purge that wipes its own
             // receipt makes every storm undiagnosable. Keep the last 64KB across the wipe.
             $journalFile = function_exists('wpc_cflog_path') ? wpc_cflog_path() : '';
@@ -2329,7 +2942,7 @@ class wps_cacheHtml
                 wpc_mark_site_stale();
                 self::wpc_stale_walk_after_response();
             } else {
-            $keepEntries = ['css', 'js', 'wpc-cflog.php'];
+            $keepEntries = array_merge(['css', 'js', 'wpc-cflog.php'], wpc_flag_entries());
             $cacheRoot = rtrim(WPS_IC_CACHE, '/');
             // v7.10.530 — RENAME, THEN DELETE. The recursive unlink below blocks every
             // concurrent render trying to WRITE into the same tree: receipted on the flagship as
@@ -2441,10 +3054,15 @@ class wps_cacheHtml
             }
 
             $urlKey = $this->url_key_class->setup($url);
-            if (function_exists('wpc_purge_is_soft') && wpc_purge_is_soft($mode)) {
-                $renamedCount = self::wpc_stale_mark_page_dir(WPS_IC_CACHE . $urlKey);
+            $gone = false;
+            if ($post_id > 0 && function_exists('get_post') && class_exists('wps_ic_cache') && !wps_ic_cache::takedownOff()) {
+                $row = get_post((int) $post_id);
+                $gone = is_object($row) && !wps_ic_cache::postIsPublic($row);
+            }
+            if (!$gone && function_exists('wpc_purge_is_soft') && wpc_purge_is_soft($mode)) {
+                $marked = self::wpc_stale_mark_page($urlKey, $url);
                 if (function_exists('wpc_cache_first_log')) {
-                    wpc_cache_first_log('purge-soft-url', (string) $urlKey, '', ['renamed' => $renamedCount]);
+                    wpc_cache_first_log('purge-soft-url', (string) $urlKey, '', ['renamed' => $marked['renamed'], 'mirror' => $marked['mirror']]);
                 }
             } else {
                 self::removeDirectory(WPS_IC_CACHE . $urlKey);
@@ -2452,6 +3070,21 @@ class wps_cacheHtml
                 self::removeStaticMirror($url);
             }
         }
+    }
+
+    /**
+     * Stale-marks one page: the copies of its folder (wpc_stale_mark_page_dir) and the static
+     * mirror's copies of its address (retireStaticMirrorCopies), which the web server answers from
+     * before PHP runs. $url is the page's address, or '' to read it from the key. Answers how many
+     * files each layer gave up: ['renamed', 'mirror'].
+     */
+    public static function wpc_stale_mark_page($urlKey, $url = '')
+    {
+        $renamed = self::wpc_stale_mark_page_dir(WPS_IC_CACHE . $urlKey);
+        if ($url === '' && class_exists('wps_ic_url_key')) {
+            $url = wps_ic_url_key::sanitizeSameHostUrl(wps_ic_url_key::getUrlFromKey((string) $urlKey));
+        }
+        return ['renamed' => $renamed, 'mirror' => $url === '' ? 0 : self::retireStaticMirrorCopies($url)];
     }
 
     /**
@@ -2546,26 +3179,103 @@ class wps_cacheHtml
     }
 
 
-    public static function removeStaticMirror($url)
+    /**
+     * The mirror folder of a page address, or '' when the address names none this site keeps: the
+     * mirror is off, the host is not a folder name, the path is not a plain path, or the folder is
+     * reached through a link below the cache root. The one place that resolves a mirror folder,
+     * for the page's folder delete (removeStaticMirror) and the copy retire (retireStaticMirrorCopies).
+     */
+    private static function staticMirrorDir($url)
     {
         if (!apply_filters('wpc_static_serve', defined('WPC_STATIC_SERVE') && WPC_STATIC_SERVE)) {
-            return;
+            return '';
         }
         $parts = function_exists('wp_parse_url') ? wp_parse_url((string) $url) : parse_url((string) $url);
         $host  = isset($parts['host']) ? (string) $parts['host'] : '';
-        if ($host === '' || strpos($host, '/') !== false) {
-            return;
+        $mirrorHost = self::staticMirrorHost();
+        $host = ($mirrorHost !== '' && wps_ic_url_key::excludeHost($host) === wps_ic_url_key::excludeHost($mirrorHost))
+            ? $mirrorHost
+            : self::mirrorFolderName($host);
+        if ($host === '') {
+            return '';
         }
         $path = rtrim(isset($parts['path']) ? (string) $parts['path'] : '', '/');
         if (strpos($path, '..') !== false || strpos($path, "\0") !== false) {
+            return '';
+        }
+        if (wpc_fs_link_below(WPS_IC_CACHE, WPS_IC_CACHE . $host . $path)) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('purge-link-refused', '', WPS_IC_CACHE . $host . $path, []);
+            }
+            return '';
+        }
+        return WPS_IC_CACHE . $host . $path;
+    }
+
+    public static function removeStaticMirror($url)
+    {
+        $dir = self::staticMirrorDir($url);
+        if ($dir === '') {
             return;
         }
-        if ($path === '') {
-            @unlink(WPS_IC_CACHE . $host . '/index.html' . '_gzip');
-            @unlink(WPS_IC_CACHE . $host . '/mobile_index.html' . '_gzip');
+        $parts = function_exists('wp_parse_url') ? wp_parse_url((string) $url) : parse_url((string) $url);
+        if (rtrim(isset($parts['path']) ? (string) $parts['path'] : '', '/') === '') {
+            @unlink($dir . '/index.html' . '_gzip');
+            @unlink($dir . '/mobile_index.html' . '_gzip');
+            @unlink($dir . '/links.txt');
+            @unlink($dir . '/mobile_links.txt');
         } else {
-            self::removeDirectory(WPS_IC_CACHE . $host . $path);
+            foreach ((array) @scandir($dir) as $name) {
+                $name = (string) $name;
+                if ($name === '' || $name[0] === '.') {
+                    continue;
+                }
+                if (@is_link($dir . '/' . $name) || @is_file($dir . '/' . $name)) {
+                    @unlink($dir . '/' . $name);
+                }
+            }
+            @rmdir($dir);
         }
+    }
+
+    public static function removeStaticMirrorSubtree($url)
+    {
+        $dir = self::staticMirrorDir($url);
+        if ($dir === '') {
+            return;
+        }
+        $parts = function_exists('wp_parse_url') ? wp_parse_url((string) $url) : parse_url((string) $url);
+        if (rtrim(isset($parts['path']) ? (string) $parts['path'] : '', '/') === '') {
+            self::removeStaticMirror($url);
+            return;
+        }
+        self::removeDirectory($dir);
+    }
+
+    /**
+     * Takes the mirror's copies of one page out of service without touching anything below it:
+     * the files the web server hands out and the records of what they link, both devices. A soft
+     * purge stale-marks the page's copies in its own folder, and the web server answers from the
+     * mirror before PHP runs, so a mirror copy left in place is a fresh page for as long as
+     * nothing renders the page again, which nothing does while the server answers it. Answers how
+     * many files it removed.
+     */
+    public static function retireStaticMirrorCopies($url)
+    {
+        $dir = self::staticMirrorDir($url);
+        if ($dir === '' || !@is_dir($dir)) {
+            return 0;
+        }
+        $removed = 0;
+        foreach (['index.html_gzip', 'mobile_index.html_gzip', 'index.html', 'mobile_index.html', 'links.txt', 'mobile_links.txt'] as $name) {
+            if (@is_file($dir . '/' . $name) && @unlink($dir . '/' . $name)) {
+                $removed++;
+            }
+        }
+        if ($removed && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('mirror-retired', '', '', ['n' => $removed]);
+        }
+        return $removed;
     }
 
     public static function removeDirectory($path)
@@ -2583,8 +3293,12 @@ class wps_cacheHtml
 
     public function removeCacheFilesByKey($urlKey)
     {
+        $mirrorUrl = class_exists('wps_ic_url_key') ? wps_ic_url_key::sanitizeSameHostUrl(wps_ic_url_key::getUrlFromKey((string) $urlKey)) : '';
         self::removeDirectory(WPS_IC_CACHE . $urlKey);
         self::removeDirectory(WP_CONTENT_DIR . '/cache/wp-preload/' . $urlKey);
+        if ($mirrorUrl !== '') {
+            self::removeStaticMirror($mirrorUrl);
+        }
     }
 
     public function removeCombinedFiles($post_id)
@@ -2597,7 +3311,7 @@ class wps_cacheHtml
         // sweep collects dead keys. JS combine DOES serve-from-existing, so its rebuild
         // trigger becomes a stale marker (epoch for 'all', per-key file) that the gate
         // honors — rebuild overwrites in place, no absence window for either lane.
-        if ($post_id == 'all') {
+        if (wpc_purge_scope_all($post_id)) {
             update_option('wpc_combine_stale_epoch', time(), false);
             return;
         }
@@ -2633,7 +3347,7 @@ class wps_cacheHtml
                 'via'  => implode('<', $wpc_tw_via),
             ]);
         }
-        if ($post_id == 'all') {
+        if (wpc_purge_scope_all($post_id)) {
 
 
             if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'wipeCriticalPreservingStores')) {

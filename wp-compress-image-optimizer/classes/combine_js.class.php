@@ -37,7 +37,7 @@ class wps_ic_combine_js
 
         self::$excludes = new wps_ic_excludes();
         self::$rewrite = new wps_cdn_rewrite();
-        $this->settings = get_option(WPS_IC_SETTINGS);
+        $this->settings = function_exists('wpc_levered_settings') ? wpc_levered_settings(get_option(WPS_IC_SETTINGS)) : get_option(WPS_IC_SETTINGS);
         $this->filesize_cap = '500000';
         $this->combine_inline_scripts = true;
         $this->combine_external = false;
@@ -50,15 +50,7 @@ class wps_ic_combine_js
         }
 
 
-	    $cf = get_option(WPS_IC_CF);
-	    $cfCname = get_option(WPS_IC_CF_CNAME);
-	    $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok())) ? $cfCname : get_option('ic_custom_cname');
-        if (!empty($custom_cname) && function_exists('wpc_cdn_cname_is_reachable') && !wpc_cdn_cname_is_reachable($custom_cname)) { $custom_cname = ''; }
-        if (empty($custom_cname) || !$custom_cname) {
-            $this->zone_name = get_option('ic_cdn_zone_name');
-        } else {
-            $this->zone_name = $custom_cname;
-        }
+        $this->zone_name = wpc_cdn_host();
 
         //Check if Hide my WP is active and get replaces
         $this->hmwpReplace = false;
@@ -130,11 +122,34 @@ class wps_ic_combine_js
         return false;
     }
 
+    private function no_content_excludes_file()
+    {
+        return rtrim(WPS_IC_COMBINE . $this->urlKey, '/') . '/no-content-excludes.json';
+    }
+
+    /** The scripts this page's bundle left out of itself: the list its own build wrote beside it, else the one older builds kept in the site option. */
+    private function read_no_content_excludes()
+    {
+        $stored = json_decode((string) @file_get_contents($this->no_content_excludes_file()), true);
+        if (is_array($stored)) {
+            return $stored;
+        }
+        return get_option('wps_no_content_excludes_js');
+    }
+
+    private function write_no_content_excludes()
+    {
+        $json = json_encode(array_values((array) $this->no_content_excludes), JSON_INVALID_UTF8_SUBSTITUTE);
+        if (is_string($json)) {
+            wpc_fs_put($this->no_content_excludes_file(), $json);
+        }
+    }
+
     public function maybe_do_combine($html)
     {
-        if ($this->combine_exists() && empty($_GET['forceRecombine']) && !$this->wpc_combine_is_stale()) {
+        if ($this->combine_exists() && !$this->wpc_combine_is_stale()) {
 
-            $this->no_content_excludes = get_option('wps_no_content_excludes_js');
+            $this->no_content_excludes = $this->read_no_content_excludes();
 
             $html = $this->replace($html);
             return $html;
@@ -159,7 +174,7 @@ class wps_ic_combine_js
         $this->write_file_and_next();
         $this->wpc_sweep_unwritten_combined_files();
 
-        update_option('wps_no_content_excludes_js', $this->no_content_excludes);
+        $this->write_no_content_excludes();
         $html = $this->insert_combined_scripts($html);
 
         return $html;
@@ -435,9 +450,9 @@ class wps_ic_combine_js
         }
 
         $path = urldecode($path);
-        $fullPath = ABSPATH . $path;
+        $fullPath = strtolower(substr($path, -3)) === '.js' ? wpc_install_file_real(ABSPATH . $path) : '';
 
-        if (!file_exists($fullPath)) {
+        if ($fullPath === '' || !is_file($fullPath)) {
             return false;
         }
 

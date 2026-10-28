@@ -51,7 +51,7 @@ if (!function_exists('wpc_stale_serve_plan')) {
                     if ($stale_rewarm_count >= 4) {
                         return 'miss';
                     }
-                    return 'stale';
+                    return wpc_stale_assets_ok($dir, $prefix) ? 'stale' : 'miss';
                 }
             }
             if (!defined('WPS_IC_CACHE')) {
@@ -85,16 +85,31 @@ if (!function_exists('wpc_stale_serve_plan')) {
             if ($rewarm_count >= 4) {
                 return 'miss';
             }
-            return 'stale';
+            return wpc_stale_assets_ok($dir, $prefix) ? 'stale' : 'miss';
         } catch (\Throwable $e) {
             return 'fresh';
         }
     }
 
+    function wpc_stale_assets_ok($dir, $prefix = '')
+    {
+        if (!function_exists('wpc_cache_p1_flag') || !wpc_cache_p1_flag()) {
+            return true;
+        }
+        $missing = wpc_copy_assets_missing($dir, $prefix);
+        if ($missing !== [] && function_exists('wpc_fs_log')) {
+            wpc_fs_log('stale-assets-missing', basename(rtrim((string) $dir, '/')), ['variant' => (string) $prefix, 'missing' => $missing]);
+        }
+        return $missing === [];
+    }
+
     function wpc_stale_unlink_copies($dir, $prefix = '')
     {
         $dir = rtrim((string) $dir, '/') . '/';
-        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt', 'links.txt'] as $copy_file) {
+        if (defined('WPS_IC_CACHE') && function_exists('wpc_fs_link_below') && wpc_fs_link_below(WPS_IC_CACHE, $dir)) {
+            return;
+        }
+        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt', 'links.txt', 'head.json'] as $copy_file) {
             @unlink($dir . $prefix . $copy_file);
         }
     }
@@ -110,6 +125,7 @@ class wps_advancedCache
 
     private $host;
     private $cachePath;
+    private $userFolder = '';
     private $url_key_class;
 
     public function __construct()
@@ -121,117 +137,10 @@ class wps_advancedCache
         $this->url_key_class = new wps_ic_url_key();
         $this->urlKey = $this->url_key_class->setup();
 
-	      // Append user cookie hash to the cache path if user is logged in
-	      $user_hash = '';
-				if (defined('WPC_CACHE_LOGGED_IN') && WPC_CACHE_LOGGED_IN){
-						foreach ( $_COOKIE as $key => $value ) {
-							if ( strpos( $key, 'wordpress_logged_in_' ) === 0 ) {
-								$user_hash = md5( $key . substr( $value, 0, 10 ) ) . '/';
-								break;
-							}
-						}
-
-				}
-
-	    // Add cookie variation to cache path
-	    $cookie_string = '';
-	    if (defined('WPC_CACHE_COOKIES') && WPC_CACHE_COOKIES !== false) {
-		    $cookie_values = [];
-		    $cache_cookies = WPC_CACHE_COOKIES;
-
-		    foreach ($cache_cookies as $cookie_name) {
-			    // Check if this is a prefix cookie (ends with _)
-			    if (substr($cookie_name, -1) === '_') {
-				    // This is a prefix - find all cookies that start with this prefix
-				    $prefix = $cookie_name; // Keep the underscore for matching
-				    foreach ($_COOKIE as $actual_cookie_name => $cookie_value) {
-					    if (strpos($actual_cookie_name, $prefix) === 0 && !empty($cookie_value)) {
-						    // Get the suffix (part after the prefix)
-						    $suffix = substr($actual_cookie_name, strlen($prefix));
-
-						    // Create a 7-character hash of the suffix and append to cookie value
-						    $suffix_hash = substr(hash('md5', $suffix), 0, 7);
-						    $cookie_values[] = $cookie_value . '_' . $suffix_hash;
-					    }
-				    }
-			    } else {
-				    // Regular cookie - exact match
-				    if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
-					    $cookie_values[] = $_COOKIE[$cookie_name];
-				    }
-			    }
-		    }
-
-		    if (!empty($cookie_values)) {
-			    $cookie_string = '_' . implode('_', $cookie_values);
-		    }
-	    }
-
-	    $this->cachePath = WPS_IC_CACHE . $user_hash . $this->urlKey . $cookie_string . '/';
+	    $this->userFolder = wps_ic_url_key::userFolder();
+	    $this->cachePath = WPS_IC_CACHE . $this->userFolder . $this->urlKey . wps_ic_url_key::cookieSuffix() . '/';
 
 
-    }
-
-    /**
-     * FrontEnd Editors Detection for various page builders
-     * @return bool
-     */
-    public static function isPageBuilder()
-    {
-        $page_builders = ['run_compress',
-            'run_restore',
-            'elementor-preview',
-            'fl_builder',
-            'et_fb',
-            'preview', //WP Preview
-            'builder',
-            'brizy',
-            'fb-edit',
-            'bricks',
-            'ct_template',
-            'ct_builder',
-            'cs-render',
-            'tatsu',
-            'trp-edit-translation',
-            'brizy-edit-iframe',
-            'ct_builder',
-            'livecomposer_editor',
-            'tatsu',
-            'tatsu-header',
-            'tatsu-footer',
-            'is-editor-iframe',
-            'tve'
-        ];
-
-        if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], 'cornerstone') !== false) {
-            return true;
-        }
-
-        if ((!empty($_GET['action']) && $_GET['action'] == 'in-front-editor')) {
-
-            return true;
-        }
-
-        if ((!empty($_GET['action']) && sanitize_text_field($_GET['action']) == 'edit#op-builder') || !empty($_GET['op3editor'])) {
-
-            return true;
-        }
-
-        if (!empty($_SERVER['REQUEST_URI'])) {
-            if (strpos($_SERVER['REQUEST_URI'], 'wp-json') || strpos($_SERVER['REQUEST_URI'], 'rest_route')) {
-                return false;
-            }
-        }
-
-        if (!empty($page_builders)) {
-            foreach ($page_builders as $page_builder) {
-                if (isset($_GET[$page_builder])) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -247,15 +156,6 @@ class wps_advancedCache
         }
 
         return false;
-    }
-
-    public static function isFEBuilder()
-    {
-        if ((!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || !empty($_GET['trp-edit-translation']) || !empty($_GET['elementor-preview']) || !empty($_GET['tatsu']) || !empty($_GET['is-editor-iframe']) || !empty($_GET['preview']) || !empty($_GET['PageSpeed']) || !empty($_GET['tve']) || !empty($_GET['et_fb']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['ct_builder']) || !empty($_GET['fb-edit']) || !empty($_GET['bricks']) || !empty($_GET['brizy-edit-iframe']) || !empty($_GET['brizy-edit']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php") || (!empty($_GET['page']) && $_GET['page'] == 'livecomposer_editor')) {
-            return true;
-        } else {
-            return false;
-        }
     }
 
     public function init()
@@ -321,14 +221,6 @@ class wps_advancedCache
             return true;
         }
 
-        if ( ! empty( $_COOKIE['woocommerce_cart_hash'] ) ) {
-            return true;
-        }
-
-        if ( ! empty( $_COOKIE['woocommerce_items_in_cart'] ) ) {
-            return true;
-        }
-
         if ((isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], 'wc-ajax=get_refreshed_fragments') !== false) ||
             (isset($_GET['wc-ajax']) && $_GET['wc-ajax'] === 'get_refreshed_fragments')) {
             return true;
@@ -340,6 +232,29 @@ class wps_advancedCache
 
     public function byPass()
     {
+        if (defined('WPC_NO_PAGE_CACHE') && WPC_NO_PAGE_CACHE) {
+            return true;
+        }
+
+        if ((string) $this->urlKey === '') {
+            return true;
+        }
+
+        if (wps_ic_url_key::userFolderDead()) {
+            return true;
+        }
+
+        // A personal cookie (a WooCommerce cart, a password-protected post, a commenter) makes
+        // the response that visitor's own: the drop-in serves no shared copy to it. The list is
+        // wps_ic_url_key::personalCookieNames(), the same one the in-WordPress reader and the
+        // store verdict ask; shoppers with items in the cart were served the cached empty-cart
+        // page (rosella.com.co, anacletababy.com, babypinkworld.com). Without the owner class
+        // loaded nothing can say the request is anonymous, so the drop-in serves nothing.
+        if (!class_exists('wps_ic_url_key') || !method_exists('wps_ic_url_key', 'personalCookieMatch')
+            || wps_ic_url_key::personalCookieMatch() !== '') {
+            return true;
+        }
+
         // Cart Fragments
         if ($this->isWooFragments()) {
             return true;
@@ -351,10 +266,16 @@ class wps_advancedCache
         $is_excluded_page = false;
 
         if (!empty($request_uri) && $request_uri !== '/') {
-            foreach ($excluded_pages as $page) {
-                if (str_contains($request_uri, $page)) {
-                    $is_excluded_page = true;
-                    break;
+            $query_at = strpos($request_uri, '?');
+            $path_part = $query_at === false ? $request_uri : substr($request_uri, 0, $query_at);
+            $query_part = $query_at === false ? '' : substr($request_uri, $query_at);
+            $is_excluded_page = preg_match('#(?:^|/)(?:cart|checkout|my-account)(?:/|$)#', $path_part) === 1;
+            if (!$is_excluded_page) {
+                foreach ($excluded_pages as $page) {
+                    if (str_contains($query_part, $page)) {
+                        $is_excluded_page = true;
+                        break;
+                    }
                 }
             }
         }
@@ -365,8 +286,9 @@ class wps_advancedCache
         }
 
         // Check mandatory cookies - bypass if any required cookie is missing
-        if (defined('WPC_MANDATORY_COOKIES') && WPC_MANDATORY_COOKIES !== false && is_array(WPC_MANDATORY_COOKIES)) {
-            foreach (WPC_MANDATORY_COOKIES as $mandatoryCookie) {
+        $mandatoryCookies = wps_ic_url_key::mandatoryCookies();
+        if ($mandatoryCookies) {
+            foreach ($mandatoryCookies as $mandatoryCookie) {
                 if (substr($mandatoryCookie, -1) === '_') {
                     $found = false;
                     foreach ($_COOKIE as $cookieName => $cookieValue) {
@@ -396,7 +318,7 @@ class wps_advancedCache
             $prefix = $prefix . '_';
         }
 
-        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+        if (wpc_warm_request()) {
             if (function_exists('ignore_user_abort')) {
                 @ignore_user_abort(true);
             }
@@ -433,7 +355,7 @@ class wps_advancedCache
     {
 
 
-        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+        if (wpc_warm_request()) {
             return;
         }
 
@@ -519,9 +441,9 @@ class wps_advancedCache
                 $this->setupCacheHeaders($brotliFile, 'br', $wpc_family);
                 wpc_hit_kick((string) $this->urlKey);
                 if ($stalePlan === 'stale') {
-                    wpc_serve_stale_copy($this->cachePath, $prefix);
+                    wpc_serve_stale_copy($this->cachePath, $prefix, $this->userFolder !== '');
                 }
-                header('Content-Encoding: br');
+                wpc_send_header('Content-Encoding: br');
                 readfile($brotliFile);
                 exit;
             }
@@ -533,10 +455,11 @@ class wps_advancedCache
                 $this->setupCacheHeaders($this->cachePath . $prefix . $baseFileName . '_gzip', 'gzip', $wpc_family);
                 wpc_hit_kick((string) $this->urlKey);
                 if ($stalePlan === 'stale') {
-                    wpc_serve_stale_copy($this->cachePath, $prefix);
+                    wpc_serve_stale_copy($this->cachePath, $prefix, $this->userFolder !== '');
                 }
-                // Nginx instantly echoes readgzfile instead of saving it to variable.
-                readgzfile($this->cachePath . $prefix . $baseFileName . '_gzip');
+                if (!wpc_send_gzip_copy($gzipFile)) {
+                    readgzfile($gzipFile);
+                }
                 exit;
             }
         }
@@ -545,7 +468,7 @@ class wps_advancedCache
             $this->setupCacheHeaders($this->cachePath . $prefix . $baseFileName, 'html', $wpc_family);
             wpc_hit_kick((string) $this->urlKey);
             if ($stalePlan === 'stale') {
-                wpc_serve_stale_copy($this->cachePath, $prefix);
+                wpc_serve_stale_copy($this->cachePath, $prefix, $this->userFolder !== '');
             }
             readfile($this->cachePath . $prefix . $baseFileName);
             exit;
@@ -610,10 +533,13 @@ class wps_advancedCache
      * Headers for a copy served from the file. $family is the copy family the reader found: a
      * local-only copy goes out private, with no s-maxage and no Cache-Tag, so no shared cache
      * holds it on the second request either — the file carries the verdict the render made.
+     * A copy kept in a signed-in visitor's folder goes out the same way, whatever its family: it is
+     * that visitor's page, and a shared cache must neither hold it nor tag it.
      */
     public function setupCacheHeaders($cache_filepath, $type = 'gzip', $family = '')
     {
-        $wpc_localonly = (string) $family !== '';
+        $wpc_signed_in_copy = $this->userFolder !== '';
+        $wpc_localonly = (string) $family !== '' || $wpc_signed_in_copy;
         // Session cookies make CDNs refuse to store the response; cached-file serves are
         // anonymous by definition.
         if (function_exists('header_remove')) {
@@ -645,7 +571,7 @@ class wps_advancedCache
             wpc_send_header('Cache-Control: ' . WPC_CC_LOCAL_ONLY);
             wpc_send_header('Expires: ' . gmdate('D, d M Y H:i:s') . ' GMT');
             // The reason the render stored this copy private (wpc_copy_reason_label, wpc-fs.php).
-            wpc_send_header('X-WPC-CC: local-only-' . wpc_copy_reason_label($cache_filepath));
+            wpc_send_header('X-WPC-CC: local-only-' . ($wpc_signed_in_copy ? 'signed-in' : wpc_copy_reason_label($cache_filepath)));
         } else {
             wpc_send_header('Cache-Control: ' . wpc_cc_freshness($browserMaxAge, $edgeMaxAge, wpc_edge_swr()));
             wpc_send_header('Expires: ' . gmdate('D, d M Y H:i:s', time() + $browserMaxAge) . ' GMT');
@@ -675,6 +601,11 @@ class wps_advancedCache
 		    // A local-only copy never takes an edge directive from the stored set, whichever
 		    // render wrote it.
 		    $wpc_edge_directives = $wpc_localonly ? ['cache-tag' => 1, 'cache-control' => 1, 'cdn-cache-control' => 1, 'surrogate-control' => 1, 'expires' => 1] : [];
+		    $wpc_edge_directives['set-cookie'] = 1;
+		    // A signed-in visitor's copy takes no other directive a shared cache or a host's page cache acts on either.
+		    if ($wpc_signed_in_copy) {
+			    $wpc_edge_directives += ['surrogate-key' => 1, 'x-litespeed-cache-control' => 1, 'x-litespeed-tag' => 1, 'x-accel-expires' => 1, 'xkey' => 1, 'x-cache-tags' => 1];
+		    }
 		    // Check if cache file exists
 		    if (file_exists($headerCacheFile)) {
 
@@ -694,7 +625,7 @@ class wps_advancedCache
 			    if (is_array($cachedHeaders)) {
 				    foreach ($cachedHeaders as $name => $value) {
 					    if (!isset($existingHeaders[$name]) && !isset($wpc_edge_directives[strtolower((string) $name)])) {
-						    header($name . ': ' . $value);
+						    wpc_send_header($name . ': ' . $value);
 					    }
 				    }
 			    }
@@ -714,7 +645,7 @@ class wps_advancedCache
 
     public function removeCacheFiles($post_id)
     {
-        if ($post_id == 'all') {
+        if (wpc_purge_scope_all($post_id)) {
             self::removeDirectory(WPS_IC_CACHE);
             return;
         }
@@ -744,7 +675,7 @@ class wps_advancedCache
         // sweep collects dead keys. JS combine DOES serve-from-existing, so its rebuild
         // trigger becomes a stale marker (epoch for 'all', per-key file) that the gate
         // honors — rebuild overwrites in place, no absence window for either lane.
-        if ($post_id == 'all') {
+        if (wpc_purge_scope_all($post_id)) {
             update_option('wpc_combine_stale_epoch', time(), false);
             return;
         }
@@ -773,7 +704,7 @@ class wps_advancedCache
                 'via'  => implode('<', $wpc_tw_via),
             ]);
         }
-        if ($post_id == 'all') {
+        if (wpc_purge_scope_all($post_id)) {
 
 
             if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'wipeCriticalPreservingStores')) {

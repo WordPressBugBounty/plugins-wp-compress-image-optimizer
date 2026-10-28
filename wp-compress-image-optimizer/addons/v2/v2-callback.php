@@ -54,71 +54,6 @@ if (!function_exists('wpc_v2_dest_ext_ok')) {
     }
 }
 
-function wpc_v2_verify_and_unsuppress($reason = '')
-
-{
-    if (!class_exists('WPC_Delivery_Resolver') || !method_exists('WPC_Delivery_Resolver', 'pick_real_image_probe')) {
-        return ['ok' => false, 'verify_cdn_ok' => false, 'stamped' => false, 'reason' => 'resolver_unavailable'];
-    }
-    $targets = method_exists('WPC_Delivery_Resolver', 'pick_real_image_probes')
-        ? WPC_Delivery_Resolver::pick_real_image_probes(3) : [];
-    if (empty($targets)) {
-        $one = WPC_Delivery_Resolver::pick_real_image_probe();
-        if (is_array($one) && !empty($one['cdn_webp_url'])) { $targets = [$one]; }
-    }
-    if (empty($targets)) {
-        return ['ok' => true, 'verify_cdn_ok' => false, 'stamped' => false, 'reason' => 'no_real_image_to_verify'];
-    }
-
-    // avif counts: an avif-first edge answering a next-gen Accept is healthy, not broken. One
-    // un-landed newest upload must not doom the site, and a cached negative must not pin it —
-    // hence N candidates + one cache-busted retry, under a hard probe budget.
-    $budget   = (int) apply_filters('wpc_v2_verify_probe_budget', 4);
-    $pass     = null;
-    $last     = ['code' => 0, 'fmt' => '', 'ctype' => ''];
-    $last_url = '';
-    foreach ($targets as $t) {
-        $url = isset($t['cdn_webp_url']) ? (string) $t['cdn_webp_url'] : '';
-        if ($url === '') continue;
-        $last_url = $url;
-        foreach ([0, 1] as $bust) {
-            if ($budget-- <= 0) break 2;
-            $u = $bust
-                ? ($url . (strpos($url, '?') === false ? '?' : '&') . 'wpcv=' . substr(md5($url . '|' . time()), 0, 8))
-                : $url;
-            $p     = WPC_Delivery_Resolver::probe($u, 'image/avif,image/webp,*/*');
-            $code  = is_array($p) ? (int) ($p['code'] ?? 0) : 0;
-            $fmt   = is_array($p) ? (string) ($p['fmt'] ?? '') : '';
-            $ctype = is_array($p) ? (string) ($p['ctype'] ?? '') : '';
-            $last  = ['code' => $code, 'fmt' => $fmt, 'ctype' => $ctype];
-            if ($code === 200 && ($fmt === 'webp' || $fmt === 'avif')) { $pass = $t; break 2; }
-            // Retry cache-busted only where a stored negative is plausible.
-            if ($code !== 404 && $code !== 403 && $code !== 502 && $code !== 504) break;
-        }
-    }
-    if ($pass === null) {
-        return ['ok' => true, 'verify_cdn_ok' => false, 'stamped' => false, 'reason' => 'edge_not_serving_webp',
-                'probe' => $last, 'probe_url' => $last_url];
-    }
-    $target = $pass;
-
-
-    if (function_exists('update_option') && function_exists('wpc_v2_env_fingerprint')) {
-        update_option('wpc_v2_provisioned_fingerprint', wpc_v2_env_fingerprint(), false);
-    }
-    if (function_exists('delete_option')) {
-        if (!function_exists('wpc_cf_cname_sync_owed') || !wpc_cf_cname_sync_owed()) {
-            delete_option('wpc_v2_force_provision');
-        }
-        delete_option('wpc_v2_provheal_tries');
-        delete_option('wpc_v2_provheal_last');
-    }
-    if (method_exists('WPC_Delivery_Resolver', 'resolve')) { WPC_Delivery_Resolver::resolve(true); }
-    if (function_exists('error_log')) { error_log('[WPC v2] verify_and_unsuppress(' . (string) $reason . '): real-content 200 webp -> fingerprint stamped -> UN-SUPPRESSED'); }
-    return ['ok' => true, 'verify_cdn_ok' => true, 'stamped' => true, 'reason' => 'un_suppressed', 'attachment_id' => (int) ($target['attachment_id'] ?? 0)];
-}
-
-
 function wpc_v2_handle_provisioned_ping(WP_REST_Request $request)
 {
     $body_raw = (string) $request->get_body();
@@ -149,19 +84,47 @@ function wpc_v2_handle_provisioned_ping(WP_REST_Request $request)
         return new WP_REST_Response(['ok' => true, 'action' => 'noop', 'reason' => 'provisioned_false'], 200);
     }
 
-    // Idempotent: already confirmed for THIS host → nothing to do.
-    if (function_exists('wpc_v2_provision_env_changed') && !wpc_v2_provision_env_changed()) {
-        return new WP_REST_Response(['ok' => true, 'action' => 'noop', 'reason' => 'already_provisioned'], 200);
-    }
+    // Nothing is suppressed on an environment change any more, so a provisioned ping has
+    // nothing to un-suppress: the nav witness above is all it carries.
+    return new WP_REST_Response(['ok' => true, 'action' => 'noop', 'reason' => 'already_provisioned'], 200);
+}
 
-    // Delegate to the shared real-content verify-then-un-suppress (same fail-safe the debug button uses).
-    $r = wpc_v2_verify_and_unsuppress('orch_trigger');
-    if (($r['reason'] ?? '') === 'resolver_unavailable') {
-        return new WP_REST_Response(['ok' => false, 'error' => 'resolver_unavailable'], 200);
+/**
+ * The status the variants host answers a HEAD with, for the healthcheck's debug block. The answer
+ * is kept ten minutes (wpc_v2_hc_egress); only an authenticated caller (a signed request or an
+ * administrator) makes the request again before then.
+ */
+function wpc_v2_healthcheck_egress($refresh)
+{
+    $held = get_transient('wpc_v2_hc_egress');
+    if (!$refresh && is_array($held) && array_key_exists('v', $held)) {
+        return $held['v'];
     }
-    $action = !empty($r['stamped']) ? 'un_suppressed'
-            : ((($r['reason'] ?? '') === 'no_real_image_to_verify') ? 'deferred' : 'stay_suppressed');
-    return new WP_REST_Response(array_merge(['ok' => true, 'action' => $action], $r), 200);
+    $r_eg = wp_remote_head('https://' . wpc_v2_variants_host() . '/', ['timeout' => 5, 'sslverify' => false]);
+    $value = is_wp_error($r_eg) ? ('ERR: ' . substr($r_eg->get_error_message(), 0, 80)) : (int) wp_remote_retrieve_response_code($r_eg);
+    set_transient('wpc_v2_hc_egress', ['v' => $value], 10 * MINUTE_IN_SECONDS);
+    return $value;
+}
+
+/**
+ * Whether this healthcheck request may start work on the site: an administrator, a request
+ * carrying a valid X-WPC-Sig (the service holds the key), or the plugin's own cron. Everyone
+ * else is handed the status and nothing else happens.
+ */
+function wpc_v2_healthcheck_authorized(WP_REST_Request $request)
+{
+    if (function_exists('current_user_can') && current_user_can('manage_options')) {
+        return true;
+    }
+    if (function_exists('wp_doing_cron') && wp_doing_cron()) {
+        return true;
+    }
+    $signature = (string) $request->get_header('x_wpc_sig');
+    if ($signature === '') {
+        return false;
+    }
+    $verified = wpc_v2_verify_hmac($signature, (string) $request->get_body(), 300, '');
+    return !empty($verified['ok']);
 }
 
 function wpc_v2_handle_healthcheck(WP_REST_Request $request)
@@ -184,7 +147,10 @@ function wpc_v2_handle_healthcheck(WP_REST_Request $request)
     // The usual carriers (self-loopback / wp-cron / Heartbeat) are unreliable
 
 
-    if (function_exists('get_option')) {
+    $hc_authed = wpc_v2_healthcheck_authorized($request);
+    $hc_legs = $hc_authed || !(function_exists('wpc_policy_cohort') && wpc_policy_cohort('hc_auth_legs') === 1);
+
+    if ($hc_legs && function_exists('get_option')) {
         $hc_force   = (bool) get_option('wpc_v2_force_provision', false);
         $hc_cfc     = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
         $hc_cfver   = get_option('wpc_cf_cname_verified');
@@ -196,19 +162,11 @@ function wpc_v2_handle_healthcheck(WP_REST_Request $request)
             if ($hc_force && function_exists('wpc_v2_run_deferred_config_sync')) { wpc_v2_run_deferred_config_sync(); }
             if ($hc_cf_pend && function_exists('wpc_v2_cf_cname_reverify')) { wpc_v2_cf_cname_reverify(false); }
         }
-        // v7.20.11 — outage bridge, fleet leg: when the fingerprint cannot re-stamp
-        // (orchestrator down) measure the zone-serves-this-origin invariant instead, so
-        // CDN emission survives the outage without a panel visit. 1h probe throttle inside.
-        if (function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed()
-            && function_exists('wpc_v2_zone_origin_proved') && !wpc_v2_zone_origin_proved()
-            && function_exists('wpc_v2_zone_origin_probe_run')) {
-            wpc_v2_zone_origin_probe_run();
-        }
     }
 
 
     $hc_is_cf = (defined('WPS_IC_CF_CNAME') && function_exists('get_option')) ? (trim((string) get_option(WPS_IC_CF_CNAME, '')) !== '') : false;
-    if (!$hc_is_cf && function_exists('get_option') && !get_option('wpc_v2_force_provision', false)
+    if ($hc_legs && !$hc_is_cf && function_exists('get_option') && !get_option('wpc_v2_force_provision', false)
         && class_exists('WPC_Delivery_Resolver') && class_exists('WPC_Negotiated_Delivery')
         && function_exists('get_transient') && !get_transient('wpc_v2_hc_reverify_bk')
         && !WPC_Negotiated_Delivery::is_active()) {
@@ -252,23 +210,22 @@ function wpc_v2_handle_healthcheck(WP_REST_Request $request)
         }
     }
 
-    // v7.21.111 — MINIMIZE THE UNAUTHENTICATED HEALTHCHECK (David/PowerCreations
-    // report). The anon GET disclosed apikey_fp + a full internal debug block
-    // (env_fingerprint, zone_id, site_url, provisioning + ingest traces) = a recon
-    // surface. Every side effect above (self-heal, reverify, asset probe) is UNCHANGED
-    // so service-driven provisioning still works — only the RESPONSE is trimmed. The
-    // full detail returns to an authorized caller: a signed request (the orchestrator,
-    // which holds the key) or a logged-in admin. Anon keeps version + capability flags
-    // (the documented LS contract) only. Reversible without a build: wpc_hc_full_anon.
-    $hc_full = (function_exists('current_user_can') && current_user_can('manage_options'));
-    if (!$hc_full) {
-        $hc_sig = (string) $request->get_header('x_wpc_sig');
-        if ($hc_sig !== '') {
-            $hc_v = wpc_v2_verify_hmac($hc_sig, (string) $request->get_body(), 300, '');
-            $hc_full = !empty($hc_v['ok']);
+    // An anonymous caller is handed the version and the capability flags only. The self-heal, reverify,
+    // origin-probe and asset-probe legs run for an authorized caller alone (wpc_v2_healthcheck_authorized)
+    // once the service turns the cohort hc_auth_legs on for the site; until then they run as they always did.
+    // The site's wpc_hc_full_anon filter widens the answer, never the legs.
+    $hc_full = (bool) apply_filters('wpc_hc_full_anon', $hc_authed);
+    $hc_pull = ($hc_full && function_exists('wpc_v2_pull_state_report')) ? wpc_v2_pull_state_report() : [];
+    if ($hc_full) {
+        $hc_noop = get_option('wpc_szt_noop', []);
+        if (is_array($hc_noop) && !empty($hc_noop['reasons'])) {
+            $hc_pull['sized_noop'] = $hc_noop;
+        }
+        $hc_floor = function_exists('wpc_twin_floor_report') ? wpc_twin_floor_report() : null;
+        if (is_array($hc_floor)) {
+            $hc_pull['twin_floor'] = $hc_floor;
         }
     }
-    $hc_full = (bool) apply_filters('wpc_hc_full_anon', $hc_full);
 
     $hc_arr = [
         'plugin_version'          => $plugin_version,
@@ -288,9 +245,12 @@ function wpc_v2_handle_healthcheck(WP_REST_Request $request)
             // was admin-only — a dead path. The healthcheck now RUNS the probe
 
 
-            'asset_probe_ran_now' => (static function () {
+            'asset_probe_ran_now' => (static function () use ($hc_legs) {
 
 
+                if (!$hc_legs) {
+                    return null;
+                }
                 if ((string) get_option('wpc_v2_cf_asset_mime_ok', '') === '1') {
                     return false;
                 }
@@ -330,15 +290,11 @@ function wpc_v2_handle_healthcheck(WP_REST_Request $request)
 
 
             'provisioning'         => [
-                'env_fingerprint'         => function_exists('wpc_v2_env_fingerprint') ? wpc_v2_env_fingerprint() : null,
-                'env_fingerprint_stamped' => (string) get_option('wpc_v2_provisioned_fingerprint', ''),
-                'env_changed'             => function_exists('wpc_v2_provision_env_changed') ? wpc_v2_provision_env_changed() : null,
                 'cdn_suppressed'          => function_exists('wpc_v2_zone_cdn_suppressed') ? wpc_v2_zone_cdn_suppressed() : null,
                 'config_synced_at'        => (int) get_option('wpc_v2_config_synced_at', 0),
                 'force_provision'         => (bool) get_option('wpc_v2_force_provision', false),
                 'force_provision_fails'   => (int) get_option('wpc_v2_force_provision_fails', 0),
                 'selfheal_attempts'       => (int) get_option('wpc_v2_selfheal_attempts', 0),
-                'provisioned_site_url'    => (string) get_option('wpc_v2_provisioned_site_url', ''),
                 'site_url'                => function_exists('site_url') ? (string) site_url() : '',
                 'zone_id'                 => function_exists('wpc_v2_get_zone_id') ? (string) wpc_v2_get_zone_id() : '',
                 'orch_nav'                => function_exists('wpc_v2_get_zone_id') ? (string) get_option('wpc_v2_orch_nav_' . sanitize_key((string) wpc_v2_get_zone_id()), '') : '',
@@ -376,16 +332,15 @@ function wpc_v2_handle_healthcheck(WP_REST_Request $request)
 
             'last_ingest_fail'     => get_option('wpc_v2_last_ingest_fail', null),
             'last_drain_stats'     => get_option('wpc_v2_last_drain_stats', null),
-            'last_wake'            => get_option('wpc_v2_last_wake', null),
-            'last_drain_skip'     => get_option('wpc_v2_last_drain_skip', null),
-            'last_extdrain'       => get_option('wpc_v2_last_extdrain', null),
+            'last_wake'            => isset($hc_pull['wake']) ? $hc_pull['wake'] : null,
+            'last_drain_skip'     => isset($hc_pull['fire']) ? $hc_pull['fire'] : null,
+            'last_extdrain'       => isset($hc_pull['loopstart']) ? $hc_pull['loopstart'] : null,
+            'pull_state'          => $hc_full ? $hc_pull : null,
             'ingest_outcomes'     => get_option('wpc_v2_ingest_outcomes', null),
             'variant_identity'    => function_exists('wpc_v2_variant_identity_report') ? wpc_v2_variant_identity_report() : null,
             'last_ingest_trace'   => get_option('wpc_v2_last_ingest_trace', null),
-            'bytes_egress'         => (static function () {
-                $r_eg = wp_remote_head('https://' . wpc_v2_variants_host() . '/', ['timeout' => 5, 'sslverify' => false]);
-                return is_wp_error($r_eg) ? ('ERR: ' . substr($r_eg->get_error_message(), 0, 80)) : (int) wp_remote_retrieve_response_code($r_eg);
-            })(),
+            'bytes_egress'         => $hc_full ? wpc_v2_healthcheck_egress($hc_authed) : null,
+            'tls_verify'           => ['cohort' => function_exists('wpc_policy_cohort') ? wpc_policy_cohort('tls_verify') : 0, 'last_fail' => get_option('wpc_tls_verify_fail', null)],
         ],
         'tier'                    => $tier_name,
         'emission_mode'           => $emission_mode,
@@ -395,6 +350,8 @@ function wpc_v2_handle_healthcheck(WP_REST_Request $request)
     ];
     if (!$hc_full) {
         unset($hc_arr['apikey_fp'], $hc_arr['debug']);
+    } elseif (function_exists('wpc_sized_slo_block')) {
+        $hc_arr['encode_on_view'] = wpc_sized_slo_block();
     }
     $resp = new WP_REST_Response($hc_arr, 200);
     $resp->header('Cache-Control', 'no-store, max-age=0');
@@ -517,7 +474,7 @@ if (!function_exists('wpc_v2_write_bare_name_alias')) {
             $bareAliasPath = dirname((string) $dest) . '/' . substr($originalBasename, 0, $extensionDotPos) . '.' . strtolower($sizeMatch[3]);
             if ($bareAliasPath === (string) $dest) { return false; }
             if (function_exists('wpc_v2_is_dest_ext_allowed') && !wpc_v2_is_dest_ext_allowed($bareAliasPath)) { return false; }
-            $storeResult = function_exists('wpc_v2_store_bytes') ? wpc_v2_store_bytes($raw, $bareAliasPath) : ['ok' => false];
+            $storeResult = function_exists('wpc_v2_store_bytes') ? wpc_v2_store_bytes($raw, $bareAliasPath, ['variant' => ['id' => (int) $imageID, 'size' => '', 'fmt' => $targetFormat, 'src' => 'bare_alias']]) : ['ok' => false];
             if (!empty($storeResult['ok'])) {
                 @chmod($bareAliasPath, 0644);
                 return true;
@@ -742,7 +699,7 @@ function wpc_v2_handle_bg_swap(WP_REST_Request $request)
             return wpc_v2_respond(400, ['error' => 'invalid_base64']);
         }
     } elseif ($fetch_url !== '') {
-        $get = wp_remote_get($fetch_url, ['timeout' => 15, 'sslverify' => true]);
+        $get = wpc_v2_pull_remote_get($fetch_url, ['timeout' => 15, 'sslverify' => true]);
         if (is_wp_error($get) || (int) wp_remote_retrieve_response_code($get) !== 200) {
             return wpc_v2_respond(502, ['error' => 'fetch_url_failed']);
         }
@@ -780,6 +737,9 @@ function wpc_v2_handle_bg_swap(WP_REST_Request $request)
 
     // Idempotency fast-path: same bytes already on disk → 200 immediately.
     if (file_exists($dest) && filesize($dest) === strlen($raw) && hash_file('sha256', $dest) === hash('sha256', $raw)) {
+        if (function_exists('wpc_v2_landed_receipt')) {
+            wpc_v2_landed_receipt($imageID, $size_label, $format, $dest, 'bg_swap', $job_id);
+        }
         wpc_v2_remove_pending($imageID, $size_label, $format);
         return wpc_v2_respond(200, ['ok' => true, 'kind' => 'idempotent_noop']);
     }
@@ -788,9 +748,12 @@ function wpc_v2_handle_bg_swap(WP_REST_Request $request)
         return wpc_v2_respond(400, ['error' => 'bad_extension']);
     }
 
-    $store_result = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $size_label, 'fmt' => $format, 'src' => 'bg_swap', 'claim' => wpc_v2_variant_claim($body)]]);
+    $store_result = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $size_label, 'fmt' => $format, 'src' => 'bg_swap', 'job' => $job_id, 'claim' => wpc_v2_variant_claim($body)]]);
     if (!empty($store_result['settled'])) {
         return wpc_v2_respond(200, ['ok' => true, 'kind' => 'no_improvement', 'reason' => (string) $store_result['error']]);
+    }
+    if (($store_result['error'] ?? '') === 'image_restored') {
+        return wpc_v2_respond(410, ['error' => 'image_restored', 'imageID' => $imageID]);
     }
     if (empty($store_result['ok'])) {
         error_log(sprintf(
@@ -1290,18 +1253,32 @@ function wpc_v2_handle_bg_swap_batch(WP_REST_Request $request)
 
     $use_journal     = function_exists('wpc_v2_rest_journal_enabled') && wpc_v2_rest_journal_enabled();
     $journal_entries = [];
+    $pathb_pending   = [];
 
 
     $pulled_bytes = [];
+    $pulls_needed = [];
     $pull_ms      = 0.0;
     $defer_pulls_to_drain = $use_journal
         && function_exists('wpc_v2_pull_delivery_enabled')
         && wpc_v2_pull_delivery_enabled();
 
+    if ($defer_pulls_to_drain && function_exists('wpc_v2_journal_has_room') && !wpc_v2_journal_has_room()) {
+        foreach ($variants as $v) {
+            if (!is_array($v) || !empty($v['bytesB64']) || !empty($v['noImprovement'])
+                || (isset($v['bumped']) && (string) $v['bumped'] === 'source_already_optimal')) {
+                continue;
+            }
+            if ((!empty($v['fetchUrl']) && is_string($v['fetchUrl'])) || (!empty($v['bytesUrl']) && is_string($v['bytesUrl']))) {
+                error_log(sprintf('[WPC V2BgSwapBatch journal_full] imageID=%d variants=%d job=%s', $imageID, $variant_n, $jobId !== '' ? substr($jobId, 0, 8) : '-'));
+                return wpc_v2_respond(503, ['error' => 'journal_full', 'retry_after' => 30]);
+            }
+        }
+    }
+
     if (!$defer_pulls_to_drain && function_exists('wpc_v2_parallel_pull')) {
         // Path A: inline pull (only when journal off — handler must have bytes
         // before responding because there is no drain to fetch them later).
-        $pulls_needed = [];
         $pull_meta    = [];
         foreach ($variants as $idx => $v) {
             if (!is_array($v) || !empty($v['bytesB64'])) continue;
@@ -1447,10 +1424,7 @@ function wpc_v2_handle_bg_swap_batch(WP_REST_Request $request)
             if (isset($v['bumped'])) $je['bumped'] = sanitize_text_field((string) $v['bumped']);
             $je += wpc_v2_variant_claim_wire($v);
             $journal_entries[] = $je;
-
-            if (wpc_v2_remove_pending($imageID, $sz, $fmt)) {
-                $any_drain_complete = true;
-            }
+            $pathb_pending[]   = [$sz, $fmt];
 
 
             wps_ic_image_variants::note_provisional_savings($imageID, $fmt, $orig_size, $expected_size);
@@ -1473,8 +1447,9 @@ function wpc_v2_handle_bg_swap_batch(WP_REST_Request $request)
             }
         } elseif ($fetch_url !== '') {
 
-
-            $get = wp_remote_get($fetch_url, ['timeout' => 15]);
+            $get = isset($pulls_needed[$idx]) && wpc_v2_pull_host_guard_on()
+                ? new WP_Error('wpc_pull_refused', 'the pull lane refused this url')
+                : wpc_v2_pull_remote_get($fetch_url, ['timeout' => 15]);
             if (is_wp_error($get) || (int) wp_remote_retrieve_response_code($get) !== 200) {
                 $results[] = ['ok' => false, 'kind' => 'rejected', 'error' => 'fetch_url_failed', 'sizeLabel' => $sz, 'format' => $fmt];
                 $rejected_count++;
@@ -1515,6 +1490,9 @@ function wpc_v2_handle_bg_swap_batch(WP_REST_Request $request)
         }
 
         if (file_exists($dest) && filesize($dest) === strlen($raw) && hash_file('sha256', $dest) === hash('sha256', $raw)) {
+            if (function_exists('wpc_v2_landed_receipt')) {
+                wpc_v2_landed_receipt($imageID, $sz, $fmt, $dest, 'bg_swap_batch', $jobId);
+            }
             if (wpc_v2_remove_pending($imageID, $sz, $fmt)) {
                 $any_drain_complete = true;
             }
@@ -1531,7 +1509,7 @@ function wpc_v2_handle_bg_swap_batch(WP_REST_Request $request)
 
         // Log silent disk-write failures in the batch path (same rationale
         // as the single-variant path).
-        $store_result = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $sz, 'fmt' => $fmt, 'src' => 'bg_swap_batch', 'claim' => wpc_v2_variant_claim($v)]]);
+        $store_result = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $sz, 'fmt' => $fmt, 'src' => 'bg_swap_batch', 'job' => $jobId, 'claim' => wpc_v2_variant_claim($v)]]);
         if (!empty($store_result['settled'])) {
             if (!empty($store_result['drain_complete'])) {
                 $any_drain_complete = true;
@@ -1637,7 +1615,11 @@ function wpc_v2_handle_bg_swap_batch(WP_REST_Request $request)
         && function_exists('wpc_v2_journal_write_batch')) {
         $journal_written = wpc_v2_journal_write_batch($imageID, $jobId, $journal_entries, $flushReason);
         if ($journal_written) {
-
+            foreach ($pathb_pending as $pb) {
+                if (wpc_v2_remove_pending($imageID, $pb[0], $pb[1])) {
+                    $any_drain_complete = true;
+                }
+            }
 
             if (function_exists('wpc_v2_journal_fire_loopback_fast')) {
                 wpc_v2_journal_fire_loopback_fast();
@@ -1674,6 +1656,10 @@ function wpc_v2_handle_bg_swap_batch(WP_REST_Request $request)
     }
     $t_after_merge = microtime(true);
 
+    if ($use_journal && !$journal_written && !empty($pathb_pending)) {
+        error_log(sprintf('[WPC V2BgSwapBatch journal_write_failed] imageID=%d variants=%d job=%s', $imageID, count($pathb_pending), $jobId !== '' ? substr($jobId, 0, 8) : '-'));
+        return wpc_v2_respond(503, ['error' => 'journal_write_failed', 'retry_after' => 30]);
+    }
 
     if ($persisted_count > 0) {
         $ic_compressing = get_post_meta($imageID, 'ic_compressing', true);
@@ -2238,7 +2224,7 @@ function wpc_v2_handle_bg_swap_single(WP_REST_Request $request)
 
     // Pull bytes.
     $pull_start = microtime(true);
-    $resp = wp_remote_get($bytes_url, [
+    $resp = wpc_v2_pull_remote_get($bytes_url, [
         'timeout'   => 30,
         'sslverify' => apply_filters('https_local_ssl_verify', false),
     ]);
@@ -2300,10 +2286,13 @@ function wpc_v2_handle_bg_swap_single(WP_REST_Request $request)
 
     // Disk write — atomic via temp+rename.
     $write_start = microtime(true);
-    $store_result = wpc_v2_store_bytes($bytes, $output_path, ['variant' => ['id' => $imageID, 'size' => $sizeLabel, 'fmt' => $format, 'src' => 'bg_swap_single', 'claim' => wpc_v2_variant_claim($body)]]);
+    $store_result = wpc_v2_store_bytes($bytes, $output_path, ['variant' => ['id' => $imageID, 'size' => $sizeLabel, 'fmt' => $format, 'src' => 'bg_swap_single', 'job' => (string) ($body['jobId'] ?? ''), 'claim' => wpc_v2_variant_claim($body)]]);
     if (!empty($store_result['settled'])) {
         wpc_v2_record_lazy_cdn_outcome((string) $store_result['error'], $arrival_t, ['image_id' => $imageID]);
         return wpc_v2_respond(200, ['ok' => true, 'kind' => 'no_improvement', 'reason' => (string) $store_result['error']]);
+    }
+    if (($store_result['error'] ?? '') === 'image_restored') {
+        return wpc_v2_respond(410, ['error' => 'image_restored', 'imageID' => $imageID]);
     }
     if (empty($store_result['ok'])) {
         wpc_v2_record_lazy_cdn_outcome('disk_' . (string) $store_result['error'], $arrival_t, [

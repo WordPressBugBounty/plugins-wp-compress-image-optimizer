@@ -522,8 +522,6 @@ add_action('template_redirect', function () {
     // that still needs a diagnosis; every trip below is shown from its RAW inputs so the one
     // holding the site is named, not inferred. Order matches wpc_v2_zone_cdn_suppressed().
     $allow_live  = function_exists('get_option') ? get_option('wps_ic_allow_live', 'unset') : 'unset';
-    $env_changed = function_exists('wpc_v2_provision_env_changed') ? wpc_v2_provision_env_changed() : null;
-    $origin_proved = function_exists('wpc_v2_zone_origin_proved') ? wpc_v2_zone_origin_proved() : null;
     $cf_cname = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
     $cf_option = defined('WPS_IC_CF') ? get_option(WPS_IC_CF) : false;
     $cname_verified = get_option('wpc_cf_cname_verified', '(unset=legacy, passes)');
@@ -541,15 +539,12 @@ add_action('template_redirect', function () {
         'UMBRELLA verdict'         => function_exists('wpc_v2_zone_cdn_suppressed') ? (wpc_v2_zone_cdn_suppressed() ? 'SUPPRESSED' : 'serving') : '(n/a)',
         '1 account gate trips'     => ($allow_live !== 'unset' && !$allow_live) ? 'YES <- TRIP' : 'no',
         '  wps_ic_allow_live raw'  => var_export($allow_live, true),
-        '2 env-changed trips'      => ($env_changed === true && $origin_proved !== true) ? 'YES <- TRIP' : 'no',
-        '  env fingerprint changed' => $env_changed === null ? '(n/a)' : var_export($env_changed, true),
-        '  origin proof live'      => $origin_proved === null ? '(n/a)' : var_export($origin_proved, true),
-        '3 cfwait trips'           => $cf_wait_trips ? 'YES <- TRIP' : 'no',
+        '2 cfwait trips'           => $cf_wait_trips ? 'YES <- TRIP' : 'no',
         '  cf cname'               => $cf_cname === '' ? '(none)' : $cf_cname,
         '  cf settings[cdn]'       => is_array($cf_option) ? var_export(isset($cf_option['settings']['cdn']) ? $cf_option['settings']['cdn'] : '(unset)', true) : '(no cf option)',
         '  wpc_cf_cname_verified'  => var_export($cname_verified, true),
-        '4 foreign zone trips'     => $format_trip($zone_foreign),
-        '5 orch cdn_disabled trips' => $format_trip($zone_cdn_disabled),
+        '3 foreign zone trips'     => $format_trip($zone_foreign),
+        '4 orch cdn_disabled trips' => $format_trip($zone_cdn_disabled),
         '  auto_disabled trips'    => $format_trip($zone_auto_disabled),
         '  suppression reason'     => is_array($suppression_reason) ? wp_json_encode($suppression_reason) : '(none)',
         '-- CF VERIFICATION STATE --' => '',

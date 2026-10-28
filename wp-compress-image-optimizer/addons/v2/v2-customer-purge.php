@@ -341,9 +341,6 @@ if (!function_exists('wpc_purge_orch_async')) {
         if ($zid !== '' && ctype_digit($zid)) {
             $body['zone_id'] = $zid;
         }
-        if (function_exists('site_url')) {
-            $body['site_url'] = (string) site_url();
-        }
 
         return [
             'type'       => 'orch',
@@ -439,7 +436,7 @@ if (!function_exists('wpc_collect_orch')) {
             $rbody = [];
         }
 
-        if ($code === 429) {
+        if ($code === 429 || $code === 503) {
             $retry_after = (int) wp_remote_retrieve_header($resp, 'retry-after');
             if ($retry_after <= 0) {
                 $retry_after = 2;
@@ -538,11 +535,16 @@ if (!function_exists('wpc_customer_purge_attachment_urls')) {
         }
 
         $abs = [$main];
+        $plain_ext = (function_exists('wpc_image_plain_on') && wpc_image_plain_on())
+            ? strtolower((string) pathinfo((string) $main, PATHINFO_EXTENSION)) : '';
         foreach (array_unique($files) as $f) {
             $stem = preg_replace('#\.(jpe?g|png|gif|webp|avif)$#i', '', $f);
             $abs[] = $base_url . '/' . $f;
             $abs[] = $base_url . '/' . $stem . '.webp';
             $abs[] = $base_url . '/' . $stem . '.avif';
+            if ($plain_ext !== '' && preg_match('#-\d+w$#', $stem)) {
+                $abs[] = $base_url . '/' . $stem . '.' . $plain_ext;
+            }
 
 
             if (preg_match('#-scaled$#', $stem)) {

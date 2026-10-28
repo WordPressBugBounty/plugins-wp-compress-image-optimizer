@@ -49,6 +49,19 @@ if (!function_exists('wpc_mc_up')) {
 
 
 
+if (!function_exists('wpc_delay_aggr_cooldown_end')) {
+    function wpc_delay_aggr_cooldown_end()
+    {
+        $tripped_at = (int) get_option('wpc_delay_aggr_off', 0);
+        if (!$tripped_at || (int) get_option('wpc_delay_aggr_fails', 0) < 5) {
+            return 0;
+        }
+        return $tripped_at + 30 * DAY_IN_SECONDS;
+    }
+}
+
+
+
 if (!function_exists('wpc_delay_aggr_rearm')) {
     // A fresh measured gen = a new keep list = a new aggressive-delay attempt:
     // clear the boot-watchdog demote so the site retries interaction-only.
@@ -69,7 +82,7 @@ if (!function_exists('wpc_delay_aggr_rearm')) {
             update_option('wpc_delay_aggr_fails', 0, false);
             return;
         }
-        if ($trip_count >= 5) {
+        if (wpc_delay_aggr_cooldown_end() > 0) {
             return;
         }
         if (time() - $tripped_at < min($trip_count, 5) * HOUR_IN_SECONDS) {
@@ -149,35 +162,121 @@ if (!function_exists('wpc_cache_first_enabled')) {
     }
 }
 
+if (!function_exists('wpc_land_url_key_note')) {
+    /**
+     * Stores the url_key the service sent with a generation beside land_uuid.txt
+     * (land_url_key.txt), when it names the page of $urlKey and, if $uuid is given, the generation
+     * landed. Returns whether it was stored.
+     */
+    function wpc_land_url_key_note($urlKey, $sentKey, $uuid = '')
+    {
+        $dir = wpc_crit_dir($urlKey);
+        $sentKey = trim((string) $sentKey);
+        if ($dir === '' || $sentKey === '' || strlen($sentKey) > 512 || preg_match('/[\x00-\x1F\s]/', $sentKey)) {
+            return false;
+        }
+        if ((string) $uuid !== '' && trim((string) @file_get_contents($dir . 'land_uuid.txt')) !== preg_replace('/[^A-Za-z0-9-]/', '', (string) $uuid)) {
+            return false;
+        }
+        if (wpc_crit_latest_key_verdict(['url_key' => $sentKey], wpc_land_page_url($urlKey)) !== true) {
+            return false;
+        }
+        return wpc_crit_meta_write($dir . 'land_url_key.txt', $sentKey);
+    }
+
+    /** The address of the page whose crit folder is $urlKey: the one persisted beside it, else the stored mapping, else the home page for the home key. */
+    function wpc_land_page_url($urlKey)
+    {
+        $dir = wpc_crit_dir($urlKey);
+        $url = $dir === '' ? '' : trim((string) @file_get_contents($dir . 'url.txt'));
+        if ($url === '' && class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'getUrlFromKey')) {
+            $url = (string) wps_ic_url_key::getUrlFromKey((string) $urlKey);
+        }
+        if ($url === '' && function_exists('wpc_gen_service_is_home_key') && function_exists('wpc_home_page_url') && wpc_gen_service_is_home_key($urlKey)) {
+            $url = (string) wpc_home_page_url();
+        }
+        return $url;
+    }
+
+    /**
+     * The key the land report is sent and signed under: the service's own url_key for the page ($sent,
+     * when it names the page; else the one stored beside land_uuid.txt), else the key computed from
+     * the page's address (wpc_crit_pointer_key). '' when none of them can be had.
+     */
+    function wpc_land_report_key($urlKey, $sent = '', $pageUrl = '')
+    {
+        $dir = wpc_crit_dir($urlKey);
+        if ($dir === '') {
+            return '';
+        }
+        $pageUrl = (string) $pageUrl !== '' ? (string) $pageUrl : wpc_land_page_url($urlKey);
+        $sent = trim((string) $sent);
+        if ($sent !== '' && $pageUrl !== '' && wpc_crit_latest_key_verdict(['url_key' => $sent], $pageUrl) === true) {
+            return $sent;
+        }
+        $stored = trim((string) @file_get_contents($dir . 'land_url_key.txt'));
+        if ($stored !== '') {
+            return $stored;
+        }
+        return $pageUrl === '' ? '' : (string) wpc_crit_pointer_key($pageUrl);
+    }
+}
+
 if (!function_exists('wpc_land_report')) {
     /**
      * Land-report beacon → the joint delivery ledger (service §8, wire-proven both directions).
      * POST crit-push.zapwp.net/land-report, X-WPC-Sig/X-WPC-Ts headers (ms ts, ±600s), HMAC-SHA256
-     * over uuid|url_key|ts keyed with the site apikey — the url_key signed IS the url_key sent.
-     * Digest = cflog serialization (<=4KB, stored verbatim). Load-gated, blocking=false, throttled
-     * once per key|uuid. A pinned box (load-gated out) leaves the row serve-probe-only, not blind.
+     * over uuid|url_key|ts keyed with the site apikey — the url_key signed IS the url_key sent, and it
+     * is the service's canonical key for the page (wpc_land_report_key), never the folder slug; with
+     * no key to send there is no report. Digest = cflog serialization (<=4KB, stored verbatim): the
+     * ack {stored, purged, cache} of a consolidated callback first, then why the crit would not be
+     * inlined, the served head block, and the rest. Load-gated, blocking=false.
+     *
+     * $extra: 'ack' (the callback's ack; its report is the only one that carries it), 'ready', 'uuid'
+     * (the generation the callback announced, when it is not the one landed), 'url_key', 'page_url'.
+     * A report without an ack stands aside while a callback is delivering ($GLOBALS
+     * ['wpc_land_callback_running']): the callback sends its own once the ack is built. Throttled once
+     * per key|uuid and 5 minutes, and not again once an ack report went out for the same uuid; an ack
+     * report once per ack and minute.
      */
-    function wpc_land_report($key)
+    function wpc_land_report($key, array $extra = [])
     {
         try {
             if (!apply_filters('wpc_land_report_on', true)) { return; }
             if (function_exists('wpc_under_pressure') && wpc_under_pressure()) { return; }
             if (!function_exists('wp_remote_post') || !defined('WPS_IC_CRITICAL')) { return; }
-            $key = (string) $key;
+            $key = ltrim((string) $key, '/');
             if ($key === '' || (function_exists('wpc_pipeline_key_junk') && wpc_pipeline_key_junk($key))) { return; }
+            $ack = (isset($extra['ack']) && is_array($extra['ack'])) ? $extra['ack'] : null;
+            if ($ack === null && !empty($GLOBALS['wpc_land_callback_running'])) { return; }
             $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/';
             $rd  = function ($f) { return @is_readable($f) ? trim((string) @file_get_contents($f)) : ''; };
-            $uuid = $rd($dir . 'land_uuid.txt');
+            $uuid = isset($extra['uuid']) ? preg_replace('/[^A-Za-z0-9-]/', '', (string) $extra['uuid']) : '';
+            if ($uuid === '') { $uuid = $rd($dir . 'land_uuid.txt'); }
             if ($uuid === '') { $uuid = $rd($dir . 'uuid.txt'); }
             if (strlen($uuid) < 8) { return; }
             $opt = (function_exists('get_option') && defined('WPS_IC_OPTIONS')) ? get_option(WPS_IC_OPTIONS) : [];
             $apikey = is_array($opt) && !empty($opt['api_key']) ? (string) $opt['api_key'] : '';
             if ($apikey === '') { return; }
-            $seen = rtrim(WPS_IC_CRITICAL, '/') . '/.kicklocks/lr_' . md5($key . '|' . $uuid) . '.txt';
-            if (@is_readable($seen) && (time() - (int) @filemtime($seen)) < (int) apply_filters('wpc_land_report_ttl', 300)) { return; }
+            $reportKey = wpc_land_report_key($key, isset($extra['url_key']) ? (string) $extra['url_key'] : '', isset($extra['page_url']) ? (string) $extra['page_url'] : '');
+            if ($reportKey === '') {
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('land-report-skipped', $key, '', ['why' => 'no-url-key', 'uuid' => substr($uuid, 0, 8)]);
+                }
+                return;
+            }
+            $plainSeen = rtrim(WPS_IC_CRITICAL, '/') . '/.kicklocks/lr_' . md5($key . '|' . $uuid) . '.txt';
+            $seen = $ack === null ? $plainSeen
+                : rtrim(WPS_IC_CRITICAL, '/') . '/.kicklocks/lra_' . md5($key . '|' . $uuid . '|' . wp_json_encode($ack) . '|' . (string) ($extra['ready'] ?? '')) . '.txt';
+            $ttl = $ack === null ? (int) apply_filters('wpc_land_report_ttl', 300) : 60;
+            if (@is_readable($seen) && (time() - (int) @filemtime($seen)) < $ttl) { return; }
             if (!is_dir(dirname($seen))) { @mkdir(dirname($seen), 0777, true); }
             @touch($seen);
+            if ($ack !== null) { @touch($plainSeen); }
             $tl = [];
+            $bgSource = null;
+            $heroSame = null;
+            $heroLqip = null;
             if (function_exists('wpc_cflog_tail')) {
                 $tail = wpc_cflog_tail(65536);
                 foreach (explode("\n", $tail) as $ln) {
@@ -185,6 +284,17 @@ if (!function_exists('wpc_land_report')) {
                     $e = json_decode($ln, true);
                     if (!is_array($e) || !isset($e['event']) || (string) ($e['key'] ?? '') !== $key) { continue; }
                     $tl[] = ['t' => (int) ($e['t'] ?? 0), 'e' => (string) $e['event']];
+                    if ($e['event'] === 'bg-mobile-src' && isset($e['layers']) && is_array($e['layers'])) {
+                        $bgSource = ['state' => substr((string) ($e['layers']['state'] ?? ''), 0, 12), 'why' => substr((string) ($e['layers']['why'] ?? ''), 0, 40), 'at' => (int) ($e['t'] ?? 0)];
+                    }
+                    if ($e['event'] === 'hero-lqip' && isset($e['layers']) && is_array($e['layers'])) {
+                        $heroLqip = ['state' => substr((string) ($e['layers']['state'] ?? ''), 0, 12), 'why' => substr((string) ($e['layers']['why'] ?? ''), 0, 40), 'at' => (int) ($e['t'] ?? 0)];
+                    }
+                    if ($e['event'] === 'hero-same-origin' && isset($e['layers']) && is_array($e['layers'])) {
+                        $heroSame = ['state' => substr((string) ($e['layers']['state'] ?? ''), 0, 12), 'why' => substr((string) ($e['layers']['why'] ?? ''), 0, 60), 'at' => (int) ($e['t'] ?? 0)];
+                        if (isset($e['layers']['sheet']) && is_string($e['layers']['sheet']) && $e['layers']['sheet'] !== '') { $heroSame['sheet'] = substr($e['layers']['sheet'], 0, 120); }
+                        if (isset($e['layers']['left']) && is_numeric($e['layers']['left'])) { $heroSame['left'] = (int) $e['layers']['left']; }
+                    }
                 }
                 $tl = array_slice($tl, -40);
             }
@@ -198,24 +308,49 @@ if (!function_exists('wpc_land_report')) {
                 'used'  => trim($rd($dir . 'used_css_url.txt')) !== '',
             ];
             $rn = count(array_filter($have));
-            $digest = ['ve' => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '', 'load1' => $load1,
+            $digest = [];
+            if ($ack !== null) {
+                $digest['ack'] = ['stored' => !empty($ack['stored']), 'purged' => !empty($ack['purged']), 'cache' => substr((string) ($ack['cache'] ?? ''), 0, 120)];
+                if (isset($extra['ready']) && (string) $extra['ready'] !== '') { $digest['ready'] = substr((string) $extra['ready'], 0, 24); }
+            }
+            if (!class_exists('wps_criticalCss') && defined('WPS_IC_DIR') && @is_file(WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php')) {
+                @include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
+            }
+            if (class_exists('wps_criticalCss') && method_exists('wps_criticalCss', 'inlineBlocker')) {
+                $blocker = (string) wps_criticalCss::inlineBlocker($key);
+                $digest['inline'] = $blocker === '' ? 'ok' : $blocker;
+            }
+            $notInlined = explode(' ', $rd($dir . 'inline_why.txt'));
+            if (count($notInlined) === 2 && $notInlined[0] !== '' && (time() - (int) $notInlined[1]) < DAY_IN_SECONDS) {
+                $digest['not_inlined'] = ['why' => substr($notInlined[0], 0, 40), 'at' => (int) $notInlined[1]];
+            }
+            if ($bgSource !== null) { $digest['bg_mobile_src'] = $bgSource; }
+            if ($heroSame !== null && function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('hero_same_origin') === 1) { $digest['hero_same_origin'] = $heroSame; }
+            if ($heroLqip !== null && class_exists('wps_ic_atf_observation') && wps_ic_atf_observation::heroLqipOn()) { $digest['hero_lqip'] = $heroLqip; }
+            if (function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('hero_land_first') === 1 && class_exists('wps_ic_hero_land')) {
+                $heroLand = wps_ic_hero_land::report($key);
+                if ($heroLand !== []) { $digest['hero_land'] = $heroLand; }
+            }
+            $servedHead = function_exists('wpc_served_head_for_dispatch') ? wpc_served_head_for_dispatch($key) : null;
+            if ($servedHead !== null) { $digest['served_head'] = $servedHead; }
+            $digest += ['ve' => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '', 'load1' => $load1,
                 'ready_n' => $rn, 'ready_of' => count($have), 'have' => $have, 'timeline' => $tl];
             $dj = wp_json_encode($digest);
             if (is_string($dj) && strlen($dj) > 4096) {
                 $digest['timeline'] = array_slice($tl, -10); $digest['clamp'] = 1; $dj = wp_json_encode($digest);
                 if (is_string($dj) && strlen($dj) > 4096) { $digest['timeline'] = []; }
             }
-            $body = wp_json_encode(['uuid' => $uuid, 'apikey' => $apikey, 'url_key' => $key, 'digest' => $digest]);
+            $body = wp_json_encode(['uuid' => $uuid, 'apikey' => $apikey, 'url_key' => $reportKey, 'digest' => $digest]);
             if (!is_string($body)) { return; }
             $ts  = (string) (int) round(microtime(true) * 1000);
-            $sig = hash_hmac('sha256', $uuid . '|' . $key . '|' . $ts, $apikey);
+            $sig = hash_hmac('sha256', $uuid . '|' . $reportKey . '|' . $ts, $apikey);
             wp_remote_post(apply_filters('wpc_land_report_url', 'https://crit-push.zapwp.net/land-report'), [
                 'blocking' => false, 'timeout' => 2, 'redirection' => 0,
                 'headers' => ['Content-Type' => 'application/json', 'X-WPC-Sig' => $sig, 'X-WPC-Ts' => $ts],
                 'body' => $body,
             ]);
             if (function_exists('wpc_cache_first_log')) {
-                wpc_cache_first_log('land-report-sent', $key, '', ['uuid' => substr($uuid, 0, 8), 'ready' => $rn . '/' . count($have)]);
+                wpc_cache_first_log('land-report-sent', $key, '', ['uuid' => substr($uuid, 0, 8), 'ready' => $rn . '/' . count($have), 'ack' => $ack === null ? 0 : 1]);
             }
         } catch (\Throwable $e) {
         }
@@ -289,7 +424,8 @@ if (!function_exists('wpc_warm_url_queue')) {
     /** Seconds between two fires site-wide; one fire sets it and every other fire inside it skips. */
     function wpc_warm_cooldown_seconds()
     {
-        return (int) apply_filters('wpc_warm_global_cooldown', 15);
+        $paced = function_exists('wpc_warm_p3_spacing') ? wpc_warm_p3_spacing() : 0;
+        return (int) apply_filters('wpc_warm_global_cooldown', $paced > 0 ? $paced : 15);
     }
 
     /** Warm renders the receiver lets run at once; the rest are answered 204 and retried by cron. */
@@ -341,15 +477,23 @@ if (!function_exists('wpc_warm_url_queue')) {
      * schedules the fire itself as the queue's cron event at that time instead, so a caller that
      * feeds several URLs at once can space their fires by the site cooldown; false then means
      * the event could not be scheduled and nothing was queued.
+     *
+     * A warm fetch never queues another (the loop guard), except a timed cron event asked for with
+     * $fromWarm: the kick receiver and the warm render's init heal run under the warm header and
+     * are not the render a warm fan-out would come from; the cron event fires its renders from cron.
      */
-    function wpc_warm_url_queue($url, $context = '', $fireAt = 0)
+    function wpc_warm_url_queue($url, $context = '', $fireAt = 0, $fromWarm = false)
     {
-        static $queued = [];
+        $queued = isset($GLOBALS['wpc_warm_queued']) && is_array($GLOBALS['wpc_warm_queued']) ? $GLOBALS['wpc_warm_queued'] : [];
         try {
-            if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+            if (wpc_warm_request() && !($fromWarm && (int) $fireAt > 0)) {
                 return false;
             }
             if (!wpc_warm_url_queue_enabled()) {
+                return false;
+            }
+            if (function_exists('wpc_warm_p3_paused') && wpc_warm_p3_paused() > 0) {
+                wpc_cache_first_log('warm-paused', '', (string) $url, ['context' => $context, 'until' => wpc_warm_p3_paused()]);
                 return false;
             }
             if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'sanitizeSameHostUrl')) {
@@ -395,12 +539,12 @@ if (!function_exists('wpc_warm_url_queue')) {
                     delete_transient($wpc_lock);
                     return false;
                 }
-                $queued[$url] = true;
+                $GLOBALS['wpc_warm_queued'][$url] = true;
                 wpc_cache_first_log('warm-fired', '', $url, ['context' => $context, 'at' => $fireAt]);
                 return true;
             }
 
-            $queued[$url] = true;
+            $GLOBALS['wpc_warm_queued'][$url] = true;
             register_shutdown_function('wpc_warm_url_fire', $url);
             // Cron backstop: verifies all 4 variants actually landed, re-fires the missing ones.
             if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
@@ -450,6 +594,9 @@ if (!function_exists('wpc_warm_url_queue_capacity')) {
                 return 0;
             }
             if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
+                return 0;
+            }
+            if (function_exists('wpc_warm_p3_paused') && wpc_warm_p3_paused($now) > 0) {
                 return 0;
             }
             if (function_exists('wpc_pipeline_events_ok') && !wpc_pipeline_events_ok()) {
@@ -713,11 +860,19 @@ if (!function_exists('wpc_warm_run_start')) {
         }
 
         $deferred = function_exists('wpc_under_pressure') && wpc_under_pressure();
+        $holdUntil = (!$deferred && function_exists('wpc_warm_p3_hold_until')) ? wpc_warm_p3_hold_until($run, $now) : 0;
         if ($deferred) {
             $run['deferred_until'] = $now + 180;
+        } elseif ($holdUntil > $now) {
+            $deferred = true;
+            $run['deferred_until'] = $holdUntil;
         } else {
             $run['deferred_until'] = 0;
             $capacity = wpc_warm_url_queue_capacity((int) $run['next_fire_at']);
+            $feedCap = function_exists('wpc_warm_p3_feed_cap') ? wpc_warm_p3_feed_cap($run, $now) : null;
+            if ($feedCap !== null) {
+                $capacity = min($capacity, $feedCap);
+            }
             if ($capacity > 0) {
                 $fireAt = wpc_warm_first_fire_at((int) $run['next_fire_at'], $now);
                 $keep = [];
@@ -824,7 +979,7 @@ if (!function_exists('wpc_warm_run_start')) {
     function wpc_warm_run_on_shutdown()
     {
         try {
-            if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])
+            if (wpc_warm_request()
                 || (defined('DOING_CRON') && DOING_CRON)
                 || (function_exists('wp_doing_ajax') && wp_doing_ajax())
                 || (function_exists('is_admin') && is_admin())) {
@@ -851,6 +1006,370 @@ if (!function_exists('wpc_warm_run_start')) {
 
     add_action('wpc_warm_run_tick', 'wpc_warm_run_tick');
     add_action('shutdown', 'wpc_warm_run_on_shutdown', 20);
+}
+
+if (!function_exists('wpc_warm_p3_on')) {
+    /*
+     * Warming paced by the site's own build time (policy cache_p3): the receiver reports each warm
+     * render (wpc_warm_build_note), the cooldown is four builds, a slow or failed build backs
+     * warming off and three pause it for an hour, and the coverage run walks home, the pages
+     * visitors missed and the published pages by last change at night inside a daily budget.
+     */
+    function wpc_warm_p3_on()
+    {
+        return function_exists('wpc_cache_phase_on') && wpc_cache_phase_on('p3');
+    }
+
+    function wpc_warm_local_time($now)
+    {
+        $offset = function_exists('get_option') ? (float) get_option('gmt_offset', 0) : 0.0;
+        return (int) $now + (int) round($offset * 3600);
+    }
+
+    function wpc_warm_day($now)
+    {
+        return gmdate('Y-m-d', wpc_warm_local_time($now));
+    }
+
+    function wpc_warm_stats_get()
+    {
+        $stats = get_option('wpc_warm_stats');
+        $stats = is_array($stats) ? $stats : [];
+        return array_merge(['day' => '', 'n' => 0, 'ms' => 0, 'used_ms' => 0, 'slow' => 0, 'fail' => 0, 'backoffs' => 0,
+            'last_ms' => 0, 'streak' => 0, 'pause_until' => 0], $stats);
+    }
+
+    /** The day's numbers for the day $now falls in; the day that ended is receipted as the W6 report. */
+    function wpc_warm_stats_roll(array $stats, $now)
+    {
+        $today = wpc_warm_day($now);
+        if ($stats['day'] === $today) {
+            return $stats;
+        }
+        if ($stats['day'] !== '' && ((int) $stats['n'] + (int) $stats['backoffs']) > 0 && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('warm-report', '', '', [
+                'day' => (string) $stats['day'], 'pages' => (int) $stats['n'],
+                'avg_ms' => (int) $stats['n'] > 0 ? (int) round($stats['ms'] / $stats['n']) : 0,
+                'backoffs' => (int) $stats['backoffs'], 'slow' => (int) $stats['slow'], 'failed' => (int) $stats['fail'],
+                'used_s' => (int) round($stats['used_ms'] / 1000), 'budget_s' => wpc_warm_budget_seconds(),
+            ]);
+        }
+        foreach (['n', 'ms', 'used_ms', 'slow', 'fail', 'backoffs'] as $field) {
+            $stats[$field] = 0;
+        }
+        $stats['day'] = $today;
+        update_option('wpc_warm_stats', $stats, false);
+        return $stats;
+    }
+
+    /** PHP seconds of warming a day may use: 15 minutes where the host caps an account (cPanel, CloudLinux), 45 elsewhere. */
+    function wpc_warm_budget_seconds()
+    {
+        $constrained = function_exists('wpc_is_constrained_host') && wpc_is_constrained_host();
+        return max(60, (int) apply_filters('wpc_warm_daily_budget_seconds', $constrained ? 900 : 2700));
+    }
+
+    /** Seconds between two fires, from the last build: the renders of one fire plus three times that; 0 until a build has been measured. */
+    function wpc_warm_p3_spacing()
+    {
+        if (!wpc_warm_p3_on()) {
+            return 0;
+        }
+        $last = (int) wpc_warm_stats_get()['last_ms'];
+        if ($last <= 0) {
+            return 0;
+        }
+        $renders = (function_exists('wpc_is_constrained_host') && wpc_is_constrained_host()) ? 1 : 2;
+        return (int) min(300, max(5, ceil(4 * $renders * $last / 1000)));
+    }
+
+    /** The time warming is paused until (0 when it is not). */
+    function wpc_warm_p3_paused($now = 0)
+    {
+        if (!wpc_warm_p3_on()) {
+            return 0;
+        }
+        $now = (int) $now > 0 ? (int) $now : wpc_warm_now();
+        $until = (int) wpc_warm_stats_get()['pause_until'];
+        return $until > $now ? $until : 0;
+    }
+
+    /** Called when a warm render ends (shutdown of the receiver): its build time and status feed the pacing. */
+    function wpc_warm_build_note($startedAt, $status = 0)
+    {
+        try {
+            if (!wpc_warm_p3_on()) {
+                return;
+            }
+            $ms = (int) round((microtime(true) - (float) $startedAt) * 1000);
+            $status = (int) $status > 0 ? (int) $status : (function_exists('http_response_code') ? (int) http_response_code() : 0);
+            $status = $status > 0 ? $status : 200;
+            $now = wpc_warm_now();
+            $stats = wpc_warm_stats_roll(wpc_warm_stats_get(), $now);
+            $stats['used_ms'] += $ms;
+            $failed = $status >= 500 || $status === 429;
+            $slow = !$failed && $ms > (int) apply_filters('wpc_warm_slow_build_ms', 5000);
+            if ($failed || $slow) {
+                $stats[$failed ? 'fail' : 'slow']++;
+                $stats['backoffs']++;
+                $stats['streak']++;
+                $wait = $stats['streak'] >= 3 ? 3600 : min(900, 60 * (1 << ($stats['streak'] - 1)));
+                $stats['pause_until'] = max((int) $stats['pause_until'], $now + $wait);
+                if ($stats['streak'] >= 3) {
+                    $stats['streak'] = 0;
+                }
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('warm-backoff', '', '', ['status' => $status, 'ms' => $ms, 'wait' => $wait]);
+                }
+            } else {
+                $stats['n']++;
+                $stats['ms'] += $ms;
+                $stats['streak'] = 0;
+            }
+            if (!$failed) {
+                $stats['last_ms'] = $ms;
+            }
+            update_option('wpc_warm_stats', $stats, false);
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** [open hour, close hour] of the night window in site time (default 01:00 to 05:00). */
+    function wpc_warm_window_hours()
+    {
+        $hours = (array) apply_filters('wpc_warm_night_window', [1, 5]);
+        $start = isset($hours[0]) ? (int) $hours[0] : 1;
+        $end = isset($hours[1]) ? (int) $hours[1] : 5;
+        return [max(0, min(23, $start)), max(1, min(24, $end))];
+    }
+
+    function wpc_warm_in_window($now)
+    {
+        $window = wpc_warm_window_hours();
+        $hour = (int) gmdate('G', wpc_warm_local_time($now));
+        return $hour >= $window[0] && $hour < $window[1];
+    }
+
+    function wpc_warm_next_window($now)
+    {
+        $window = wpc_warm_window_hours();
+        $local = wpc_warm_local_time($now);
+        $midnight = $local - ($local % 86400);
+        $open = $midnight + $window[0] * 3600;
+        if ($open <= $local) {
+            $open += 86400;
+        }
+        return (int) $now + ($open - $local);
+    }
+
+    /** Whether the coverage run (and so any run) must hold: until when, or 0 to go on. */
+    function wpc_warm_p3_hold_until(array $run, $now)
+    {
+        if (!wpc_warm_p3_on()) {
+            return 0;
+        }
+        $pause = wpc_warm_p3_paused($now);
+        if ($pause > 0) {
+            return $pause;
+        }
+        if ((string) ($run['src'] ?? '') !== 'coverage') {
+            return 0;
+        }
+        if (!wpc_warm_in_window($now)) {
+            return wpc_warm_next_window($now);
+        }
+        $stats = wpc_warm_stats_roll(wpc_warm_stats_get(), $now);
+        if ((int) $stats['used_ms'] >= wpc_warm_budget_seconds() * 1000) {
+            return wpc_warm_next_window($now);
+        }
+        return 0;
+    }
+
+    /** How many more URLs the day's budget lets the coverage run feed (null: not a coverage run, no limit). */
+    function wpc_warm_p3_feed_cap(array $run, $now)
+    {
+        if (!wpc_warm_p3_on() || (string) ($run['src'] ?? '') !== 'coverage') {
+            return null;
+        }
+        $stats = wpc_warm_stats_roll(wpc_warm_stats_get(), $now);
+        $left = wpc_warm_budget_seconds() * 1000 - (int) $stats['used_ms'];
+        $renders = (function_exists('wpc_is_constrained_host') && wpc_is_constrained_host()) ? 1 : 2;
+        return max(0, (int) floor($left / (max(250, (int) $stats['last_ms']) * $renders)));
+    }
+
+    /** A visitor's render stored a copy: the page was a miss. The key only, never who asked. */
+    function wpc_warm_note_miss($urlKey)
+    {
+        try {
+            if (!wpc_warm_p3_on() || (string) $urlKey === '') {
+                return;
+            }
+            $missed = get_option('wpc_warm_missed');
+            $missed = is_array($missed) ? $missed : [];
+            $now = wpc_warm_now();
+            if (isset($missed[$urlKey]) && ($now - (int) $missed[$urlKey]) < DAY_IN_SECONDS) {
+                return;
+            }
+            $missed[(string) $urlKey] = $now;
+            arsort($missed);
+            update_option('wpc_warm_missed', array_slice($missed, 0, 300, true), false);
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** The pages the coverage run walks: home, then the pages visitors missed, then the published pages by last change; a page with a copy is left out. */
+    function wpc_warm_cover_candidates($limit = 300)
+    {
+        $urls = [];
+        $skip = '#/(tag|author|search)/|/page/([3-9]|[0-9]{2,})/|[?&]s=#i';
+        $add = function ($url) use (&$urls, $skip) {
+            if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'sanitizeSameHostUrl')) {
+                $url = wps_ic_url_key::sanitizeSameHostUrl((string) $url);
+            }
+            if ((string) $url !== '' && !isset($urls[$url]) && preg_match($skip, $url) !== 1) {
+                $urls[$url] = true;
+            }
+        };
+        $add(home_url('/'));
+        $missed = get_option('wpc_warm_missed');
+        if (is_array($missed)) {
+            arsort($missed);
+            foreach (array_keys($missed) as $key) {
+                $url = class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'getUrlFromKey') ? (string) wps_ic_url_key::getUrlFromKey((string) $key) : '';
+                if ($url !== '') {
+                    $add($url);
+                }
+            }
+        }
+        global $wpdb;
+        if (isset($wpdb) && is_object($wpdb) && function_exists('get_permalink')) {
+            $types = function_exists('get_post_types') ? array_values((array) get_post_types(['public' => true])) : ['post', 'page'];
+            $types = array_values(array_diff($types, ['attachment']));
+            if ($types !== []) {
+                $marks = implode(',', array_fill(0, count($types), '%s'));
+                $ids = (array) $wpdb->get_col($wpdb->prepare(
+                    "SELECT ID FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_password = '' AND post_type IN ($marks) ORDER BY post_modified_gmt DESC LIMIT %d",
+                    ...array_merge($types, [(int) $limit])
+                ));
+                foreach ($ids as $id) {
+                    $add((string) get_permalink((int) $id));
+                }
+            }
+        }
+        $out = [];
+        foreach (array_keys($urls) as $url) {
+            if (count($out) >= $limit) {
+                break;
+            }
+            if (!wpc_warm_run_copy_present($url)) {
+                $out[] = $url;
+            }
+        }
+        return $out;
+    }
+
+    /** One look at whether the coverage run is due: it starts only inside the night window, inside the budget, when nothing is paused and no run is live. */
+    function wpc_warm_cover_tick($from = 'cron')
+    {
+        try {
+            if (!wpc_warm_p3_on() || !function_exists('wpc_warm_url_queue_enabled') || !wpc_warm_url_queue_enabled()) {
+                return false;
+            }
+            $now = wpc_warm_now();
+            $state = get_option('wpc_warm_cover');
+            if ($now < (int) (is_array($state) ? ($state['n'] ?? 0) : 0)) {
+                return false;
+            }
+            $stats = wpc_warm_stats_roll(wpc_warm_stats_get(), $now);
+            $later = function ($until, $why) use ($now, $from) {
+                update_option('wpc_warm_cover', ['n' => (int) $until], true);
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('warm-cover-wait', '', '', ['why' => $why, 'until' => (int) $until, 'from' => (string) $from]);
+                }
+                return false;
+            };
+            $pause = wpc_warm_p3_paused($now);
+            if ($pause > 0) {
+                return $later($pause, 'paused');
+            }
+            if (!wpc_warm_in_window($now)) {
+                return $later(min(wpc_warm_next_window($now), $now + 3600), 'window');
+            }
+            if ((int) $stats['used_ms'] >= wpc_warm_budget_seconds() * 1000) {
+                return $later(wpc_warm_next_window($now), 'budget');
+            }
+            if (wpc_warm_run_is_live(wpc_warm_run_get())) {
+                return $later($now + 3600, 'run-live');
+            }
+            if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
+                return $later($now + 900, 'pressure');
+            }
+            $urls = wpc_warm_cover_candidates();
+            if ($urls === []) {
+                return $later($now + 6 * 3600, 'nothing-to-warm');
+            }
+            $started = wpc_warm_run_start('coverage', $urls);
+            update_option('wpc_warm_cover', ['n' => $now + 20 * 3600], true);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('warm-cover-start', '', '', ['n' => count($urls), 'from' => (string) $from, 'started' => !empty($started['started']) ? 1 : 0]);
+            }
+            return !empty($started['started']);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /** The cron half: look, then ask again in an hour. */
+    function wpc_warm_cover_cron()
+    {
+        wpc_warm_cover_tick('cron');
+        if (wpc_warm_p3_on() && function_exists('wpc_pl_sched') && function_exists('wp_next_scheduled') && !wp_next_scheduled('wpc_warm_cover_tick')) {
+            wpc_pl_sched(time() + 3600, 'wpc_warm_cover_tick');
+        }
+    }
+
+    /** The front-end half, for a site whose cron never runs: any visitor request once the check is due (the autoloaded option is there only while the switch is on). */
+    function wpc_warm_cover_on_shutdown()
+    {
+        try {
+            if (wpc_warm_request()
+                || (defined('DOING_CRON') && DOING_CRON)
+                || (function_exists('wp_doing_ajax') && wp_doing_ajax())
+                || (function_exists('is_admin') && is_admin())) {
+                return;
+            }
+            $state = function_exists('wp_load_alloptions') ? (wp_load_alloptions()['wpc_warm_cover'] ?? null) : get_option('wpc_warm_cover');
+            $state = is_string($state) ? maybe_unserialize($state) : $state;
+            if (!is_array($state) || wpc_warm_now() < (int) ($state['n'] ?? 0)) {
+                return;
+            }
+            wpc_warm_cover_tick('shutdown');
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** The policy flag cache_p3 changed: on starts the hourly look, off ends a coverage run and forgets the schedule. */
+    function wpc_cache_p3_sync($on)
+    {
+        if ($on) {
+            add_option('wpc_warm_cover', ['n' => 0], '', 'yes');
+            if (function_exists('wpc_pl_sched') && function_exists('wp_next_scheduled') && !wp_next_scheduled('wpc_warm_cover_tick')) {
+                wpc_pl_sched(time() + 300, 'wpc_warm_cover_tick');
+            }
+            return;
+        }
+        if (function_exists('wp_clear_scheduled_hook')) {
+            wp_clear_scheduled_hook('wpc_warm_cover_tick');
+        }
+        delete_option('wpc_warm_cover');
+        $run = wpc_warm_run_get();
+        if (wpc_warm_run_is_live($run) && (string) ($run['src'] ?? '') === 'coverage') {
+            wpc_warm_run_end($run, 'switch-off');
+        }
+    }
+
+    add_action('wpc_warm_cover_tick', 'wpc_warm_cover_cron');
+    add_action('shutdown', 'wpc_warm_cover_on_shutdown', 21);
 }
 
 if (!function_exists('wpc_warm_home_dispatch_queue')) {
@@ -883,9 +1402,7 @@ if (!function_exists('wpc_warm_home_dispatch_queue')) {
     function wpc_warm_home_dispatch_queue($src)
     {
         try {
-            $settings = get_option(WPS_IC_SETTINGS);
-            if (!is_array($settings) || empty($settings['critical']['css']) || $settings['critical']['css'] != '1'
-                || wpc_warm_home_has_crit()) {
+            if (wpc_crit_generation_off(wpc_home_page_key()) || wpc_warm_home_has_crit()) {
                 return false;
             }
             // One event for every source: its args are empty, so a second source finds it.
@@ -1016,7 +1533,7 @@ if (!function_exists('wpc_warm_url_fire')) {
             // warm request since it was written; fire() never did. A warm loopback could
             // therefore fan out four more, and only a racy 15s global cooldown stood in the
             // way. Measured: 3 hard refreshes produced ~19 concurrent 724KB renders.
-            if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+            if (wpc_warm_request()) {
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('warm-refire-blocked', '', (string) $url, []);
                 }
@@ -1031,6 +1548,12 @@ if (!function_exists('wpc_warm_url_fire')) {
             if ($cache_control !== '' && strpos($cache_control, 'no-store') !== false) {
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('warm-skip-uncacheable', '', (string) $url, ['cc' => substr($cache_control, 0, 24)]);
+                }
+                return false;
+            }
+            if (function_exists('wpc_warm_p3_paused') && wpc_warm_p3_paused() > 0) {
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('warm-paused', '', (string) $url, ['until' => wpc_warm_p3_paused()]);
                 }
                 return false;
             }
@@ -1122,7 +1645,7 @@ if (!function_exists('wpc_warm_url_fire')) {
                         'headers'  => [
                             'user-agent'       => $wpc_v['ua'],
                             'accept'           => $wpc_v['accept'],
-                            'X-WPC-Cache-Warm' => '1',
+                            'X-WPC-Cache-Warm' => wpc_warm_header_for($url),
                         ],
                     ]);
                 }
@@ -1131,7 +1654,7 @@ if (!function_exists('wpc_warm_url_fire')) {
                          . "Host: {$host}\r\n"
                          . "User-Agent: {$wpc_v['ua']}\r\n"
                          . "Accept: {$wpc_v['accept']}\r\n"
-                         . "X-WPC-Cache-Warm: 1\r\n"
+                         . "X-WPC-Cache-Warm: " . wpc_warm_header_for(($https ? 'https' : 'http') . '://' . $host . $path) . "\r\n"
                          . "Connection: close\r\n\r\n";
                     $fp = wps_ic_ajax::wpc_loopback_open_socket($host, $port, $https, 0.2);
                     if ($fp) {
@@ -1163,8 +1686,8 @@ if (!function_exists('wpc_warm_rx_gate')) {
     function wpc_warm_rx_gate()
     {
         try {
-            if (empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])
-                || !empty($_SERVER['HTTP_X_WPC_DIAG'])
+            if (!wpc_warm_request()
+                || wpc_warm_request('diag')
                 || (defined('DOING_CRON') && DOING_CRON)
                 || (function_exists('wp_doing_ajax') && wp_doing_ajax())) {
                 return;
@@ -1188,6 +1711,9 @@ if (!function_exists('wpc_warm_rx_gate')) {
             }
             $sl[] = $now;
             update_option('wpc_warm_rx_slots', $sl, false);
+            if (function_exists('wpc_warm_p3_on') && wpc_warm_p3_on()) {
+                register_shutdown_function('wpc_warm_build_note', isset($_SERVER['REQUEST_TIME_FLOAT']) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : microtime(true));
+            }
             register_shutdown_function(function () use ($now) {
                 try {
                     $sl = get_option('wpc_warm_rx_slots');
@@ -1222,7 +1748,9 @@ if (!function_exists('wpc_warm_rx_gate')) {
 if (!function_exists('wpc_url_warm_cron_handler')) {
     /**
      * Cron backstop: check which of the 4 hashed-cache variant files actually landed; re-fire only
-     * the missing ones. Max 2 attempts, then leave the rest to live traffic.
+     * the missing ones. Max 2 attempts, then leave the rest to live traffic. A copy a hold (policy
+     * cache_p2) is keeping serving, unchanged since the hold was taken, has not landed: it is
+     * rendered too, which is how a hold taken inside a warm fetch (the kick receiver) is rebuilt.
      */
     function wpc_url_warm_cron_handler($url, $attempt = 1)
     {
@@ -1250,9 +1778,16 @@ if (!function_exists('wpc_url_warm_cron_handler')) {
             }
             $wpc_dir     = rtrim(WPS_IC_CACHE, '/') . '/' . $wpc_key . '/';
             $wpc_missing = [];
+            if (function_exists('wpc_p2_settle')) {
+                wpc_p2_settle($wpc_key, false, false);
+            }
+            $wpc_hold = function_exists('wpc_p2_read') ? wpc_p2_read($wpc_key) : null;
             foreach (array_keys(wpc_warm_url_variants()) as $wpc_variant) {
                 $wpc_prefix = $wpc_variant === '' ? '' : $wpc_variant . '_';
-                if (wpc_copy_present_gzip($wpc_dir, $wpc_prefix) === '') {
+                $wpc_present = wpc_copy_present_gzip($wpc_dir, $wpc_prefix);
+                $wpc_held = $wpc_hold !== null && $wpc_present !== '' && isset($wpc_hold['f'][basename($wpc_present)])
+                    && (int) @filemtime($wpc_present) <= (int) $wpc_hold['f'][basename($wpc_present)];
+                if ($wpc_present === '' || $wpc_held) {
                     $wpc_missing[] = $wpc_variant;
                 }
             }
@@ -1340,6 +1875,199 @@ if (!function_exists('wpc_crit_cur_uuid')) {
         return '';
     }
 }
+
+if (!function_exists('wpc_crit_site_offset')) {
+    /** The seconds this site shifts its crit-service timers by: one fixed number per site from its address, 0 to the span less one. */
+    function wpc_crit_site_offset()
+    {
+        $span = max(1, (int) apply_filters('wpc_crit_hook_offset_span', 20));
+        $seed = function_exists('site_url') ? (string) site_url() : '';
+        return (int) (hexdec(substr(md5($seed), 0, 6)) % $span);
+    }
+
+    /** The cron hooks whose events call the crit service: /generate, /status, /v2/latest and its CDN. */
+    function wpc_crit_service_hooks()
+    {
+        return ['wpc_lcp_repull', 'wpc_crit_collect', 'wpc_crit_redispatch', 'wpc_crit_resync_wave',
+            'wpc_land_repoll55', 'wpc_presc_poll', 'wpc_warm_home_dispatch', 'wpc_combine_fonts_fetch'];
+    }
+}
+
+if (!function_exists('wpc_crit_used_css_setting_on')) {
+    /** Whether the Used CSS setting is on; with it off no used-css locator is owed by the service. */
+    function wpc_crit_used_css_setting_on()
+    {
+        if (!function_exists('get_option') || !defined('WPS_IC_SETTINGS')) {
+            return false;
+        }
+        $settings = get_option(WPS_IC_SETTINGS);
+        return is_array($settings) && !empty($settings['used-css']) && $settings['used-css'] == '1';
+    }
+}
+
+if (!function_exists('wpc_latest_miss_state')) {
+    /** What a /v2/latest 404 is remembered against: the page's last dispatch, its last land, the re-check an update marked and the service's last word that prescriptions exist. */
+    function wpc_latest_miss_state($dir)
+    {
+        $dir = rtrim((string) $dir, '/') . '/';
+        return trim((string) @file_get_contents($dir . 'dispatch_ts.txt')) . '|' . trim((string) @file_get_contents($dir . 'land_ts.txt'))
+            . '|' . (int) @filemtime($dir . 'repull_due.txt') . '|' . (int) @filemtime($dir . 'presc_want.txt');
+    }
+
+    /** Whether the service already answered this page 404 found:false and nothing has dispatched, landed or marked a re-check since. */
+    function wpc_latest_miss_remembered($dir)
+    {
+        $dir = rtrim((string) $dir, '/') . '/';
+        return @is_readable($dir . 'latest_404.txt')
+            && trim((string) @file_get_contents($dir . 'latest_404.txt')) === wpc_latest_miss_state($dir);
+    }
+
+    function wpc_latest_miss_remember($dir)
+    {
+        $dir = rtrim((string) $dir, '/') . '/';
+        return wpc_crit_meta_write($dir . 'latest_404.txt', wpc_latest_miss_state($dir));
+    }
+}
+
+if (!function_exists('wpc_status_success_count')) {
+    /** How many /status answers of success this page has had for $uuid. */
+    function wpc_status_success_count($dir, $uuid)
+    {
+        $parts = explode(' ', trim((string) @file_get_contents(rtrim((string) $dir, '/') . '/status_ok.txt')));
+        return (count($parts) === 2 && $parts[0] === (string) $uuid) ? (int) $parts[1] : 0;
+    }
+
+    /** Records one more success answer for $uuid; returns the count. */
+    function wpc_status_success_note($dir, $uuid)
+    {
+        $count = wpc_status_success_count($dir, $uuid) + 1;
+        wpc_crit_meta_write(rtrim((string) $dir, '/') . '/status_ok.txt', (string) $uuid . ' ' . $count);
+        return $count;
+    }
+
+    /** The seconds until the next /status poll of a uuid that has answered success $count times: 60, 120, 240, then none (0). */
+    function wpc_status_success_delay($count)
+    {
+        $ladder = [1 => 60, 2 => 120, 3 => 240];
+        return isset($ladder[(int) $count]) ? $ladder[(int) $count] : 0;
+    }
+}
+
+if (!function_exists('wpc_crit_derived_missed')) {
+    /** Whether the derived URL of $which ('delay', 'lcp') answered 404 for the generation on disk and the memory is younger than six hours. */
+    function wpc_crit_derived_missed($dir, $which)
+    {
+        $dir = rtrim((string) $dir, '/') . '/';
+        $parts = explode(' ', trim((string) @file_get_contents($dir . $which . '_404.txt')));
+        return count($parts) === 2 && $parts[0] !== '' && $parts[0] === wpc_crit_cur_uuid($dir)
+            && (time() - (int) $parts[1]) < (int) apply_filters('wpc_crit_derived_miss_ttl', 6 * HOUR_IN_SECONDS);
+    }
+
+    /** Remembers a 404 or 410 answer to a DERIVED artifact URL; a URL the service named is never remembered. */
+    function wpc_crit_derived_note($dir, $which, $response)
+    {
+        $code = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
+        $dir = rtrim((string) $dir, '/') . '/';
+        $meta = $dir . ($which === 'delay' ? 'delay_url.txt' : 'lcp_url.txt');
+        if ($code === 403 && function_exists('wpc_crit_signed_denied')) {
+            wpc_crit_signed_denied($dir, trim((string) @file_get_contents($meta)), $response);
+        }
+        if (($code !== 404 && $code !== 410) || ($which !== 'delay' && $which !== 'lcp')
+            || preg_match('#^https?://#i', trim((string) @file_get_contents($meta)))) {
+            return false;
+        }
+        $uuid = wpc_crit_cur_uuid($dir);
+        if ($uuid === '' || !wpc_crit_meta_write($dir . $which . '_404.txt', $uuid . ' ' . time())) {
+            return false;
+        }
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('artifact-miss-remembered', basename(rtrim($dir, '/')), '', ['artifact' => $which, 'uuid' => substr($uuid, 0, 8)]);
+        }
+        return true;
+    }
+}
+
+if (!function_exists('wpc_crit_key_fold')) {
+    /**
+     * A page key in one comparable form: no scheme, host lowercased and www-folded, path decoded,
+     * the trailing slash folded on any path but the root, no query. '' when it cannot be told (an
+     * international host that cannot be converted).
+     */
+    function wpc_crit_key_fold($key)
+    {
+        $key = trim((string) $key);
+        if ($key === '') {
+            return '';
+        }
+        $key = preg_replace('#^[a-z][a-z0-9+.-]*://#i', '', $key);
+        $key = (string) preg_replace('/[?#].*$/s', '', $key);
+        $slash = strpos($key, '/');
+        $host = strtolower($slash === false ? $key : substr($key, 0, $slash));
+        $path = $slash === false ? '/' : substr($key, $slash);
+        if (strpos($host, 'www.') === 0) {
+            $host = substr($host, 4);
+        }
+        if (preg_match('/[^\x00-\x7F]/', $host)) {
+            $ascii = function_exists('idn_to_ascii') ? @idn_to_ascii($host, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46) : false;
+            if (!is_string($ascii) || $ascii === '') {
+                return '';
+            }
+            $host = $ascii;
+        }
+        $path = rawurldecode($path);
+        if (strlen($path) > 1) {
+            $path = rtrim($path, '/');
+        }
+        return $host === '' ? '' : $host . ($path === '' ? '/' : $path);
+    }
+
+    /**
+     * Whether a service answer that carries url_key is the answer for the page asked about: true
+     * when the key names that page, false when it names another, null when it cannot be checked
+     * (no key in the answer, or either side cannot be put in the comparable form).
+     */
+    function wpc_crit_latest_key_verdict($answer, $askedUrl)
+    {
+        if (!is_array($answer) || !isset($answer['url_key']) || !is_string($answer['url_key']) || $answer['url_key'] === '') {
+            return null;
+        }
+        $sent = wpc_crit_key_fold($answer['url_key']);
+        $asked = function_exists('wpc_crit_pointer_key') ? wpc_crit_key_fold(wpc_crit_pointer_key((string) $askedUrl)) : '';
+        if ($sent === '' || $asked === '') {
+            return null;
+        }
+        return $sent === $asked;
+    }
+
+    /**
+     * Whether a service answer names another page than the one asked about, and is refused for it
+     * (the answer's url_key; policy.off_key_check puts the site back on taking every answer). The
+     * one reader of the switch; the refusals ask this and the land report's key reads the verdict.
+     */
+    function wpc_crit_latest_key_foreign($answer, $askedUrl)
+    {
+        if (function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('off_key_check') === 1) {
+            return false;
+        }
+        return wpc_crit_latest_key_verdict($answer, $askedUrl) === false;
+    }
+
+    function wpc_crit_status_foreign($answer, $urlKey, $via)
+    {
+        if (!is_array($answer) || !function_exists('wpc_land_page_url')) {
+            return false;
+        }
+        $pageUrl = wpc_land_page_url((string) $urlKey);
+        if ($pageUrl === '' || !wpc_crit_latest_key_foreign($answer, $pageUrl)) {
+            return false;
+        }
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('crit-latest-key-mismatch', (string) $urlKey, $pageUrl, ['via' => (string) $via]);
+        }
+        return true;
+    }
+}
+
 if (!function_exists('wpc_crit_artifact_url')) {
     /** URL of an observation artifact (delay.json / lcp.json), meta-or-DERIVED.
      *  The service returns /status=success (crit done) with NO delay_url/lcp_url
@@ -1361,14 +2089,59 @@ if (!function_exists('wpc_crit_artifact_url')) {
         if (@is_readable($meta)) {
             $u = trim((string) @file_get_contents($meta));
             if ($u !== '' && preg_match('#^https?://#i', $u)) {
-                return $u . (strpos($u, '?') !== false ? '&' : '?') . 't=' . time();
+                return (function_exists('wpc_crit_artifact_signed') && wpc_crit_artifact_signed($u)) ? $u : $u . (strpos($u, '?') !== false ? '&' : '?') . 't=' . time();
             }
         }
         $uuid = wpc_crit_cur_uuid($dir);
-        if ($uuid !== '') {
-            return 'https://critical-css-mc.b-cdn.net/' . substr($uuid, 0, 4) . '/' . $uuid . $suf[$which] . '?t=' . time();
+        if ($uuid !== '' && !wpc_crit_derived_missed($dir, $which)) {
+            $u = function_exists('wpc_crit_artifact_href') ? wpc_crit_artifact_href($uuid, $suf[$which], $dir)
+                : 'https://critical-css-mc.b-cdn.net/' . substr($uuid, 0, 4) . '/' . $uuid . $suf[$which];
+            return (function_exists('wpc_crit_artifact_signed') && wpc_crit_artifact_signed($u)) ? $u : $u . (strpos($u, '?') !== false ? '&' : '?') . 't=' . time();
         }
         return '';
+    }
+}
+if (!function_exists('wpc_crit_signed_denied')) {
+
+    function wpc_crit_signed_denied($dir, $url, $response, $urlKey = null)
+    {
+        try {
+            if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) !== 403
+                || !function_exists('wpc_crit_artifact_signed') || !wpc_crit_artifact_signed((string) $url) || !defined('WPS_IC_CRITICAL')) {
+                return false;
+            }
+            $dir = rtrim((string) $dir, '/') . '/';
+            if ($urlKey === null) {
+                $root = rtrim(WPS_IC_CRITICAL, '/') . '/';
+                $urlKey = strpos($dir, $root) === 0 ? rtrim(substr($dir, strlen($root)), '/') : '';
+            }
+            $urlKey = (string) $urlKey;
+            if ($urlKey === '' || !is_dir($dir)) {
+                return false;
+            }
+            $gate = 'wpc_sa403_' . md5($urlKey);
+            if (get_transient($gate)) {
+                return false;
+            }
+            set_transient($gate, 1, HOUR_IN_SECONDS);
+            $dropped = [];
+            foreach ((array) @glob($dir . '*_url.txt') as $meta) {
+                if (is_string($meta) && $meta !== '' && wpc_crit_artifact_signed(trim((string) @file_get_contents($meta))) && @unlink($meta)) {
+                    $dropped[] = basename($meta, '_url.txt');
+                }
+            }
+            delete_transient('wpc_v2l_' . md5($urlKey));
+            wpc_crit_meta_write($dir . 'repull_due.txt', (string) time());
+            if (function_exists('wp_next_scheduled') && function_exists('wpc_pl_sched') && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, 1])) {
+                wpc_pl_sched(time() + 30, 'wpc_lcp_repull', [$urlKey, 1]);
+            }
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('artifact-signed-denied', $urlKey, '', ['dropped' => implode(',', $dropped)]);
+            }
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 }
 if (!function_exists('wpc_delay_manifest_landed')) {
@@ -1398,9 +2171,15 @@ if (!function_exists('wpc_crit_derived_replace')) {
      *  moved the artifact. */
     function wpc_crit_derived_replace($dir, $artifact, $freshUrl, $urlKey, $replaceReason = '')
     {
+        if (wpc_crit_purge_stale_home((string) $urlKey)) {
+            return false;
+        }
         $pointerFile = $artifact === 'delay' ? 'delay_url.txt' : 'lcp_url.txt';
         $contentFile = $artifact === 'delay' ? 'delay.json' : 'lcp.json';
         $r = wp_remote_get($freshUrl, ['headers' => ['user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : ''], 'timeout' => 5]);
+        if (function_exists('wpc_crit_signed_denied')) {
+            wpc_crit_signed_denied($dir, $freshUrl, $r, $urlKey);
+        }
         $body = (!is_wp_error($r) && (int) wp_remote_retrieve_response_code($r) === 200) ? wp_remote_retrieve_body($r) : '';
         if (!is_string($body) || $body === '' || !is_array(json_decode($body, true))) {
             if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('derived-supersede-deferred', (string) $urlKey, '', ['artifact' => $artifact, 'code' => is_wp_error($r) ? 0 : (int) wp_remote_retrieve_response_code($r)]); }
@@ -1431,6 +2210,11 @@ if (!function_exists('wpc_lcp_has_usable_facts')) {
     function wpc_lcp_has_usable_facts($j)
     {
         if (!is_array($j) || !isset($j['atf_images']) || !is_array($j['atf_images'])) { return false; }
+        if (class_exists('wps_ic_atf_observation') && wps_ic_atf_observation::heroFold() && isset($j['leg_status']) && is_array($j['leg_status'])) {
+            foreach (['mobile', 'desktop'] as $g) {
+                if (!empty($j['leg_status'][$g]['measured']) && isset($j['atf_images'][$g]) && is_array($j['atf_images'][$g])) { return true; }
+            }
+        }
         $l = [];
         foreach (['mobile', 'desktop'] as $g) {
             if (isset($j['atf_images'][$g]) && is_array($j['atf_images'][$g])) { $l = array_merge($l, $j['atf_images'][$g]); }
@@ -1440,6 +2224,24 @@ if (!function_exists('wpc_lcp_has_usable_facts')) {
             if (is_array($e) && !empty($e['stem']) && !empty($e['css_w'])) { return true; }
         }
         return false;
+    }
+}
+if (!function_exists('wpc_lcp_carried_atf_images')) {
+    /** The atf_images list the carry-forward grafts onto the incoming lcp.json body from the older file $current: the older list, except for a device the body answers with an empty list and stamps complete (policy.atf_complete_lazy). null when no device is left to carry. */
+    function wpc_lcp_carried_atf_images($incoming, $current)
+    {
+        $carried = $current['atf_images'];
+        if (!class_exists('wps_ic_atf_observation') || !method_exists('wps_ic_atf_observation', 'completeDevices')) {
+            return $carried;
+        }
+        $answered = false;
+        foreach (wps_ic_atf_observation::completeDevices($incoming) as $device) {
+            if (isset($incoming['atf_images'][$device]) && $incoming['atf_images'][$device] === []) {
+                $answered = true;
+                $carried = (is_array($carried) && (isset($carried['mobile']) || isset($carried['desktop']))) ? array_replace($carried, [$device => []]) : [];
+            }
+        }
+        return (!$answered || wpc_lcp_has_usable_facts(['atf_images' => $carried])) ? $carried : null;
     }
 }
 if (!function_exists('wpc_write_lcp_preserving_facts')) {
@@ -1456,13 +2258,16 @@ if (!function_exists('wpc_write_lcp_preserving_facts')) {
         $incoming = json_decode($body, true);
         if (!is_array($incoming)) { return false; }
         $lcp_file = $dir . 'lcp.json';
-        if (apply_filters('wpc_lcp_carry_facts', true)
+        $serviceCarries = class_exists('wps_ic_atf_observation') && wps_ic_atf_observation::heroFold()
+            && isset($incoming['leg_status']) && is_array($incoming['leg_status']);
+        if (apply_filters('wpc_lcp_carry_facts', true) && !$serviceCarries
             && !wpc_lcp_has_usable_facts($incoming) && @is_readable($lcp_file)) {
             $current_mtime = (int) @filemtime($lcp_file);
             $current = json_decode((string) @file_get_contents($lcp_file), true);
             if (is_array($current) && wpc_lcp_has_usable_facts($current) && $current_mtime > 0
-                && (time() - $current_mtime) < (int) apply_filters('wpc_lcp_carry_max_age', 7 * DAY_IN_SECONDS)) {
-                $incoming['atf_images'] = $current['atf_images'];
+                && (time() - $current_mtime) < (int) apply_filters('wpc_lcp_carry_max_age', 7 * DAY_IN_SECONDS)
+                && ($carried = wpc_lcp_carried_atf_images($incoming, $current)) !== null) {
+                $incoming['atf_images'] = $carried;
                 if (empty($incoming['oversized_images']) && !empty($current['oversized_images'])) {
                     $incoming['oversized_images'] = $current['oversized_images'];
                 }
@@ -1537,6 +2342,9 @@ if (!function_exists('wpc_amend_delay_recovery')) {
             || (function_exists('wpc_under_pressure') && wpc_under_pressure())) {
             return false; // load gate: the refetch is blocking HTTP — yield to visitors when hot
         }
+        if (wpc_crit_purge_stale_home((string) $urlKey)) {
+            return false;
+        }
         $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
         // A tainted lcp.json (challenged legs, facts withheld) is amended IN PLACE under the
         // same uuid after gen completes — the write-once law pins the taint, and the delay
@@ -1552,6 +2360,7 @@ if (!function_exists('wpc_amend_delay_recovery')) {
                 $miss_reason = '';
                 if ($lcp_artifact_url !== '' && preg_match('#^https?://#i', $lcp_artifact_url)) {
                     $lcp_response = wp_remote_get($lcp_artifact_url, ['headers' => ['user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : ''], 'timeout' => 5]);
+                    wpc_crit_derived_note($dir, 'lcp', $lcp_response);
                     $lcp_status = !is_wp_error($lcp_response) ? (int) wp_remote_retrieve_response_code($lcp_response) : -1;
                     if ($lcp_status === 200) {
                         $lcp_body = wp_remote_retrieve_body($lcp_response);
@@ -1592,6 +2401,7 @@ if (!function_exists('wpc_amend_delay_recovery')) {
             return false;
         }
         $wpc_amr = wp_remote_get($wpc_amu, ['headers' => ['user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : ''], 'timeout' => 5]);
+        wpc_crit_derived_note($dir, 'delay', $wpc_amr);
         if (is_wp_error($wpc_amr) || (int) wp_remote_retrieve_response_code($wpc_amr) !== 200) {
             return false;
         }
@@ -1606,6 +2416,7 @@ if (!function_exists('wpc_amend_delay_recovery')) {
         $wpc_alu = wpc_crit_artifact_url($dir, 'lcp');
         if ($wpc_alu !== '') {
             $wpc_alr = wp_remote_get($wpc_alu, ['headers' => ['user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : ''], 'timeout' => 5]);
+            wpc_crit_derived_note($dir, 'lcp', $wpc_alr);
             if (!is_wp_error($wpc_alr) && (int) wp_remote_retrieve_response_code($wpc_alr) === 200) {
                 $wpc_alb = wp_remote_retrieve_body($wpc_alr);
                 if (is_string($wpc_alb) && $wpc_alb !== '' && is_array(json_decode($wpc_alb, true))) {
@@ -1642,6 +2453,24 @@ if (!function_exists('wpc_lcp_repull_handler')) {
         }
         if (function_exists('wpc_pipeline_key_junk') && wpc_pipeline_key_junk($urlKey)) {
             return; // junk url_key chain dies here, no reschedule
+        }
+        if (wpc_crit_purge_stale_home((string) $urlKey)) {
+            return;
+        }
+        $wpc_held_dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
+        if (function_exists('wpc_reland_held') && @is_file($wpc_held_dir . 'repull_force.txt')) {
+            list($wpc_held_sig, $wpc_held_map) = wpc_reland_marker_parts((string) @file_get_contents($wpc_held_dir . 'repull_force.txt'));
+            if (wpc_reland_held($wpc_held_dir, $wpc_held_sig, $wpc_held_map) === 'done') {
+                $wpc_held_stamp = (int) @filemtime($wpc_held_dir . 'repull_force.txt');
+                wpc_crit_meta_write($wpc_held_dir . 'reland_obs.txt', $wpc_held_sig);
+                @unlink($wpc_held_dir . 'repull_force.txt');
+                if ($wpc_held_stamp > 0 && abs((int) @filemtime($wpc_held_dir . 'repull_due.txt') - $wpc_held_stamp) <= 60) {
+                    @unlink($wpc_held_dir . 'repull_due.txt');
+                }
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('reland-already-held', (string) $urlKey, '', ['obs' => substr((string) strtok($wpc_held_sig, '|'), 0, 8)]);
+                }
+            }
         }
         // Breaker: when the backend is known-down every leg below times out (~70-90s of
         // blocking HTTP per fire) — skip the whole chain, keep ONE bounded backstop.
@@ -1690,11 +2519,8 @@ if (!function_exists('wpc_lcp_repull_handler')) {
         }
 
 
-        $wpc_ucss_on = false;
-        if (function_exists('get_option') && defined('WPS_IC_SETTINGS')) {
-            $wpc_ucss_set = get_option(WPS_IC_SETTINGS);
-            $wpc_ucss_on  = is_array($wpc_ucss_set) && !empty($wpc_ucss_set['used-css']) && $wpc_ucss_set['used-css'] == '1';
-        }
+        $wpc_ucss_on = wpc_crit_used_css_setting_on();
+        $wpc_ucss_owed = $wpc_ucss_on;
         if ($wpc_ucss_on && @is_readable($dir . 'used_tpl.txt')) {
             $wpc_cur_tpl = trim((string) @file_get_contents($dir . 'tpl.txt'));
             $wpc_used_tpl_now = trim((string) @file_get_contents($dir . 'used_tpl.txt'));
@@ -1702,7 +2528,7 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('used-css-tpl-stale', (string) $urlKey, '', ['used_tpl' => substr($wpc_used_tpl_now, 0, 24), 'cur_tpl' => substr($wpc_cur_tpl, 0, 24)]);
                 }
-                foreach (['used_tpl.txt', 'used_css_url.txt', 'used_css_mobile_url.txt', 'used_css_desktop_url.txt', 'used_css_sheets_url.txt'] as $wpc_stale_f) {
+                foreach (['used_tpl.txt', 'used_css_url.txt', 'used_css_mobile_url.txt', 'used_css_desktop_url.txt', 'used_css_sheets_url.txt', 'repull_force.txt'] as $wpc_stale_f) {
                     @unlink($dir . $wpc_stale_f);
                 }
                 $wpc_ucss_on = false;
@@ -1718,13 +2544,17 @@ if (!function_exists('wpc_lcp_repull_handler')) {
             && $wpc_crit_age >= (int) apply_filters('wpc_observation_min_age', 60)
 
 
-            && (!@is_readable($dir . 'lcp_url.txt') || !@is_readable($dir . 'delay_url.txt') || !@is_readable($dir . 'fonts_url.txt') || !@is_readable($dir . 'used_css_sheets_url.txt') || !@is_readable($dir . 'used_tpl.txt') || !@is_readable($dir . 'used_css_url.txt'))
+            && (!@is_readable($dir . 'lcp_url.txt') || !@is_readable($dir . 'delay_url.txt') || !@is_readable($dir . 'fonts_url.txt')
+                || ($wpc_ucss_owed && (!@is_readable($dir . 'used_css_sheets_url.txt') || !@is_readable($dir . 'used_tpl.txt') || !@is_readable($dir . 'used_css_url.txt'))))
             && @is_readable($dir . 'uuid.txt')) {
             $wpc_ru = preg_replace('/[^A-Za-z0-9-]/', '', trim((string) @file_get_contents($dir . 'uuid.txt')));
-            if ($wpc_ru !== '') {
+            if ($wpc_ru !== '' && wpc_status_success_count($dir, $wpc_ru) < 4) {
                 $wpc_rs = wp_remote_get(wpc_crit_service_read_url('/status', ['uuid' => $wpc_ru], (string) $urlKey), ['timeout' => 5]);
                 if (!is_wp_error($wpc_rs) && (int) wp_remote_retrieve_response_code($wpc_rs) === 200) {
                     $wpc_rd = json_decode((string) wp_remote_retrieve_body($wpc_rs), true);
+                    if (wpc_crit_status_foreign($wpc_rd, (string) $urlKey, 'status-repull')) {
+                        $wpc_rd = null;
+                    }
                     // The generation uuid.txt names is gone (removed, refused, unknown, failed):
                     // forget it once, and the chain stops below for want of anything to collect.
                     // A dispatch still in flight is not gone (wpc_gen_status_gone's first minute).
@@ -1738,15 +2568,7 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                         $wpc_rd = null;
                     }
                     if (is_array($wpc_rd)) {
-                        // observation:ready|pending (service 3.77.1/.2) — status:success means the
-                        // CRIT finished, NOT the observation leg (delay/lcp/fonts land later). On
-                        // 'pending' keep retrying; NEVER conclude absence from a missing url (that
-                        // stranded busyprosai — polled 3s in, saw success + no delay_url, gave up).
-                        if (($wpc_rd['observation'] ?? '') === 'pending'
-                            && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
-                            && (int) $attempt < $wpc_max_att && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, (int) $attempt + 1])) {
-                            wpc_pl_sched(time() + 30, 'wpc_lcp_repull', [$urlKey, (int) $attempt + 1]);
-                        }
+                        $wpc_status_successes = (($wpc_rd['status'] ?? '') === 'success') ? wpc_status_success_note($dir, $wpc_ru) : 0;
                         if (!@is_readable($dir . 'lcp_url.txt')   && !empty($wpc_rd['lcp_url']))   { wpc_crit_meta_write($dir . 'lcp_url.txt', trim((string) $wpc_rd['lcp_url'])); wpc_crit_meta_write($dir . 'lcp_src.txt', 'repull-status'); }
                         if (!@is_readable($dir . 'delay_url.txt') && !empty($wpc_rd['delay_url'])) { wpc_crit_meta_write($dir . 'delay_url.txt', trim((string) $wpc_rd['delay_url'])); }
                         if (!@is_readable($dir . 'fonts_url.txt') && !empty($wpc_rd['fonts_url'])) { wpc_crit_meta_write($dir . 'fonts_url.txt', trim((string) $wpc_rd['fonts_url'])); }
@@ -1759,7 +2581,8 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                         // URL metas only ever hold real URLs — the service serializes null as
                         // the literal 'None', which then shadows derivation forever downstream.
                         if (!@is_readable($dir . 'used_css_sheets_url.txt') && !empty($wpc_rd['used_css_sheets_url']) && preg_match('#^https?://#i', trim((string) $wpc_rd['used_css_sheets_url']))) { wpc_crit_meta_write($dir . 'used_css_sheets_url.txt', trim((string) $wpc_rd['used_css_sheets_url'])); }
-                        if (!@is_readable($dir . 'used_css_url.txt') && !empty($wpc_rd['used_css_url']) && preg_match('#^https?://#i', trim((string) $wpc_rd['used_css_url']))) { wpc_crit_meta_write($dir . 'used_css_url.txt', trim((string) $wpc_rd['used_css_url'])); }
+                        $wpc_status_lands = $wpc_ucss_owed && function_exists('wpc_used_css_land_generation') && function_exists('wpc_used_css_fetch') && function_exists('wpc_used_css_path');
+                        if (!$wpc_status_lands && !@is_readable($dir . 'used_css_url.txt') && !empty($wpc_rd['used_css_url']) && preg_match('#^https?://#i', trim((string) $wpc_rd['used_css_url']))) { wpc_crit_meta_write($dir . 'used_css_url.txt', trim((string) $wpc_rd['used_css_url'])); }
                         if (!@is_readable($dir . 'used_tpl.txt') && !empty($wpc_rd['tpl_key'])) {
                             wpc_crit_meta_write($dir . 'used_tpl.txt', preg_replace('/[^A-Za-z0-9:._-]/', '', (string) $wpc_rd['tpl_key']));
                             if (function_exists('wpc_r2_on_artifact_land')) { wpc_r2_on_artifact_land(); }
@@ -1768,7 +2591,33 @@ if (!function_exists('wpc_lcp_repull_handler')) {
 
                         foreach (['mobile', 'desktop'] as $wpc_device) {
                             $wpc_used_css_key = 'used_css_' . $wpc_device . '_url';
-                            if (!@is_readable($dir . $wpc_used_css_key . '.txt') && !empty($wpc_rd[$wpc_used_css_key])) { wpc_crit_meta_write($dir . $wpc_used_css_key . '.txt', trim((string) $wpc_rd[$wpc_used_css_key])); }
+                            if (!$wpc_status_lands && !@is_readable($dir . $wpc_used_css_key . '.txt') && !empty($wpc_rd[$wpc_used_css_key])) { wpc_crit_meta_write($dir . $wpc_used_css_key . '.txt', trim((string) $wpc_rd[$wpc_used_css_key])); }
+                        }
+                        if ($wpc_status_lands) {
+                            $wpc_status_lanes = [];
+                            foreach (['union' => 'used_css_url', 'mobile' => 'used_css_mobile_url', 'desktop' => 'used_css_desktop_url'] as $wpc_status_lane => $wpc_status_key) {
+                                if (!@is_readable($dir . $wpc_status_key . '.txt') && !empty($wpc_rd[$wpc_status_key]) && is_string($wpc_rd[$wpc_status_key]) && preg_match('#^https?://#i', trim($wpc_rd[$wpc_status_key]))) {
+                                    $wpc_status_lanes[$wpc_status_lane] = trim($wpc_rd[$wpc_status_key]);
+                                }
+                            }
+                            if (!empty($wpc_status_lanes)) {
+                                $wpc_status_land = wpc_used_css_land_generation($dir, trim((string) @file_get_contents($dir . 'used_tpl.txt')), $wpc_status_lanes, ['key' => (string) $urlKey, 'via' => 'status']);
+                                if (!empty($wpc_status_land['failed']) && (int) $attempt < $wpc_max_att
+                                    && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+                                    && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, (int) $attempt + 1])) {
+                                    wpc_pl_sched(time() + 45, 'wpc_lcp_repull', [$urlKey, (int) $attempt + 1]);
+                                }
+                            }
+                        }
+                        // observation:ready|pending (service 3.77.1/.2): status success means the crit
+                        // finished, not the observation leg. A pending answer is asked again at 60, 120 and
+                        // 240 s, and only while a locator it should name is still missing.
+                        $wpc_pending_delay = wpc_status_success_delay($wpc_status_successes);
+                        if (($wpc_rd['observation'] ?? '') === 'pending' && ($wpc_status_successes === 0 || $wpc_pending_delay > 0)
+                            && (!@is_readable($dir . 'lcp_url.txt') || !@is_readable($dir . 'delay_url.txt') || !@is_readable($dir . 'fonts_url.txt'))
+                            && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+                            && (int) $attempt < $wpc_max_att && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, (int) $attempt + 1])) {
+                            wpc_pl_sched(time() + ($wpc_pending_delay > 0 ? $wpc_pending_delay : 60), 'wpc_lcp_repull', [$urlKey, (int) $attempt + 1]);
                         }
                     }
                 }
@@ -1787,8 +2636,9 @@ if (!function_exists('wpc_lcp_repull_handler')) {
             && ($wpc_presc_want_mtime = (int) @filemtime($dir . 'presc_want.txt')) > 0
             && (time() - $wpc_presc_want_mtime) < 3600;
         if (apply_filters('wpc_v2_latest', true) && defined('WPS_IC_CRITICAL_API_URL')
-            && (!@is_readable($dir . 'lcp_url.txt') || !@is_readable($dir . 'used_tpl.txt')
-                || !@is_readable($dir . 'used_css_sheets_url.txt') || !@is_readable($dir . 'fonts_url.txt')
+            && !wpc_latest_miss_remembered($dir)
+            && (!@is_readable($dir . 'lcp_url.txt') || !@is_readable($dir . 'fonts_url.txt')
+                || ($wpc_ucss_owed && (!@is_readable($dir . 'used_tpl.txt') || !@is_readable($dir . 'used_css_sheets_url.txt')))
                 || $wpc_prescriptions_wanted
                 // An upgrade marks the homepage due for a re-check instead of wiping its locators
                 // (wpc_artifact_refresh_on_update). The marker opens this leg for an hour and is
@@ -1811,6 +2661,13 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                     ['url' => $latestPageUrl, 'apikey' => (string) $pluginOptions['api_key']], (string) $urlKey),
                     ['timeout' => 5]);
                 $latestCode = !is_wp_error($latestAnswer) ? (int) wp_remote_retrieve_response_code($latestAnswer) : 0;
+                if ($latestCode === 200 && wpc_crit_latest_key_foreign(json_decode((string) wp_remote_retrieve_body($latestAnswer), true), $latestPageUrl)) {
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('crit-latest-key-mismatch', (string) $urlKey, $latestPageUrl, ['via' => 'v2-latest']);
+                    }
+                    set_transient('wpc_v2l_' . md5((string) $urlKey), 1, 900);
+                    $latestCode = -1;
+                }
                 if ($latestCode === 200) {
                     // The marker is the re-check's retry budget, not a receipt for the reply: it is
                     // cleared at the end of this block only when the check finished with nothing left
@@ -1823,9 +2680,23 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                     if (function_exists('wpc_rum_sample_store')) {
                         wpc_rum_sample_store($latestJson);
                     }
+                    if (is_array($latestJson) && isset($latestJson['url_key'], $latestJson['crit_uuid'])
+                        && is_string($latestJson['url_key']) && is_string($latestJson['crit_uuid'])) {
+                        wpc_land_url_key_note((string) $urlKey, $latestJson['url_key'], $latestJson['crit_uuid']);
+                    }
                     if (is_array($latestJson) && !empty($latestJson['ready'])
                         && !empty($latestJson['artifacts']) && is_array($latestJson['artifacts'])) {
                         $latestArtifacts = $latestJson['artifacts'];
+                        $wpc_obs_foreign = false;
+                        $wpc_latest_lands = function_exists('wpc_used_css_land_generation') && function_exists('wpc_used_css_fetch') && function_exists('wpc_used_css_path') && wpc_crit_used_css_setting_on();
+                        if (!empty($latestJson['obs_tpl_key']) && is_string($latestJson['obs_tpl_key'])
+                            && function_exists('wpc_used_css_key_valid') && wpc_used_css_key_valid(trim($latestJson['obs_tpl_key']))) {
+                            $wpc_page_tpl_now = trim((string) @file_get_contents($dir . 'tpl.txt'));
+                            $wpc_obs_foreign = $wpc_page_tpl_now !== '' && trim($latestJson['obs_tpl_key']) !== $wpc_page_tpl_now;
+                        }
+                        if ($wpc_obs_foreign) {
+                            set_transient('wpc_v2l_' . md5((string) $urlKey), 1, 900);
+                        }
                         // FRESH-GEN SUPERSEDES STALE WRITE-ONCE delay.json (the flip's gate).
                         // delay.json/lcp.json are write-once, so a fresh gen never overwrites a
                         // stale on-disk copy — busyprosai pinned an 18.9h-old, ceiling-less
@@ -1873,6 +2744,8 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                             'used_css_mobile' => 'used_css_mobile_url.txt',
                             'used_css_desktop' => 'used_css_desktop_url.txt',
                             'crit_combined' => 'crit_combined_url.txt'] as $artifactKey => $pointerFile) {
+                            if ($wpc_obs_foreign && strpos($artifactKey, 'used_css') === 0) { continue; }
+                            if ($wpc_latest_lands && ($artifactKey === 'used_css_mobile' || $artifactKey === 'used_css_desktop')) { continue; }
                             if (!@is_readable($dir . $pointerFile) && !empty($latestArtifacts[$artifactKey]) && is_string($latestArtifacts[$artifactKey])) {
                                 wpc_crit_meta_write($dir . $pointerFile, trim((string) $latestArtifacts[$artifactKey]));
                                 if ($artifactKey === 'lcp') { wpc_crit_meta_write($dir . 'lcp_src.txt', 'v2-latest'); }
@@ -1883,6 +2756,7 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                         // Contract delta 2: prescriptions + used_css (union) ride artifacts{}
                         // directly — THE delivery channel; shelf paths are never derived.
                         foreach (['prescriptions' => 'prescriptions_url.txt', 'used_css' => 'used_css_url.txt'] as $wpc_pointer_artifact => $wpc_pointer_file_name) {
+                            if (($wpc_obs_foreign || $wpc_latest_lands) && $wpc_pointer_artifact === 'used_css') { continue; }
                             if (!@is_readable($dir . $wpc_pointer_file_name) && !empty($latestArtifacts[$wpc_pointer_artifact]) && is_string($latestArtifacts[$wpc_pointer_artifact])
                                 && preg_match('#^https?://#i', trim((string) $latestArtifacts[$wpc_pointer_artifact]))) {
                                 wpc_crit_meta_write($dir . $wpc_pointer_file_name, trim((string) $latestArtifacts[$wpc_pointer_artifact]));
@@ -1897,7 +2771,7 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                         }
 
 
-                        if (!@is_readable($dir . 'used_tpl.txt')) {
+                        if (!$wpc_obs_foreign && !@is_readable($dir . 'used_tpl.txt')) {
                             foreach (['used_css_mobile', 'used_css_desktop', 'used_css_sheets', 'used_css'] as $usedCssKey) {
                                 if (!empty($latestArtifacts[$usedCssKey])
                                     && preg_match('/tpl-([A-Za-z0-9._-]{8,})?\.(?:mobile\.|desktop\.|sheets\.)?(?:css|json)$/i', basename((string) parse_url((string) $latestArtifacts[$usedCssKey], PHP_URL_PATH)), $tplMatch)
@@ -1920,6 +2794,10 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                             // tpl.txt IS the key.
                             if (!@is_readable($dir . 'used_tpl.txt') && !empty($latestArtifacts['used_css'])) {
                                 $wpc_local_tpl = trim((string) @file_get_contents($dir . 'tpl.txt'));
+                                if (!empty($latestJson['obs_tpl_key']) && is_string($latestJson['obs_tpl_key'])
+                                    && function_exists('wpc_used_css_key_valid') && wpc_used_css_key_valid(trim($latestJson['obs_tpl_key']))) {
+                                    $wpc_local_tpl = trim($latestJson['obs_tpl_key']);
+                                }
                                 if ($wpc_local_tpl !== '' && function_exists('wpc_used_css_key_valid')
                                     && wpc_used_css_key_valid($wpc_local_tpl)) {
                                     wpc_crit_meta_write($dir . 'used_tpl.txt', $wpc_local_tpl);
@@ -1929,31 +2807,71 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                                 }
                             }
                         }
-                        // v7.21.217 — WRITING THE URL IS NOT LANDING THE FILE. This lane wrote
-                        // used_css_url.txt + used_tpl.txt and stopped — nothing here ever FETCHED
-                        // the body, so the doctor read PENDING (tpl=none / file unreadable)
-                        // forever while every sidecar sat correct (bestexteriorsinc receipt).
-                        // Fetch inline when both halves exist and the tpl file is missing.
-                        $wpc_used_tpl = trim((string) @file_get_contents($dir . 'used_tpl.txt'));
-                        $wpc_used_css_url  = trim((string) @file_get_contents($dir . 'used_css_url.txt'));
-                        if ($wpc_used_tpl !== '' && $wpc_used_css_url !== '' && function_exists('wpc_used_css_fetch')
-                            && function_exists('wpc_used_css_path') && !@is_readable(wpc_used_css_path($wpc_used_tpl))
+                        $wpc_land_lanes = [];
+                        foreach (['union' => 'used_css', 'mobile' => 'used_css_mobile', 'desktop' => 'used_css_desktop'] as $wpc_land_lane => $wpc_land_artifact) {
+                            if (!empty($latestArtifacts[$wpc_land_artifact]) && is_string($latestArtifacts[$wpc_land_artifact])) {
+                                $wpc_land_lanes[$wpc_land_lane] = trim((string) $latestArtifacts[$wpc_land_artifact]);
+                            }
+                        }
+                        if (!empty($wpc_land_lanes) && function_exists('wpc_used_css_land_generation') && wpc_crit_used_css_setting_on()
                             && !get_transient('wpc_v2lucf217_' . md5((string) $urlKey))) {
-                            set_transient('wpc_v2lucf217_' . md5((string) $urlKey), 1, 300);
-                            if (wpc_used_css_fetch($wpc_used_css_url, $wpc_used_tpl)) {
-                                if (function_exists('wpc_used_css_scoped_purge')) { wpc_used_css_scoped_purge($wpc_used_tpl); }
-                                if (function_exists('wpc_cache_first_log')) {
-                                    wpc_cache_first_log('v2-latest-usedcss-landed', (string) $urlKey, '', ['tpl' => $wpc_used_tpl]);
-                                        if (function_exists('wpc_used_css_sheets_land')) { wpc_used_css_sheets_land($dir, $wpc_used_tpl); }
+                            $wpc_land_opts = ['key' => (string) $urlKey, 'via' => 'v2-latest'];
+                            if (!empty($latestJson['obs_tpl_key']) && is_string($latestJson['obs_tpl_key'])) {
+                                $wpc_land_opts['obs_tpl_key'] = $latestJson['obs_tpl_key'];
+                            }
+                            $wpc_force_sig = '';
+                            $wpc_force_held = false;
+                            $wpc_land_wait = false;
+                            if (@is_file($dir . 'repull_force.txt')) {
+                                list($wpc_force_sig, $wpc_force_map) = wpc_reland_marker_parts((string) @file_get_contents($dir . 'repull_force.txt'));
+                                if ((time() - (int) @filemtime($dir . 'repull_force.txt')) > (int) apply_filters('wpc_repull_force_ttl', 6 * HOUR_IN_SECONDS)) {
+                                    if (strpos($wpc_force_sig, '|') !== false) {
+                                        wpc_crit_meta_write($dir . 'reland_obs.txt', $wpc_force_sig);
+                                    }
+                                    @unlink($dir . 'repull_force.txt');
+                                } elseif (!is_array(wpc_used_css_fresh_marker($dir)[2])) {
+                                    $wpc_land_opts['force'] = true;
+                                    $wpc_force_obs = (string) strtok($wpc_force_sig, '|');
+                                    if (strpos($wpc_force_sig, '|') !== false && $wpc_force_obs !== '') {
+                                        $wpc_force_named = false;
+                                        foreach ($wpc_land_lanes as $wpc_force_url) {
+                                            if (stripos((string) basename((string) strtok($wpc_force_url, '?')), $wpc_force_obs) === 0) { $wpc_force_named = true; }
+                                        }
+                                        if (!$wpc_force_named) {
+                                            unset($wpc_land_opts['force']);
+                                            $wpc_land_wait = function_exists('wpc_reland_held') && wpc_reland_held($dir, $wpc_force_sig, $wpc_force_map) !== '';
+                                        } elseif (function_exists('wpc_reland_held') && wpc_reland_held($dir, $wpc_force_sig, $wpc_force_map) !== '') {
+                                            unset($wpc_land_opts['force']);
+                                            $wpc_force_held = true;
+                                        }
+                                    }
                                 }
-                            } elseif (function_exists('wpc_cache_first_log')) {
-                                wpc_cache_first_log('v2-latest-usedcss-fetch-failed', (string) $urlKey, '', ['url' => substr($wpc_used_css_url, -60)]);
+                            }
+                            $wpc_land = $wpc_land_wait ? ['tpl' => '', 'pulled' => [], 'failed' => []] : wpc_used_css_land_generation($dir, '', $wpc_land_lanes, $wpc_land_opts);
+                            if (empty($wpc_land['failed']) && (!empty($wpc_land_opts['force']) || $wpc_force_held)) {
+                                if (strpos($wpc_force_sig, '|') !== false) {
+                                    wpc_crit_meta_write($dir . 'reland_obs.txt', $wpc_force_sig);
+                                }
+                                @unlink($dir . 'repull_force.txt');
+                            }
+                            if (!empty($wpc_land['failed'])) {
+                                set_transient('wpc_v2lucf217_' . md5((string) $urlKey), 1, 300);
+                                if (function_exists('wpc_cache_first_log')) {
+                                    wpc_cache_first_log('v2-latest-usedcss-fetch-failed', (string) $urlKey, '', ['url' => substr((string) reset($wpc_land_lanes), -60)]);
+                                }
+                            }
+                            if (!empty($wpc_land['pulled'])) {
+                                if (function_exists('wpc_cache_first_log')) {
+                                    wpc_cache_first_log('v2-latest-usedcss-landed', (string) $urlKey, '', ['tpl' => (string) $wpc_land['tpl']]);
+                                }
+                                if (in_array('union', $wpc_land['pulled'], true) && function_exists('wpc_used_css_sheets_land')) { wpc_used_css_sheets_land($dir, (string) $wpc_land['tpl']); }
                             }
                         }
                         if (function_exists('wpc_cache_first_log')) {
                             wpc_cache_first_log('v2-latest-hit', (string) $urlKey, $latestPageUrl,
                                 ['uuid' => isset($latestJson['crit_uuid']) ? substr((string) $latestJson['crit_uuid'], 0, 8) : '',
-                                    'epoch' => isset($latestJson['epoch']) ? (int) $latestJson['epoch'] : null]);
+                                    'epoch' => isset($latestJson['epoch']) ? (int) $latestJson['epoch'] : null]
+                                + wpc_crit_corpus_echo($dir, isset($latestJson['corpus_id']) ? $latestJson['corpus_id'] : '', isset($latestJson['crit_uuid']) ? $latestJson['crit_uuid'] : ''));
                         }
                     } elseif (is_array($latestJson) && isset($latestJson['ready']) && !$latestJson['ready']) {
                         // /v2/latest is where the service answers expired:true for a ready row whose
@@ -1980,6 +2898,9 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                     // of only after that generation landed): it is asked about by name and, when
                     // the service answers it as removed, the page stops serving it.
                     $latestNotFound = json_decode((string) wp_remote_retrieve_body($latestAnswer), true);
+                    if (is_array($latestNotFound) && array_key_exists('found', $latestNotFound) && !$latestNotFound['found']) {
+                        wpc_latest_miss_remember($dir);
+                    }
                     if (is_array($latestNotFound) && !empty($latestNotFound['removed'])) {
                         if (function_exists('wpc_cache_first_log')) {
                             wpc_cache_first_log('crit-pointer-removed', (string) $urlKey, $latestPageUrl, ['via' => 'v2-latest']);
@@ -2014,6 +2935,7 @@ if (!function_exists('wpc_lcp_repull_handler')) {
             $wpc_du = wpc_crit_artifact_url($dir, 'delay');
             if ($wpc_du !== '') {
                 $wpc_dr = wp_remote_get($wpc_du, ['headers' => ['user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : ''], 'timeout' => 5]);
+                wpc_crit_derived_note($dir, 'delay', $wpc_dr);
                 if (!is_wp_error($wpc_dr) && (int) wp_remote_retrieve_response_code($wpc_dr) === 200) {
                     $wpc_db = wp_remote_retrieve_body($wpc_dr);
                     if (is_string($wpc_db) && $wpc_db !== '' && is_array(json_decode($wpc_db, true))) {
@@ -2113,7 +3035,8 @@ if (!function_exists('wpc_lcp_repull_handler')) {
             $wpc_derive_uuid = preg_replace('/[^0-9a-fA-F-]/', '', trim((string) @file_get_contents($dir . 'uuid.txt')));
             $wpc_delay_url = @is_readable($dir . 'delay_url.txt') ? trim((string) @file_get_contents($dir . 'delay_url.txt')) : '';
             if (strlen($wpc_derive_uuid) >= 32 && $wpc_delay_url !== ''
-                && preg_match('#^https?://#i', $wpc_delay_url)) {
+                && preg_match('#^https?://#i', $wpc_delay_url)
+                && !(function_exists('wpc_crit_artifact_signed') && wpc_crit_artifact_signed($wpc_delay_url))) {
                 $wpc_derived_fonts_url = (string) preg_replace(
                     '#/[0-9a-f]{4}/[0-9a-fA-F-]{32,40}\.delay\.json#i',
                     '/' . substr($wpc_derive_uuid, 0, 4) . '/' . $wpc_derive_uuid . '.fonts.json',
@@ -2139,6 +3062,9 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                 $wpc_fr      = null;
                 if (!$wpc_f_young) {
                     $wpc_fr  = wp_remote_get($wpc_fu, ['headers' => ['user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : ''], 'timeout' => 6]);
+                    if (function_exists('wpc_crit_signed_denied')) {
+                        wpc_crit_signed_denied($dir, $wpc_fu, $wpc_fr, $urlKey);
+                    }
                     $wpc_frc = !is_wp_error($wpc_fr) ? (int) wp_remote_retrieve_response_code($wpc_fr) : 0;
                     if ($wpc_frc === 200) {
                         $wpc_fj = json_decode((string) wp_remote_retrieve_body($wpc_fr), true);
@@ -2158,7 +3084,8 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                             $wpc_gen_uuid = @is_readable($dir . 'uuid.txt')
                                 ? trim((string) @file_get_contents($dir . 'uuid.txt')) : '';
                             $wpc_gen_uuid = preg_replace('/[^0-9a-fA-F-]/', '', $wpc_gen_uuid);
-                            if (strlen($wpc_gen_uuid) >= 32 && stripos($wpc_fu, $wpc_gen_uuid) === false) {
+                            if (strlen($wpc_gen_uuid) >= 32 && stripos($wpc_fu, $wpc_gen_uuid) === false
+                                && !(function_exists('wpc_crit_artifact_signed') && wpc_crit_artifact_signed($wpc_fu))) {
                                 $wpc_alt_fonts_url = (string) preg_replace(
                                     '#/[0-9a-f]{4}/[0-9a-fA-F-]{32,40}\.fonts\.json#i',
                                     '/' . substr($wpc_gen_uuid, 0, 4) . '/' . $wpc_gen_uuid . '.fonts.json',
@@ -2244,14 +3171,47 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                 }
             }
             $wpc_up = wpc_used_css_path($wpc_ut);
+            $wpc_fresh_marker = function_exists('wpc_used_css_fresh_marker') ? wpc_used_css_fresh_marker($dir) : ['', '', null, [], ''];
+            if ($wpc_fresh_marker[1] !== '' && is_array($wpc_fresh_marker[2]) && $wpc_fresh_marker[4] !== $wpc_ut) {
+                @unlink($dir . 'repull_force.txt');
+            } elseif ($wpc_fresh_marker[1] !== '' && is_array($wpc_fresh_marker[2]) && $wpc_ut !== '' && function_exists('wpc_used_css_land_generation') && function_exists('wpc_used_css_url_obs')) {
+                $wpc_fresh_lanes = [];
+                foreach (['union', 'mobile', 'desktop'] as $wpc_fresh_lane) {
+                    $wpc_fresh_url = (isset($wpc_fresh_marker[3][$wpc_fresh_lane]) && is_string($wpc_fresh_marker[3][$wpc_fresh_lane])) ? trim($wpc_fresh_marker[3][$wpc_fresh_lane]) : '';
+                    if ($wpc_fresh_url !== '' && preg_match('#^https?://#i', $wpc_fresh_url) && wpc_used_css_url_obs($wpc_fresh_url) === $wpc_fresh_marker[1]) { $wpc_fresh_lanes[$wpc_fresh_lane] = $wpc_fresh_url; }
+                }
+                if (!empty($wpc_fresh_lanes) && function_exists('wpc_used_css_obs_recall')) {
+                    foreach ($wpc_fresh_lanes as $wpc_fresh_lane => $wpc_fresh_url) {
+                        $wpc_fresh_now = wpc_used_css_obs_recall($wpc_ut, $wpc_fresh_lane === 'union' ? '' : $wpc_fresh_lane);
+                        $wpc_fresh_was = isset($wpc_fresh_marker[2][$wpc_fresh_lane]) && is_string($wpc_fresh_marker[2][$wpc_fresh_lane]) ? $wpc_fresh_marker[2][$wpc_fresh_lane] : '';
+                        if ($wpc_fresh_now['obs'] !== '' && $wpc_fresh_now['obs'] !== $wpc_fresh_was && $wpc_fresh_now['obs'] !== $wpc_fresh_marker[1]) {
+                            $wpc_fresh_lanes = [];
+                            @unlink($dir . 'repull_force.txt');
+                            break;
+                        }
+                    }
+                }
+                if (!empty($wpc_fresh_lanes)) {
+                    $wpc_fresh_land = wpc_used_css_land_generation($dir, $wpc_ut, $wpc_fresh_lanes, ['key' => (string) $urlKey, 'via' => 'repull', 'fresh' => true]);
+                    if (empty($wpc_fresh_land['failed'])) {
+                        wpc_crit_meta_write($dir . 'reland_obs.txt', $wpc_fresh_marker[0]);
+                        @unlink($dir . 'repull_force.txt');
+                    } elseif ((int) $attempt < $wpc_max_att
+                        && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+                        && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, (int) $attempt + 1])) {
+                        wpc_pl_sched(time() + 45, 'wpc_lcp_repull', [$urlKey, (int) $attempt + 1]);
+                    }
+                }
+            }
             // store-hit is cheap inside fetch — and it's where split siblings arm
-            if ($wpc_uu !== '' && $wpc_up !== '') {
+            if ($wpc_uu !== '' && $wpc_up !== '' && !(function_exists('wpc_used_css_sibling_holds') && wpc_used_css_sibling_holds($wpc_ut, '', $wpc_uu))) {
                 $wpc_used_css_fail_reason = '';
                 if (!wpc_used_css_fetch($wpc_uu, $wpc_ut, '', $wpc_used_css_fail_reason)) {
                     // A 404 that survived the first backoff step is an EXPIRED artifact, not a
                     // slow one — ask for a regen instead of only sleeping longer (v3.198.68).
                     if (strpos($wpc_used_css_fail_reason, 'http:404') === 0
-                        && (int) get_transient('wpc_ucss404_' . md5((string) $wpc_uu) . '_n') >= 2
+                        && ($wpc_first404 = (int) get_transient('wpc_ucss404_' . md5((string) $wpc_uu) . '_t')) > 0
+                        && time() - $wpc_first404 > 400
                         && function_exists('wpc_dispatch_expired_used_css_regen')) {
                         wpc_dispatch_expired_used_css_regen($urlKey, $wpc_used_css_fail_reason);
                     }
@@ -2273,7 +3233,7 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                 $wpc_device_used_css_url = trim((string) @file_get_contents($wpc_device_url_file));
                 if ($wpc_device_used_css_url !== '' && !preg_match('#^https?://#i', $wpc_device_used_css_url)) { $wpc_device_used_css_url = ''; } // 'None'-class meta
                 $wpc_device_used_css_path = $wpc_device_used_tpl !== '' ? wpc_used_css_path($wpc_device_used_tpl, $wpc_used_css_device) : '';
-                if ($wpc_device_used_css_url !== '' && $wpc_device_used_css_path !== '') {
+                if ($wpc_device_used_css_url !== '' && $wpc_device_used_css_path !== '' && !(function_exists('wpc_used_css_sibling_holds') && wpc_used_css_sibling_holds($wpc_device_used_tpl, $wpc_used_css_device, $wpc_device_used_css_url))) {
                     wpc_used_css_fetch($wpc_device_used_css_url, $wpc_device_used_tpl, $wpc_used_css_device);
                 }
             }
@@ -2286,6 +3246,9 @@ if (!function_exists('wpc_lcp_repull_handler')) {
             if ($wpc_combined_url !== '' && preg_match('#^https://#i', $wpc_combined_url)
                 && ($wpc_combined_src !== $wpc_combined_url || !@is_readable($dir . 'critical_combined.css'))) {
                 $wpc_combined_response = wp_remote_get($wpc_combined_url, ['timeout' => 15, 'sslverify' => true]);
+                if (function_exists('wpc_crit_signed_denied')) {
+                    wpc_crit_signed_denied($dir, $wpc_combined_url, $wpc_combined_response, $urlKey);
+                }
                 $wpc_combined_css = (!is_wp_error($wpc_combined_response) && (int) wp_remote_retrieve_response_code($wpc_combined_response) === 200)
                     ? (string) wp_remote_retrieve_body($wpc_combined_response) : '';
                 if (strlen($wpc_combined_css) > 1024 && stripos($wpc_combined_css, '@media') !== false
@@ -2307,6 +3270,9 @@ if (!function_exists('wpc_lcp_repull_handler')) {
             $sheets_path = wpc_used_css_sheets_path($sheets_template);
             if ($sheets_url !== '' && $sheets_path !== '' && !@is_readable($sheets_path)) {
                 $wpc_shr = wp_remote_get($sheets_url, ['headers' => ['user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : ''], 'timeout' => 5]);
+                if (function_exists('wpc_crit_signed_denied')) {
+                    wpc_crit_signed_denied($dir, $sheets_url, $wpc_shr, $urlKey);
+                }
                 if (!is_wp_error($wpc_shr) && (int) wp_remote_retrieve_response_code($wpc_shr) === 200) {
                     $wpc_shj = json_decode((string) wp_remote_retrieve_body($wpc_shr), true);
                     $wpc_sha = (is_array($wpc_shj) && isset($wpc_shj['sheets']) && is_array($wpc_shj['sheets'])) ? $wpc_shj['sheets'] : (is_array($wpc_shj) ? $wpc_shj : []);
@@ -2336,6 +3302,7 @@ if (!function_exists('wpc_lcp_repull_handler')) {
         }
         $ua    = defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : '';
         $resp  = wp_remote_get($lcpUrl, ['headers' => ['user-agent' => $ua], 'timeout' => 5]);
+        wpc_crit_derived_note($dir, 'lcp', $resp);
         $wpc_lcode = !is_wp_error($resp) ? (int) wp_remote_retrieve_response_code($resp) : 0;
         if ($wpc_lcode === 200) {
             $body = wp_remote_retrieve_body($resp);
@@ -2753,6 +3720,35 @@ if (!function_exists('wpc_used_css_path')) {
         $c = (string) @file_get_contents($p);
         return (preg_match('#^https?://#i', trim((string) strtok($c, "\n"))) && strpos($c, "\nok") !== false);
     }
+    function wpc_used_css_obs_path($tplKey, $device = '')
+    {
+        $p = wpc_used_css_path($tplKey, $device);
+        return $p === '' ? '' : (string) preg_replace('/\.css$/', '.obs.txt', $p);
+    }
+    function wpc_used_css_obs_recall($tplKey, $device = '')
+    {
+        $out = ['obs' => '', 'sha' => ''];
+        $p = wpc_used_css_obs_path($tplKey, $device);
+        if ($p === '' || !@is_readable($p)) { return $out; }
+        $j = json_decode((string) @file_get_contents($p), true);
+        if (!is_array($j)) { return $out; }
+        if (isset($j['obs']) && is_string($j['obs']) && preg_match('/^[0-9a-f-]{8,64}$/i', $j['obs'])) { $out['obs'] = strtolower($j['obs']); }
+        if (isset($j['sha']) && is_string($j['sha']) && preg_match('/^[0-9a-f]{64}$/i', $j['sha'])) { $out['sha'] = strtolower($j['sha']); }
+        return $out;
+    }
+    function wpc_used_css_obs_remember($tplKey, $device, $set)
+    {
+        $p = wpc_used_css_obs_path($tplKey, $device);
+        if ($p === '' || !is_array($set)) { return false; }
+        $cur = wpc_used_css_obs_recall($tplKey, $device);
+        $new = $cur;
+        foreach (['obs', 'sha'] as $k) {
+            if (array_key_exists($k, $set) && is_string($set[$k])) { $new[$k] = strtolower(trim($set[$k])); }
+        }
+        if ($new === $cur && @is_file($p)) { return true; }
+        if (!is_dir(dirname($p))) { @wp_mkdir_p(dirname($p)); }
+        return (wpc_crit_meta_write($p, (string) json_encode($new)) !== false);
+    }
     /**
      * v7.10.828 — THE PIN IS A DECLARATION: a used-css bundle serving a page with builder
      * conceal markers must DECLARE the dynamic-state safelist (service v3.198.60 stamps
@@ -2826,7 +3822,7 @@ if (!function_exists('wpc_dispatch_expired_used_css_regen')) {
 
 if (!function_exists('wpc_used_css_fetch')) {
 
-    function wpc_used_css_fetch($url, $tplKey, $device = '', &$outcome = null)
+    function wpc_used_css_fetch($url, $tplKey, $device = '', &$outcome = null, $expect = [])
     {
         $outcome = '';
         $path = wpc_used_css_path($tplKey, $device);
@@ -2834,13 +3830,17 @@ if (!function_exists('wpc_used_css_fetch')) {
             $outcome = $path === '' ? 'bad-tpl-path' : 'empty-url';
             return false;
         }
+        $wpc_ucf_forced = is_array($expect) && !empty($expect['force']);
+        $refresh_key = 'wpc_ucsr266_' . md5($path . '|' . $url);
         // Remember the URL BEFORE any gate — including the store-hit path — so an already
         // stored bundle gains a durable pointer on the first run after upgrade rather than
         // only on the next fetch.
-        if (function_exists('wpc_used_css_url_remember')) {
+        if (function_exists('wpc_used_css_url_remember') && function_exists('wpc_used_css_url_recall')
+            && wpc_used_css_url_recall($tplKey, $device) === '') {
             wpc_used_css_url_remember($tplKey, $url, false, $device);
         }
-        if (@is_readable($path) && @filesize($path) > 5) {
+        $wpc_ucf_held = @is_readable($path) && @filesize($path) > 5;
+        if (!$wpc_ucf_forced && $wpc_ucf_held) {
             // One-shot refresh: stores from before the service pageTokens repair can lack
             // hidden-element state rules — re-pull the current bundle once per artifact.
             // NEVER unlink first: the fetch below writes temp+rename (atomic), so a 404
@@ -2849,10 +3849,7 @@ if (!function_exists('wpc_used_css_fetch')) {
             // permanent — same path for a new artifact, transient already set, never refetched.
             // Fold the artifact URL in (invalidates outright if the service versions it) and
             // bound the ttl so the union self-heals regardless.
-            $refresh_key = 'wpc_ucsr266_' . md5($path . '|' . $url);
-            if (!get_transient($refresh_key)) {
-                set_transient($refresh_key, 1, (int) apply_filters('wpc_used_css_refresh_ttl', 3 * DAY_IN_SECONDS));
-            } else {
+            if (get_transient($refresh_key)) {
                 // Union already stored — arm the split siblings once per window (they appear
                 // only on gens ≥ v3.56.0, so absence is normal and must not hammer). The arm
                 // condition is the union BASIS, not mere presence: an .atf.css built from an
@@ -2887,7 +3884,7 @@ if (!function_exists('wpc_used_css_fetch')) {
         // Artifacts can be amended IN PLACE on the same uuid/URL — an un-busted GET gets
         // Bunny's stale edge copy (hawkeye receipt: corrected bytes on origin, old order
         // served). Every real fetch busts; the one-shot gates already bound frequency.
-        $cache_bust = (strpos($url, '?') === false ? '?' : '&') . 't=' . time();
+        $cache_bust = (function_exists('wpc_crit_artifact_signed') && wpc_crit_artifact_signed($url)) ? '' : (strpos($url, '?') === false ? '?' : '&') . 't=' . time();
 // v7.10.550 — the service advertises used_css_*_url unconditionally on one /status
 // branch while the sibling branch HEAD-probes first, so a URL can be published for an
 // object that was never uploaded. We treated the advertisement as proof and re-probed
@@ -2897,6 +3894,19 @@ if (function_exists('get_transient') && get_transient($not_found_key)) {
     $outcome = '404-remembered';
     return false;
 }
+$wpc_ucf_failed_key = 'wpc_ucssfail_' . md5((string) $url);
+if (function_exists('get_transient') && get_transient($wpc_ucf_failed_key)) {
+    $outcome = 'failure-remembered';
+    return false;
+}
+$wpc_ucf_remember_failure = function () use ($wpc_ucf_failed_key) {
+    if (function_exists('set_transient')) {
+        $wpc_ucf_failed_n = function_exists('get_transient') ? (int) get_transient($wpc_ucf_failed_key . '_n') + 1 : 1;
+        set_transient($wpc_ucf_failed_key . '_n', $wpc_ucf_failed_n, 7 * DAY_IN_SECONDS);
+        $wpc_ucf_failed_ttls = [600, 1800, 3600];
+        set_transient($wpc_ucf_failed_key, 1, max(60, (int) apply_filters('wpc_used_css_failure_ttl', $wpc_ucf_failed_ttls[min($wpc_ucf_failed_n, 3) - 1], $wpc_ucf_failed_n)));
+    }
+};
         $resp = wp_remote_get($url . $cache_bust, ['headers' => ['user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : ''], 'timeout' => (int) apply_filters('wpc_used_css_fetch_timeout', 5)]);
         if (is_wp_error($resp) || (int) wp_remote_retrieve_response_code($resp) !== 200) {
             if (!is_wp_error($resp) && (int) wp_remote_retrieve_response_code($resp) === 404
@@ -2907,25 +3917,37 @@ if (function_exists('get_transient') && get_transient($not_found_key)) {
                 // 15m -> 1h -> 6h -> 24h cap; any 200 lands the bundle and retires the counter.
                 $not_found_count = (int) get_transient($not_found_key . '_n') + 1;
                 set_transient($not_found_key . '_n', $not_found_count, 7 * DAY_IN_SECONDS);
-                $not_found_ttls = [900, 3600, 21600, 86400];
-                $not_found_ttl = $not_found_ttls[min($not_found_count, 4) - 1];
+                if (!get_transient($not_found_key . '_t')) {
+                    set_transient($not_found_key . '_t', time(), 7 * DAY_IN_SECONDS);
+                }
+                $not_found_ttls = [60, 180, 600, 3600, 21600, 86400];
+                $not_found_ttl = $not_found_ttls[min($not_found_count, 6) - 1];
                 set_transient($not_found_key, 1, (int) apply_filters('wpc_used_css_404_ttl', $not_found_ttl));
                 // v7.20.19 — site-wide "the stylesheet is not coming" flag. The conceal guard
                 // hides real UI until the used-css link releases it; while the fetch is known to
                 // be failing the guard must concede at once instead of hiding navigation.
                 set_transient('wpc_ucss_failing', 1, (int) $not_found_ttl);
+            } else {
+                $wpc_ucf_remember_failure();
             }
             $wpc_ucf_log('http', ['code' => is_wp_error($resp) ? ('err:' . $resp->get_error_code()) : (int) wp_remote_retrieve_response_code($resp)]);
             return false;
         }
         $body = wp_remote_retrieve_body($resp);
         if (!is_string($body) || strlen($body) < 64 || strlen($body) > 5242880) {
+            $wpc_ucf_remember_failure();
             $wpc_ucf_log('size', ['len' => is_string($body) ? strlen($body) : -1]);
             return false;
         }
         if (preg_match('/<(?:html|body|head|!doctype)\b/i', substr($body, 0, 4096))) {
+            $wpc_ucf_remember_failure();
             $wpc_ucf_log('html', ['head' => substr(preg_replace('/\s+/', ' ', $body), 0, 50)]);
             return false; // HTML (error/redirect page) — never store as CSS
+        }
+        if (is_array($expect) && !empty($expect['sha256']) && !hash_equals(strtolower((string) $expect['sha256']), hash('sha256', $body))) {
+            $wpc_ucf_remember_failure();
+            $wpc_ucf_log('sha', ['len' => strlen($body)]);
+            return false;
         }
         $body = wpc_used_css_process_body($body);
         $dir = dirname($path);
@@ -2947,10 +3969,16 @@ if (function_exists('get_transient') && get_transient($not_found_key)) {
             return false;
         }
         $wpc_ucf_log('ok', ['bytes' => strlen($body)]);
-        if (function_exists('delete_transient')) { delete_transient($not_found_key . '_n'); delete_transient('wpc_ucss_failing'); }
+        if (($wpc_ucf_forced || $wpc_ucf_held) && function_exists('set_transient')) {
+            set_transient($refresh_key, 1, (int) apply_filters('wpc_used_css_refresh_ttl', 3 * DAY_IN_SECONDS));
+        }
+        if (function_exists('delete_transient')) { delete_transient($not_found_key . '_n'); delete_transient($not_found_key . '_t'); delete_transient($wpc_ucf_failed_key); delete_transient($wpc_ucf_failed_key . '_n'); delete_transient('wpc_ucss_failing'); }
         // The fetch went through, so this locator is real — promote it to verified (.471).
         if (function_exists('wpc_used_css_url_remember')) {
             wpc_used_css_url_remember($tplKey, $url, true, $device);
+        }
+        if (function_exists('wpc_used_css_obs_remember')) {
+            wpc_used_css_obs_remember($tplKey, $device, ['obs' => '', 'sha' => '']);
         }
         if (function_exists('wpc_used_css_fetch_split')) {
             wpc_used_css_fetch_split($url, $tplKey, $device);
@@ -3006,10 +4034,11 @@ if (!function_exists('wpc_used_css_process_body')) {
             if (is_array($settings) && !empty($settings['font-display'])) {
                 $wpc_fdu = (string) $settings['font-display'];
             }
+            $wpc_fdu_kept = function_exists('wpc_font_display_site_kept') && wpc_font_display_site_kept($wpc_fdu);
             if (function_exists('wpc_font_display_effective')) {
                 $wpc_fdu = wpc_font_display_effective($wpc_fdu);
             }
-            if ($wpc_fdu !== '' && $wpc_fdu !== 'off' && preg_match('/^[a-z-]{2,16}$/', $wpc_fdu)) {
+            if (!$wpc_fdu_kept && $wpc_fdu !== '' && $wpc_fdu !== 'off' && preg_match('/^[a-z-]{2,16}$/', $wpc_fdu)) {
                 // .485: per-face, for the same reason as the CSS emitters — one blanket value
                 // put 'optional' on families with no metric-matched fallback.
                 $site_font_display = $wpc_fdu;
@@ -3100,6 +4129,17 @@ if (!function_exists('wpc_css_isolate_sheet')) {
         return $css . $close . ($rest[0] === '@' ? ';' : '{}');
     }
 }
+if (!function_exists('wpc_css_wrap')) {
+    /** One sheet, closed the way a browser closes it at the end of its file, inside @media $media when one is given (on its own lines when $lines). Every place that puts a sheet in front of other CSS asks this; nothing else calls wpc_css_isolate_sheet. */
+    function wpc_css_wrap($css, $media = '', $lines = false)
+    {
+        $css = wpc_css_isolate_sheet((string) $css);
+        if (!$media) {
+            return $css;
+        }
+        return $lines ? '@media ' . $media . ' {' . PHP_EOL . $css . PHP_EOL . '}' : '@media ' . $media . '{' . $css . '}';
+    }
+}
 if (!function_exists('wpc_park_used_css_backgrounds')) {
     // v7.21.255 - CSS IMAGES OFF THE WIRE. Stored used-css carried background url()s and a
     // no-gesture load fetched every one at sheet-land (13 rows on bestexteriorsinc, dup-
@@ -3168,11 +4208,19 @@ if (!function_exists('wpc_park_used_css_backgrounds')) {
         }
         return implode(',', $parts);
     }
-    function wpc_bgpark_extract_background_decls($body, &$taken)
+    function wpc_bgpark_longhands($prop)
+    {
+        if ($prop === 'background') { return ['image', 'position-x', 'position-y', 'size', 'repeat', 'attachment', 'origin', 'clip', 'color', 'blend-mode']; }
+        if (!preg_match('/^(?:-webkit-)?background-(image|position(?:-[xy])?|size|repeat(?:-[xy])?|attachment|origin|clip|color|blend-mode)$/', $prop, $m)) { return []; }
+        if ($m[1] === 'position') { return ['position-x', 'position-y']; }
+        return [strpos($m[1], 'repeat') === 0 ? 'repeat' : $m[1]];
+    }
+    function wpc_bgpark_extract_background_decls($body, &$taken, $carry = true, &$dup = 0)
     {
         if (stripos($body, 'url(') === false) { return $body; }
         $decls = wpc_bgpark_split_outside_parens($body, ';');
         $keep = []; $take = [];
+        $set = [];
         foreach ($decls as $dc) {
             $prop = strtolower(trim((string) strstr($dc, ':', true)));
             if (($prop === 'background' || $prop === 'background-image')
@@ -3183,14 +4231,20 @@ if (!function_exists('wpc_park_used_css_backgrounds')) {
                 // declaration = crit's own copy keeps painting; the parked twin restores
                 // the full value on arm.
                 $take[] = trim($dc);
+                if ($carry) { $set += array_flip(wpc_bgpark_longhands($prop)); }
             } else {
                 $keep[] = $dc;
+                if ($set && ($lh = wpc_bgpark_longhands($prop)) && array_intersect_key(array_flip($lh), $set)) {
+                    $take[] = trim($dc);
+                    $set += array_flip($lh);
+                    $dup += substr_count(strtolower($dc), 'url(');
+                }
             }
         }
         if (!empty($take)) { $taken = implode(';', $take); }
         return implode(';', $keep);
     }
-    function wpc_bgpark_walk_rules($css, $ctx, &$moved)
+    function wpc_bgpark_walk_rules($css, $ctx, &$moved, $carry = true, &$dup = 0)
     {
         $out = ''; $i = 0; $n = strlen($css);
         while ($i < $n) {
@@ -3204,14 +4258,14 @@ if (!function_exists('wpc_park_used_css_backgrounds')) {
             if ($selT !== '' && $selT[0] === '@') {
                 $at = strtolower($selT);
                 if (strpos($at, '@media') === 0 || strpos($at, '@supports') === 0) {
-                    $out .= $sel . '{' . wpc_bgpark_walk_rules($inner, array_merge($ctx, [$selT]), $moved) . '}';
+                    $out .= $sel . '{' . wpc_bgpark_walk_rules($inner, array_merge($ctx, [$selT]), $moved, $carry, $dup) . '}';
                 } else {
                     // @font-face / @keyframes / @page etc - never touched
                     $out .= $sel . '{' . $inner . '}';
                 }
             } else {
                 $taken = '';
-                $out .= $sel . '{' . wpc_bgpark_extract_background_decls($inner, $taken) . '}';
+                $out .= $sel . '{' . wpc_bgpark_extract_background_decls($inner, $taken, $carry, $dup) . '}';
                 if ($taken !== '') { $moved[] = [$ctx, $selT, $taken]; }
             }
             $i = $e + 1;
@@ -3224,15 +4278,17 @@ if (!function_exists('wpc_park_used_css_backgrounds')) {
             if (!is_string($css) || $css === '' || stripos($css, 'url(') === false) { return $css; }
             if (!apply_filters('wpc_used_css_bg_park', true)) { return $css; }
             if (strpos($css, '.wpc-bgl255') !== false) { return $css; }
-            if (function_exists('wpc_css_isolate_sheet')) { $css = wpc_css_isolate_sheet($css); }
+            $css = wpc_css_wrap($css);
             // v7.21.269 — the delay-class gate was the BYPASS: background lands (cron/kick)
             // run without the delay classes loaded, so class_exists failed and the store
             // re-landed UNPARKED (bestexteriorsinc: 6 bg rows back on the wire, tpl with 0
             // guarded rules). The gate protected nothing — the inline armer rides the
             // used-css emit unconditionally, loader or not. Park always; the filter is
             // the only policy gate.
-            $moved = [];
-            $base = wpc_bgpark_walk_rules($css, [], $moved);
+            $moved = []; $dup = 0;
+            $carry = !((defined('WPC_BG_PARK_CARRY_OFF') && WPC_BG_PARK_CARRY_OFF)
+                || apply_filters('wpc_used_css_bg_park_carry', true) === false);
+            $base = wpc_bgpark_walk_rules($css, [], $moved, $carry, $dup);
             if (empty($moved)) { return $css; }
             $park = '';
             foreach ($moved as $mv) {
@@ -3244,7 +4300,7 @@ if (!function_exists('wpc_park_used_css_backgrounds')) {
             // terminal parse belt (.198 law): the transform adds brace PAIRS only and loses no
             // url() — compare deltas against the input (string-literal braces skew absolutes)
             if ((substr_count($out, '{') - substr_count($css, '{')) !== (substr_count($out, '}') - substr_count($css, '}'))
-                || substr_count(strtolower($out), 'url(') !== substr_count(strtolower($css), 'url(')) {
+                || substr_count(strtolower($out), 'url(') !== substr_count(strtolower($css), 'url(') + $dup) {
                 return $css;
             }
             return $out;
@@ -3288,9 +4344,10 @@ if (!function_exists('wpc_used_css_fetch_split')) {
                 return false;
             }
             $bodies = [];
+            $rawRestSha = '';
             foreach (['atf', 'rest'] as $part) {
                 $pu = (string) preg_replace('/\.css(\?|$)/', '.' . $part . '.css$1', $url, 1);
-                $r = wp_remote_get($pu . (strpos($pu, '?') === false ? '?' : '&') . 't=' . time(), ['headers' => ['user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : ''], 'timeout' => (int) apply_filters('wpc_used_css_fetch_timeout', 5)]);
+                $r = wp_remote_get($pu . ((function_exists('wpc_crit_artifact_signed') && wpc_crit_artifact_signed($pu)) ? '' : (strpos($pu, '?') === false ? '?' : '&') . 't=' . time()), ['headers' => ['user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : ''], 'timeout' => (int) apply_filters('wpc_used_css_fetch_timeout', 5)]);
                 if (is_wp_error($r) || (int) wp_remote_retrieve_response_code($r) !== 200) {
                     return false;
                 }
@@ -3299,6 +4356,7 @@ if (!function_exists('wpc_used_css_fetch_split')) {
                     || preg_match('/<(?:html|body|head|!doctype)\b/i', substr($b, 0, 4096))) {
                     return false;
                 }
+                if ($part === 'rest') { $rawRestSha = hash('sha256', $b); }
                 $bodies[$part] = wpc_used_css_process_body($b);
             }
             // Stamp the union basis into each sibling so a later render can tell "built from
@@ -3317,6 +4375,9 @@ if (!function_exists('wpc_used_css_fetch_split')) {
                     return false;
                 }
             }
+            if ($rawRestSha !== '' && function_exists('wpc_used_css_obs_remember')) {
+                wpc_used_css_obs_remember($tplKey, $device, ['sha' => $rawRestSha]);
+            }
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('used-css-split', '', substr((string) $url, 0, 90), ['dev' => $device !== '' ? $device : 'union', 'atf' => strlen($bodies['atf']), 'rest' => strlen($bodies['rest'])]);
             }
@@ -3324,6 +4385,171 @@ if (!function_exists('wpc_used_css_fetch_split')) {
         } catch (\Throwable $e) {
             return false;
         }
+    }
+}
+if (!function_exists('wpc_used_css_land_generation')) {
+    /**
+     * The one lander for a generation's used-css bundles. $dir is the page's crit folder, $tplKey
+     * the template the caller names ('' = the folder's tpl.txt, then used_tpl.txt), $lanes maps
+     * union / mobile / desktop to the generation's URL for that lane. A lane whose URL is the one
+     * the store already holds verified is left alone (its pointer follows); any other URL is
+     * pulled whole (bundle, then its atf / rest siblings), and its pointer file moves only after
+     * the pull succeeded. Opts: key (journal key), via, force (pull whatever the store holds),
+     * persist (false = write no pointer), purge (false = leave the copies), fresh (a delivery whose
+     * observation is new to the page: it lands over a different stored observation instead of
+     * yielding to the one a sibling page holds), sha (lane => sha256
+     * of the raw bundle, a mismatch stores nothing), obs_tpl_key (the template the observation
+     * belongs to: it is landed under that key, and a key other than the page's writes no page
+     * pointer), obs_uuid and rest_sha256 (file name => raw sha256; a lane whose held observation
+     * or raw rest bytes differ is pulled even at the same URL). A pull whose stored bytes equal
+     * the held ones purges nothing. Answers tpl, lanes (url, state, why), pulled, identical,
+     * failed, why and purged.
+     */
+    function wpc_used_css_land_generation($dir, $tplKey, $lanes, $opts = [])
+    {
+        $result = ['tpl' => '', 'lanes' => [], 'pulled' => [], 'failed' => [], 'why' => '', 'purged' => ''];
+        try {
+            $dir = rtrim((string) $dir, '/') . '/';
+            $opts = is_array($opts) ? $opts : [];
+            $lanes = is_array($lanes) ? $lanes : [];
+            $force = !empty($opts['force']);
+            $fresh = !empty($opts['fresh']);
+            $persist = !array_key_exists('persist', $opts) || !empty($opts['persist']);
+            $shas = (isset($opts['sha']) && is_array($opts['sha'])) ? $opts['sha'] : [];
+            $specs = ['union' => ['', 'used_css_url.txt'], 'mobile' => ['mobile', 'used_css_mobile_url.txt'], 'desktop' => ['desktop', 'used_css_desktop_url.txt']];
+            $urls = [];
+            foreach ($specs as $lane => $spec) {
+                $offered = (isset($lanes[$lane]) && is_string($lanes[$lane])) ? trim($lanes[$lane]) : '';
+                if ($offered !== '' && preg_match('#^https?://#i', $offered)) { $urls[$lane] = $offered; }
+            }
+            if (empty($urls) || !function_exists('wpc_used_css_fetch') || !function_exists('wpc_used_css_path')) {
+                return $result;
+            }
+            $tpl = wpc_used_css_key_valid(trim((string) $tplKey)) ? trim((string) $tplKey) : '';
+            foreach (['tpl.txt', 'used_tpl.txt'] as $tplFile) {
+                if ($tpl !== '') { break; }
+                $fromDir = trim((string) @file_get_contents($dir . $tplFile));
+                if (wpc_used_css_key_valid($fromDir)) { $tpl = $fromDir; }
+            }
+            $obsTpl = (isset($opts['obs_tpl_key']) && is_string($opts['obs_tpl_key']) && wpc_used_css_key_valid(trim($opts['obs_tpl_key']))) ? trim($opts['obs_tpl_key']) : '';
+            if ($obsTpl !== '') {
+                if ($tpl !== '' && $obsTpl !== $tpl) {
+                    $persist = false;
+                    $result['foreign'] = true;
+                }
+                $tpl = $obsTpl;
+            }
+            $restShas = (isset($opts['rest_sha256']) && is_array($opts['rest_sha256'])) ? $opts['rest_sha256'] : [];
+            $laneSuffix = ['union' => '.used.rest.css', 'mobile' => '.used-mobile.rest.css', 'desktop' => '.used-desktop.rest.css'];
+            $fingerprint = function ($p) {
+                $out = '';
+                foreach ([$p, (string) preg_replace('/\.css$/', '.atf.css', $p), (string) preg_replace('/\.css$/', '.rest.css', $p)] as $f) {
+                    $out .= (@is_readable($f) ? (string) @md5_file($f) : '-') . '|';
+                }
+                return $out;
+            };
+            $result['tpl'] = $tpl;
+            $result['identical'] = [];
+            $advanced = [];
+            if ($tpl === '') {
+                $result['why'] = 'no-tpl-key';
+            } else {
+                foreach ($specs as $lane => $spec) {
+                    if (!isset($urls[$lane])) {
+                        $result['lanes'][$lane] = ['state' => 'no-url', 'why' => '', 'url' => ''];
+                        continue;
+                    }
+                    $url = $urls[$lane];
+                    $bare = (string) strtok($url, '?');
+                    $path = wpc_used_css_path($tpl, $spec[0]);
+                    $stored = function_exists('wpc_used_css_url_recall') ? wpc_used_css_url_recall($tpl, $spec[0]) : '';
+                    $held = $path !== '' && @is_readable($path) && (int) @filesize($path) > 5;
+                    $lane_info = ['state' => '', 'why' => '', 'url' => substr($url, 0, 110), 'mtime_before' => $path !== '' ? (int) @filemtime($path) : 0];
+                    $offeredObs = (isset($opts['obs_uuid']) && is_string($opts['obs_uuid'])) ? strtolower(trim($opts['obs_uuid'])) : '';
+                    if ($offeredObs === '' && preg_match('/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.used(?:-mobile|-desktop)?\.css$/i', $bare, $obsMatch)) {
+                        $offeredObs = strtolower($obsMatch[1]);
+                    }
+                    $offeredSha = '';
+                    foreach ($restShas as $shaName => $shaVal) {
+                        if (is_string($shaName) && is_string($shaVal) && preg_match('/^[0-9a-f]{64}$/i', $shaVal)
+                            && substr($shaName, -strlen($laneSuffix[$lane])) === $laneSuffix[$lane]
+                            && ($offeredObs === '' || strpos($shaName, $offeredObs) === 0)) {
+                            $offeredSha = strtolower($shaVal);
+                            break;
+                        }
+                    }
+                    $storedObs = function_exists('wpc_used_css_obs_recall') ? wpc_used_css_obs_recall($tpl, $spec[0]) : ['obs' => '', 'sha' => ''];
+                    $moved = ($offeredObs !== '' && $storedObs['obs'] !== '' && $offeredObs !== $storedObs['obs'])
+                        || ($offeredSha !== '' && $storedObs['sha'] !== '' && $offeredSha !== $storedObs['sha']);
+                    $siblingHeld = !$force && !$fresh && $held && $offeredObs !== '' && $storedObs['obs'] !== '' && $offeredObs !== $storedObs['obs']
+                        && function_exists('wpc_used_css_obs_ahead') && !wpc_used_css_obs_ahead(wpc_used_css_url_obs(@file_get_contents($dir . $spec[1])), $storedObs['obs'], $offeredObs);
+                    if ($siblingHeld) {
+                        $lane_info['state'] = 'unchanged';
+                    } elseif (!$force && !$moved && $held && $stored !== '' && (string) strtok($stored, '?') === $bare
+                        && function_exists('wpc_used_css_url_verified') && wpc_used_css_url_verified($tpl, $spec[0])) {
+                        $lane_info['state'] = 'unchanged';
+                        if ($persist && trim((string) @file_get_contents($dir . $spec[1])) !== $bare) {
+                            wpc_crit_meta_write($dir . $spec[1], $bare);
+                            $advanced[] = $lane;
+                        }
+                    } else {
+                        $fetch_why = '';
+                        $expect = ['force' => true];
+                        if (!empty($shas[$lane]) && is_string($shas[$lane])) { $expect['sha256'] = $shas[$lane]; }
+                        $printBefore = $held ? $fingerprint($path) : '';
+                        $fetched = wpc_used_css_fetch($url, $tpl, $spec[0], $fetch_why, $expect);
+                        $lane_info['why'] = (string) $fetch_why;
+                        if ($fetched) {
+                            $lane_info['state'] = 'pulled';
+                            $result['pulled'][] = $lane;
+                            if ($printBefore !== '' && $printBefore === $fingerprint($path)) {
+                                $lane_info['identical'] = true;
+                                $result['identical'][] = $lane;
+                            }
+                            if ($offeredObs !== '' && function_exists('wpc_used_css_obs_remember')) {
+                                wpc_used_css_obs_remember($tpl, $spec[0], ['obs' => $offeredObs]);
+                            }
+                            if ($persist) { wpc_crit_meta_write($dir . $spec[1], $bare); }
+                        } else {
+                            $lane_info['state'] = 'failed';
+                            $result['failed'][] = $lane;
+                        }
+                    }
+                    $lane_info['mtime_after'] = $path !== '' ? (int) @filemtime($path) : 0;
+                    $result['lanes'][$lane] = $lane_info;
+                }
+                if (count($result['pulled']) > count($result['identical']) && (!array_key_exists('purge', $opts) || !empty($opts['purge']))) {
+                    if (function_exists('wpc_used_css_scoped_purge') && wpc_used_css_scoped_purge($tpl)) {
+                        $result['purged'] = 'scoped';
+                    } else {
+                        try {
+                            wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft');
+                            $result['purged'] = 'all';
+                        } catch (\Throwable $e) {
+                        }
+                    }
+                }
+            }
+            if (function_exists('wpc_cache_first_log') && ($result['why'] !== '' || !empty($result['pulled']) || !empty($result['failed']) || !empty($advanced))) {
+                $held_back = [];
+                foreach ($result['lanes'] as $lane => $lane_info) {
+                    if ($lane_info['state'] === 'failed') {
+                        $held_back[] = $lane . ':' . ($lane_info['why'] !== '' ? $lane_info['why'] : 'fetch');
+                    } elseif ($lane_info['state'] === 'unchanged' || $lane_info['state'] === 'no-url') {
+                        $held_back[] = $lane . ':' . $lane_info['state'];
+                    }
+                }
+                wpc_cache_first_log('used-css-land', isset($opts['key']) ? (string) $opts['key'] : '', '', [
+                    'via'     => isset($opts['via']) ? (string) $opts['via'] : '',
+                    'tpl'     => substr($tpl, 0, 24),
+                    'pulled'  => implode(',', $result['pulled']),
+                    'skipped' => $result['why'] !== '' ? $result['why'] : implode(',', $held_back),
+                    'purged'  => $result['purged'],
+                ]);
+            }
+        } catch (\Throwable $e) {
+        }
+        return $result;
     }
 }
 if (!function_exists('wpc_used_css_demand_args')) {
@@ -3407,6 +4633,36 @@ if (!function_exists('wpc_used_css_apply_demand')) {
         // Read by the service at server.js:16001 (req.body.capabilities.used_css); the form-encoded
         // POST path nests it too, because the service mounts express.urlencoded({extended:true}).
         $args['capabilities']['used_css'] = 1;
+        return true;
+    }
+}
+
+if (!function_exists('wpc_hero_rendition_capability')) {
+
+    function wpc_hero_rendition_capability(&$args)
+    {
+        if (!class_exists('wps_ic_atf_observation') || !wps_ic_atf_observation::phoneHeroOn()) {
+            return false;
+        }
+        if (!isset($args['capabilities']) || !is_array($args['capabilities'])) {
+            $args['capabilities'] = [];
+        }
+        $args['capabilities']['hero_rendition'] = 1;
+        return true;
+    }
+}
+
+if (!function_exists('wpc_hero_lqip_capability')) {
+
+    function wpc_hero_lqip_capability(&$args)
+    {
+        if (!class_exists('wps_ic_atf_observation') || !wps_ic_atf_observation::heroLqipOn()) {
+            return false;
+        }
+        if (!isset($args['capabilities']) || !is_array($args['capabilities'])) {
+            $args['capabilities'] = [];
+        }
+        $args['capabilities']['hero_lqip'] = 1;
         return true;
     }
 }
@@ -3528,6 +4784,566 @@ if (!function_exists('wpc_css_insert_fallbacks')) {
     }
 }
 
+if (!function_exists('wpc_css_slice_keyframes_on')) {
+    function wpc_css_slice_keyframes_on()
+    {
+        return function_exists('wpc_policy_cohort') && wpc_policy_cohort('slice_keyframes') === 1;
+    }
+}
+
+if (!function_exists('wpc_css_slice_page_sheets_on')) {
+    function wpc_css_slice_page_sheets_on()
+    {
+        return function_exists('wpc_policy_cohort') && wpc_policy_cohort('slice_page_sheets') === 1;
+    }
+}
+
+if (!function_exists('wpc_css_skip_string')) {
+    /** The index after the string that opens at $i (a quote, an unescaped line break or the end closes it). */
+    function wpc_css_skip_string($css, $i, $n)
+    {
+        $quote = $css[$i];
+        $i++;
+        while ($i < $n && $css[$i] !== $quote && $css[$i] !== "\n") {
+            if ($css[$i] === '\\') {
+                $i++;
+            }
+            $i++;
+        }
+        return $i + 1;
+    }
+}
+
+if (!function_exists('wpc_css_block_end')) {
+    /** The index of the brace that closes the block opened at $open, or $n when it is never closed. */
+    function wpc_css_block_end($css, $open, $n)
+    {
+        $depth = 1;
+        $j = $open + 1;
+        while ($j < $n) {
+            $c = $css[$j];
+            if ($c === '\\') {
+                $j += 2;
+                continue;
+            }
+            if ($c === '"' || $c === "'") {
+                $j = wpc_css_skip_string($css, $j, $n);
+                continue;
+            }
+            if ($c === '/' && $j + 1 < $n && $css[$j + 1] === '*') {
+                $end = strpos($css, '*/', $j + 2);
+                $j = $end === false ? $n : $end + 2;
+                continue;
+            }
+            if ($c === '{') {
+                $depth++;
+            } elseif ($c === '}') {
+                $depth--;
+                if ($depth === 0) {
+                    return $j;
+                }
+            }
+            $j++;
+        }
+        return $n;
+    }
+}
+
+if (!function_exists('wpc_css_split_items')) {
+    /** The top-level pieces of CSS text, in order: ['b', prelude, body] for a block, ['s', text] for a statement. */
+    function wpc_css_split_items($css)
+    {
+        $items = [];
+        $css = (string) $css;
+        $n = strlen($css);
+        $start = 0;
+        $paren = 0;
+        $i = 0;
+        while ($i < $n) {
+            $c = $css[$i];
+            if ($c === '\\') {
+                $i += 2;
+                continue;
+            }
+            if ($c === '"' || $c === "'") {
+                $i = wpc_css_skip_string($css, $i, $n);
+                continue;
+            }
+            if ($c === '/' && $i + 1 < $n && $css[$i + 1] === '*') {
+                $end = strpos($css, '*/', $i + 2);
+                $i = $end === false ? $n : $end + 2;
+                continue;
+            }
+            if ($c === '(') {
+                $paren++;
+            } elseif ($c === ')') {
+                if ($paren > 0) {
+                    $paren--;
+                }
+            } elseif ($paren === 0) {
+                if ($c === ';') {
+                    $items[] = ['s', (string) substr($css, $start, $i - $start)];
+                    $start = $i + 1;
+                } elseif ($c === '}') {
+                    $start = $i + 1;
+                } elseif ($c === '{') {
+                    $close = wpc_css_block_end($css, $i, $n);
+                    $items[] = ['b', (string) substr($css, $start, $i - $start), (string) substr($css, $i + 1, $close - $i - 1)];
+                    $i = $close;
+                    $start = $i + 1;
+                }
+            }
+            $i++;
+        }
+        if ($start < $n && trim((string) substr($css, $start)) !== '') {
+            $items[] = ['s', (string) substr($css, $start)];
+        }
+        return $items;
+    }
+}
+
+if (!function_exists('wpc_css_split_list')) {
+    /** $text cut at each comma ($comma) or each run of white space (otherwise) that is outside parentheses and strings; pieces trimmed. */
+    function wpc_css_split_list($text, $comma)
+    {
+        $text = (string) $text;
+        $parts = [];
+        $n = strlen($text);
+        $start = 0;
+        $paren = 0;
+        $i = 0;
+        while ($i < $n) {
+            $c = $text[$i];
+            if ($c === '\\') {
+                $i += 2;
+                continue;
+            }
+            if ($c === '"' || $c === "'") {
+                $i = wpc_css_skip_string($text, $i, $n);
+                continue;
+            }
+            if ($c === '(') {
+                $paren++;
+            } elseif ($c === ')') {
+                if ($paren > 0) {
+                    $paren--;
+                }
+            } elseif ($paren === 0 && ($comma ? $c === ',' : strpos(" \t\r\n\f", $c) !== false)) {
+                $parts[] = (string) substr($text, $start, $i - $start);
+                $start = $i + 1;
+            }
+            $i++;
+        }
+        $parts[] = (string) substr($text, $start);
+        $out = [];
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($comma || $part !== '') {
+                $out[] = $part;
+            }
+        }
+        return $out;
+    }
+}
+
+if (!function_exists('wpc_css_ident_name')) {
+    /** A keyframes name as written, without the quotes of a string name. */
+    function wpc_css_ident_name($text)
+    {
+        $text = trim((string) $text);
+        $len = strlen($text);
+        if ($len >= 2 && ($text[0] === '"' || $text[0] === "'") && $text[$len - 1] === $text[0]) {
+            return substr($text, 1, $len - 2);
+        }
+        return $text;
+    }
+}
+
+if (!function_exists('wpc_css_single_animation_name')) {
+    /** The keyframes name one animation asks for ('' for none), or null when the text does not say or is not a valid animation. $tokens are one comma item cut at white space; $nameOnly reads them as an animation-name value. */
+    function wpc_css_single_animation_name($tokens, $nameOnly)
+    {
+        $keywords = [
+            'ease' => 'ease', 'ease-in' => 'ease', 'ease-out' => 'ease', 'ease-in-out' => 'ease', 'linear' => 'ease', 'step-start' => 'ease', 'step-end' => 'ease',
+            'infinite' => 'count',
+            'normal' => 'dir', 'reverse' => 'dir', 'alternate' => 'dir', 'alternate-reverse' => 'dir',
+            'forwards' => 'fill', 'backwards' => 'fill', 'both' => 'fill',
+            'running' => 'play', 'paused' => 'play',
+            'auto' => 'line',
+        ];
+        $seen = ['time' => 0, 'ease' => 0, 'count' => 0, 'dir' => 0, 'fill' => 0, 'play' => 0, 'line' => 0];
+        $name = '';
+        $unknown = false;
+        foreach ($tokens as $token) {
+            $lower = strtolower($token);
+            $candidate = false;
+            if ($lower === 'none') {
+                continue;
+            }
+            if ($token[0] === '"' || $token[0] === "'") {
+                $candidate = true;
+            } elseif ($nameOnly) {
+                if (strpos($token, '(') !== false) {
+                    return null;
+                }
+                $candidate = true;
+            } elseif (preg_match('/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:ms|s)$/', $lower)) {
+                if (++$seen['time'] > 2) {
+                    return null;
+                }
+            } elseif (preg_match('/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/', $lower)) {
+                if (++$seen['count'] > 1) {
+                    return null;
+                }
+            } elseif (strpos($token, '(') !== false) {
+                $function = substr($lower, 0, strpos($lower, '('));
+                if ($function === 'cubic-bezier' || $function === 'steps' || $function === 'linear') {
+                    if (++$seen['ease'] > 1) {
+                        return null;
+                    }
+                } elseif ($function === 'calc' || $function === 'min' || $function === 'max' || $function === 'clamp') {
+                    if (++$seen['time'] > 2) {
+                        return null;
+                    }
+                } elseif ($function === 'scroll' || $function === 'view') {
+                    if (++$seen['line'] > 1) {
+                        return null;
+                    }
+                } else {
+                    $unknown = true;
+                }
+            } elseif (strpos($token, '--') === 0) {
+                if (++$seen['line'] > 1) {
+                    return null;
+                }
+            } elseif (isset($keywords[$lower]) && !$seen[$keywords[$lower]]) {
+                $seen[$keywords[$lower]] = 1;
+            } else {
+                $candidate = true;
+            }
+            if ($candidate) {
+                $found = wpc_css_ident_name($token);
+                if ($name !== '' || $found === '' || preg_match('/^(?:initial|inherit|unset|revert|revert-layer|default)$/i', $found)) {
+                    return null;
+                }
+                $name = $found;
+            }
+        }
+        return $name === '' && $unknown ? null : $name;
+    }
+}
+
+if (!function_exists('wpc_css_animation_names')) {
+    /** The keyframes names an animation or animation-name value asks for (empty for none or a CSS-wide keyword), or null when the text does not say (var(), env(), attr(), an unknown function, an invalid value). */
+    function wpc_css_animation_names($nameOnly, $value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+        if (preg_match('/^(?:initial|inherit|unset|revert|revert-layer)$/i', $value)) {
+            return [];
+        }
+        $names = [];
+        foreach (wpc_css_split_list($value, true) as $single) {
+            $tokens = wpc_css_split_list($single, false);
+            if (!$tokens || ($nameOnly && count($tokens) !== 1)) {
+                return null;
+            }
+            $name = wpc_css_single_animation_name($tokens, $nameOnly);
+            if ($name === null) {
+                return null;
+            }
+            if ($name !== '') {
+                $names[] = $name;
+            }
+        }
+        return $names;
+    }
+}
+
+if (!function_exists('wpc_css_keyframes_walk')) {
+    function wpc_css_keyframes_walk($css, $chain, &$defs)
+    {
+        foreach (wpc_css_split_items($css) as $item) {
+            if ($item[0] !== 'b') {
+                continue;
+            }
+            $prelude = trim((string) preg_replace('~/\*.*?\*/~s', '', $item[1]));
+            if ($prelude === '' || $prelude[0] !== '@' || !preg_match('/^@(-[a-z]+-)?([a-z][a-z-]*)\s*(.*)$/is', $prelude, $at)) {
+                continue;
+            }
+            $kind = strtolower($at[2]);
+            if ($kind === 'keyframes') {
+                $defs[] = ['prefix' => strtolower($at[1]), 'name' => wpc_css_ident_name($at[3]), 'chain' => $chain, 'text' => $prelude . '{' . $item[2] . '}'];
+            } elseif ($at[1] === '' && ($kind === 'media' || $kind === 'supports' || $kind === 'container')) {
+                wpc_css_keyframes_walk($item[2], array_merge($chain, [$prelude]), $defs);
+            } elseif ($at[1] === '' && ($kind === 'layer' || $kind === 'scope')) {
+                wpc_css_keyframes_walk($item[2], $chain, $defs);
+            }
+        }
+    }
+}
+
+if (!function_exists('wpc_css_keyframes_pick')) {
+    /** The @keyframes blocks of $defs (from wpc_css_keyframes_walk) that the names in $names (name => true) use, in source order. From the last unconditional block of a name and prefix on, an earlier one is overridden and left out; a block inside @media, @supports or @container keeps its wrapper. */
+    function wpc_css_keyframes_pick($defs, $names)
+    {
+        $kept = [];
+        foreach ($defs as $at => $def) {
+            if (!isset($names[$def['name']])) {
+                continue;
+            }
+            $key = $def['prefix'] . ' ' . $def['name'];
+            if (!$def['chain']) {
+                $kept[$key] = [];
+            }
+            $kept[$key][] = $at;
+        }
+        $order = [];
+        foreach ($kept as $list) {
+            foreach ($list as $at) {
+                $order[] = $at;
+            }
+        }
+        sort($order);
+        $out = '';
+        foreach ($order as $at) {
+            $text = $defs[$at]['text'];
+            for ($c = count($defs[$at]['chain']) - 1; $c >= 0; $c--) {
+                $text = $defs[$at]['chain'][$c] . '{' . $text . '}';
+            }
+            $out .= $text;
+        }
+        return $out;
+    }
+}
+
+if (!function_exists('wpc_css_animation_decl_ok')) {
+    /** False for an animation or animation-name declaration asking for a name outside $have (name => true) or one it does not say; the names of a kept one are added to $used. */
+    function wpc_css_animation_decl_ok($text, $have, &$used)
+    {
+        $colon = strpos($text, ':');
+        if ($colon === false) {
+            return true;
+        }
+        $property = strtolower(trim((string) preg_replace('~/\*.*?\*/~s', '', substr($text, 0, $colon))));
+        if (!preg_match('/^(?:-(?:webkit|moz|o|ms)-)?animation(-name)?$/', $property, $kind)) {
+            return true;
+        }
+        $value = (string) preg_replace('~/\*.*?\*/~s', '', substr($text, $colon + 1));
+        $value = (string) preg_replace('/\s*!\s*important\s*$/i', '', trim($value));
+        $names = wpc_css_animation_names(!empty($kind[1]), $value);
+        if ($names === null) {
+            return false;
+        }
+        foreach ($names as $name) {
+            if (!isset($have[$name])) {
+                return false;
+            }
+        }
+        foreach ($names as $name) {
+            $used[$name] = true;
+        }
+        return true;
+    }
+}
+
+if (!function_exists('wpc_css_animation_filter')) {
+    /** $css without the animation and animation-name declarations whose keyframes are not all in $have (name => true), and without the rules and queries they leave empty; the names the kept ones ask for are added to $used. */
+    function wpc_css_animation_filter($css, $have, &$used)
+    {
+        if (stripos($css, 'animation') === false) {
+            return $css;
+        }
+        $out = '';
+        $changed = false;
+        foreach (wpc_css_split_items($css) as $item) {
+            if ($item[0] === 's') {
+                if (wpc_css_animation_decl_ok($item[1], $have, $used)) {
+                    $out .= $item[1] . ';';
+                } else {
+                    $changed = true;
+                }
+                continue;
+            }
+            $group = preg_match('/^\s*@(-[a-z]+-)?([a-z][a-z-]*)/i', $item[1], $at) ? strtolower($at[2]) : '';
+            if ($group !== '' && !in_array($group, ['media', 'supports', 'container', 'layer', 'scope', 'document', 'starting-style'], true)) {
+                $out .= $item[1] . '{' . $item[2] . '}';
+                continue;
+            }
+            $inner = wpc_css_animation_filter($item[2], $have, $used);
+            if ($inner !== $item[2]) {
+                $changed = true;
+                if (trim($inner) === '') {
+                    continue;
+                }
+            }
+            $out .= $item[1] . '{' . $inner . '}';
+        }
+        return $changed ? $out : $css;
+    }
+}
+
+if (!function_exists('wpc_css_slice_keyframes')) {
+    /** $slice, cut from the sheet text $source, with the @keyframes of every animation name its animation and animation-name declarations keep (taken from $source), and without the declarations whose keyframes $source does not hold or whose keyframes do not fit in the 4096 bytes the slice may gain (names taken in the order the slice first uses them; a block is never cut). */
+    function wpc_css_slice_keyframes($slice, $source)
+    {
+        $slice = (string) $slice;
+        try {
+            if (!wpc_css_slice_keyframes_on() || stripos($slice, 'animation') === false) {
+                return $slice;
+            }
+            $defs = [];
+            wpc_css_keyframes_walk((string) $source, [], $defs);
+            $have = [];
+            foreach ($defs as $def) {
+                $have[$def['name']] = true;
+            }
+            $used = [];
+            $filtered = wpc_css_animation_filter($slice, $have, $used);
+            $fit = [];
+            $spent = 0;
+            foreach ($used as $name => $unused) {
+                $size = strlen(wpc_css_keyframes_pick($defs, [$name => true]));
+                if ($spent + $size <= 4096) {
+                    $fit[$name] = true;
+                    $spent += $size;
+                }
+            }
+            if (count($fit) !== count($used)) {
+                $used = [];
+                $filtered = wpc_css_animation_filter($slice, $fit, $used);
+            }
+            return $used ? wpc_css_wrap($filtered) . wpc_css_keyframes_pick($defs, $used) : $filtered;
+        } catch (\Throwable $e) {
+            return $slice;
+        }
+    }
+}
+
+if (!function_exists('wpc_header_css_selector_items')) {
+    /** The items of the selector list $sel, split at its top-level commas only (not inside parentheses, brackets or a string, not after a backslash). */
+    function wpc_header_css_selector_items($sel)
+    {
+        $items = [];
+        $item = '';
+        $depth = 0;
+        $quote = '';
+        $len = strlen((string) $sel);
+        for ($i = 0; $i < $len; $i++) {
+            $c = $sel[$i];
+            if ($c === '\\' && $i + 1 < $len) {
+                $item .= $c . $sel[++$i];
+                continue;
+            }
+            if ($quote !== '') {
+                if ($c === $quote) { $quote = ''; }
+            } elseif ($c === '"' || $c === "'") {
+                $quote = $c;
+            } elseif ($c === '(' || $c === '[') {
+                $depth++;
+            } elseif (($c === ')' || $c === ']') && $depth > 0) {
+                $depth--;
+            } elseif ($c === ',' && $depth === 0) {
+                $items[] = $item;
+                $item = '';
+                continue;
+            }
+            $item .= $c;
+        }
+        $items[] = $item;
+        return $items;
+    }
+}
+
+if (!function_exists('wpc_header_css_item_hit')) {
+    /** True when the one selector $item names the header region: it matches $keywordRx, or holds one of $tokens. An id or builder-element token must end where the name does (#_header-1-25 is not #_header-1-250). */
+    function wpc_header_css_item_hit($item, $keywordRx, array $tokens)
+    {
+        if (preg_match($keywordRx, $item)) {
+            return true;
+        }
+        foreach ($tokens as $tk) {
+            if ($tk === '') {
+                continue;
+            }
+            if ($tk[0] === '#' || strpos($tk, 'elementor-element-') === 0) {
+                if (preg_match('/' . preg_quote($tk, '/') . '(?![\w-])/', $item)) {
+                    return true;
+                }
+            } elseif (strpos($item, $tk) !== false) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+if (!function_exists('wpc_header_css_pick')) {
+    /** The rules of the stylesheet text $css (comments already stripped) whose selector names the header region: the header keywords or one of $tokens, inside @media and @supports too. $whole is the cut of a page's own sheets: it keeps the last character of a block the sheet leaves open at its end and keeps, of a selector list, only the items that name the header region. */
+    function wpc_header_css_pick($css, $tokens = [], $whole = false)
+    {
+        // Keyword selectors alone miss opaque builder IDs (.elementor-element-xxxx) that
+        // style the header region — the markup-derived tokens make the slice complete.
+        $selRx = '/(?:^|[\s,>+~(])(?:header\b|\.elementor-location-header|#masthead|\.site-header|\.main-header|\.[\w-]*navbar[\w-]*|\.elementor-nav-menu[\w-]*|\.[\w-]*site-logo[\w-]*|\.custom-logo\b)/i';
+        $pick  = function ($block) use ($selRx, $tokens, $whole, &$pick) {
+            $out = '';
+            $len = strlen($block);
+            $i   = 0;
+            while ($i < $len) {
+                $open = strpos($block, '{', $i);
+                if ($open === false) {
+                    break;
+                }
+                $sel = trim(substr($block, $i, $open - $i));
+                // balanced-brace scan for the block body
+                $depth = 1;
+                $j = $open + 1;
+                while ($j < $len && $depth > 0) {
+                    $c = $block[$j];
+                    if ($c === '{') { $depth++; }
+                    elseif ($c === '}') { $depth--; }
+                    $j++;
+                }
+                $body = substr($block, $open + 1, $j - $open - ($whole && $depth > 0 ? 1 : 2));
+                if ($sel !== '' && $sel[0] === '@') {
+                    if (stripos($sel, '@media') === 0 || stripos($sel, '@supports') === 0) {
+                        $inner = $pick($body);
+                        if ($inner !== '') {
+                            $out .= $sel . '{' . $inner . '}';
+                        }
+                    }
+                    // other at-rules (@font-face, @keyframes) never move the header — skip
+                } elseif ($whole) {
+                    $named = [];
+                    foreach (wpc_header_css_selector_items($sel) as $item) {
+                        if (trim($item) !== '' && wpc_header_css_item_hit(trim($item), $selRx, (array) $tokens)) {
+                            $named[] = trim($item);
+                        }
+                    }
+                    if ($named) {
+                        $out .= implode(',', $named) . '{' . $body . '}';
+                    }
+                } else {
+                    $hit = preg_match($selRx, $sel);
+                    if (!$hit && $tokens) {
+                        foreach ($tokens as $tk) {
+                            if ($tk !== '' && strpos($sel, $tk) !== false) { $hit = true; break; }
+                        }
+                    }
+                    if ($hit) {
+                        $out .= $sel . '{' . $body . '}';
+                    }
+                }
+                $i = $j;
+            }
+            return $out;
+        };
+        return $pick($css);
+    }
+}
+
 if (!function_exists('wpc_header_css_slice')) {
     /**
      * Extract every rule governing the header region from a stylesheet. The deferred CSS
@@ -3543,7 +5359,8 @@ if (!function_exists('wpc_header_css_slice')) {
             }
             $tokens = array_values(array_filter(array_map('strval', (array) $tokens)));
             $mt    = (int) @filemtime($cssPath);
-            $cache = $cssPath . '.hslice' . ($tokens ? '-' . substr(md5(implode(',', $tokens)), 0, 8) : '');
+            $withKeyframes = function_exists('wpc_css_slice_keyframes_on') && wpc_css_slice_keyframes_on();
+            $cache = $cssPath . '.hslice' . ($withKeyframes ? 'k' : '') . ($tokens ? '-' . substr(md5(implode(',', $tokens)), 0, 8) : '');
             if (@is_readable($cache) && (int) @filemtime($cache) >= $mt) {
                 return (string) @file_get_contents($cache);
             }
@@ -3552,61 +5369,108 @@ if (!function_exists('wpc_header_css_slice')) {
                 return '';
             }
             $css   = preg_replace('#/\*.*?\*/#s', '', $css);
-            // Keyword selectors alone miss opaque builder IDs (.elementor-element-xxxx) that
-            // style the header region — the markup-derived tokens make the slice complete.
-            $selRx = '/(?:^|[\s,>+~(])(?:header\b|\.elementor-location-header|#masthead|\.site-header|\.main-header|\.[\w-]*navbar[\w-]*|\.elementor-nav-menu[\w-]*|\.[\w-]*site-logo[\w-]*|\.custom-logo\b)/i';
-            $pick  = function ($block) use ($selRx, $tokens, &$pick) {
-                $out = '';
-                $len = strlen($block);
-                $i   = 0;
-                while ($i < $len) {
-                    $open = strpos($block, '{', $i);
-                    if ($open === false) {
-                        break;
-                    }
-                    $sel = trim(substr($block, $i, $open - $i));
-                    // balanced-brace scan for the block body
-                    $depth = 1;
-                    $j = $open + 1;
-                    while ($j < $len && $depth > 0) {
-                        $c = $block[$j];
-                        if ($c === '{') { $depth++; }
-                        elseif ($c === '}') { $depth--; }
-                        $j++;
-                    }
-                    $body = substr($block, $open + 1, $j - $open - 2);
-                    if ($sel !== '' && $sel[0] === '@') {
-                        if (stripos($sel, '@media') === 0 || stripos($sel, '@supports') === 0) {
-                            $inner = $pick($body);
-                            if ($inner !== '') {
-                                $out .= $sel . '{' . $inner . '}';
-                            }
-                        }
-                        // other at-rules (@font-face, @keyframes) never move the header — skip
-                    } else {
-                        $hit = preg_match($selRx, $sel);
-                        if (!$hit && $tokens) {
-                            foreach ($tokens as $tk) {
-                                if ($tk !== '' && strpos($sel, $tk) !== false) { $hit = true; break; }
-                            }
-                        }
-                        if ($hit) {
-                            $out .= $sel . '{' . $body . '}';
-                        }
-                    }
-                    $i = $j;
-                }
-                return $out;
-            };
-            $slice = $pick($css);
+            $slice = wpc_header_css_pick($css, $tokens);
             if (strlen($slice) > 16384) {
                 $slice = substr($slice, 0, strrpos(substr($slice, 0, 16384), '}') + 1);
+            }
+            if ($withKeyframes) {
+                $slice = wpc_css_slice_keyframes($slice, $css);
             }
             wpc_fs_put($cache, $slice, LOCK_EX);
             return $slice;
         } catch (\Throwable $e) {
             return '';
         }
+    }
+}
+
+if (!function_exists('wpc_header_css_slice_groups')) {
+    /**
+     * The header slice of the stylesheets a page parks, in groups: $sheets are ['css' => the sheet's text, 'media' => the link's media or '']
+     * in document order and $groupOf[i] is the number of the group $sheets[i] goes into (one group when it is not given). Each sheet is cut
+     * with wpc_header_css_pick and wrapped in its own media, the cuts of all the groups share the 16 KB cap of wpc_header_css_slice, and the
+     * keyframes of the animations a group keeps are taken from all the sheets. Returns [group number => the group's text]. Stored by the
+     * content of every sheet, their order, media and group, the tokens and the keyframes switch.
+     */
+    function wpc_header_css_slice_groups($sheets, $tokens = [], $groupOf = null)
+    {
+        try {
+            $sheets = array_values((array) $sheets);
+            if (!$sheets) {
+                return [];
+            }
+            $groupOf = is_array($groupOf) ? array_values($groupOf) : [];
+            $tokens = array_values(array_filter(array_map('strval', (array) $tokens)));
+            $withKeyframes = function_exists('wpc_css_slice_keyframes_on') && wpc_css_slice_keyframes_on();
+            $identity = [];
+            foreach ($sheets as $i => $sheet) {
+                $identity[] = md5((string) $sheet['css']) . '@' . (string) $sheet['media'] . '>' . (isset($groupOf[$i]) ? (int) $groupOf[$i] : 0);
+            }
+            $store = 'wpc_hsl_' . md5(implode('|', $identity) . '#' . implode(',', $tokens) . '#' . ($withKeyframes ? 'k' : '') . '#g');
+            $stored = function_exists('get_transient') ? get_transient($store) : false;
+            $storedGroups = is_string($stored) ? json_decode($stored, true) : null;
+            if (is_array($storedGroups)) {
+                return $storedGroups;
+            }
+            $slices = [];
+            $total = 0;
+            foreach ($sheets as $i => $sheet) {
+                $cut = wpc_header_css_pick((string) preg_replace('#/\*.*?\*/#s', '', (string) $sheet['css']), $tokens, true);
+                if ($cut === '') {
+                    continue;
+                }
+                $piece = wpc_css_wrap($cut, (string) $sheet['media']);
+                $capped = false;
+                while ($total + strlen($piece) > 16384) {
+                    $capped = true;
+                    $room = strlen($cut) - ($total + strlen($piece) - 16384);
+                    $at = $room > 0 ? strrpos(substr($cut, 0, $room), '}') : false;
+                    if ($at === false) {
+                        $piece = '';
+                        break;
+                    }
+                    $cut = substr($cut, 0, $at + 1);
+                    $piece = wpc_css_wrap($cut, (string) $sheet['media']);
+                }
+                $group = isset($groupOf[$i]) ? (int) $groupOf[$i] : 0;
+                $slices[$group] = (isset($slices[$group]) ? $slices[$group] : '') . $piece;
+                $total += strlen($piece);
+                if ($capped) {
+                    break;
+                }
+            }
+            if ($withKeyframes) {
+                $source = null;
+                foreach ($slices as $group => $slice) {
+                    if (stripos($slice, 'animation') === false) {
+                        continue;
+                    }
+                    if ($source === null) {
+                        $source = '';
+                        foreach ($sheets as $sheet) {
+                            $source .= wpc_css_wrap((string) preg_replace('#/\*.*?\*/#s', '', (string) $sheet['css']), (string) $sheet['media']);
+                        }
+                    }
+                    $slices[$group] = wpc_css_slice_keyframes($slice, $source);
+                }
+            }
+            ksort($slices);
+            $encoded = json_encode($slices);
+            if (function_exists('set_transient') && is_string($encoded)) {
+                set_transient($store, $encoded, DAY_IN_SECONDS);
+            }
+            return $slices;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+}
+if (!function_exists('wpc_header_css_slice_sheets')) {
+    /** The header slice of the stylesheets a page parks as one text: wpc_header_css_slice_groups() with every sheet in the one group. */
+    function wpc_header_css_slice_sheets($sheets, $tokens = [])
+    {
+        $slices = function_exists('wpc_header_css_slice_groups') ? wpc_header_css_slice_groups($sheets, $tokens) : [];
+        return isset($slices[0]) ? (string) $slices[0] : '';
     }
 }
 
@@ -3943,6 +5807,40 @@ if (!function_exists('wpc_wp_cache_record_verdict')) {
     add_action('admin_init', 'wpc_wp_cache_notice_sync', 30);
 
     /**
+     * With WPC_NO_PAGE_CACHE on, retires what our page cache armed before the constant was
+     * added (static-serve rules, our drop-in, the WP_CACHE line we wrote); journals
+     * page-cache-blocked-retire with what it took down, and nothing when there was nothing.
+     */
+    function wpc_page_cache_blocked_retire()
+    {
+        if (!function_exists('wpc_page_cache_blocked') || !wpc_page_cache_blocked()) {
+            return [];
+        }
+        $retired = [];
+        try {
+            if (!class_exists('wps_ic_htaccess') && defined('WPS_IC_DIR') && is_readable(WPS_IC_DIR . 'classes/htaccess.class.php')) {
+                @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+            }
+            if (class_exists('wps_ic_htaccess')) {
+                $retired = (new wps_ic_htaccess())->retireForBlockedPageCache();
+            }
+        } catch (\Throwable $e) {
+            return [];
+        }
+        if ($retired !== [] && function_exists('wpc_cache_first_log')) {
+            $stuck = !in_array('removed', $retired, true);
+            if (!$stuck || !get_transient('wpc_page_cache_retire_stuck')) {
+                if ($stuck) {
+                    set_transient('wpc_page_cache_retire_stuck', 1, HOUR_IN_SECONDS);
+                }
+                wpc_cache_first_log('page-cache-blocked-retire', '', '', $retired);
+            }
+        }
+        return $retired;
+    }
+    add_action('admin_init', 'wpc_page_cache_blocked_retire', 5);
+
+    /**
      * The page-cache toggle's state line: '' while the page cache is off or active, else why it
      * is not active. Active means WP_CACHE true at runtime and nothing else.
      */
@@ -4126,12 +6024,18 @@ if (!function_exists('wpc_pipeline_admission_ok')) {
         if ($q === '') {
             return true;
         }
+        if (class_exists('wps_ic_url_key') && !wps_ic_url_key::queryIsPlain($q)) {
+            return false;
+        }
         parse_str($q, $p);
         $wpc_plain = function_exists('get_option') && (string) get_option('permalink_structure') === '';
         foreach ($p as $pk => $pv) {
             $pk = (string) $pk;
             if (in_array($pk, ['wpc_visitor_mode', 'remote_generate_critical'], true)) {
-                continue;
+                if ($pv === 'true') {
+                    continue;
+                }
+                return false;
             }
             if ($wpc_plain && in_array($pk, ['p', 'page_id'], true)) {
                 continue; // plain-permalink sites: ?p= IS the canonical URL
@@ -4300,6 +6204,9 @@ if (!function_exists('wpc_pl_sched')) {
             }
             return false;
         }
+        if (in_array((string) $hook, wpc_crit_service_hooks(), true)) {
+            $ts = (int) $ts + wpc_crit_site_offset();
+        }
         // RAIL: when enabled, ALL pipeline work rides the single queue — one consumer,
         // priorities, dedupe, off-pool engines. Legacy single-events otherwise.
         if (function_exists('wpc_rail_on') && wpc_rail_on() && function_exists('wpc_rail_enqueue')) {
@@ -4316,6 +6223,353 @@ if (!function_exists('wpc_pl_sched')) {
             $GLOBALS['wpc_pipeline_schedule_bump_count'] = (int) ($GLOBALS['wpc_pipeline_schedule_bump_count'] ?? 0) + 1;
         }
         return $scheduled;
+    }
+}
+
+if (!function_exists('wpc_p2_hold')) {
+    /** The contexts that are this plugin's own landings (a person's purge or a repair is not one). */
+    function wpc_p2_landing_context($context)
+    {
+        return preg_match('/^(crit-|lcp-|delay-|fonts-|manifest-off-|land-|image-land|sized-landed)/', (string) $context) === 1;
+    }
+
+    function wpc_p2_marker_file($urlKey)
+    {
+        $urlKey = (string) $urlKey;
+        if ($urlKey === '' || !defined('WPS_IC_CACHE') || strpos($urlKey, '..') !== false || preg_match('/^[A-Za-z0-9._-]+$/', $urlKey) !== 1) {
+            return '';
+        }
+        return rtrim(WPS_IC_CACHE, '/') . '/' . $urlKey . '/p2-pending.json';
+    }
+
+    /** The compressed copies a page folder holds now, name => mtime. */
+    function wpc_p2_variants($dir)
+    {
+        $found = [];
+        foreach ((array) @glob(rtrim((string) $dir, '/') . '/*index.html_gzip') as $file) {
+            $mtime = @filemtime($file);
+            if ($mtime) {
+                $found[basename($file)] = (int) $mtime;
+            }
+        }
+        return $found;
+    }
+
+    function wpc_p2_read($urlKey)
+    {
+        $file = wpc_p2_marker_file($urlKey);
+        if ($file === '' || !is_file($file)) {
+            return null;
+        }
+        $record = json_decode((string) @file_get_contents($file), true);
+        if (!is_array($record) || empty($record['t']) || empty($record['u']) || !isset($record['f']) || !is_array($record['f'])) {
+            return null;
+        }
+        return $record;
+    }
+
+    function wpc_p2_write($urlKey, array $record)
+    {
+        $file = wpc_p2_marker_file($urlKey);
+        if ($file === '') {
+            return false;
+        }
+        $tmp = $file . '.tmp.' . getmypid();
+        if (!wpc_fs_put($tmp, json_encode($record))) {
+            @unlink($tmp);
+            return false;
+        }
+        if (!@rename($tmp, $file)) {
+            @unlink($tmp);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * The compressed copies a landing on this page would keep serving; [] when it has none or when
+     * nothing would rebuild the page (the warm queue is off, the warm lane is stood down by Safe
+     * Mode, or warming is paused).
+     */
+    function wpc_p2_holdable($urlKey)
+    {
+        $file = wpc_p2_marker_file($urlKey);
+        if ($file === '' || !wpc_warm_url_queue_enabled() || (function_exists('wpc_warm_p3_paused') && wpc_warm_p3_paused() > 0)
+            || (function_exists('wpc_bg_lane_allowed') && !wpc_bg_lane_allowed('wpc_url_warm'))) {
+            return [];
+        }
+        return wpc_p2_variants(dirname($file));
+    }
+
+    /**
+     * A landing under policy cache_p2 leaves the copies the page folder holds where they are and
+     * records them; false when there is none to keep serving or nothing will rebuild the page (the
+     * warm queue is off, or warming is paused): the purge then runs as it always did.
+     */
+    function wpc_p2_hold($urlKey, $clean, $context)
+    {
+        $variants = wpc_p2_holdable($urlKey);
+        if ($variants === []) {
+            return false;
+        }
+        $held = wpc_p2_write($urlKey, [
+            't' => time(), 'u' => (string) $clean, 'c' => (string) $context,
+            'd' => (int) wps_ic_cache_integrations::landSecondWaveDelay($urlKey), 'f' => $variants, 'r' => (object) [],
+        ]);
+        if ($held && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('p2-hold', (string) $urlKey, (string) $clean, ['ctx' => (string) $context, 'variants' => count($variants)]);
+        }
+        return $held;
+    }
+
+    /** A warm render of a held page was refused by the store checks: its device's old copy stays. */
+    function wpc_p2_note_refused($urlKey, $prefix, $why)
+    {
+        $record = wpc_p2_read($urlKey);
+        if ($record === null) {
+            return;
+        }
+        $device = strpos((string) $prefix, 'mobile') === 0 ? 'mobile_' : '';
+        $record['r'] = (array) ($record['r'] ?? []);
+        $record['r'][$device] = substr((string) $why, 0, 40);
+        wpc_p2_write($urlKey, $record);
+    }
+
+    /** The layers in front of the copy, past the CDN purge's own 60 s window, once the new copy is the one on disk. */
+    function wpc_p2_external($clean, $urlKey, $context, $inline)
+    {
+        if (!class_exists('wps_ic_cache_integrations') || !method_exists('wps_ic_cache_integrations', 'purgeExternalLayers')) {
+            return [];
+        }
+        if (function_exists('delete_transient')) {
+            $other = (substr($clean, -1) === '/') ? rtrim($clean, '/') : $clean . '/';
+            foreach ([$clean, $other] as $form) {
+                delete_transient('wpc_cfp_' . md5($form));
+            }
+        }
+        return wps_ic_cache_integrations::purgeExternalLayers($clean, $urlKey, ['context' => (string) $context, 'varnish' => true, 'inline' => (bool) $inline]);
+    }
+
+    /**
+     * Closes a held landing when every copy it recorded has been replaced, or, at expiry, retires
+     * the ones that were not (a device whose warm render the store refused keeps its old copy).
+     * The external layers are purged here and nowhere earlier. A hold past its time plus 60 s is at
+     * expiry whoever asks (its second wave never ran): every reader of the marker settles through
+     * here, so an orphaned hold ends at the next store, join, warm-up or warm event on its page.
+     */
+    function wpc_p2_settle($urlKey, $expire = false, $inline = false)
+    {
+        $record = wpc_p2_read($urlKey);
+        if ($record === null) {
+            return 'none';
+        }
+        if (!$expire && time() >= (int) $record['t'] + max(30, (int) ($record['d'] ?? 75)) + 60) {
+            $expire = true;
+        }
+        $file = wpc_p2_marker_file($urlKey);
+        $dir = dirname($file) . '/';
+        if (wpc_fs_link_below(WPS_IC_CACHE, $dir)) {
+            return 'linked';
+        }
+        $since = (int) $record['t'];
+        $clean = (string) $record['u'];
+        $context = (string) ($record['c'] ?? '');
+        clearstatcache();
+        $open = [];
+        $replaced = 0;
+        foreach (array_keys($record['f']) as $name) {
+            $name = (string) $name;
+            if (preg_match('/^[A-Za-z0-9_-]*index\.html_gzip$/', $name) !== 1) {
+                continue;
+            }
+            $mtime = @filemtime($dir . $name);
+            if (!$mtime) {
+                continue;
+            }
+            if ($mtime >= $since) {
+                $replaced++;
+            } else {
+                $open[] = $name;
+            }
+        }
+        if ($open === []) {
+            @unlink($file);
+            wpc_p2_external($clean, $urlKey, $context, $inline);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('p2-swap', (string) $urlKey, $clean, ['ctx' => $context, 'waited' => max(0, time() - $since), 'variants' => count($record['f']), 'replaced' => $replaced]);
+            }
+            return 'swapped';
+        }
+        if (!$expire) {
+            return 'pending';
+        }
+        $refused = (array) ($record['r'] ?? []);
+        $retired = 0;
+        $kept = 0;
+        foreach ($open as $name) {
+            $device = strpos($name, 'mobile_') === 0 ? 'mobile_' : '';
+            if (isset($refused[$device])) {
+                $kept++;
+                continue;
+            }
+            $base = substr($name, 0, -strlen('index.html_gzip'));
+            foreach (['index.html', 'index.html_gzip', 'index.html_br', 'index.html_md5', 'stale.html', 'stale.html_gzip', 'stale.html_br'] as $suffix) {
+                @unlink($dir . $base . $suffix);
+            }
+            $retired++;
+        }
+        @unlink($file);
+        if ($retired > 0 && class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'removeStaticMirror')) {
+            wps_cacheHtml::removeStaticMirror($clean);
+        }
+        $changed = $retired > 0 || $replaced > 0;
+        if ($changed) {
+            wpc_p2_external($clean, $urlKey, $context, $inline);
+        }
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log($changed ? 'p2-expired' : 'p2-kept-old', (string) $urlKey, $clean, [
+                'ctx' => $context, 'retired' => $retired, 'kept' => $kept, 'replaced' => $replaced, 'refused' => implode(',', array_keys($refused)),
+            ]);
+        }
+        return 'expired';
+    }
+
+    /**
+     * Whether the post the page belongs to is one no visitor is served (a takedown is never held).
+     * The post is the one the caller knows ($postId), else the one WordPress resolves the address to
+     * (published posts only: a draft's address does not resolve for a visitor), else the posts of any
+     * status that carry the address's last segment as their name; the page is gone only when there is
+     * such a post and none of them is public.
+     */
+    function wpc_p2_page_gone($pageUrl, $postId = 0)
+    {
+        if (!class_exists('wps_ic_cache') || !method_exists('wps_ic_cache', 'postIsPublic') || !function_exists('get_post')) {
+            return false;
+        }
+        $postId = (int) $postId;
+        if ($postId <= 0 && function_exists('url_to_postid')) {
+            $postId = (int) url_to_postid((string) $pageUrl);
+        }
+        if ($postId > 0) {
+            $row = get_post($postId);
+            return is_object($row) && !wps_ic_cache::postIsPublic($row);
+        }
+        $slug = basename(trim((string) parse_url((string) $pageUrl, PHP_URL_PATH), '/'));
+        if ($slug === '' || !function_exists('get_posts')) {
+            return false;
+        }
+        $rows = (array) get_posts(['name' => $slug, 'post_type' => 'any', 'post_status' => 'any', 'numberposts' => 5, 'suppress_filters' => true]);
+        $rows = array_values(array_filter($rows, 'is_object'));
+        if ($rows === []) {
+            return false;
+        }
+        foreach ($rows as $row) {
+            if (wps_ic_cache::postIsPublic($row)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * A landing that would delete a page's copies hands the page to the landing purge instead, under
+     * policy cache_p2: the copies keep serving and the layers in front of them are purged once the
+     * new copy is stored (purgeUrlHtml decides, wpc_p2_hold records, wpc_p2_settle closes).
+     * '' leaves the landing to the caller's own delete: the switch is off, cache-first is off, the
+     * context is not a landing, nothing would be kept serving or rebuild the page, or the post is
+     * not public. 'held' is a landing the hold took, 'purged' one purgeUrlHtml could not hold and
+     * purged, and 'open' a landing that joined the hold already open on the page ($joinOpen: a lane
+     * that repeats while the old copy still stands must not push the hold out; a hold past its time
+     * is closed instead). A landing taken inside a warm fetch (the kick receiver, the warm render's
+     * init) queues its rebuild as a timed cron event, which the loop guard of the queue lets through
+     * for this caller only; when that cannot be queued the hold is released and the answer is ''.
+     * $postId is the post the caller already knows, for the takedown check.
+     */
+    function wpc_p2_land_page($urlKey, $pageUrl, $context, $joinOpen = false, $postId = 0)
+    {
+        $urlKey = (string) $urlKey;
+        if ($urlKey === '' || !function_exists('wpc_cache_phase_on') || !wpc_cache_phase_on('p2')
+            || !function_exists('wpc_cache_first_enabled') || !wpc_cache_first_enabled()
+            || !wpc_p2_landing_context($context) || wpc_p2_holdable($urlKey) === []
+            || !class_exists('wps_ic_cache_integrations') || !method_exists('wps_ic_cache_integrations', 'purgeUrlHtml')) {
+            return '';
+        }
+        $pageUrl = (string) $pageUrl;
+        if ($pageUrl === '' && class_exists('wps_ic_url_key')) {
+            $pageUrl = (string) wps_ic_url_key::getUrlFromKey($urlKey);
+        }
+        if (($pageUrl !== '' || (int) $postId > 0) && wpc_p2_page_gone($pageUrl, $postId)) {
+            return '';
+        }
+        $record = $joinOpen ? wpc_p2_read($urlKey) : null;
+        if ($record !== null) {
+            wpc_p2_settle($urlKey, false, false);
+            return 'open';
+        }
+        $layers = wps_ic_cache_integrations::purgeUrlHtml($urlKey, $pageUrl, ['context' => (string) $context, 'warm' => true, 'force' => true]);
+        if (($layers['external'] ?? '') !== 'pending') {
+            return 'purged';
+        }
+        if (wpc_warm_request() && function_exists('wpc_warm_url_queue')) {
+            $clean = class_exists('wps_ic_url_key') ? wps_ic_url_key::sanitizeSameHostUrl($pageUrl) : '';
+            if ($clean === '' || !wpc_warm_url_queue($clean, (string) $context, time() + 5, true)) {
+                @unlink(wpc_p2_marker_file($urlKey));
+                return '';
+            }
+        }
+        return 'held';
+    }
+
+    /**
+     * An image landed: a page that shows it keeps serving its copy while the page is rebuilt (policy
+     * cache_p2). false leaves the page to the per-post purge, which is what runs without the switch,
+     * for a page the hold cannot take (no copy, nothing to rebuild it, not public) and for every
+     * page past the tenth in one request: nothing is purged before the hold is known.
+     */
+    function wpc_p2_land_post($postId)
+    {
+        static $taken = 0;
+        if ($taken >= 10 || !function_exists('wpc_cache_phase_on') || !wpc_cache_phase_on('p2') || !function_exists('get_permalink')
+            || !class_exists('wps_ic_url_key')) {
+            return false;
+        }
+        $url = (string) get_permalink((int) $postId);
+        $key = $url === '' ? '' : (string) (new wps_ic_url_key())->setup($url);
+        if (wpc_p2_land_page($key, $url, 'image-land', false, (int) $postId) !== 'held') {
+            return false;
+        }
+        $taken++;
+        return true;
+    }
+
+    /** Called after a page folder's copy was stored (saveGzCache). */
+    function wpc_p2_note_stored($urlKey)
+    {
+        $file = wpc_p2_marker_file($urlKey);
+        if ($file === '' || !is_file($file)) {
+            return;
+        }
+        wpc_p2_settle($urlKey, false, true);
+    }
+
+    /** The second wave of a rebuild-mode landing: 'none' when nothing is held, 'wait' (a new wave is queued) before the hold is up, 'settled' after. */
+    function wpc_p2_second_wave($urlKey, $clean)
+    {
+        $record = wpc_p2_read($urlKey);
+        if ($record === null) {
+            return 'none';
+        }
+        $hold = max(30, (int) ($record['d'] ?? 75));
+        if (time() < (int) $record['t'] + $hold - 5) {
+            if (function_exists('wpc_pl_sched')) {
+                wpc_pl_sched((int) $record['t'] + $hold + 5, 'wpc_land_second_wave', [(string) $clean]);
+            } elseif (function_exists('wp_schedule_single_event')) {
+                wp_schedule_single_event((int) $record['t'] + $hold + 5, 'wpc_land_second_wave', [(string) $clean]);
+            }
+            return 'wait';
+        }
+        wpc_p2_settle($urlKey, true, false);
+        return 'settled';
     }
 }
 
@@ -4942,6 +7196,26 @@ if (!function_exists('wpc_check_font_metrics_collapse')) {
     // After the consistency gate (99) so it observes the final table the consumer will emit.
     add_filter('wpc_font_fallback_metrics', 'wpc_check_font_metrics_collapse', 100);
 }
+if (!function_exists('wpc_signed_artifacts_capability')) {
+
+    function wpc_signed_artifacts_on()
+    {
+        return !function_exists('apply_filters') || apply_filters('wpc_signed_artifacts', true) !== false;
+    }
+
+    function wpc_signed_artifacts_capability(&$args)
+    {
+        if (!wpc_signed_artifacts_on()) {
+            return false;
+        }
+        if (!isset($args['capabilities']) || !is_array($args['capabilities'])) {
+            $args['capabilities'] = [];
+        }
+        $args['capabilities']['signed_artifacts'] = 1;
+        return true;
+    }
+}
+
 
 
 
@@ -4953,7 +7227,7 @@ if (!function_exists('wpc_fontdisplay_rebake_once')) {
     function wpc_fontdisplay_rebake_once()
     {
         try {
-            $v = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '0';
+            $v = (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '0') . (wpc_font_display_site_kept() ? '|declared' : '');
             if (get_option('wpc_fd_rebake_v') === $v) {
                 return;
             }
@@ -4978,15 +7252,48 @@ if (!function_exists('wpc_fontdisplay_rebake_once')) {
         }
     }
     add_action('admin_init', 'wpc_fontdisplay_rebake_once', 33);
+    add_action('wpc_fontdisplay_rebake_event', 'wpc_fontdisplay_rebake_once');
 }
 
+
+if (!function_exists('wpc_font_display_setting')) {
+    function wpc_font_display_setting($raw)
+    {
+        $raw = is_scalar($raw) ? strtolower(trim((string) $raw)) : '';
+        return in_array($raw, ['off', 'smart', 'swap', 'block', 'auto', 'optional', 'fallback'], true) ? $raw : 'smart';
+    }
+}
+
+if (!function_exists('wpc_font_display_site_kept')) {
+    /** True while render cohort font_display_declared is on and the Text Font Display setting is the default, smart: a text face keeps the display its site declared, and no emitter writes one of its own. $raw null reads the stored setting. */
+    function wpc_font_display_site_kept($raw = null)
+    {
+        if ($raw === null) {
+            $stored = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
+            $raw = (is_array($stored) && isset($stored['font-display'])) ? $stored['font-display'] : '';
+        }
+        return wpc_font_display_setting($raw) === 'smart'
+            && function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('font_display_declared') === 1;
+    }
+}
+
+if (!function_exists('wpc_icon_font_display_effective')) {
+    function wpc_icon_font_display_effective($raw = '')
+    {
+        $raw = is_scalar($raw) ? strtolower(trim((string) $raw)) : '';
+        return in_array($raw, ['swap', 'block', 'auto', 'optional', 'fallback'], true) ? $raw : 'block';
+    }
+}
 
 if (!function_exists('wpc_font_display_effective')) {
     // 'smart' resolves per-site: optional only when the deterministic metrics verdict
     // landed (matched twin proven from the woff2 tables) — zero-CLS is then free; else swap.
     function wpc_font_display_effective($raw, $family = '')
     {
-        $raw = strtolower(trim((string) $raw));
+        $raw = wpc_font_display_setting($raw);
+        if ($raw === 'smart' && wpc_font_display_site_kept($raw)) {
+            return 'swap';
+        }
         // v7.10.401: 'smart' has always resolved to optional once metrics are validated.
         // Extend that to plain 'swap': a swap with a VALIDATED metrics-matched fallback still
         // swap-reflows on every load for zero benefit (the fallback is metrics-identical), and
@@ -5058,6 +7365,45 @@ if (!function_exists('wpc_font_display_effective')) {
     }
 }
 
+if (!function_exists('wpc_font_family_inline_subset')) {
+    /** True when this page inlines a subset of $family (font-subsets.css, or a data:font/woff2 face of critical_mobile.css / critical_desktop.css, in the page's own crit folder: wps_cdn_rewrite::wpc_font_subset_display_families). */
+    function wpc_font_family_inline_subset($family)
+    {
+        if (!class_exists('wps_cdn_rewrite') || !method_exists('wps_cdn_rewrite', 'wpc_font_subset_display_families')) {
+            return false;
+        }
+        $subsetFamilies = wps_cdn_rewrite::wpc_font_subset_display_families();
+        $key = strtolower(trim((string) $family, " \t\"'"));
+        return $key !== '' && !empty($subsetFamilies[$key]);
+    }
+}
+
+if (!function_exists('wpc_font_display_on_page')) {
+    /**
+     * wpc_font_display_effective for a face written into this page or a copy keyed by the page's subset families: a family
+     * the page inlines a subset of is not optional where the setting would make it optional. The subset paints the characters it
+     * carries; the others come from this face, and an optional face that arrives after its short block period is never used,
+     * so those characters stayed in the fallback for the whole visit (crit lab, 2026-10-15: Manrope "A" and "D" in Arial).
+     * It keeps the display the face declared (swap, fallback, block or optional) and takes swap when the face declared none or auto.
+     */
+    function wpc_font_display_on_page($raw, $family, $declared = '')
+    {
+        $display = wpc_font_display_effective($raw, $family);
+        if ($display !== 'optional' || !wpc_font_subset_swap($family)) { return $display; }
+        $declared = is_scalar($declared) ? strtolower(trim((string) $declared)) : '';
+        return in_array($declared, ['swap', 'fallback', 'block', 'optional'], true) ? $declared : 'swap';
+    }
+}
+
+if (!function_exists('wpc_font_subset_swap')) {
+    /** True while render cohort subset_face_swap is on and this page inlines a subset of $family. */
+    function wpc_font_subset_swap($family)
+    {
+        return function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('subset_face_swap') === 1
+            && wpc_font_family_inline_subset($family);
+    }
+}
+
 if (!function_exists('wpc_fd_auto_migrate')) {
     function wpc_fd_auto_migrate()
     {
@@ -5092,7 +7438,7 @@ if (!function_exists('wpc_fd_auto_migrate')) {
 
 if (!function_exists('wpc_compute_tpl_key')) {
 
-    function wpc_compute_tpl_key()
+    function wpc_compute_tpl_key($toggle = '')
     {
         try {
             $h = [];
@@ -5116,6 +7462,10 @@ if (!function_exists('wpc_compute_tpl_key')) {
                     }
                     $h[] = $handle . ':' . $version;
                 }
+            }
+            if (is_string($toggle) && $toggle !== '') {
+                $kept = array_values(array_filter($h, function ($entry) use ($toggle) { return strpos($entry, $toggle . ':') !== 0; }));
+                $h = count($kept) !== count($h) ? $kept : array_merge($h, [$toggle . ':0']);
             }
             sort($h);
             $theme = function_exists('wp_get_theme') ? wp_get_theme() : null;
@@ -5157,14 +7507,20 @@ if (!function_exists('wpc_compute_tpl_key')) {
     }
 
 
+    /**
+     * The GMT epoch the published post $url renders was last modified, as a string, or '': the post
+     * $postID (or url_to_postid) names for a post URL; for the home URL the static front page
+     * (wpc_saved_page_source_mtime), and '' for a latest-posts home, an archive or a post that is
+     * not published.
+     */
     function wpc_dispatch_post_mtime($postID, $url)
     {
         if (!function_exists('get_post_modified_time')) {
             return '';
         }
-        // Homepage / front page → dynamic ATF, no reliable content-version → omit.
         if (function_exists('home_url') && rtrim((string) $url, '/') === rtrim((string) home_url('/'), '/')) {
-            return '';
+            $frontMtime = function_exists('wpc_saved_page_source_mtime') ? (int) wpc_saved_page_source_mtime((string) $url) : 0;
+            return $frontMtime > 0 ? (string) $frontMtime : '';
         }
         $pid = (is_numeric($postID) && (int) $postID > 0) ? (int) $postID : 0;
         if ($pid === 0 && function_exists('url_to_postid')) {
@@ -5182,8 +7538,9 @@ if (!function_exists('wpc_compute_tpl_key')) {
 if (!function_exists('wpc_browser_accept')) {
     /**
      * The Accept header a current browser sends when it fetches a subresource of this kind:
-     * 'image', 'style' or 'font'. A warm request to the zone sends the same, so the copy it stores
-     * is the one a browser's request reads.
+     * 'image' (what current browsers send, AVIF first, for every image URL whatever its extension),
+     * 'style' or 'font'. A warm request to the zone sends the same, so the copy it stores is the
+     * one a browser's request reads.
      */
     function wpc_browser_accept($kind)
     {
@@ -5234,8 +7591,14 @@ if (!function_exists('wpc_land_second_wave')) {
                 return;
             }
 
+            $p2Key = (new wps_ic_url_key())->setup($clean);
+            $p2State = (function_exists('wpc_p2_second_wave') && !empty($p2Key)) ? wpc_p2_second_wave($p2Key, $clean) : 'none';
+            if ($p2State === 'wait') {
+                return;
+            }
+
             // 1. External re-purge (same primitives purgeUrlHtml uses; each self-gates/no-ops).
-            if (class_exists('wps_ic_cache_integrations')) {
+            if ($p2State === 'none' && class_exists('wps_ic_cache_integrations')) {
                 try {
                     if (method_exists('wps_ic_cache_integrations', 'purgeVarnish')) {
                         wps_ic_cache_integrations::purgeVarnish(0, false, $clean);
@@ -5243,7 +7606,7 @@ if (!function_exists('wpc_land_second_wave')) {
                 } catch (\Throwable $e) {
                 }
             }
-            if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeEdgeHtmlUrls')) {
+            if ($p2State === 'none' && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeEdgeHtmlUrls')) {
                 try {
                     $forms   = [$clean];
                     $forms[] = (substr($clean, -1) === '/') ? rtrim($clean, '/') : $clean . '/';
@@ -5258,7 +7621,8 @@ if (!function_exists('wpc_land_second_wave')) {
                 return;
             }
             $dir = rtrim(WPS_IC_CACHE, '/') . '/' . $key . '/';
-            if (apply_filters('wpc_bypass_freeze_fallback', true)) {
+            $p2Closed = $p2State === 'none' && function_exists('wpc_cache_phase_on') && wpc_cache_phase_on('p2') && !apply_filters('wpc_build_before_purge', false);
+            if ($p2State === 'none' && !$p2Closed && apply_filters('wpc_bypass_freeze_fallback', true)) {
                 $newest = 0;
                 foreach (['index.html_gzip', 'webp_index.html_gzip', 'mobile_index.html_gzip', 'mobile-webp_index.html_gzip', 'localonly_index.html_gzip', 'mobile_localonly_index.html_gzip'] as $vf) {
                     $mt = @filemtime($dir . $vf);
@@ -5909,6 +8273,8 @@ if (!function_exists('wpc_delete_crit_artifacts')) {
     }
 }
 
+require_once __DIR__ . '/../v2/v2-report-stamp.php';
+
 if (!function_exists('wpc_delay_report_stamp')) {
     /**
      * The stamp a page's Delay JS report carries, verified by wpc_delay_v3_report_handler().
@@ -5925,24 +8291,110 @@ if (!function_exists('wpc_delay_report_stamp')) {
      */
     function wpc_delay_report_stamp($path)
     {
-        $secret = function_exists('wp_salt') ? (string) wp_salt('nonce') : '';
-        if ($secret === '' && function_exists('get_option') && defined('WPS_IC_OPTIONS')) {
-            $opts = get_option(WPS_IC_OPTIONS);
-            $secret = is_array($opts) && !empty($opts['api_key']) ? (string) $opts['api_key'] : '';
+        if (function_exists('wpc_lever_test_active') && wpc_lever_test_active()) {
+            return '';
         }
-        return substr(hash_hmac('sha256', 'delay-report|' . (string) $path, $secret . '|' . ABSPATH), 0, 20);
+        return wpc_report_stamp_mac('delay-report|' . wpc_delay_path_key($path));
+    }
+
+    /**
+     * Whether $stamp is the one a page's report carries: the path key's, or, for the days a copy rendered before
+     * the path key existed can still be on a visitor's screen (7.25.60 minted over the exact spelling of the
+     * path, so every non-root page's stamp changed once), the exact spelling's. The window opens the first time
+     * such a stamp is seen and lasts wpc_delay_stamp_legacy_s (14 days, the age of a stored copy).
+     */
+    function wpc_delay_report_stamp_ok($path, $stamp)
+    {
+        if (!is_string($stamp) || $stamp === '') {
+            return false;
+        }
+        if (hash_equals(wpc_delay_report_stamp($path), $stamp)) {
+            return true;
+        }
+        return hash_equals(wpc_report_stamp_mac('delay-report|' . (string) $path), $stamp) && wpc_delay_stamp_legacy_open();
+    }
+
+    /** Whether the window for stamps and render ids minted over the exact path is open; the first call that finds one opens it. */
+    function wpc_delay_stamp_legacy_open()
+    {
+        $since = (int) get_option('wpc_delay_stamp_legacy', 0);
+        if ($since <= 0) {
+            $since = time();
+            update_option('wpc_delay_stamp_legacy', $since, false);
+        }
+        return time() < $since + (int) apply_filters('wpc_delay_stamp_legacy_s', 14 * DAY_IN_SECONDS);
+    }
+
+    /**
+     * The stamp the device check carries (verified by wpc_device_mix_judge): bound to the page's path
+     * and the device it was rendered for. No time bucket.
+     */
+    function wpc_device_report_stamp($path, $page)
+    {
+        return wpc_report_stamp_mac('device-report|' . (string) $page . '|' . (string) $path);
+    }
+
+    /**
+     * The id a page's Delay JS report names as `r`: a keyed hash of the page's path, the device bucket
+     * it was rendered for and the UTC day of the render. The same for every visitor of the copy.
+     */
+    function wpc_delay_render_id($path, $device, $day = null, $exact = false)
+    {
+        return substr(wpc_report_stamp_mac('delay-render|' . (string) $device . '|' . ($day === null ? gmdate('Y-m-d') : (string) $day) . '|' . ($exact ? (string) $path : wpc_delay_path_key($path))), 0, 12);
+    }
+
+    /**
+     * A page's path as the render id names it, the same from the server's request and from the browser's
+     * location.pathname: percent-encoding undone, the home page's subdirectory taken off, no trailing slash. A
+     * proxy that rewrites the path in one of these ways does not turn every report into a stranger's.
+     */
+    function wpc_delay_path_key($path)
+    {
+        $path = rawurldecode((string) $path);
+        $home = '/' . trim((string) apply_filters('wpc_delay_home_path', (string) parse_url(function_exists('home_url') ? (string) home_url() : '', PHP_URL_PATH)), '/');
+        if ($home !== '/' && ($path === $home || strpos($path, $home . '/') === 0)) {
+            $path = (string) substr($path, strlen($home));
+        }
+        return '/' . trim($path, '/');
+    }
+
+    /**
+     * Whether $id is one the plugin minted for $path (both device buckets) on any of the last fourteen UTC
+     * days, the age a stored copy of a page can reach. A report that names another id names no copy of this site.
+     */
+    function wpc_delay_render_id_valid($id, $path)
+    {
+        if (!is_string($id) || !preg_match('/^[a-f0-9]{12}$/', $id)) {
+            return false;
+        }
+        $path = substr((string) $path, 0, 120);
+        $exact = false;
+        for ($back = 0; $back < 14; $back++) {
+            $day = gmdate('Y-m-d', time() - $back * 86400);
+            foreach (['m', 'd'] as $device) {
+                if (hash_equals(wpc_delay_render_id($path, $device, $day), $id)) {
+                    return true;
+                }
+                $exact = $exact || hash_equals(wpc_delay_render_id($path, $device, $day, true), $id);
+            }
+        }
+        if ($exact) {
+            return wpc_delay_stamp_legacy_open();
+        }
+        return false;
     }
 
     /**
      * The path this page's reports name as `u`: the senders send location.pathname cut to 120
      * characters, so the render mints over the request path cut the same way. A stamp minted over
-     * any other spelling of the path would refuse every report the page sends.
+     * any other spelling of the path would refuse every report the page sends. The device check
+     * sends it cut to 300.
      */
-    function wpc_delay_report_page_path()
+    function wpc_delay_report_page_path($limit = 120)
     {
         $uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
         $path = explode('?', $uri, 2)[0];
-        return substr($path === '' ? '/' : $path, 0, 120);
+        return substr($path === '' ? '/' : $path, 0, (int) $limit);
     }
 }
 
@@ -5989,18 +8441,24 @@ if (!function_exists('wpc_repull_kick_now')) {
      * receive), the 6 h dead-key mark and the pressure back-off run first, so a duplicate never
      * spends an admission. A dropped kick costs nothing: the next render or beacon asks again.
      */
-    function wpc_kick_admit_ceiling()
+    function wpc_kick_admit_ceiling($lane = '')
     {
+        if ($lane === 'unsigned') {
+            return defined('WPC_KICK_ADMIT_UNSIGNED_PER_MINUTE') ? max(0, (int) WPC_KICK_ADMIT_UNSIGNED_PER_MINUTE) : 6;
+        }
+        if ($lane === 'proof') {
+            return defined('WPC_SITE_PAGE_PROOFS_PER_MINUTE') ? max(0, (int) WPC_SITE_PAGE_PROOFS_PER_MINUTE) : 30;
+        }
         return defined('WPC_KICK_ADMIT_PER_MINUTE') ? max(0, (int) WPC_KICK_ADMIT_PER_MINUTE) : 12;
     }
 
-    /** $create false: the path only, no directory made (a reader that must not write, the doctor). */
-    function wpc_kick_admit_counter_file($create = true)
+    /** $create false: the path only, no directory made (a reader that must not write, the doctor). $lane 'unsigned': the counter of the kicks no admission token signed; 'proof': the counter of the page proofs an anonymous beacon asked for (one per blog on a multisite). */
+    function wpc_kick_admit_counter_file($create = true, $lane = '')
     {
         if (!defined('WPS_IC_CRITICAL')) { return ''; }
         $dir = rtrim(WPS_IC_CRITICAL, '/') . '/.kicklocks/';
         if ($create && !is_dir($dir)) { @mkdir($dir, 0777, true); }
-        return (is_dir($dir) && is_writable($dir)) ? $dir . 'admit' : '';
+        return (is_dir($dir) && is_writable($dir)) ? $dir . ($lane === 'unsigned' ? 'admit_unsigned' : ($lane === 'proof' ? 'admit_proof' . (function_exists('is_multisite') && is_multisite() && function_exists('get_current_blog_id') ? '_' . (int) get_current_blog_id() : '') : 'admit')) : '';
     }
 
     /** The admission token a loopback carries, bound to its key and the current minute. */
@@ -6043,11 +8501,11 @@ if (!function_exists('wpc_repull_kick_now')) {
      * Take one admission from the site's rolling-minute counter: at most the ceiling in any 60 s,
      * counted back from now, not from the window's first admission. Fails closed.
      */
-    function wpc_kick_admit_take()
+    function wpc_kick_admit_take($lane = '')
     {
-        $ceiling = wpc_kick_admit_ceiling();
-        if ($ceiling === 0) { return true; }
-        $file = wpc_kick_admit_counter_file();
+        $ceiling = wpc_kick_admit_ceiling($lane);
+        if ($ceiling === 0) { return $lane !== 'unsigned' && $lane !== 'proof'; }
+        $file = wpc_kick_admit_counter_file(true, $lane);
         if ($file === '' || !function_exists('wpc_fs_update')) { return false; }
         list($written, $admitted) = wpc_fs_update($file, function ($current) use ($ceiling) {
             $times = wpc_kick_admit_window($current);
@@ -6059,13 +8517,122 @@ if (!function_exists('wpc_repull_kick_now')) {
     }
 
     /** How many admissions the rolling window has left now (diagnostics; takes nothing). */
-    function wpc_kick_admit_room()
+    function wpc_kick_admit_room($lane = '')
     {
-        $ceiling = wpc_kick_admit_ceiling();
-        if ($ceiling === 0) { return -1; }
-        $file = wpc_kick_admit_counter_file();
+        $ceiling = wpc_kick_admit_ceiling($lane);
+        if ($ceiling === 0) { return ($lane === 'unsigned' || $lane === 'proof') ? 0 : -1; }
+        $file = wpc_kick_admit_counter_file(true, $lane);
         $times = wpc_kick_admit_window($file !== '' ? @file_get_contents($file) : '');
         return max(0, $ceiling - count($times));
+    }
+
+    /** Whether the service has turned the beacon's page proof off for this site (cohort off_beacon_proof): the beacon then records any same-host page and kicks on the signed lane, as before the proof. */
+    function wpc_beacon_proof_off()
+    {
+        return function_exists('wpc_policy_cohort') && wpc_policy_cohort('off_beacon_proof') === 1;
+    }
+
+    /**
+     * Whether an address an anonymous beacon names is a page of the site, asked at most WPC_SITE_PAGE_PROOFS_PER_MINUTE times a rolling minute
+     * (default 30, 0 refuses every proof) and not again for an address refused in the last ten minutes. The proof is queries; the budget is
+     * taken before them, so an address refused here costs the site nothing a real page needs but a slot of this counter, and takes no
+     * admission of the kick lanes. A refused proof leaves one sampled receipt (proof-refused) a minute for each reason: the first of every reason always lands, and a flood of addresses cannot fill the log. The
+     * refusal is remembered by the address without its query (the query is not what the proof asks about), so variants of one address
+     * share a proof and a receipt.
+     */
+    function wpc_site_page_proven($pageUrl)
+    {
+        if (wpc_beacon_proof_off()) {
+            return true;
+        }
+        $refused = 'wpc_sp_no_' . md5(rtrim((string) strtok((string) $pageUrl, '?'), '/'));
+        if (get_transient($refused)) {
+            return false;
+        }
+        if (!wpc_kick_admit_take('proof')) {
+            wpc_proof_refused_note($pageUrl, 'budget', ['max' => wpc_kick_admit_ceiling('proof')]);
+            return false;
+        }
+        if (class_exists('wps_ic_url_key') && wps_ic_url_key::isSitePage($pageUrl)) {
+            return true;
+        }
+        wpc_proof_refused_note($pageUrl, class_exists('wps_ic_url_key') ? wps_ic_url_key::lastRefusal() : 'not-a-page');
+        set_transient($refused, 1, 600);
+        return false;
+    }
+
+    /**
+     * The receipt for an address the beacon's page proof refused: proof-refused {why, segs, h}. Nothing of the path is logged (it can carry a
+     * visitor: /unsubscribe/jo@example.com, a token, a phone number, an address, and no part of it can be told from a slug by its shape):
+     * segs is the number of path segments, h the first eight hex characters of an HMAC of the path keyed with the site's own salt, so the
+     * operator can match one address they suspect (the same code with the site's salt) and nobody else can confirm a guess from a log. No h
+     * is written on a site with no salt. One is written for a proof that ran and said no, once per reason a minute (not-a-page, date-shape, page-number, endpoint, budget …). It is what aims off_beacon_proof.
+     */
+    function wpc_proof_refused_note($pageUrl, $why, array $layers = [])
+    {
+        if (function_exists('wpc_cache_first_log')) {
+            $sample = 'wpc_proof_noted_' . md5((string) $why);
+            if (get_transient($sample)) {
+                return;
+            }
+            set_transient($sample, 1, 60);
+            $path = rtrim((string) parse_url((string) $pageUrl, PHP_URL_PATH), '/');
+            $segments = array_filter(explode('/', $path), function ($segment) { return $segment !== ''; });
+            $salt = function_exists('wp_salt') ? (string) wp_salt('auth') : '';
+            wpc_cache_first_log('proof-refused', '', '', ['why' => (string) $why, 'segs' => count($segments), 'h' => $salt === '' ? '' : substr(hash_hmac('sha256', $path, $salt), 0, 8)] + $layers);
+        }
+    }
+
+    /**
+     * Why the beacon does not take an address whatever it is: critical CSS is off for it (wpc_crit_generation_off: the page's own setting, the Critical CSS Exclusions list, or the site setting off with no page turning it on), or the
+     * Exclude from Plugin list names it, matched as the page cache matches its list (host and path, and the query) at the address with and
+     * without its trailing slash, which the beacon's address has lost. 'crit-off', 'excluded', or '' for neither. Asked before the page is looked up and before a record
+     * of it is read or written, so an excluded page's address is never recorded and a recorded one is not known for it.
+     */
+    function wpc_beacon_refused_by_settings($pageUrl, $pageKey)
+    {
+        if (function_exists('wpc_crit_generation_off') && wpc_crit_generation_off((string) $pageKey, (string) $pageUrl)) {
+            return 'crit-off';
+        }
+        $options = get_option('wpc-url-excludes');
+        $patterns = (is_array($options) && !empty($options['exclude-url-from-all']) && is_array($options['exclude-url-from-all'])) ? $options['exclude-url-from-all'] : [];
+        if ($patterns && class_exists('wps_ic_url_key')) {
+            $query = (string) parse_url((string) $pageUrl, PHP_URL_QUERY);
+            $address = (string) strtok((string) $pageUrl, '?');
+            foreach ([rtrim($address, '/'), rtrim($address, '/') . '/'] as $form) {
+                if (wps_ic_url_key::requestCacheExcludedBy($patterns, $form . ($query !== '' ? '?' . $query : '')) !== false) {
+                    return 'excluded';
+                }
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Whether $urlKey names a page this site holds a record of: the address its page copy or its
+     * crit folder keeps (url.txt, resolved to the site's own host), the home page, or a landed or
+     * stale-marked crit. A kick a browser or the drop-in sends is asked about this before it takes
+     * the background slot or an admission; a key anyone can type is not a page.
+     */
+    function wpc_kick_key_known($urlKey)
+    {
+        $urlKey = (string) $urlKey;
+        if ($urlKey === '' || $urlKey !== basename($urlKey) || strpos($urlKey, '..') !== false || strlen($urlKey) > 255) {
+            return false;
+        }
+        if (class_exists('wps_ic_url_key')) {
+            if ((string) wps_ic_url_key::getUrlFromKey($urlKey) !== '') {
+                return true;
+            }
+            if (function_exists('home_url') && ltrim((string) (new wps_ic_url_key())->setup(home_url('/')), '/') === $urlKey) {
+                return true;
+            }
+        }
+        if (!defined('WPS_IC_CRITICAL')) {
+            return false;
+        }
+        $critDir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
+        return @is_file($critDir . 'land_uuid.txt') || @is_file($critDir . 'stale.txt') || @filesize($critDir . 'critical_desktop.css') > 5;
     }
 
     /**
@@ -6106,6 +8673,12 @@ if (!function_exists('wpc_repull_kick_now')) {
             return ['signed' => true, 'name' => $named !== '' ? $named : 'loopback'];
         }
         return ['signed' => false, 'name' => $named === 'hit' ? 'hit' : 'beacon'];
+    }
+
+    /** The kick sources a visitor's browser starts without a token: they take their admission from the unsigned lane on the fire side too. */
+    function wpc_kick_visitor_sources()
+    {
+        return wpc_beacon_proof_off() ? [] : ['interaction'];
     }
 
     /**
@@ -6199,7 +8772,7 @@ if (!function_exists('wpc_repull_kick_now')) {
                     return false;
                 }
             }
-            if ($source !== 'loopback' && !wpc_kick_admit_take()) {
+            if ($source !== 'loopback' && !wpc_kick_admit_take(($receiving || in_array((string) $source, wpc_kick_visitor_sources(), true)) ? 'unsigned' : '')) {
                 if (!get_transient('wpc_kick_throttled_' . md5($source)) && function_exists('wpc_cache_first_log')) {
                     set_transient('wpc_kick_throttled_' . md5($source), 1, 60);
                     wpc_cache_first_log('kick-throttled', $urlKey, '', ['src' => substr((string) $source, 0, 20)]);
@@ -6533,6 +9106,19 @@ if (!function_exists('wpc_repull_kick_now')) {
     }
 
     /**
+     * A page whose crit render the service refused for its own stale input (`input_stale`, on the
+     * /generate answer and on /status): its saved copies are dropped, both devices, and the page is
+     * marked wanted, so the next visit saves it again. The one owner of that drop.
+     */
+    function wpc_gen_input_stale_drop($urlKey)
+    {
+        $urlKey = ltrim((string) $urlKey, '/');
+        if ($urlKey !== '' && function_exists('wpc_saved_page_drop')) {
+            wpc_saved_page_drop($urlKey, 'input-stale');
+        }
+    }
+
+    /**
      * What a /status answer says about the generation it was asked about ($uuid, dispatched for
      * $urlKey), in the service's own words since crit-push 3.198.293 (server.js /status):
      *   'superseded' a generation removed below the page's or the site's minimum epoch
@@ -6540,6 +9126,8 @@ if (!function_exists('wpc_repull_kick_now')) {
      *   'refused'    the dispatch was refused at admission (`blocked` + its refusal type, e.g.
      *                domain_capped, demand_deferred): it never made a generation;
      *   'not-found'  no row, no stamp, no files (`not_found`, reason `unknown_uuid` or `expired`);
+     *   'stale'      the service refused the render's own input (`failed` + `input_stale`): the page's
+     *                saved copies are dropped with it (wpc_gen_input_stale_drop);
      *   'failed'     the generation failed (`failed` + any other type, `abandoned` among them);
      *   ''           still rendering, landed, an answer that says none of these, or a gone answer
      *                about a dispatch of ours younger than a minute (below).
@@ -6567,6 +9155,8 @@ if (!function_exists('wpc_repull_kick_now')) {
             $gone = 'refused';
         } elseif ($status === 'not_found') {
             $gone = 'not-found';
+        } elseif ($status === 'failed' && ($statusJson['error_type'] ?? '') === 'input_stale') {
+            $gone = 'stale';
         } elseif ($status === 'failed') {
             $gone = 'failed';
         } else {
@@ -6584,8 +9174,8 @@ if (!function_exists('wpc_repull_kick_now')) {
 
     /**
      * Forget a generation of ours the service answered as gone ($gone from wpc_gen_status_gone),
-     * everywhere this site holds it: the pending set (superseded and refused leave it uncounted:
-     * neither is a generation that failed to land; not-found and failed count toward the park),
+     * everywhere this site holds it: the pending set (superseded, refused and stale leave it uncounted:
+     * none is a generation that failed to land; not-found and failed count toward the park),
      * the uuid transient and uuid.txt when they still name it. Nothing
      * polls it again and nothing is sent for it here: the page's next real visit asks afresh.
      * True when this call dropped it, so the caller writes its receipt once. uuid.txt left in
@@ -6612,7 +9202,10 @@ if (!function_exists('wpc_repull_kick_now')) {
                 $dropped = true;
             }
         }
-        if ($gone === 'superseded' || $gone === 'refused') {
+        if ($gone === 'stale') {
+            wpc_gen_input_stale_drop($urlKey);
+        }
+        if ($gone === 'superseded' || $gone === 'refused' || $gone === 'stale') {
             wpc_gen_pending_forget($urlKey, $uuid);
         } else {
             wpc_gen_pending_terminal($urlKey, $uuid);
@@ -6715,7 +9308,7 @@ if (!function_exists('wpc_repull_kick_now')) {
      */
     function wpc_render_kick_skipped_note($urlKey, $marker)
     {
-        if (!function_exists('wpc_cache_first_log')) {
+        if (!function_exists('wpc_cache_first_log') || (string) $marker === 'lever') {
             return;
         }
         $sample = 'wpc_render_kick_skipped_' . md5((string) $urlKey);
@@ -6786,7 +9379,7 @@ if (!function_exists('wpc_repull_kick_now')) {
                     . (function_exists('wpc_gen_human_evidence') && wpc_gen_human_evidence($urlKey) ? '&human=1' : '');
                 if (function_exists('wp_remote_get') && function_exists('admin_url')) {
                     wp_remote_get(admin_url('admin-ajax.php') . $kickQuery,
-                        ['blocking' => false, 'timeout' => 2, 'headers' => ['X-WPC-Cache-Warm' => '1']]);
+                        ['blocking' => false, 'timeout' => 2, 'headers' => ['X-WPC-Cache-Warm' => wpc_warm_header_for(admin_url('admin-ajax.php'))]]);
                 }
                 if (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'wpc_loopback_open_socket')
                     && function_exists('admin_url')) {
@@ -6797,7 +9390,7 @@ if (!function_exists('wpc_repull_kick_now')) {
                         if ($fp) {
                             $ajaxPath = (isset($ajaxUrlParts['path']) ? $ajaxUrlParts['path'] : '/wp-admin/admin-ajax.php') . $kickQuery;
                             fwrite($fp, "GET " . $ajaxPath . " HTTP/1.1\r\nHost: " . $ajaxUrlParts['host']
-                                . "\r\nX-WPC-Cache-Warm: 1\r\nConnection: Close\r\n\r\n");
+                                . "\r\nX-WPC-Cache-Warm: " . wpc_warm_header_for(admin_url('admin-ajax.php')) . "\r\nConnection: Close\r\n\r\n");
                             fclose($fp);
                         }
                     }
@@ -7016,6 +9609,11 @@ if (!function_exists('wpc_repull_kick_now')) {
     function wpc_repull_kick_receiver()
     {
         try {
+            $askedKey = isset($_GET['k']) ? sanitize_text_field((string) $_GET['k']) : '';
+            if ($askedKey === '' || (!wpc_kick_received_source($askedKey)['signed']
+                && (!wpc_kick_key_known($askedKey) || wpc_kick_admit_room('unsigned') < 1))) {
+                wp_die('', '', ['response' => 200]);
+            }
             // v7.21.360 — REGENERATION IS NEVER WORTH A SLOW SITE. This lane holds a PHP
             // worker while it self-fetches ?criticalCombine= renders (rosariospadaro
             // receipt: one kick ran 15,185ms with 14,066ms of it in outbound HTTP, on a
@@ -7111,16 +9709,23 @@ if (!function_exists('wpc_repull_kick_now')) {
                 }
                 if ($wpc_cm > 0 && $wpc_newv > 0 && $wpc_cm > $wpc_newv
                     && apply_filters('wpc_stale_public_heal', true)) {
-                    if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeCacheFiles')) {
-                        wps_ic_cache_integrations::purgeCacheFiles($k);
-                    }
-                    $wpc_su = (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'getUrlFromKey'))
-                        ? (string) wps_ic_url_key::getUrlFromKey($k) : '';
-                    if ($wpc_su !== '' && class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'removeStaticMirror')) {
-                        wps_cacheHtml::removeStaticMirror($wpc_su);
-                    }
-                    if (function_exists('wpc_cache_first_log')) {
-                        wpc_cache_first_log('stale-purge', $k, $wpc_su, ['crit_m' => $wpc_cm, 'cache_m' => $wpc_newv]);
+                    $wpc_p2 = function_exists('wpc_p2_land_page') ? wpc_p2_land_page($k, '', 'land-stale-public', true) : '';
+                    if ($wpc_p2 !== '') {
+                        if (function_exists('wpc_cache_first_log')) {
+                            wpc_cache_first_log('stale-public-kept', $k, '', ['crit_m' => $wpc_cm, 'cache_m' => $wpc_newv, 'p2' => $wpc_p2]);
+                        }
+                    } else {
+                        if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeCacheFiles')) {
+                            wps_ic_cache_integrations::purgeCacheFiles($k);
+                        }
+                        $wpc_su = (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'getUrlFromKey'))
+                            ? (string) wps_ic_url_key::getUrlFromKey($k) : '';
+                        if ($wpc_su !== '' && class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'removeStaticMirror')) {
+                            wps_cacheHtml::removeStaticMirror($wpc_su);
+                        }
+                        if (function_exists('wpc_cache_first_log')) {
+                            wpc_cache_first_log('stale-purge', $k, $wpc_su, ['crit_m' => $wpc_cm, 'cache_m' => $wpc_newv]);
+                        }
                     }
                 }
                 if (function_exists('wpc_wire_catchup')) {
@@ -7247,44 +9852,74 @@ if (!function_exists('wpc_gen_dispatch')) {
      */
 
     /**
-     * TRUE when critical CSS is off for $urlKey: the site setting is off and no page's own setting
-     * turns it on for that key. With no key, TRUE only when no page turns it on either.
+     * TRUE when critical CSS is off for $urlKey: the page's own setting is off, the page matches the
+     * Critical CSS Exclusions list (a substring of its host and path, the test a render makes), or the
+     * site setting is off and no page's own setting turns it on for that key. $pageUrl is the address
+     * when the caller has it; without it the address is read from the key's record. With no key, TRUE
+     * only when the site setting is off and no page turns it on either.
      * The dispatch door asks this for every caller, a click included: with the setting off, Remove
      * Critical on a test site still sent two forced generations and landed crit on disk, because
      * the consume check before the door stands aside for forced and admin requests.
      */
-    function wpc_crit_generation_off($urlKey = '')
+    function wpc_crit_generation_off($urlKey = '', $pageUrl = '')
     {
         $settings = get_option(WPS_IC_SETTINGS);
-        if (is_array($settings) && isset($settings['critical']['css']) && (string) $settings['critical']['css'] === '1') {
-            return false;
-        }
+        $siteOn = is_array($settings) && isset($settings['critical']['css']) && (string) $settings['critical']['css'] === '1';
         $excludes = get_option('wpc-excludes');
-        $pagesOn = [];
+        $pagesSet = [];
         if (is_array($excludes) && !empty($excludes['page_excludes']) && is_array($excludes['page_excludes'])) {
             foreach ($excludes['page_excludes'] as $pageId => $pageExcludes) {
-                if (is_array($pageExcludes) && isset($pageExcludes['critical_css']) && (string) $pageExcludes['critical_css'] === '1') {
-                    $pagesOn[] = $pageId;
+                if (is_array($pageExcludes) && isset($pageExcludes['critical_css']) && in_array((string) $pageExcludes['critical_css'], ['0', '1'], true)) {
+                    $pagesSet[$pageId] = (string) $pageExcludes['critical_css'];
                 }
             }
         }
-        if ($pagesOn === []) {
-            return true;
-        }
         $urlKey = ltrim((string) $urlKey, '/');
         if ($urlKey === '') {
-            return false;
+            return $siteOn ? false : !in_array('1', $pagesSet, true);
         }
-        if (!class_exists('wps_ic_url_key')) {
-            return false;
-        }
-        foreach ($pagesOn as $pageId) {
-            $pageUrl = ((string) $pageId === 'home') ? home_url('/') : (function_exists('get_permalink') ? (string) get_permalink((int) $pageId) : '');
-            if ($pageUrl !== '' && ltrim((string) (new wps_ic_url_key())->setup($pageUrl), '/') === $urlKey) {
-                return false;
+        $keys = class_exists('wps_ic_url_key') ? new wps_ic_url_key() : null;
+        $pageValue = null;
+        if ($pagesSet && $keys !== null) {
+            foreach ($pagesSet as $pageId => $value) {
+                $permalink = ((string) $pageId === 'home') ? home_url('/') : (function_exists('get_permalink') ? (string) get_permalink((int) $pageId) : '');
+                if ($permalink !== '' && ltrim((string) $keys->keyFor($permalink), '/') === $urlKey) {
+                    $pageValue = $value;
+                    break;
+                }
             }
         }
-        return true;
+        if ($pageValue === '0') {
+            return true;
+        }
+        $patterns = (is_array($excludes) && !empty($excludes['critical_css']) && is_array($excludes['critical_css'])) ? $excludes['critical_css'] : [];
+        if ($patterns && $keys !== null) {
+            $address = (string) $pageUrl;
+            if ($address === '') {
+                $address = (string) wps_ic_url_key::getUrlFromKey($urlKey);
+            }
+            if ($address === '' && function_exists('home_url') && ltrim((string) $keys->keyFor(home_url('/')), '/') === $urlKey) {
+                $address = home_url('/');
+            }
+            $address = (string) preg_replace('#^https?://#i', '', $address);
+            if ($address !== '') {
+                foreach ($patterns as $pattern) {
+                    if (is_string($pattern) && $pattern !== '' && strpos($address, $pattern) !== false) {
+                        return true;
+                    }
+                }
+            }
+        }
+        if ($siteOn) {
+            return false;
+        }
+        if (!in_array('1', $pagesSet, true)) {
+            return true;
+        }
+        if ($keys === null) {
+            return false;
+        }
+        return $pageValue !== '1';
     }
 
     /** 'human' when this request declared a person's intent; 'automatic' otherwise. */
@@ -7315,7 +9950,7 @@ if (!function_exists('wpc_gen_dispatch')) {
         if ($action === 'wpc_repull_kick') {
             return 'kick';
         }
-        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+        if (wpc_warm_request()) {
             return 'warm';
         }
         if (function_exists('wp_doing_ajax') && wp_doing_ajax()) {
@@ -7389,6 +10024,28 @@ if (!function_exists('wpc_gen_dispatch')) {
     }
 
     /**
+     * Adds 'home' => 1 to a dispatch body when $urlKey is the site's front page (wpc_gen_service_is_home_key,
+     * the one home resolver: the static front page, else the site's home, a subdirectory install's
+     * included), and takes it off every other body. A dispatch whose host is not the site's home host
+     * writes the receipt gen-dispatch-host {host, home, twin}; twin is 1 when the two hosts differ only
+     * by www. Nothing is refused.
+     */
+    function wpc_gen_dispatch_home_fields(array $args, $urlKey)
+    {
+        unset($args['home']);
+        if ((string) $urlKey !== '' && wpc_gen_service_is_home_key($urlKey)) {
+            $args['home'] = 1;
+        }
+        $host = strtolower((string) parse_url(isset($args['url']) ? (string) $args['url'] : '', PHP_URL_HOST));
+        $homeHost = strtolower((string) parse_url(function_exists('home_url') ? (string) home_url('/') : '', PHP_URL_HOST));
+        if ($host !== '' && $homeHost !== '' && $host !== $homeHost && function_exists('wpc_cache_first_log')) {
+            $fold = function ($h) { return strpos($h, 'www.') === 0 ? substr($h, 4) : $h; };
+            wpc_cache_first_log('gen-dispatch-host', (string) $urlKey, '', ['host' => $host, 'home' => $homeHost, 'twin' => $fold($host) === $fold($homeHost) ? 1 : 0]);
+        }
+        return $args;
+    }
+
+    /**
      * The URL of one of the service's read routes for $urlKey ('/status', '/v2/latest'), carrying
      * the same removal epochs a dispatch carries (wpc_gen_dispatch_epoch_fields: present only
      * when above 0), and the site's apikey: the service stores a carried epoch only from a read
@@ -7404,6 +10061,9 @@ if (!function_exists('wpc_gen_dispatch')) {
             }
         }
         $query = wpc_gen_dispatch_epoch_fields($query, (string) $urlKey);
+        if ((string) $route === '/v2/latest' && !isset($query['cap']) && function_exists('wpc_signed_artifacts_on') && wpc_signed_artifacts_on()) {
+            $query['cap'] = 'sa1';
+        }
         return str_replace('/generate', (string) $route, WPS_IC_CRITICAL_API_URL) . '?' . http_build_query($query);
     }
 
@@ -7798,6 +10458,9 @@ if (!function_exists('wpc_gen_dispatch')) {
                         continue;
                     }
                     unset($args[$shed]);
+                    if ($shed === 'html_mobile') {
+                        unset($args['corpus_id_mobile']);
+                    }
                 }
                 $gzipped = gzencode(wp_json_encode($args));
                 if ($gzipped !== false && strlen($gzipped) < 10 * 1024 * 1024) {
@@ -7828,7 +10491,9 @@ if (!function_exists('wpc_gen_dispatch')) {
      *
      * A body without the page ('html') is never sent, whoever asks: 'no-page'; nor one for a URL
      * that is not a front-end page (wpc_url_is_low_value): 'not-a-page'. The URL goes
-     * without the push parameters, and 'via' names the path that asked.
+     * without the push parameters, and 'via' names the path that asked. The body carries
+     * 'served_head', the sizes of the head of the copy the page is served now
+     * (wpc_served_head_for_dispatch), and leaves it out when no copy has a record.
      *
      * Returns ['sent', 'refused', 'uuid', 'class', 'response', 'body', 'answer']; 'built' is true
      * when the body was built and then refused.
@@ -7910,7 +10575,8 @@ if (!function_exists('wpc_gen_dispatch')) {
             }
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('gen-dispatch-refused', $urlKey, '', ['why' => $unbuilt, 'path' => $via, 'class' => $result['class'],
-                    'css' => empty($args['css']) ? 0 : 1, 'scope' => is_array($held) ? $held['scope'] : '', 'type' => is_array($held) ? $held['type'] : '']);
+                    'css' => empty($args['css']) ? 0 : 1, 'scope' => is_array($held) ? $held['scope'] : '', 'type' => is_array($held) ? $held['type'] : '']
+                    + ($unbuilt === 'no-page' && function_exists('wpc_saved_page_absent_why') ? ['saved' => wpc_saved_page_absent_why($urlKey)] : []));
             }
             if ($unbuilt === 'no-page' && function_exists('wpc_saved_page_wanted')) {
                 wpc_saved_page_wanted($urlKey);
@@ -7932,6 +10598,12 @@ if (!function_exists('wpc_gen_dispatch')) {
             $args['force'] = $force;
         }
         $args = wpc_gen_dispatch_epoch_fields($args, $urlKey);
+        $args = wpc_gen_dispatch_home_fields($args, $urlKey);
+        unset($args['served_head']);
+        $servedHead = function_exists('wpc_served_head_for_dispatch') ? wpc_served_head_for_dispatch($urlKey) : null;
+        if ($servedHead !== null) {
+            $args['served_head'] = $servedHead;
+        }
 
         $response = wpc_gen_post($args, $request);
         $body = (string) wp_remote_retrieve_body($response);
@@ -7945,6 +10617,7 @@ if (!function_exists('wpc_gen_dispatch')) {
                 'force' => $force !== '' ? 1 : 0,
                 'epoch' => isset($args['epoch']) ? (int) $args['epoch'] : 0,
                 'page_epoch' => isset($args['page_epoch']) ? (int) $args['page_epoch'] : 0,
+                'home'  => isset($args['home']) ? 1 : 0,
                 'code'  => is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response),
                 'len'   => strlen($body),
                 'head'  => substr($body, 0, 60),
@@ -8085,6 +10758,7 @@ if (!function_exists('wpc_gen_dispatch')) {
      *   429 render_pending                           → ours, still rendering: owed a land
      *   4xx / 5xx naming an error_type               → the hold its hold_scope names, any class
      *   429 / 5xx                                    → today's per-key retry, collect, back-off
+     *   error_type input_stale                       → the page's saved copies are dropped (wpc_saved_page_drop)
      */
     function wpc_gen_answer($urlKey, $uuid, $response, $body, $class, $blocking)
     {
@@ -8167,6 +10841,9 @@ if (!function_exists('wpc_gen_dispatch')) {
             wpc_cache_first_log('gen-answer', $urlKey, '', ['uuid' => substr((string) $uuid, 0, 8),
                 'served' => $answer['served'], 'crit_uuid' => substr($answer['crit_uuid'], 0, 8), 'code' => $code,
                 'epoch' => $answer['epoch'], 'epoch_min' => $answer['epoch_min']]);
+        }
+        if ($answer['error_type'] === 'input_stale') {
+            wpc_gen_input_stale_drop($urlKey);
         }
 
         // UNREACHABLE backend (connect/DNS/SSL WP_Error — NOT a timeout) or a real 5xx backs off
@@ -8293,6 +10970,9 @@ if (!function_exists('wpc_crit_self_arm_watchdog')) {
     function wpc_watchdog_request_excluded()
     {
         if ((function_exists('wp_doing_ajax') && wp_doing_ajax()) || (defined('DOING_AJAX') && DOING_AJAX)) {
+            return true;
+        }
+        if (function_exists('wpc_lever_test_active') && wpc_lever_test_active()) {
             return true;
         }
         if ((function_exists('wp_doing_cron') && wp_doing_cron()) || (defined('DOING_CRON') && DOING_CRON)) {
@@ -8458,6 +11138,40 @@ if (!function_exists('wpc_crit_self_arm_watchdog')) {
 }
 
 
+if (!function_exists('wpc_crit_purge_stale_home')) {
+    /** True while the soft-purged homepage has no dispatch since the purge; its stale mark is kept and no pre-purge crit is re-landed. Filter wpc_purge_stale_home_keep false disables. */
+    function wpc_crit_purge_stale_home($urlKey)
+    {
+        try {
+            $urlKey = ltrim((string) $urlKey, '/');
+            if ($urlKey === '' || !defined('WPS_IC_CRITICAL') || !function_exists('home_url') || !class_exists('wps_ic_url_key')
+                || !apply_filters('wpc_purge_stale_home_keep', true)) {
+                return false;
+            }
+            $purgedAt = (int) get_option('wpc_crit_soft_purge_at', 0);
+            if ($purgedAt <= 0 || (time() - $purgedAt) > 6 * 3600) {
+                return false;
+            }
+            if (ltrim((string) (new wps_ic_url_key())->setup(home_url('/')), '/') !== $urlKey) {
+                return false;
+            }
+            $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
+            if ((int) trim((string) @file_get_contents($dir . 'stale.txt')) < $purgedAt) {
+                return false;
+            }
+            if ((int) trim((string) @file_get_contents($dir . 'dispatch_ts.txt')) >= $purgedAt) {
+                return false;
+            }
+            if (function_exists('wpc_belt_receipt')) {
+                wpc_belt_receipt('purge-stale-kept', ['purged_at' => $purgedAt], true, $urlKey);
+            }
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+}
+
 // ─── Crit ≤60s land contract (v7.10.320): dispatch-owned collector + publish webhook ───
 if (!function_exists('wpc_crit_collect_now')) {
     /**
@@ -8478,6 +11192,9 @@ if (!function_exists('wpc_crit_collect_now')) {
             }
             if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
                 return false; // scheduled probes keep trying; never add load to a hot box
+            }
+            if (wpc_crit_purge_stale_home($urlKey)) {
+                return false;
             }
             $lk = 'wpc_collect_' . md5((string) $urlKey);
             if (get_transient($lk)) {
@@ -8717,6 +11434,9 @@ if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
             if (!apply_filters('wpc_ttfb_static_serve_auto', true) || get_option('wpc_ttfb_ss_optout')) {
                 return false;
             }
+            if (function_exists('wpc_page_cache_blocked') && wpc_page_cache_blocked()) {
+                return false;
+            }
             // Only evaluate in an HTTP context (loopback cron / admin-ajax kick): a WP-CLI
             // system-cron run has no SERVER_SOFTWARE, so isApache() would false-negative and
             // POISON the backoff on a genuinely Apache host. Skip cleanly — no state touched
@@ -8752,7 +11472,8 @@ if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
             $dir = defined('WPS_IC_CRITICAL') ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/' : '';
             $fixable = $dir !== '' ? wpc_ttfb_read_ceiling_cap($dir) : 0;
             $min = (int) apply_filters('wpc_ttfb_static_serve_min_ms', 300);
-            if ($fixable < $min) {
+            $byPhase = $fixable < $min;
+            if ($byPhase && !(function_exists('wpc_cache_phase_on') && wpc_cache_phase_on('p4'))) {
                 return false; // no meaningful recoverable TTFB — leave the host alone
             }
 
@@ -8775,8 +11496,11 @@ if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
             $res = method_exists($h, 'applyStaticServe') ? $h->applyStaticServe() : ['ok' => false, 'reason' => 'no-method'];
             if (!empty($res['ok'])) {
                 wpc_ttfb_ss_backoff_clear();
+                if ($byPhase) {
+                    update_option('wpc_ss_p4_armed', 1, false);
+                }
                 if (function_exists('wpc_cache_first_log')) {
-                    wpc_cache_first_log('ttfb-static-serve-armed', (string) $urlKey, '', ['fixable_ms' => $fixable]);
+                    wpc_cache_first_log('ttfb-static-serve-armed', (string) $urlKey, '', ['fixable_ms' => $fixable, 'phase' => $byPhase ? 'p4' : '']);
                 }
                 if (function_exists('wpc_auto_journal')) {
                     wpc_auto_journal('ttfb-static-serve', ['armed' => 1, 'fixable_ms' => $fixable]);
@@ -8792,6 +11516,43 @@ if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
                     ['reason' => (string) ($res['reason'] ?? '?'), 'fixable_ms' => $fixable]);
             }
             return false;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * The policy flag cache_p4 changed (the ingest calls this with the new state). On: the live
+     * static-serve rules take the drop-in's cookie conditions. Off: a mirror this phase armed on a
+     * site that never asked for it and whose TTFB would not have armed it is taken down (the pages
+     * go back to the PHP serve), and the rules of a mirror that stays go back to the older cookie
+     * conditions. A mirror a person switched on, or the TTFB arm made, stays.
+     */
+    function wpc_cache_p4_sync($on)
+    {
+        try {
+            if (!class_exists('wps_ic_htaccess') && defined('WPS_IC_DIR') && is_readable(WPS_IC_DIR . 'classes/htaccess.class.php')) {
+                @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+            }
+            if (!class_exists('wps_ic_htaccess')) {
+                return false;
+            }
+            $h = new wps_ic_htaccess();
+            if (!$on && get_option('wpc_ss_p4_armed')) {
+                delete_option('wpc_ss_p4_armed');
+                $set = get_option(WPS_IC_SETTINGS);
+                if (!(is_array($set) && !empty($set['static-serve']) && $set['static-serve'] == '1')) {
+                    if (method_exists($h, 'isApache')) {
+                        $h->isApache();
+                    }
+                    $h->removeStaticServe();
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('static-serve-p4-removed', '', '', []);
+                    }
+                    return true;
+                }
+            }
+            return method_exists($h, 'refreshStaticServeBlock') ? $h->refreshStaticServeBlock() : false;
         } catch (\Throwable $e) {
             return false;
         }
@@ -8832,7 +11593,7 @@ if (!function_exists('wpc_crit_kick_collect')) {
 
 if (!function_exists('wpc_crit_purge_redispatch')) {
     /** B1: the crit purge itself owns the homepage regen — detached, ungated on cache mode. */
-    function wpc_crit_purge_redispatch($sync = false)
+    function wpc_crit_purge_redispatch($sync = false, $onGeneration = null)
     {
         try {
             if (!class_exists('wps_criticalCss') || !class_exists('wps_ic_url_key') || !function_exists('home_url')) {
@@ -8872,7 +11633,7 @@ if (!function_exists('wpc_crit_purge_redispatch')) {
             if (!function_exists('fastcgi_finish_request') && !function_exists('litespeed_finish_request')) {
                 return;
             }
-            register_shutdown_function(function () use ($k, $sync) {
+            register_shutdown_function(function () use ($k, $sync, $onGeneration) {
                 try {
                     if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
                         wpc_finish_request();
@@ -8887,10 +11648,14 @@ if (!function_exists('wpc_crit_purge_redispatch')) {
                     add_filter('wpc_gen_dispatch_timeout', function () use ($sync) { return $sync ? 20 : 8; });
                     $_GET['forceCritical'] = '1'; // human-initiated: the kick-path guards stand down
                     $c = new wps_criticalCss(home_url('/'));
+                    $generation = null;
                     if (method_exists($c, 'generateCriticalAjax')) {
-                        wpc_gen_as_human('purge-redispatch', function () use ($c, $sync) {
-                            $c->generateCriticalAjax((bool) $sync); // Pull Latest → fresh, tpl-cache-busting gen
+                        wpc_gen_as_human('purge-redispatch', function () use ($c, $sync, &$generation) {
+                            $generation = $c->generateCriticalAjax((bool) $sync); // Pull Latest → fresh, tpl-cache-busting gen
                         });
+                    }
+                    if (is_callable($onGeneration)) {
+                        call_user_func($onGeneration, $generation);
                     }
                     if (function_exists('wpc_crit_collect_now')) {
                         wpc_crit_collect_now($k, 1);
@@ -9021,6 +11786,17 @@ if (!function_exists('wpc_crit_webhook_rx')) {
                 echo 'x';
                 exit;
             }
+            if (!wpc_crit_key_binds($ukey, [$url], (new wps_ic_url_key())->setup((string) strtok($url, '?')))) {
+                $keyEnforced = function_exists('wpc_policy_cohort') && wpc_policy_cohort('sig_enforce') === 1 && wpc_policy_cohort('off_sig_403') !== 1;
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('callback-key-mismatch', '', (string) strtok($url, '?'), ['signed_canon' => (string) wpc_crit_canonical_key($ukey), 'page_canon' => (string) wpc_crit_canonical_key($url), 'uuid' => substr($uuid, 0, 8), 'enforced' => (int) $keyEnforced]);
+                }
+                if ($keyEnforced) {
+                    status_header(403);
+                    echo 'x';
+                    exit;
+                }
+            }
             if ($evt === 'prescriptions_updated') {
                 // SIGNAL-ONLY (body URLs untrusted): schedule the pull; it re-derives
                 // through the validated /v2/latest + prescriptions_url.txt path. Own
@@ -9084,7 +11860,9 @@ if (!function_exists('wpc_crit_webhook_rx')) {
             }
             $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $k . '/';
             if (!is_dir($dir) && function_exists('wp_mkdir_p')) { @wp_mkdir_p($dir); }
-            wpc_crit_meta_write($dir . 'uuid.txt', $uuid);
+            if (!wpc_crit_purge_stale_home($k)) {
+                wpc_crit_meta_write($dir . 'uuid.txt', $uuid);
+            }
             // crit_published carries exactly {event, uuid, url, url_key, ts, sig,
             // gen_dispatch_received_ts, artifacts{mobile,desktop,combined}} (crit-push
             // server.js:17147-17156). There are no inline artifact bodies on this webhook and
@@ -9112,6 +11890,9 @@ if (!function_exists('wpc_crit_webhook_rx')) {
                 $cc = new wps_criticalCss();
                 $landed = (bool) $cc->pullDerivedArtifacts($k, $uuid, true, 0,
                     ['via' => 'webhook', 'epoch' => (is_array($j) && isset($j['epoch'])) ? $j['epoch'] : null]);
+                if ($landed) {
+                    wpc_land_url_key_note($k, $ukey, $uuid);
+                }
                 if ($landed && function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('whk-landed', $k, '', ['uuid' => substr($uuid, 0, 8)]);
                 }
@@ -9213,6 +11994,204 @@ if (!function_exists('wpc_detach_request_or_schedule_cron')) {
         }
         return false;
     }
+    function wpc_used_css_url_obs($url)
+    {
+        return preg_match('/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.used(?:-mobile|-desktop)?\.css$/i', (string) strtok(trim((string) $url), '?'), $m) ? strtolower($m[1]) : '';
+    }
+    function wpc_used_css_obs_ahead($ownObs, $storeObs, $offeredObs)
+    {
+        if ((string) $offeredObs === '') {
+            return false;
+        }
+        return (string) $storeObs === '' || (string) $ownObs === '' || (string) $storeObs === (string) $ownObs;
+    }
+    function wpc_used_css_sibling_holds($tplKey, $device, $url)
+    {
+        $path = wpc_used_css_path($tplKey, $device);
+        $offered = wpc_used_css_url_obs($url);
+        if ($path === '' || $offered === '' || !@is_readable($path) || (int) @filesize($path) <= 5 || !function_exists('wpc_used_css_obs_recall')) {
+            return false;
+        }
+        $held = wpc_used_css_obs_recall($tplKey, $device);
+        return $held['obs'] !== '' && $held['obs'] !== $offered && !wpc_used_css_obs_ahead($offered, $held['obs'], $offered);
+    }
+    function wpc_used_css_fresh_marker($dir)
+    {
+        $file = rtrim((string) $dir, '/') . '/repull_force.txt';
+        if (!@is_file($file) || (time() - (int) @filemtime($file)) > (int) apply_filters('wpc_repull_force_ttl', 6 * HOUR_IN_SECONDS)) {
+            return ['', '', null, [], ''];
+        }
+        $parts = explode("\n", trim((string) @file_get_contents($file)), 3);
+        $sig = trim($parts[0]);
+        $held = isset($parts[2]) ? json_decode(trim($parts[2]), true) : null;
+        $store = (is_array($held) && isset($held['store']) && is_array($held['store'])) ? $held['store'] : null;
+        $urls = (is_array($held) && isset($held['urls']) && is_array($held['urls'])) ? $held['urls'] : [];
+        $tpl = (is_array($held) && isset($held['tpl']) && is_string($held['tpl'])) ? $held['tpl'] : '';
+        return [$sig, strpos($sig, '|') !== false ? strtolower((string) strtok($sig, '|')) : '', $store, $urls, $tpl];
+    }
+    function wpc_reland_marker_parts($raw)
+    {
+        $parts = explode("\n", trim((string) $raw), 3);
+        $map = isset($parts[1]) ? json_decode(trim($parts[1]), true) : [];
+        return [trim($parts[0]), is_array($map) ? $map : []];
+    }
+    function wpc_reland_held($dir, $signature, $shaMap)
+    {
+        $dir = rtrim((string) $dir, '/') . '/';
+        $bar = strpos((string) $signature, '|');
+        if ($bar === false || !is_array($shaMap) || !function_exists('wpc_used_css_obs_recall') || !function_exists('wpc_used_css_path')) {
+            return '';
+        }
+        $obs = strtolower(substr($signature, 0, $bar));
+        if (!preg_match('/^[0-9a-f-]{8,64}$/', $obs) || substr($signature, $bar + 1) !== md5((string) json_encode($shaMap))) {
+            return '';
+        }
+        $tpl = '';
+        foreach (['tpl.txt', 'used_tpl.txt'] as $tplFile) {
+            $fromDir = trim((string) @file_get_contents($dir . $tplFile));
+            if ($fromDir !== '' && wpc_used_css_key_valid($fromDir)) { $tpl = $fromDir; break; }
+        }
+        if ($tpl === '') {
+            return '';
+        }
+        $inPlay = 0;
+        $pagesHold = true;
+        foreach (['' => ['.used.rest.css', 'used_css_url.txt'], 'mobile' => ['.used-mobile.rest.css', 'used_css_mobile_url.txt'], 'desktop' => ['.used-desktop.rest.css', 'used_css_desktop_url.txt']] as $device => $spec) {
+            $path = wpc_used_css_path($tpl, $device);
+            $storeHas = $path !== '' && @is_readable($path) && (int) @filesize($path) > 5;
+            $pageUrl = trim((string) @file_get_contents($dir . $spec[1]));
+            if (!$storeHas && $pageUrl === '') {
+                continue;
+            }
+            $inPlay++;
+            if (!$storeHas) {
+                return '';
+            }
+            $held = wpc_used_css_obs_recall($tpl, $device);
+            if ($held['obs'] !== $obs) {
+                return '';
+            }
+            $name = $obs . $spec[0];
+            if (isset($shaMap[$name]) && is_string($shaMap[$name]) && preg_match('/^[0-9a-f]{64}$/i', $shaMap[$name]) && strtolower($shaMap[$name]) !== $held['sha']) {
+                return '';
+            }
+            if ($pageUrl === '' || !preg_match('/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.used(?:-mobile|-desktop)?\.css$/i', (string) strtok($pageUrl, '?'), $pageMatch) || strtolower($pageMatch[1]) !== $obs) {
+                $pagesHold = false;
+            }
+        }
+        if ($inPlay === 0) {
+            return '';
+        }
+        return $pagesHold ? 'done' : 'store';
+    }
+    function wpc_pointer_obs_reland($urlKey, $dir, $pointer)
+    {
+        $urlKey = ltrim((string) $urlKey, '/');
+        $dir = rtrim((string) $dir, '/') . '/';
+        if (wpc_crit_purge_stale_home($urlKey)) {
+            return false;
+        }
+        $obs = (is_array($pointer) && isset($pointer['obs']) && is_string($pointer['obs'])) ? strtolower($pointer['obs']) : '';
+        if ($urlKey === '' || !preg_match('/^[0-9a-f-]{8,64}$/', $obs)
+            || !function_exists('wpc_used_css_obs_recall') || !function_exists('wpc_used_css_url_recall')
+            || !function_exists('wpc_crit_used_css_setting_on') || !wpc_crit_used_css_setting_on()) {
+            return false;
+        }
+        $tpl = '';
+        foreach (['used_tpl.txt', 'tpl.txt'] as $tplFile) {
+            $fromDir = trim((string) @file_get_contents($dir . $tplFile));
+            if ($fromDir !== '' && wpc_used_css_key_valid($fromDir)) { $tpl = $fromDir; break; }
+        }
+        $shaMap = (isset($pointer['sha']) && is_array($pointer['sha'])) ? $pointer['sha'] : [];
+        $suffixes = ['' => '.used.rest.css', 'mobile' => '.used-mobile.rest.css', 'desktop' => '.used-desktop.rest.css'];
+        $why = '';
+        $storeObs = [];
+        $storeSha = [];
+        if ($tpl !== '') {
+            foreach ($suffixes as $device => $suffix) {
+                $path = wpc_used_css_path($tpl, $device);
+                $heldUrl = wpc_used_css_url_recall($tpl, $device);
+                if ($path === '' || !@is_readable($path) || (int) @filesize($path) <= 5 || $heldUrl === '') {
+                    continue;
+                }
+                $held = wpc_used_css_obs_recall($tpl, $device);
+                if ($held['obs'] === '') {
+                    if (function_exists('wpc_used_css_obs_remember') && function_exists('wpc_used_css_url_verified') && wpc_used_css_url_verified($tpl, $device)
+                        && preg_match('/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.used(?:-mobile|-desktop)?\.css$/i', (string) strtok($heldUrl, '?'), $heldMatch)) {
+                        wpc_used_css_obs_remember($tpl, $device, ['obs' => strtolower($heldMatch[1])]);
+                        $held = wpc_used_css_obs_recall($tpl, $device);
+                    }
+                }
+                $storeObs[$device] = $held['obs'];
+                $storeSha[$device] = $held['sha'];
+            }
+        }
+        foreach (['' => 'used_css_url.txt', 'mobile' => 'used_css_mobile_url.txt', 'desktop' => 'used_css_desktop_url.txt'] as $pageLaneDevice => $pageLaneFile) {
+            $pageLaneObs = wpc_used_css_url_obs(@file_get_contents($dir . $pageLaneFile));
+            if ($pageLaneObs !== '' && $pageLaneObs !== $obs
+                && wpc_used_css_obs_ahead($pageLaneObs, isset($storeObs[$pageLaneDevice]) ? $storeObs[$pageLaneDevice] : '', $obs)) {
+                $why = 'obs-stale';
+                break;
+            }
+        }
+        if ($why === '' && $tpl === '') {
+            return false;
+        }
+        foreach ($suffixes as $device => $suffix) {
+            if ($why !== '') { break; }
+            if (isset($storeObs[$device]) && $storeObs[$device] !== '' && $storeObs[$device] === $obs) {
+                $name = $obs . $suffix;
+                if ($storeSha[$device] !== '' && isset($shaMap[$name]) && is_string($shaMap[$name])
+                    && preg_match('/^[0-9a-f]{64}$/i', $shaMap[$name]) && strtolower($shaMap[$name]) !== $storeSha[$device]) {
+                    $why = 'sha-moved';
+                }
+            }
+        }
+        if ($why === '') {
+            return false;
+        }
+        $signature = $obs . '|' . md5((string) json_encode($shaMap));
+        if (trim((string) @file_get_contents($dir . 'reland_obs.txt')) === $signature
+            && (time() - (int) @filemtime($dir . 'reland_obs.txt')) <= (int) apply_filters('wpc_reland_giveup_ttl', 6 * HOUR_IN_SECONDS)) {
+            return false;
+        }
+        if (!function_exists('wpc_pl_sched') || !function_exists('wp_next_scheduled')) {
+            return false;
+        }
+        $forceFile = $dir . 'repull_force.txt';
+        $priorForce = @is_file($forceFile) ? wpc_reland_marker_parts((string) @file_get_contents($forceFile))[0] : '';
+        $priorFresh = $priorForce !== '' && (time() - (int) @filemtime($forceFile)) <= (int) apply_filters('wpc_repull_force_ttl', 6 * HOUR_IN_SECONDS);
+        if ($priorForce === $signature && !$priorFresh) {
+            wpc_crit_meta_write($dir . 'reland_obs.txt', $signature);
+            @unlink($forceFile);
+            return false;
+        }
+        $claimKey = 'wpc_reland_claim_' . md5($tpl . '|' . $obs);
+        $claimedBy = get_transient($claimKey);
+        if (is_string($claimedBy) && $claimedBy !== '' && $claimedBy !== $urlKey) {
+            return false;
+        }
+        if (wp_next_scheduled('wpc_lcp_repull', [$urlKey, 1])) {
+            if ($priorForce !== $signature) {
+                wpc_crit_meta_write($forceFile, $signature . "\n" . json_encode($shaMap));
+            }
+            return false;
+        }
+        $scheduled = wpc_pl_sched(time() + 5, 'wpc_lcp_repull', [$urlKey, 1]);
+        if ($scheduled === false || (function_exists('is_wp_error') && is_wp_error($scheduled))) {
+            return false;
+        }
+        if ($priorForce !== $signature) {
+            wpc_crit_meta_write($forceFile, $signature . "\n" . json_encode($shaMap));
+        }
+        set_transient($claimKey, $urlKey, max(60, (int) apply_filters('wpc_reland_claim_ttl', HOUR_IN_SECONDS)));
+        wpc_crit_meta_write($dir . 'repull_due.txt', (string) time());
+        @touch($dir . 'repull_due.txt');
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('pointer-obs-reland', $urlKey, '', ['obs' => substr($obs, 0, 8), 'why' => $why, 'tpl' => substr($tpl, 0, 24)]);
+        }
+        return true;
+    }
     // v7.21.188 — POINTER TICK (crit-team Q1: five fresh pointers, zero autonomous lands).
     // The .174 lane only polls inside 15 min of OUR dispatch; a service-side publish
     // (observer mint, reannounce) writes no dispatch stamp here and pullDerivedArtifacts'
@@ -9255,7 +12234,7 @@ if (!function_exists('wpc_detach_request_or_schedule_cron')) {
             if (get_transient('wpc_ptick_' . md5($k))) {
                 return;
             }
-            set_transient('wpc_ptick_' . md5($k), 1, (int) apply_filters('wpc_pointer_tick_every', 60));
+            set_transient('wpc_ptick_' . md5($k), 1, (int) apply_filters('wpc_pointer_tick_every', HOUR_IN_SECONDS));
             if (!wpc_detach_request_or_schedule_cron($k)) {
                 return;
             }
@@ -9264,6 +12243,9 @@ if (!function_exists('wpc_detach_request_or_schedule_cron')) {
                 return;
             }
             $p = preg_replace('/[^a-f0-9-]/i', '', (string) $cc->fetchLatestPointerUuid($k));
+            if (strlen($p) >= 8 && isset($cc->lastPointer) && is_array($cc->lastPointer)) {
+                wpc_pointer_obs_reland($k, $d, $cc->lastPointer);
+            }
             if (strlen($p) < 8 || $p === $lu) {
                 return;
             }
@@ -9382,21 +12364,47 @@ if (!function_exists('wpc_presc_known_classes')) {
         wpc_presc_journal_merge([(string) $id => $row]);
     }
 
-    /** A3 gate-2 STICKY store: ids the inline guard refuted on the served DOM (the re-count
-     *  found them non-unique, or the plausibility pass found the reserve implausible).
-     *  Kept OUT of the churny journal so a forced re-apply cannot re-arm them and
+    /** A3 gate-2 STICKY store: ids the runtime re-count found non-unique on the served
+     *  DOM. Kept OUT of the churny journal so a forced re-apply cannot re-arm them and
      *  eviction cannot drop the gate state. Each mark is STAMPED with the 12-hex artifact
      *  tag (av = md5(prescriptions body)[:12]) it was computed against, so a mark is
      *  honored only while that exact artifact is live — a republish, a purge-and-refetch,
-     *  or a stale in-flight beacon all self-invalidate on av mismatch. id => av. Bounded. */
+     *  or a stale in-flight beacon all self-invalidate on av mismatch. Stored id => {a: av, t: when
+     *  marked}, bounded; wpc_presc_notuniq_get() answers id => av for the marks under seven days old. */
     function wpc_presc_av_tag($body)
     {
         return substr(md5((string) $body), 0, 12);
     }
+    function wpc_presc_notuniq_ttl()
+    {
+        return (int) apply_filters('wpc_presc_notuniq_ttl', 7 * DAY_IN_SECONDS);
+    }
+    function wpc_presc_notuniq_rows()
+    {
+        $stored = get_option('wpc_presc_notuniq');
+        $rows = [];
+        if (!is_array($stored)) {
+            return $rows;
+        }
+        $oldest = time() - wpc_presc_notuniq_ttl();
+        foreach ($stored as $id => $row) {
+            if (is_array($row) && isset($row['a'], $row['t']) && is_string($row['a']) && (int) $row['t'] >= $oldest) {
+                $rows[strtolower((string) $id)] = [
+                    'a' => $row['a'], 't' => (int) $row['t'],
+                    'at' => isset($row['at']) ? (int) $row['at'] : (int) $row['t'],
+                    'why' => isset($row['why']) && is_string($row['why']) ? $row['why'] : '',
+                ];
+            }
+        }
+        return $rows;
+    }
     function wpc_presc_notuniq_get()
     {
-        $s = get_option('wpc_presc_notuniq');
-        return is_array($s) ? $s : [];
+        $marks = [];
+        foreach (wpc_presc_notuniq_rows() as $id => $row) {
+            $marks[$id] = $row['a'];
+        }
+        return $marks;
     }
     /** Is this id currently refuted FOR the live artifact av? */
     function wpc_presc_notuniq_hit($store, $id, $av)
@@ -9404,24 +12412,22 @@ if (!function_exists('wpc_presc_known_classes')) {
         $id = strtolower((string) $id);
         return $av !== '' && isset($store[$id]) && (string) $store[$id] === (string) $av;
     }
-    function wpc_presc_notuniq_mark($map)
+    function wpc_presc_notuniq_mark($map, $why = 'visitor reports: the rule matched more than one element on the served page')
     {
-        $s = wpc_presc_notuniq_get();
-        $orig = $s;
+        $s = wpc_presc_notuniq_rows();
+        $marked = false;
         foreach ((array) $map as $id => $av) {
             $id = strtolower((string) $id);
             $av = (string) $av;
             if (!preg_match('/^[a-f0-9]{6,40}$/', $id) || !preg_match('/^[a-f0-9]{6,32}$/', $av)) {
                 continue;
             }
-            // Move to the TAIL on every confirm (unconditional per-id, not gated on a
-            // batch change-flag) — eviction is LRU-by-mark, so a repeatedly-refuted id is
-            // the LAST to evict, not the first (the insertion-order slice dropped exactly
-            // those). The consume lane is ≤1/60s, so the write below is not churn.
+            $at = (isset($s[$id]) && $s[$id]['a'] === $av) ? $s[$id]['at'] : time();
             unset($s[$id]);
-            $s[$id] = $av;
+            $s[$id] = ['a' => $av, 't' => time(), 'at' => $at, 'why' => (string) $why];
+            $marked = true;
         }
-        if ($s !== $orig) { // value change OR reorder
+        if ($marked) {
             if (count($s) > 512) {
                 $s = array_slice($s, -512, null, true);
             }
@@ -9430,7 +12436,7 @@ if (!function_exists('wpc_presc_known_classes')) {
     }
     function wpc_presc_notuniq_clear($ids)
     {
-        $s = wpc_presc_notuniq_get();
+        $s = wpc_presc_notuniq_rows();
         if (empty($s)) {
             return;
         }
@@ -9445,6 +12451,23 @@ if (!function_exists('wpc_presc_known_classes')) {
         if ($d) {
             update_option('wpc_presc_notuniq', $s, false);
         }
+    }
+    /** Drop the marks that lapsed (and the old-format rows that carry no time) from the stored option; the number dropped. */
+    function wpc_presc_notuniq_sweep()
+    {
+        $stored = get_option('wpc_presc_notuniq');
+        if (!is_array($stored) || empty($stored)) {
+            return 0;
+        }
+        $live = wpc_presc_notuniq_rows();
+        $dropped = count($stored) - count($live);
+        if ($dropped > 0) {
+            update_option('wpc_presc_notuniq', $live, false);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('report-effect-reverted', '', '', ['kind' => 'presc', 'reason' => 'expired', 'n' => $dropped]);
+            }
+        }
+        return max(0, $dropped);
     }
 
     /** Route each entry per the §4 fix.type→action map; journal every id (law 7) in ONE
@@ -9464,7 +12487,6 @@ if (!function_exists('wpc_presc_known_classes')) {
         // every re-apply — a forced refetch of an unchanged file must not re-arm them
         // (the oscillation class). A genuine service rewrite clears them (see fetch).
         $notUniq = function_exists('wpc_presc_notuniq_get') ? wpc_presc_notuniq_get() : [];
-        $journalBefore = get_option('wpc_presc_journal');
         // Same selector alphabet the render leg enforces — land and render must agree,
         // or 'armed' receipts describe rules that never emit.
         $selRx = '/^[A-Za-z0-9 _\-#.:\[\]=>+~()]+$/';
@@ -9507,8 +12529,7 @@ if (!function_exists('wpc_presc_known_classes')) {
                     // runtime re-count refuted this id FOR THIS artifact version — do not
                     // re-arm (render suppresses it too). A different av (republish) is not
                     // a hit, so a genuinely re-published/fixed id arms again.
-                    $rows[$id] = $base + ['status' => 'skipped',
-                        'skipped' => (is_array($journalBefore) && (string) ($journalBefore[$id]['skipped'] ?? '') === 'implausible') ? 'implausible' : 'not-unique'];
+                    $rows[$id] = $base + ['status' => 'skipped', 'skipped' => 'not-unique'];
                     continue;
                 }
                 $armed++;
@@ -9594,6 +12615,17 @@ if (!function_exists('wpc_presc_known_classes')) {
         return $armed;
     }
 
+    /** Whether the prescriptions URL on disk answered 404 or 410, is the same URL, is under six hours old and the service has not said since that prescriptions were updated. */
+    function wpc_presc_miss_remembered($dir)
+    {
+        $dir = rtrim((string) $dir, '/') . '/';
+        $parts = explode(' ', trim((string) @file_get_contents($dir . 'presc_404.txt')));
+        $url = trim((string) @file_get_contents($dir . 'prescriptions_url.txt'));
+        return count($parts) === 2 && $url !== '' && $parts[0] === md5((string) strtok($url, '?'))
+            && (time() - (int) $parts[1]) < (int) apply_filters('wpc_crit_derived_miss_ttl', 6 * HOUR_IN_SECONDS)
+            && (int) @filemtime($dir . 'presc_want.txt') < (int) $parts[1];
+    }
+
     /** Fetch → validate → store → apply. Buster-always (§1 fetch law: the file is amended
      *  in place post-verdict); ETag is a change marker ONLY — never If-None-Match (delta 3). */
     function wpc_prescriptions_fetch($urlKey, $force = false)
@@ -9621,11 +12653,20 @@ if (!function_exists('wpc_presc_known_classes')) {
             }
             $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
             $u = trim((string) @file_get_contents($dir . 'prescriptions_url.txt'));
-            if ($u === '' || !preg_match('#^https://#i', $u)) {
+            if ($u === '' || !preg_match('#^https://#i', $u) || wpc_presc_miss_remembered($dir)) {
                 return false;
             }
-            $u .= (strpos($u, '?') === false ? '?' : '&') . 't=' . time();
+            $named = $u;
+            if (!(function_exists('wpc_crit_artifact_signed') && wpc_crit_artifact_signed($u))) {
+                $u .= (strpos($u, '?') === false ? '?' : '&') . 't=' . time();
+            }
             $r = wp_remote_get($u, ['timeout' => 5, 'user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : '']);
+            if (function_exists('wpc_crit_signed_denied')) {
+                wpc_crit_signed_denied($dir, $named, $r, $urlKey);
+            }
+            if (!is_wp_error($r) && in_array((int) wp_remote_retrieve_response_code($r), [404, 410], true)) {
+                wpc_crit_meta_write($dir . 'presc_404.txt', md5((string) strtok($named, '?')) . ' ' . time());
+            }
             if (is_wp_error($r) || (int) wp_remote_retrieve_response_code($r) !== 200) {
                 return false;
             }
@@ -9843,7 +12884,7 @@ if (!function_exists('wpc_presc_known_classes')) {
             if (wpc_prescriptions_fetch($urlKey, true)) {
                 @unlink($dir . 'presc_due.txt');
                 delete_transient($ctr);
-            } else {
+            } elseif (!wpc_presc_miss_remembered($dir)) {
                 $defer(90);
             }
         } catch (\Throwable $e) {
@@ -9854,57 +12895,142 @@ if (!function_exists('wpc_presc_known_classes')) {
 
 
 if (!function_exists('wpc_presc_seen_handler')) {
-    /** A3 runtime beacon from the inline guard: `not-unique` (the re-count found the
-     *  selector on more than one element) or `implausible` (the reserve is far taller than
-     *  the element it holds, measured in the browser). font_seen shape: accept filter, a
-     *  lock per verdict, strict input caps, bounded queue, deferred consume — zero blocking
-     *  work on the beacon request. */
+    /** Whether $ids are reserve rules the published prescriptions.json of the page under crit key $key
+     *  arms, and $av is the tag of that file as it stands: the only vote worth counting. The file is
+     *  read and parsed once a window for a key that has a valid vote: what it armed is kept in a
+     *  transient (30 s, the filter wpc_presc_seen_window), and only a valid vote fills it. */
+    function wpc_presc_seen_valid($key, $av, array $ids)
+    {
+        if (!defined('WPS_IC_CRITICAL') || !function_exists('wpc_presc_av_tag') || $ids === []
+            || !preg_match('/^[a-z0-9][a-z0-9%._-]{0,239}$/', $key) || strpos($key, '..') !== false) {
+            return false;
+        }
+        $slot  = 'wpc_presc_seen_f_' . md5($key);
+        $known = get_transient($slot);
+        $fresh = false;
+        if (!is_array($known) || !isset($known['av'], $known['armed']) || !is_array($known['armed'])) {
+            $file = rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/prescriptions.json';
+            $raw = @is_file($file) ? (string) @file_get_contents($file) : '';
+            if ($raw === '' || strlen($raw) > 262144) {
+                return false;
+            }
+            $env = json_decode($raw, true);
+            if (!is_array($env) || !isset($env['prescriptions']) || !is_array($env['prescriptions'])) {
+                return false;
+            }
+            $armed = [];
+            foreach ($env['prescriptions'] as $p) {
+                if (is_array($p) && isset($p['id']) && is_string($p['id']) && empty($p['applied_by_service'])
+                    && isset($p['fix']['type']) && is_string($p['fix']['type']) && strtolower($p['fix']['type']) === 'reserve-rect'
+                    && isset($p['verified_unique']) && $p['verified_unique'] === true) {
+                    $armed[] = strtolower($p['id']);
+                }
+            }
+            $known = ['av' => wpc_presc_av_tag($raw), 'armed' => $armed];
+            $fresh = true;
+        }
+        if (!hash_equals((string) $known['av'], $av)) {
+            return false;
+        }
+        foreach ($ids as $id) {
+            if (!in_array($id, $known['armed'], true)) {
+                return false;
+            }
+        }
+        if ($fresh) {
+            set_transient($slot, $known, (int) apply_filters('wpc_presc_seen_window', 30));
+        }
+        return true;
+    }
+
+    /** A3 runtime re-count beacon (the loader counted a reserve rule's selector on more than one element).
+     *  A vote is taken only for ids and an artifact tag that the page's published prescriptions.json
+     *  names; a rule is counted once a window (30 s) per page; the queue takes it when three such votes
+     *  have come in within a day, and a vote for a rule that is already marked renews the mark (at
+     *  most once a day). */
+    function wpc_presc_seen_take()
+    {
+        if (!apply_filters('wpc_presc_seen_accept', true)) {
+            return;
+        }
+        $idr = strtolower(trim(wp_unslash(wpc_post_string('id'))));
+        $av  = strtolower(trim(wp_unslash(wpc_post_string('av'))));
+        if ($idr === '' || strlen($idr) > 180 || trim(wp_unslash(wpc_post_string('skipped'))) !== 'not-unique'
+            || !preg_match('/^[a-f0-9]{6,32}$/', $av)) {
+            return;
+        }
+        $ids = array_values(array_unique(array_slice(array_filter(array_map('trim', explode(',', $idr)), 'strlen'), 0, 4)));
+        foreach ($ids as $id) {
+            if (!preg_match('/^[a-f0-9]{6,40}$/', $id)) {
+                return;
+            }
+        }
+        $key = trim(wp_unslash(wpc_post_string('k')));
+        if (!wpc_presc_seen_valid($key, $av, $ids)) {
+            return;
+        }
+        $marks  = wpc_presc_notuniq_rows();
+        $votes  = get_option('wpc_presc_votes');
+        $votes  = is_array($votes) ? $votes : [];
+        $queue  = get_option('wpc_presc_seen_queue');
+        $queue  = is_array($queue) ? $queue : [];
+        $quorum = max(1, (int) apply_filters('wpc_presc_seen_quorum', 3));
+        $voted  = false;
+        $queued = false;
+        $renew  = [];
+        foreach ($ids as $id) {
+            if (isset($marks[$id]) && $marks[$id]['a'] === $av) {
+                if (time() - $marks[$id]['t'] > DAY_IN_SECONDS) {
+                    $renew[$id] = $av;
+                }
+                continue;
+            }
+            if (isset($queue[$id])) {
+                continue;
+            }
+            $slot = 'wpc_presc_seen_w_' . md5($key . '|' . $id);
+            if (get_transient($slot)) {
+                continue;
+            }
+            set_transient($slot, 1, (int) apply_filters('wpc_presc_seen_window', 30));
+            $row = (isset($votes[$id]) && is_array($votes[$id]) && (string) ($votes[$id]['av'] ?? '') === $av
+                && time() - (int) ($votes[$id]['w'] ?? 0) < DAY_IN_SECONDS)
+                ? ['av' => $av, 'n' => (int) ($votes[$id]['n'] ?? 0), 'w' => (int) $votes[$id]['w']]
+                : ['av' => $av, 'n' => 0, 'w' => time()];
+            $row['n']++;
+            if ($row['n'] >= $quorum && count($queue) < 10) {
+                $queue[$id] = $av;
+                $queued = true;
+                unset($votes[$id]);
+            } else {
+                $votes[$id] = $row;
+            }
+            $voted = true;
+        }
+        if ($voted) {
+            if (count($votes) > 64) {
+                uasort($votes, function ($a, $b) {
+                    return (int) ($a['w'] ?? 0) - (int) ($b['w'] ?? 0);
+                });
+                $votes = array_slice($votes, -64, null, true);
+            }
+            update_option('wpc_presc_votes', $votes, false);
+        }
+        if ($renew !== []) {
+            wpc_presc_notuniq_mark($renew);
+        }
+        if ($queued) {
+            update_option('wpc_presc_seen_queue', $queue, false);
+            if (function_exists('wp_schedule_single_event') && !wp_next_scheduled('wpc_presc_seen_consume')) {
+                wp_schedule_single_event(time() + 60, 'wpc_presc_seen_consume');
+            }
+        }
+    }
+
     function wpc_presc_seen_handler()
     {
         try {
-            if (!apply_filters('wpc_presc_seen_accept', true)) {
-                wp_die('', '', 204);
-            }
-            $sk  = isset($_POST['skipped']) ? trim((string) wp_unslash($_POST['skipped'])) : '';
-            if (!in_array($sk, ['not-unique', 'implausible'], true)) {
-                wp_die('', '', 204);
-            }
-            // One beacon per verdict per pageload carries up to 4 comma-joined ids (the 30s
-            // lock would drop a second beacon of the same verdict).
-            $lock = $sk === 'not-unique' ? 'wpc_presc_seen_lock' : 'wpc_presc_seen_lock_' . $sk;
-            if (get_transient($lock)) {
-                wp_die('', '', 204);
-            }
-            set_transient($lock, 1, 30);
-            $idr = isset($_POST['id']) ? strtolower(trim((string) wp_unslash($_POST['id']))) : '';
-            // av = the artifact tag the verdict was computed against; a mark is honored
-            // only while that av is live, so a stale in-flight beacon can't suppress a
-            // freshly re-published id.
-            $av  = isset($_POST['av']) ? strtolower(trim((string) wp_unslash($_POST['av']))) : '';
-            if ($idr === '' || strlen($idr) > 180 || !preg_match('/^[a-f0-9]{6,32}$/', $av)) {
-                wp_die('', '', 204);
-            }
-            $ids = array_slice(array_filter(array_map('trim', explode(',', $idr))), 0, 4);
-            $q = get_option('wpc_presc_seen_queue');
-            if (!is_array($q)) {
-                $q = [];
-            }
-            $qd = false;
-            foreach ($ids as $id) {
-                if (!preg_match('/^[a-f0-9]{6,40}$/', $id)) {
-                    continue;
-                }
-                if (!isset($q[$id]) && count($q) < 10) {
-                    $q[$id] = $sk === 'not-unique' ? $av : ['av' => $av, 'skipped' => $sk];
-                    $qd = true;
-                }
-            }
-            if ($qd) {
-                update_option('wpc_presc_seen_queue', $q, false);
-                if (function_exists('wp_schedule_single_event') && !wp_next_scheduled('wpc_presc_seen_consume')) {
-                    wp_schedule_single_event(time() + 60, 'wpc_presc_seen_consume');
-                }
-            }
+            wpc_presc_seen_take();
         } catch (\Throwable $e) {
         }
         wp_die('', '', 204);
@@ -9921,31 +13047,12 @@ if (!function_exists('wpc_presc_seen_handler')) {
                 return;
             }
             $mark = [];
-            $votes = get_option('wpc_presc_implausible_votes', []);
-            $votes = is_array($votes) ? $votes : [];
-            $need = max(1, (int) apply_filters('wpc_presc_implausible_votes', 3));
-            foreach ($q as $id => $queued) {
-                $av = is_array($queued) ? (string) ($queued['av'] ?? '') : (string) $queued;
-                $skipped = (is_array($queued) && ($queued['skipped'] ?? '') === 'implausible') ? 'implausible' : 'not-unique';
-                if ($skipped === 'implausible') {
-                    $prior = isset($votes[$id]) && is_array($votes[$id]) && (string) ($votes[$id]['av'] ?? '') === $av ? (int) ($votes[$id]['n'] ?? 0) : 0;
-                    $votes[$id] = ['av' => $av, 'n' => $prior + 1, 't' => time()];
-                    if ($prior + 1 < $need) {
-                        continue;
-                    }
-                    unset($votes[$id]);
-                }
-                wpc_presc_journal_put((string) $id, ['status' => 'skipped', 'skipped' => $skipped,
-                    'via' => $skipped === 'implausible' ? 'runtime-plausibility' : 'runtime-recount']);
-                if (preg_match('/^[a-f0-9]{6,32}$/', $av)) {
-                    $mark[(string) $id] = $av; // id => artifact tag
+            foreach ($q as $id => $av) {
+                wpc_presc_journal_put((string) $id, ['status' => 'skipped', 'skipped' => 'not-unique', 'via' => 'runtime-recount']);
+                if (preg_match('/^[a-f0-9]{6,32}$/', (string) $av)) {
+                    $mark[(string) $id] = (string) $av; // id => artifact tag
                 }
             }
-            if (count($votes) > 200) {
-                uasort($votes, function ($a, $b) { return (int) ($b['t'] ?? 0) - (int) ($a['t'] ?? 0); });
-                $votes = array_slice($votes, 0, 200, true);
-            }
-            update_option('wpc_presc_implausible_votes', $votes, false);
             // Sticky gate: survives journal eviction AND forced re-applies; the av stamp
             // makes a stale-artifact verdict self-invalidate.
             if (!empty($mark) && function_exists('wpc_presc_notuniq_mark')) {
@@ -10214,10 +13321,26 @@ if (!function_exists('wpc_crit_selftest_run')) {
     {
         try {
             $tok = isset($_GET['t']) && defined('WPC_PERF_DEBUG_TOKEN') && hash_equals((string) WPC_PERF_DEBUG_TOKEN, (string) $_GET['t']);
-            if (!(function_exists('current_user_can') && current_user_can('manage_options')) && !$tok) {
+            $resyncAsked = (isset($_GET['refetch']) && sanitize_key((string) $_GET['refetch']) === 'resync')
+                || (isset($_POST['refetch']) && sanitize_key((string) $_POST['refetch']) === 'resync');
+            $resyncDelegated = isset($_POST['refetch']) && sanitize_key((string) $_POST['refetch']) === 'resync'
+                && array_diff(array_keys((array) $_GET), ['action']) === []
+                && function_exists('current_user_can') && current_user_can('manage_wpc_settings');
+            if (!(function_exists('current_user_can') && (current_user_can('manage_options') || $resyncDelegated)) && !$tok) {
                 status_header(403);
                 echo 'x';
                 exit;
+            }
+            if ($resyncAsked && !$tok) {
+                $resyncNonce = isset($_POST['wps_ic_nonce']) ? (string) $_POST['wps_ic_nonce'] : '';
+                if (!isset($_SERVER['REQUEST_METHOD']) || strtoupper((string) $_SERVER['REQUEST_METHOD']) !== 'POST'
+                    || !current_user_can('manage_wpc_settings')
+                    || !wp_verify_nonce($resyncNonce, 'wps_ic_nonce_action')) {
+                    status_header(403);
+                    header('Content-Type: application/json');
+                    echo '{"error":"forbidden"}';
+                    exit;
+                }
             }
             // v7.10.379 TRACE (read-only cross-team debug, &trace=1): this key's landing lifecycle
             // — gen uuid (the service's join key), artifact inventory + quality flags, and the cflog
@@ -10277,7 +13400,7 @@ if (!function_exists('wpc_crit_selftest_run')) {
                 // (wpc_wire_catchup's case). Per-device counts + the drop families + lcp verdict
                 // are the two consumers' entire decision surface. Pure disk reads.
                 $twp = function_exists('wpc_wire_provenance') ? wpc_wire_provenance($tk)
-                    : ['rev' => 0, 'sig' => '', 'url' => '', 'scope' => 'url', 'material_rev' => 0, 'epoch' => 0];
+                    : ['rev' => 0, 'url' => '', 'scope' => 'url', 'material_rev' => 0, 'epoch' => 0];
                 $twire = [
                     'declared_rev' => (int) $twp['rev'], 'declared_url' => (string) $twp['url'],
                     'held_url' => trim($trd($tdir . 'wire.held_url')),
@@ -10362,7 +13485,8 @@ if (!function_exists('wpc_crit_selftest_run')) {
             // &refetch=resync → the one-click full close: stale-mark everything (pages
             //   keep serving), clear every gate/backoff, force a fresh dispatch, pull all
             //   lanes now, and self-schedule follow-up waves for the observe-leg artifacts.
-            $refetchWhat = isset($_GET['refetch']) ? sanitize_key((string) $_GET['refetch']) : '';
+            $refetchWhat = isset($_GET['refetch']) ? sanitize_key((string) $_GET['refetch'])
+                : (isset($_POST['refetch']) ? sanitize_key((string) $_POST['refetch']) : '');
             $isResync = ($refetchWhat === 'resync');
             if ($isResync) {
                 $refetchWhat = 'all';
@@ -10370,7 +13494,8 @@ if (!function_exists('wpc_crit_selftest_run')) {
             if ($refetchWhat !== '' && in_array($refetchWhat, ['fonts', 'crit', 'used', 'all'], true)) {
                 $refetchUrlKey = isset($_GET['k']) ? sanitize_text_field((string) $_GET['k'])
                     : ltrim((string) (new wps_ic_url_key())->setup(home_url('/')), '/');
-                if ($refetchUrlKey === '' || (function_exists('wpc_pipeline_key_junk') && wpc_pipeline_key_junk($refetchUrlKey))) {
+                if ($refetchUrlKey === '' || strpos($refetchUrlKey, '..') !== false || strpos($refetchUrlKey, '\\') !== false
+                    || (function_exists('wpc_pipeline_key_junk') && wpc_pipeline_key_junk($refetchUrlKey))) {
                     status_header(200);
                     echo '{"error":"bad-key"}';
                     exit;
@@ -10413,6 +13538,7 @@ if (!function_exists('wpc_crit_selftest_run')) {
                 if ($refetchWhat === 'fonts' || $refetchWhat === 'all') {
                     @unlink($refetchDir . 'font-subsets.css');
                     @unlink($refetchDir . 'font-metrics.json');
+                    @unlink($refetchDir . 'font-below-fold.json');
                     $refetchDone[] = 'fonts';
                 }
                 if ($refetchWhat === 'used' || $refetchWhat === 'all') {
@@ -10470,7 +13596,7 @@ if (!function_exists('wpc_crit_selftest_run')) {
                                     $pointerJson = json_decode((string) wp_remote_retrieve_body($pointerResponse), true);
                                     $pointerUuid = is_array($pointerJson) ? preg_replace('/[^a-f0-9-]/i', '', (string) ($pointerJson['crit_uuid'] ?? '')) : '';
                                     if (strlen($pointerUuid) >= 8) {
-                                        $usedBaseUrl = 'https://critical-css-mc.b-cdn.net/' . substr($pointerUuid, 0, 4) . '/' . $pointerUuid;
+                                        $usedBaseUrl = (function_exists('wpc_crit_artifact_href') ? wpc_crit_artifact_href($pointerUuid, '') : 'https://critical-css-mc.b-cdn.net/' . substr($pointerUuid, 0, 4) . '/' . $pointerUuid);
                                         $usedBaseSource = 'ptr';
                                         if (is_array($pointerJson) && (int) ($pointerJson['has_used_css'] ?? 0) === 1) {
                                             $pointerUsedBase = $usedBaseUrl;
@@ -10482,7 +13608,7 @@ if (!function_exists('wpc_crit_selftest_run')) {
                         }
                     }
                     if ($usedBaseUrl === '' && preg_match('/^[0-9a-f-]{8,}$/i', (string) $stampUuid)) {
-                        $usedBaseUrl = 'https://critical-css-mc.b-cdn.net/' . substr($stampUuid, 0, 4) . '/' . $stampUuid;
+                        $usedBaseUrl = (function_exists('wpc_crit_artifact_href') ? wpc_crit_artifact_href($stampUuid, '') : 'https://critical-css-mc.b-cdn.net/' . substr($stampUuid, 0, 4) . '/' . $stampUuid);
                         $usedBaseSource = 'stamp';
                     }
                     // Crit lands are ASYNC — during the click land_uuid.txt still holds the
@@ -10491,7 +13617,7 @@ if (!function_exists('wpc_crit_selftest_run')) {
                     // The stamp still wins when the pointer lacks used files or timed out.
                     $liveUuid = trim((string) @file_get_contents($refetchDir . 'land_uuid.txt'));
                     if ($pointerUsedBase === '' && preg_match('/^[0-9a-f-]{8,}$/i', $liveUuid)) {
-                        $usedBaseUrl = 'https://critical-css-mc.b-cdn.net/' . substr($liveUuid, 0, 4) . '/' . $liveUuid;
+                        $usedBaseUrl = (function_exists('wpc_crit_artifact_href') ? wpc_crit_artifact_href($liveUuid, '') : 'https://critical-css-mc.b-cdn.net/' . substr($liveUuid, 0, 4) . '/' . $liveUuid);
                         $usedBaseSource = 'land';
                     }
                     // Operator override (temporary until the service advertises used_css=1 on
@@ -10500,7 +13626,7 @@ if (!function_exists('wpc_crit_selftest_run')) {
                     // supersedes it organically. One-shot, no persistence, no FTP.
                     $overrideUuid = isset($_GET['used_uuid']) ? preg_replace('/[^0-9a-f-]/i', '', (string) $_GET['used_uuid']) : '';
                     if (strlen($overrideUuid) >= 8) {
-                        $usedBaseUrl = 'https://critical-css-mc.b-cdn.net/' . substr($overrideUuid, 0, 4) . '/' . $overrideUuid;
+                        $usedBaseUrl = (function_exists('wpc_crit_artifact_href') ? wpc_crit_artifact_href($overrideUuid, '') : 'https://critical-css-mc.b-cdn.net/' . substr($overrideUuid, 0, 4) . '/' . $overrideUuid);
                         $usedBaseSource = 'override';
                     }
                     $tplKey = '';
@@ -10529,10 +13655,12 @@ if (!function_exists('wpc_crit_selftest_run')) {
                     }
                     $usedPulled = [];
                     $usedDebug = ['tpl' => $tplKey, 'base' => substr((string) $usedBaseUrl, 0, 90), 'base_src' => $usedBaseSource];
-                    if ($tplKey !== '' && function_exists('wpc_used_css_fetch') && function_exists('wpc_used_css_path')) {
+                    if ($tplKey !== '' && function_exists('wpc_used_css_land_generation')) {
                         $shelfSuffixes = ['union' => '.used.css', 'mobile' => '.used-mobile.css', 'desktop' => '.used-desktop.css'];
-                        foreach (['union' => ['', 'used_css_url.txt'], 'mobile' => ['mobile', 'used_css_mobile_url.txt'], 'desktop' => ['desktop', 'used_css_desktop_url.txt']] as $lane => $laneSpec) {
-                            $metaRaw = trim((string) @file_get_contents($refetchDir . $laneSpec[1]));
+                        $laneUrls = [];
+                        $laneOrigin = [];
+                        foreach (['union' => 'used_css_url.txt', 'mobile' => 'used_css_mobile_url.txt', 'desktop' => 'used_css_desktop_url.txt'] as $lane => $pointerFile) {
+                            $metaRaw = trim((string) @file_get_contents($refetchDir . $pointerFile));
                             $usedUrl = $metaRaw;
                             if ($usedUrl !== '' && !preg_match('#^https?://#i', $usedUrl)) {
                                 $usedUrl = ''; // 'None'/junk meta (service-side null serialization) — derive instead
@@ -10546,34 +13674,27 @@ if (!function_exists('wpc_crit_selftest_run')) {
                                 $usedUrl = $usedBaseUrl . $shelfSuffixes[$lane] . '?t=' . time(); // ?t= — Bunny negative-caches premature 404s
                                 $usedUrlSource = ($usedUrlSource === 'meta-stale') ? 'derived-over-stale-meta' : 'derived';
                             }
-                            $storePath = $usedUrl !== '' ? wpc_used_css_path($tplKey, $laneSpec[0]) : '';
-                            if ($storePath === '') {
-                                continue;
-                            }
-                            delete_transient('wpc_ucsr266_' . md5($storePath));
-                            delete_transient('wpc_ucsp_' . md5($storePath));
-                            $mtimeBefore = (int) @filemtime($storePath);
-                            $fetchWhy = '';
-                            $usedPulled[$lane] = (bool) wpc_used_css_fetch($usedUrl, $tplKey, $laneSpec[0], $fetchWhy);
-                            $usedDebug[$lane] = [
-                                'src' => $usedUrlSource, 'meta_raw' => substr($metaRaw, 0, 70),
-                                'url' => substr((string) $usedUrl, 0, 110), 'why' => (string) $fetchWhy,
-                                'ok' => $usedPulled[$lane],
-                                'mtime_before' => $mtimeBefore, 'mtime_after' => (int) @filemtime($storePath),
-                            ];
-                            // Unconditional on success — a pointer-first pull that leaves the
-                            // OLD uuid in the meta gets reverted by the next meta-driven
-                            // re-pull (waves/kick legs fetch the stale address and overwrite).
-                            if ($usedPulled[$lane] && $usedBaseSource !== 'override' && function_exists('wpc_crit_meta_write')) {
-                                // override stays one-shot — persisting it would let repull
-                                // waves re-fetch a hand-pasted uuid forever.
-                                wpc_crit_meta_write($refetchDir . $laneSpec[1], (string) strtok($usedUrl, '?'));
+                            if ($usedUrl !== '') {
+                                $laneUrls[$lane] = $usedUrl;
+                                $laneOrigin[$lane] = [$usedUrlSource, $metaRaw];
                             }
                         }
-                    }
-                    if (!empty(array_filter($usedPulled))) {
-                        if (!function_exists('wpc_used_css_scoped_purge') || !wpc_used_css_scoped_purge($tplKey)) {
-                            try { wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft'); } catch (\Throwable $e) {}
+                        // override stays one-shot — persisting it would let repull
+                        // waves re-fetch a hand-pasted uuid forever.
+                        $usedLanded = wpc_used_css_land_generation($refetchDir, $tplKey, $laneUrls, [
+                            'force' => true, 'persist' => $usedBaseSource !== 'override', 'key' => $refetchUrlKey, 'via' => 'refetch',
+                        ]);
+                        foreach ($usedLanded['lanes'] as $lane => $laneInfo) {
+                            if (!isset($laneOrigin[$lane])) {
+                                continue;
+                            }
+                            $usedPulled[$lane] = $laneInfo['state'] === 'pulled';
+                            $usedDebug[$lane] = [
+                                'src' => $laneOrigin[$lane][0], 'meta_raw' => substr($laneOrigin[$lane][1], 0, 70),
+                                'url' => $laneInfo['url'], 'why' => $laneInfo['why'],
+                                'ok' => $usedPulled[$lane],
+                                'mtime_before' => $laneInfo['mtime_before'], 'mtime_after' => $laneInfo['mtime_after'],
+                            ];
                         }
                     }
                     $refetchDone[] = 'used:' . ($tplKey === '' ? 'no-tpl-key' : (empty($usedPulled) ? 'no-urls' : implode(',', array_keys(array_filter($usedPulled)))));
@@ -10875,15 +13996,19 @@ if (!function_exists('wpc_font_seen_handler')) {
         try {
             if (!apply_filters('wpc_font_seen_accept', true)) { wp_die('', '', 204); }
             if (get_transient('wpc_font_seen_lock')) { wp_die('', '', 204); }
-            set_transient('wpc_font_seen_lock', 1, 30);
+            if (!class_exists('wps_ic_fonts') && defined('WPS_IC_DIR')) {
+                @include_once WPS_IC_DIR . 'addons/fonts/fonts.class.php';
+            }
             $u = isset($_POST['u']) ? trim((string) wp_unslash($_POST['u'])) : '';
-            if ($u === '' || strlen($u) > 700
-                || !preg_match('#^https://fonts\.(googleapis\.com|bunny\.net)/css2?\?[A-Za-z0-9&=:;,+%@._\-]+$#', $u)) {
+            if (!class_exists('wps_ic_fonts') || !wps_ic_fonts::isProviderSheet($u)) {
                 wp_die('', '', 204);
             }
             if (function_exists('wpc_is_font_sheet_localized') && wpc_is_font_sheet_localized($u)) { wp_die('', '', 204); }
+            $fonts = new wps_ic_fonts();
             $q = get_option('wpc_font_seen_queue');
             if (!is_array($q)) { $q = []; }
+            if ($fonts->seenOnly([$u]) === [] || !$fonts->beaconAdmits($u, count($q))) { wp_die('', '', 204); }
+            set_transient('wpc_font_seen_lock', 1, 30);
             if (!in_array($u, $q, true) && count($q) < 10) {
                 $q[] = $u;
                 update_option('wpc_font_seen_queue', $q, false);
@@ -10926,10 +14051,34 @@ if (!function_exists('wpc_is_font_sheet_localized')) {
         return is_dir($sheet_dir) && count((array) @glob($sheet_dir . '*.css')) > 0;
     }
 }
+if (!function_exists('wpc_font_rescan_settle')) {
+    function wpc_font_rescan_settle($ok, $why = '')
+    {
+        $ttl = 6 * HOUR_IN_SECONDS;
+        $fails = 0;
+        if ($ok) {
+            delete_option('wpc_font_rescan_fails');
+        } else {
+            $fails = min(6, (int) get_option('wpc_font_rescan_fails', 0) + 1);
+            update_option('wpc_font_rescan_fails', $fails, false);
+            $ttl = min(6 * HOUR_IN_SECONDS, 15 * MINUTE_IN_SECONDS * (1 << ($fails - 1)));
+        }
+        set_transient('wpc_font_rescan_lock', 1, $ttl);
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('font-rescan-settled', '', '', ['ok' => $ok ? 1 : 0, 'fails' => $fails, 'lock' => $ttl, 'why' => (string) $why]);
+        }
+        return $ttl;
+    }
+}
 if (!function_exists('wpc_font_rescan_handler')) {
     function wpc_font_rescan_handler()
     {
+        $ok = null;
+        $why = '';
         try {
+            if (function_exists('wpc_cron_lane_load_core')) {
+                wpc_cron_lane_load_core();
+            }
             if (!class_exists('wps_ic_fonts') && defined('WPS_IC_DIR')) {
                 @include_once WPS_IC_DIR . 'addons/fonts/fonts.class.php';
             }
@@ -10944,18 +14093,18 @@ if (!function_exists('wpc_font_rescan_handler')) {
             }
             $fonts = new wps_ic_fonts();
             $url   = home_url('/');
-            $found = $fonts->scanForFonts($fonts->callAPI($url));
-            if ((empty($found['googleFontsStylesheets']) && empty($found['gstaticUrls']))
-                && method_exists($fonts, 'localScan') && apply_filters('wpc_font_local_scan', true)) {
-                $found = $fonts->localScan($url);
-            }
+            $found = $fonts->localScan($url);
+            $ok = (string) $found['failed'] === '';
+            $why = $ok ? '' : (string) $found['failed'];
+            $page_sheets = $ok && !empty($found['googleFontsStylesheets']) ? (array) $found['googleFontsStylesheets'] : [];
+            $fonts->noteSheets($page_sheets);
 
 
             $seen_queue = get_option('wpc_font_seen_queue');
             if (is_array($seen_queue) && !empty($seen_queue)) {
                 $found['googleFontsStylesheets'] = array_values(array_unique(array_merge(
                     isset($found['googleFontsStylesheets']) && is_array($found['googleFontsStylesheets']) ? $found['googleFontsStylesheets'] : [],
-                    array_slice($seen_queue, 0, 10)
+                    array_slice($fonts->seenOnly($seen_queue), 0, 10)
                 )));
                 delete_option('wpc_font_seen_queue');
             }
@@ -10969,8 +14118,20 @@ if (!function_exists('wpc_font_rescan_handler')) {
                 if ($changed && class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeAll')) {
                     wps_ic_cache_integrations::purgeAll(false, false, true, false, false, false, 'soft');
                 }
+                foreach ($page_sheets as $page_sheet) {
+                    if (function_exists('wpc_is_font_sheet_localized') && !wpc_is_font_sheet_localized($page_sheet)) {
+                        $ok = false;
+                        $why = 'sheet-not-localized';
+                        break;
+                    }
+                }
             }
         } catch (\Throwable $e) {
+            $ok = false;
+            $why = 'error';
+        }
+        if ($ok !== null && function_exists('set_transient')) {
+            wpc_font_rescan_settle($ok, $why);
         }
     }
     add_action('wpc_font_rescan', 'wpc_font_rescan_handler');
@@ -11014,15 +14175,15 @@ if (!function_exists('wpc_consume_wire_artifact')) {
      * §2 (v7.10.678) — consume the service's per-URL wire.json manifest.
      *
      * Called from the crit callback (a SEPARATE background request, never a page render). Stores
-     * the render-provenance stamp (wire_rev/wire_sig) per-URL alongside the crit, and — when a real
+     * the render-provenance stamp (wire_rev, wire_url) per-URL alongside the crit, and — when a real
      * URL + rev are present — fetches, validates and caches the manifest, recording its material_rev,
-     * schema_epoch and scope. `wire_rev` 0 / `wire_sig` '' means "no manifest for this gen": the stamp
+     * schema_epoch and scope. `wire_rev` 0 means "no manifest for this gen": the stamp
      * is written as 0 and NOTHING is fetched or acted on (§5 never purges on rev 0). The fetch is
      * host-allowlisted, size-capped and JSON-validated — never trusts an arbitrary callback URL — and
      * is idempotent: a repeat callback for a rev already cached does not re-hit the network. No render
      * touches this; §5/render read the stamp back with wpc_wire_provenance() (a cheap file read).
      */
-    function wpc_consume_wire_artifact($urlKey, $wireUrl, $wireRev, $wireSig)
+    function wpc_consume_wire_artifact($urlKey, $wireUrl, $wireRev)
     {
         if (empty($urlKey) || !defined('WPS_IC_CRITICAL')
             || !apply_filters('wpc_wire_artifact_consume', true)) {
@@ -11071,13 +14232,14 @@ if (!function_exists('wpc_consume_wire_artifact')) {
                 return 0;
             }
             $write($dir . 'wire_rev.txt', (string) $rev);
-            $write($dir . 'wire_sig.txt', substr((string) $wireSig, 0, 4096));
+            wpc_wire_sig_unlink($dir);
             if ($wireUrl !== '') { $write($dir . 'wire_url.txt', $wireUrl); }
             // rev 0 / no url ⇒ nothing to fetch (the callback said "not yet / never").
             if ($rev <= 0 || $wireUrl === '') { return 0; }
             // Host allowlist: only the crit MC / bunny CDN, never an arbitrary param URL.
             $host = strtolower((string) parse_url($wireUrl, PHP_URL_HOST));
-            if ($host === '' || (substr($host, -10) !== '.b-cdn.net' && stripos($host, 'critical-css-mc') === false)) {
+            if ($host === '' || (substr($host, -10) !== '.b-cdn.net' && stripos($host, 'critical-css-mc') === false
+                && !(function_exists('wpc_crit_artifact_host_ok') && wpc_crit_artifact_host_ok($host)))) {
                 return 0;
             }
             // v7.10.684 — idempotence keys on the SHELF OBJECT ({uuid}.wire.json is immutable),
@@ -11098,10 +14260,13 @@ if (!function_exists('wpc_consume_wire_artifact')) {
             }
             // Amended object, same URL: bust any shelf-CDN copy of the stale rev on the FETCH
             // only — held_url stays canonical for the dedupe key.
-            $fetchUrl = ($heldUrl === $wireUrl)
+            $fetchUrl = ($heldUrl === $wireUrl && !(function_exists('wpc_crit_artifact_signed') && wpc_crit_artifact_signed($wireUrl)))
                 ? $wireUrl . ((strpos($wireUrl, '?') === false ? '?' : '&') . 'wr=' . $rev)
                 : $wireUrl;
             $resp = wp_remote_get($fetchUrl, ['timeout' => (int) apply_filters('wpc_wire_fetch_timeout', 4)]);
+            if (function_exists('wpc_crit_signed_denied')) {
+                wpc_crit_signed_denied($dir, $wireUrl, $resp, ltrim((string) $urlKey, '/'));
+            }
             if (is_wp_error($resp) || (int) wp_remote_retrieve_response_code($resp) !== 200) { return 0; }
             $raw = (string) wp_remote_retrieve_body($resp);
             if ($raw === '' || strlen($raw) > 262144) { return 0; }
@@ -11155,16 +14320,19 @@ if (!function_exists('wpc_consume_wire_artifact')) {
             // declared rev 2. held_url CHANGING is the one honest content signal. Local layers
             // only: CF eviction already rides the crit-land tag purge.
             if ($heldUrl !== $wireUrl || $matRev > $heldRev) {
-                if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeCacheFiles')) {
-                    wps_ic_cache_integrations::purgeCacheFiles((string) $urlKey);
-                }
-                $pageUrl = (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'getUrlFromKey'))
-                    ? (string) wps_ic_url_key::getUrlFromKey((string) $urlKey) : '';
-                if ($pageUrl !== '' && class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'removeStaticMirror')) {
-                    wps_cacheHtml::removeStaticMirror($pageUrl);
+                $wpc_p2 = function_exists('wpc_p2_land_page') ? wpc_p2_land_page((string) $urlKey, '', 'crit-wire-derived') : '';
+                if ($wpc_p2 === '') {
+                    if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeCacheFiles')) {
+                        wps_ic_cache_integrations::purgeCacheFiles((string) $urlKey);
+                    }
+                    $pageUrl = (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'getUrlFromKey'))
+                        ? (string) wps_ic_url_key::getUrlFromKey((string) $urlKey) : '';
+                    if ($pageUrl !== '' && class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'removeStaticMirror')) {
+                        wps_cacheHtml::removeStaticMirror($pageUrl);
+                    }
                 }
                 if (function_exists('wpc_cache_first_log')) {
-                    wpc_cache_first_log('wire-purge-derived', (string) $urlKey, '', ['from' => substr((string) $heldUrl, -22), 'to' => substr($wireUrl, -22)]);
+                    wpc_cache_first_log('wire-purge-derived', (string) $urlKey, '', ['from' => substr((string) $heldUrl, -22), 'to' => substr($wireUrl, -22)] + ($wpc_p2 === '' ? [] : ['p2' => $wpc_p2]));
                 }
             }
             if (function_exists('wpc_cache_first_log')) {
@@ -11214,8 +14382,9 @@ if (!function_exists('wpc_wire_catchup')) {
                 $landUuid = preg_replace('/[^a-f0-9\-]/', '', strtolower(trim((string) @file_get_contents($dir . 'uuid.txt'))));
             }
             if (strlen($landUuid) >= 32 && stripos($declared, $landUuid) === false) {
-                $shelfBase = 'https://critical-css-mc.b-cdn.net/';
-                if ($declared !== '' && preg_match('#^(https?://[^/]+/)#i', $declared, $baseMatch)) {
+                $shelfBase = function_exists('wpc_crit_artifact_base') ? wpc_crit_artifact_base() : 'https://critical-css-mc.b-cdn.net/';
+                if ($declared !== '' && preg_match('#^(https?://[^/]+/)#i', $declared, $baseMatch)
+                    && !(function_exists('wpc_crit_artifact_signed') && wpc_crit_artifact_signed($declared))) {
                     $shelfBase = $baseMatch[1];
                 }
                 $declared = $shelfBase . substr($landUuid, 0, 4) . '/' . $landUuid . '.wire.json';
@@ -11232,8 +14401,7 @@ if (!function_exists('wpc_wire_catchup')) {
             }
             set_transient('wpc_wirecu_' . md5((string) $urlKey), 1, 300);
             $rev = @is_file($dir . 'wire_rev.txt') ? (int) @file_get_contents($dir . 'wire_rev.txt') : 0;
-            $sig = @is_file($dir . 'wire_sig.txt') ? (string) @file_get_contents($dir . 'wire_sig.txt') : '';
-            $ok  = (int) wpc_consume_wire_artifact((string) $urlKey, $declared, max(1, $rev), $sig);
+            $ok  = (int) wpc_consume_wire_artifact((string) $urlKey, $declared, max(1, $rev));
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('wire-catchup', (string) $urlKey, '', ['ok' => $ok]);
             }
@@ -11247,23 +14415,229 @@ if (!function_exists('wpc_wire_catchup')) {
 if (!function_exists('wpc_wire_provenance')) {
     /**
      * §2 — read the stored wire provenance for a urlKey. Cheap file reads; safe at render.
-     * Returns ['rev'=>int (callback stamp), 'sig'=>string, 'url'=>string,
+     * Returns ['rev'=>int (callback stamp), 'url'=>string,
      *          'scope'=>'url'|'site', 'material_rev'=>int (cached manifest), 'epoch'=>int].
      * rev 0 ⇒ no manifest was declared for this render (§5 must not purge on it).
      */
     function wpc_wire_provenance($urlKey)
     {
-        $out = ['rev' => 0, 'sig' => '', 'url' => '', 'scope' => 'url', 'material_rev' => 0, 'epoch' => 0];
+        $out = ['rev' => 0, 'url' => '', 'scope' => 'url', 'material_rev' => 0, 'epoch' => 0];
         if (empty($urlKey) || !defined('WPS_IC_CRITICAL')) { return $out; }
         $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . ltrim((string) $urlKey, '/') . '/';
         $r = function ($p) use ($dir) { return @is_file($dir . $p) ? (string) @file_get_contents($dir . $p) : ''; };
         $out['rev']          = (int) $r('wire_rev.txt');
-        $out['sig']          = $r('wire_sig.txt');
         $out['url']          = $r('wire_url.txt');
         $out['scope']        = trim($r('wire.scope')) === 'site' ? 'site' : 'url';
         $out['material_rev'] = (int) $r('wire.rev');
         $out['epoch']        = (int) $r('wire.epoch');
         return $out;
+    }
+}
+
+if (!function_exists('wpc_wire_sig_unlink')) {
+    /**
+     * Removes the wire_sig.txt file that earlier releases wrote into a page's critical folder.
+     * Nothing reads or writes it any more. Answers whether a file or link of that name was there
+     * and is gone; a symbolic link is removed itself, its target is never touched.
+     */
+    function wpc_wire_sig_unlink($dir)
+    {
+        $file = rtrim((string) $dir, '/') . '/wire_sig.txt';
+        return (@is_file($file) || @is_link($file)) && @unlink($file);
+    }
+}
+
+if (!function_exists('wpc_wire_sig_files_sweep')) {
+    /**
+     * Once per upgrade: removes every wire_sig.txt directly inside a page folder of the critical
+     * folder (one level, that exact name). A page folder that is, or sits behind, a symbolic link
+     * is not entered (wpc_fs_link_below). Stops between folders once the time budget
+     * (filter wpc_wire_sig_sweep_secs, 3 s) is spent. Fails silent. Writes one `wire-sig-swept`
+     * receipt, {n: files removed, partial: 1 when the budget ended the walk}, and answers n.
+     */
+    function wpc_wire_sig_files_sweep()
+    {
+        $removed = 0;
+        try {
+            if (!defined('WPS_IC_CRITICAL')) {
+                return 0;
+            }
+            $root = rtrim((string) WPS_IC_CRITICAL, '/');
+            $deadline = microtime(true) + max(0.0, (float) apply_filters('wpc_wire_sig_sweep_secs', 3));
+            $partial = 0;
+            foreach ((array) @scandir($root) as $name) {
+                $name = (string) $name;
+                if ($name === '' || $name[0] === '.') {
+                    continue;
+                }
+                if (microtime(true) >= $deadline) {
+                    $partial = 1;
+                    break;
+                }
+                $dir = $root . '/' . $name;
+                if (!@is_dir($dir) || wpc_fs_link_below($root, $dir)) {
+                    continue;
+                }
+                if (wpc_wire_sig_unlink($dir)) {
+                    $removed++;
+                }
+            }
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('wire-sig-swept', '', '', ['n' => $removed, 'partial' => $partial]);
+            }
+        } catch (\Throwable $e) {
+        }
+        return $removed;
+    }
+}
+
+if (!function_exists('wpc_copy_user_folder_name')) {
+    /**
+     * Whether an entry of the page cache root is named like a signed-in visitor's folder
+     * (wps_ic_url_key::userFolder()): 32 lowercase hex characters. A name is not proof, because a
+     * page whose key is 32 hex characters is named the same; wpc_user_folder_newest() tells them apart.
+     */
+    function wpc_copy_user_folder_name($entry)
+    {
+        return preg_match('/^[a-f0-9]{32}$/', (string) $entry) === 1;
+    }
+}
+
+if (!function_exists('wpc_user_folder_newest')) {
+    /**
+     * The time of the newest entry in a signed-in visitor's folder, or null when $dir is not one.
+     * A signed-in visitor's folder holds page folders, each holding that page's files, and at most
+     * the cron heartbeat's stamp file. A folder with any other file directly in it (a page whose
+     * key is 32 hex characters holds its copy there), a symbolic link anywhere in it, or a
+     * directory inside a page folder is not read as one and is never removed.
+     */
+    function wpc_user_folder_newest($dir)
+    {
+        $dir = rtrim((string) $dir, '/');
+        $newest = (int) @filemtime($dir);
+        $pages = @scandir($dir);
+        if (!is_array($pages)) {
+            return null;
+        }
+        foreach ($pages as $page) {
+            if ($page === '.' || $page === '..') {
+                continue;
+            }
+            $path = $dir . '/' . $page;
+            if (@is_link($path)) {
+                return null;
+            }
+            if (!@is_dir($path)) {
+                if ($page !== 'wpc-cron-heartbeat.stamp') {
+                    return null;
+                }
+                $newest = max($newest, (int) @filemtime($path));
+                continue;
+            }
+            $newest = max($newest, (int) @filemtime($path));
+            $files = @scandir($path);
+            if (!is_array($files)) {
+                return null;
+            }
+            foreach ($files as $file) {
+                if ($file === '.' || $file === '..') {
+                    continue;
+                }
+                $filePath = $path . '/' . $file;
+                if (@is_link($filePath) || @is_dir($filePath)) {
+                    return null;
+                }
+                $newest = max($newest, (int) @filemtime($filePath));
+            }
+        }
+        return $newest;
+    }
+}
+
+if (!function_exists('wpc_user_folder_sweep')) {
+    /**
+     * Once a day, from the cron lane: removes the folders of signed-in visitors that have been idle
+     * longer than a login can last (wps_ic_url_key::USER_FOLDER_IDLE_SECONDS). A folder is one of the
+     * page cache root's top-level entries named like wps_ic_url_key::userFolder() and read as one by
+     * wpc_user_folder_newest(); it goes when its newest file is older than that. A link is never
+     * entered or removed, and a page-key folder or a mirror host folder is never read as one.
+     * Stops between folders once the time budget (filter wpc_user_folder_sweep_secs, 3 s) is spent
+     * and at least one folder was read,
+     * keeps where it stopped (option wpc_user_folder_sweep) and asks the cron for a resume a minute
+     * on; a walk resumes from its cursor for a day, then starts again. A walk that completed
+     * starts no other for twenty hours. Writes one `user-folders-swept` receipt per slice, {n:
+     * folders removed, seen: folders read as a visitor's, partial: 1 when the budget ended the
+     * slice}, and answers n.
+     */
+    function wpc_user_folder_sweep()
+    {
+        $removed = 0;
+        try {
+            if (!defined('WPS_IC_CACHE') || !defined('WPS_IC_DIR') || !function_exists('get_option')) {
+                return 0;
+            }
+            if (!class_exists('wps_ic_url_key', false)) {
+                @include_once WPS_IC_DIR . 'traits/url_key.php';
+            }
+            $root = rtrim((string) WPS_IC_CACHE, '/');
+            if (!class_exists('wps_ic_url_key', false) || !@is_dir($root)) {
+                return 0;
+            }
+            $now = time();
+            $state = get_option('wpc_user_folder_sweep', false);
+            $state = is_array($state) ? $state : [];
+            $after = '';
+            $started = $now;
+            $total = 0;
+            if (!empty($state['partial']) && $now - (int) ($state['t'] ?? 0) <= 86400) {
+                $after = (string) ($state['after'] ?? '');
+                $started = (int) $state['t'];
+                $total = (int) ($state['n'] ?? 0);
+            } elseif ($now - (int) ($state['done'] ?? 0) < 72000) {
+                return 0;
+            }
+            $idle = wps_ic_url_key::USER_FOLDER_IDLE_SECONDS;
+            $deadline = microtime(true) + max(0.0, (float) apply_filters('wpc_user_folder_sweep_secs', 3));
+            $partial = 0;
+            $seen = 0;
+            $walked = 0;
+            foreach ((array) @scandir($root) as $name) {
+                $name = (string) $name;
+                if (!wpc_copy_user_folder_name($name) || ($after !== '' && strcmp($name, $after) <= 0)) {
+                    continue;
+                }
+                if ($walked > 0 && microtime(true) >= $deadline) {
+                    $partial = 1;
+                    break;
+                }
+                $after = $name;
+                $walked++;
+                $dir = $root . '/' . $name;
+                if (!@is_dir($dir) || wpc_fs_link_below($root, $dir)) {
+                    continue;
+                }
+                $newest = wpc_user_folder_newest($dir);
+                if ($newest === null) {
+                    continue;
+                }
+                $seen++;
+                if ($newest < $now - $idle && wpc_fs_remove_tree($dir)) {
+                    $removed++;
+                }
+            }
+            $total += $removed;
+            update_option('wpc_user_folder_sweep', $partial
+                ? ['t' => $started, 'partial' => 1, 'after' => $after, 'n' => $total, 'done' => (int) ($state['done'] ?? 0)]
+                : ['t' => $started, 'partial' => 0, 'after' => '', 'n' => $total, 'done' => $now], false);
+            if ($partial && function_exists('wp_schedule_single_event')) {
+                wp_schedule_single_event($now + 60, 'wpc_user_folder_sweep_hook');
+            }
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('user-folders-swept', '', '', ['n' => $removed, 'seen' => $seen, 'partial' => $partial]);
+            }
+        } catch (\Throwable $e) {
+        }
+        return $removed;
     }
 }
 
@@ -11335,8 +14709,7 @@ if (!function_exists('wpc_copy_admissible')) {
             };
             // 1 — CRIT CARRIED, config-aware: the copy must hold what the configuration promises.
             if (!empty($checks['crit'])) {
-                $settings = get_option(WPS_IC_SETTINGS);
-                if (is_array($settings) && isset($settings['critical']['css']) && (string) $settings['critical']['css'] === '1'
+                if (!wpc_crit_generation_off((string) $urlKey)
                     && ((int) @filesize($dir . 'critical_desktop.css') > 5 || (int) @filesize($dir . 'critical_mobile.css') > 5)
                     && strpos($html, 'id="wpc-critical-css"') === false) {
                     // Every landed crit is inlined whatever its size (the cap is the service's),
@@ -11359,9 +14732,16 @@ if (!function_exists('wpc_copy_admissible')) {
                 // render's cover fallback records.
                 $heroUrl = (is_array($wire) && isset($wire['wire'][$device]['lcp']['url']))
                     ? (string) $wire['wire'][$device]['lcp']['url'] : '';
-                if ($lcpVerdict === 'inline-data-uri'
+                $heroHeld = false;
+                if ($lcpVerdict === 'inline-data-uri' && class_exists('wps_ic_atf_observation') && wps_ic_atf_observation::heroFold()) {
+                    $heroHeld = (($GLOBALS['wpc_lcp_hero_cover_state'] ?? '') === 'held')
+                        || wps_ic_atf_observation::documentHolds(json_decode((string) @file_get_contents($dir . 'lcp.json'), true), $device);
+                }
+                if ($lcpVerdict === 'inline-data-uri' && !$heroHeld
                     && (($GLOBALS['wpc_lcp_hero_cover_state'] ?? '') !== 'inline')
                     && strpos($html, 'wpc-lcp-bg-authority') === false
+                    && ($heroUrl === '' || !class_exists('wps_rewriteLogic') || !method_exists('wps_rewriteLogic', 'wpc_lcp_bg_url_allowed')
+                        || wps_rewriteLogic::wpc_lcp_bg_url_allowed($heroUrl))
                     && !wpc_lcp_bg_preloaded($html, $heroUrl, $device)) {
                     return $refuse('hero');
                 }
@@ -11403,7 +14783,7 @@ if (!function_exists('wpc_gen_semantic_ok')) {
             // extraction can produce.
             foreach (['crit_desktop', 'crit_mobile'] as $k) {
                 if (isset($bodies[$k]) && is_string($bodies[$k])) {
-                    foreach (['wpc-arm-sentinel', 'bg-authority700', 'wpc-lcp-bg-preload'] as $mk) {
+                    foreach (['wpc-arm-sentinel', 'bg-authority700', 'wpc-lcp-bg-preload', 'wpc-hero-lqip'] as $mk) {
                         if (strpos($bodies[$k], $mk) !== false) {
                             $why = 'self-ref-' . $k;
                             return false;
@@ -11478,7 +14858,8 @@ if (!function_exists('wpc_manifest_consume')) {
             // Host allowlist — manifest AND every artifact URL inside it (never trust webhook URLs).
             $allow = function ($u) {
                 $h = strtolower((string) parse_url((string) $u, PHP_URL_HOST));
-                return $h !== '' && (substr($h, -10) === '.b-cdn.net' || stripos($h, 'critical-css-mc') !== false);
+                return $h !== '' && (substr($h, -10) === '.b-cdn.net' || stripos($h, 'critical-css-mc') !== false
+                    || (function_exists('wpc_crit_artifact_host_ok') && wpc_crit_artifact_host_ok($h)));
             };
             if (!$allow($manifestUrl)) { return 0; }
             // defer_{dev}_{i} entries name the SITE'S OWN stylesheets (crit-push manifest-writer.js:71). They are
@@ -11536,8 +14917,9 @@ if (!function_exists('wpc_manifest_consume')) {
             // NOT in the chain = stale straggler or disjoint history — hold everything; the
             // pointer's real current gen re-announces via webhook replay or /reannounce.
             if ($held !== '' && $held !== $genId) {
-                $shelfBase = 'https://critical-css-mc.b-cdn.net/';
-                if (preg_match('#^(https?://[^/]+/)#i', (string) $manifestUrl, $baseMatch)) { $shelfBase = $baseMatch[1]; }
+                $shelfBase = function_exists('wpc_crit_artifact_base') ? wpc_crit_artifact_base() : 'https://critical-css-mc.b-cdn.net/';
+                if (preg_match('#^(https?://[^/]+/)#i', (string) $manifestUrl, $baseMatch)
+                    && !(function_exists('wpc_crit_artifact_signed') && wpc_crit_artifact_signed((string) $manifestUrl))) { $shelfBase = $baseMatch[1]; }
                 $cur = $m;
                 $newer = false;
                 for ($i = 0; $i < 4; $i++) {
@@ -11598,18 +14980,16 @@ if (!function_exists('wpc_manifest_consume')) {
                 'uuid' => $genId,
                 'via'  => 'manifest',
                 'epoch' => $epoch,
+                'corpus_id' => isset($m['corpus_id']) && is_string($m['corpus_id']) ? $m['corpus_id'] : '',
             ];
-            // v7.10.699 — spec v1.1: tpl_key rides the manifest (service v3.187), so used_css
-            // lands through the same proven saver path (used_css_url.txt + used_tpl.txt + the
-            // Route-2 artifact-land hooks) and NOTHING remains on the legacy callback.
             $tplKey = (isset($m['tpl_key']) && is_string($m['tpl_key'])) ? trim($m['tpl_key']) : '';
-            if ($tplKey !== '' && !empty($m['artifacts']['used_css']['url'])) {
-                $saveArgs['tpl_key']      = $tplKey;
-                $saveArgs['used_css_url'] = (string) $m['artifacts']['used_css']['url'];
-            }
             $res = $cc->saveCriticalCss($urlKey, $saveArgs, 'meta', (string) $pageUrl);
             if (is_array($res) && isset($res['critical-failed'])) {
                 $log('manifest-land-fail', ['a' => 'crit']);
+                return 0;
+            }
+            if (is_array($res) && isset($res['critical-css']) && $res['critical-css'] === 'purge-stale-kept') {
+                $log('manifest-land-fail', ['a' => 'crit', 'why' => 'purge-stale-kept']);
                 return 0;
             }
             // Verify effect, not execution: the flip requires the device pair ON DISK — a save
@@ -11619,7 +14999,38 @@ if (!function_exists('wpc_manifest_consume')) {
                 return 0;
             }
             $landed[] = 'crit';
-            if (isset($saveArgs['used_css_url'])) { $landed[] = 'used_css'; }
+            $usedLanes = [];
+            $usedShas = [];
+            foreach (['union' => 'used_css', 'mobile' => 'used_css_mobile', 'desktop' => 'used_css_desktop'] as $usedLane => $usedArtifact) {
+                if (!empty($m['artifacts'][$usedArtifact]['url'])) {
+                    $usedLanes[$usedLane] = (string) $m['artifacts'][$usedArtifact]['url'];
+                    if (!empty($m['artifacts'][$usedArtifact]['sha256'])) { $usedShas[$usedLane] = (string) $m['artifacts'][$usedArtifact]['sha256']; }
+                }
+            }
+            if (!empty($usedLanes) && function_exists('wpc_used_css_land_generation') && wpc_crit_used_css_setting_on()) {
+                $usedLandOpts = ['key' => (string) $urlKey, 'via' => 'manifest', 'sha' => $usedShas, 'fresh' => true];
+                $usedWire = isset($bodies['wire']) ? json_decode((string) $bodies['wire'], true) : null;
+                if (is_array($usedWire) && !empty($usedWire['rest_sha256']) && is_array($usedWire['rest_sha256'])) {
+                    $usedLandOpts['rest_sha256'] = $usedWire['rest_sha256'];
+                }
+                $usedLand = wpc_used_css_land_generation($dir, $tplKey, $usedLanes, $usedLandOpts);
+                $usedHeld = !empty($usedLand['pulled']);
+                foreach ((array) $usedLand['lanes'] as $usedLaneInfo) {
+                    if ($usedLaneInfo['state'] === 'unchanged') { $usedHeld = true; }
+                }
+                if ($usedHeld && $usedLand['tpl'] !== '' && trim((string) @file_get_contents($dir . 'used_tpl.txt')) !== $usedLand['tpl']) {
+                    $write($dir . 'used_tpl.txt', $usedLand['tpl']);
+                }
+                if (!empty($usedLand['pulled'])) {
+                    $landed[] = 'used_css';
+                    if (function_exists('wpc_r2_on_artifact_land')) { wpc_r2_on_artifact_land(); }
+                    if (function_exists('wpc_autopurge_on_land')) { wpc_autopurge_on_land($dir); }
+                }
+                if (!empty($usedLand['failed']) && function_exists('wpc_pl_sched') && function_exists('wp_next_scheduled')
+                    && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, 1])) {
+                    wpc_pl_sched(time() + 45, 'wpc_lcp_repull', [$urlKey, 1]);
+                }
+            }
             if (isset($bodies['wire']) && is_array(json_decode($bodies['wire'], true))) {
                 $w = json_decode($bodies['wire'], true);
                 $tmp = $dir . 'wire.json.tmp.' . getmypid();
@@ -11667,13 +15078,16 @@ if (!function_exists('wpc_manifest_consume')) {
             if (!@is_file($dir . 'dispatch_ts.txt')) {
                 $write($dir . 'dispatch_ts.txt', (string) time()); // quarantine reads land-without-dispatch as foreign crit
             }
-            if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeCacheFiles')) {
-                wps_ic_cache_integrations::purgeCacheFiles((string) $urlKey);
-            }
-            $mirrorUrl = (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'getUrlFromKey'))
-                ? (string) wps_ic_url_key::getUrlFromKey((string) $urlKey) : '';
-            if ($mirrorUrl !== '' && class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'removeStaticMirror')) {
-                wps_cacheHtml::removeStaticMirror($mirrorUrl);
+            $wpc_p2 = function_exists('wpc_p2_land_page') ? wpc_p2_land_page((string) $urlKey, '', 'crit-manifest-flip') : '';
+            if ($wpc_p2 === '') {
+                if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeCacheFiles')) {
+                    wps_ic_cache_integrations::purgeCacheFiles((string) $urlKey);
+                }
+                $mirrorUrl = (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'getUrlFromKey'))
+                    ? (string) wps_ic_url_key::getUrlFromKey((string) $urlKey) : '';
+                if ($mirrorUrl !== '' && class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'removeStaticMirror')) {
+                    wps_cacheHtml::removeStaticMirror($mirrorUrl);
+                }
             }
             $log('manifest-consumed', [
                 'gen'      => substr($genId, 0, 8),
@@ -11681,11 +15095,85 @@ if (!function_exists('wpc_manifest_consume')) {
                 'landed'   => implode(',', $landed),
                 'defer'    => $deferredSheetsSeen,
                 'lean'     => (string) ($m['quality']['lean'] ?? ''),
-            ]);
+            ] + ($wpc_p2 === '' ? [] : ['p2' => $wpc_p2]) + wpc_crit_corpus_echo($dir, isset($m['corpus_id']) ? $m['corpus_id'] : '', $genId));
             return 1;
         } catch (\Throwable $e) {
             return 0;
         }
+    }
+}
+
+if (!function_exists('wpc_font_below_fold_write')) {
+    /**
+     * Keeps, in the page's crit dir $dir (ending in a slash), the keys ("family|weight|style", family
+     * lower case) the service's fonts rows say no first screen paints: font-below-fold.json holds
+     * them, and is removed when no key qualifies. A key qualifies when every row of its family, weight
+     * and style says below_fold === true. A row with a built subset (a url), an icon row, and a family
+     * with a row whose weight cannot be read keep their keys out. The one owner of that decision, for
+     * every land that reads the rows (wpc_consume_fonts_artifact and the criticalDone callback).
+     * Answers the number of keys kept.
+     */
+    function wpc_font_below_fold_write($fonts, $dir)
+    {
+        if (!is_array($fonts) || !is_string($dir) || $dir === '' || !function_exists('wpc_crit_meta_write')) {
+            return 0;
+        }
+        $below_tuples = [];
+        $below_state = [];
+        foreach ($fonts as $below_row) {
+            if (!is_array($below_row) || empty($below_row['family'])) { continue; }
+            $below_family = strtolower(trim(str_replace(['"', "'", '|', "\r", "\n"], '', (string) $below_row['family'])));
+            if ($below_family === '') { continue; }
+            $below_weight = strtolower(trim(preg_replace('/\s+/', ' ', (string) (isset($below_row['weight']) ? $below_row['weight'] : '400'))));
+            $below_weight = $below_weight === 'normal' || $below_weight === 'regular' ? '400' : ($below_weight === 'bold' ? '700' : $below_weight);
+            if (!preg_match('/^\d{1,4}( \d{1,4})?$/', $below_weight)) {
+                $below_state[$below_family . '|*'] = false;
+                continue;
+            }
+            $below_style = preg_match('/^(?:italic|oblique)/i', trim((string) (isset($below_row['style']) ? $below_row['style'] : 'normal'))) ? 'italic' : 'normal';
+            $below_key = $below_family . '|' . $below_weight . '|' . $below_style;
+            $below_moves = isset($below_row['below_fold']) && $below_row['below_fold'] === true
+                && empty($below_row['url'])
+                && !(isset($below_row['kind']) && $below_row['kind'] === 'icon');
+            $below_state[$below_key] = (!isset($below_state[$below_key]) || $below_state[$below_key]) && $below_moves;
+        }
+        foreach ($below_state as $below_key => $below_moves) {
+            $below_family = substr($below_key, 0, (int) strpos($below_key, '|'));
+            if ($below_moves && substr($below_key, -2) !== '|*' && !isset($below_state[$below_family . '|*']) && count($below_tuples) < 64) {
+                $below_tuples[] = $below_key;
+            }
+        }
+        if ($below_tuples) { wpc_crit_meta_write($dir . 'font-below-fold.json', wp_json_encode($below_tuples)); }
+        elseif (@is_readable($dir . 'font-below-fold.json')) { @unlink($dir . 'font-below-fold.json'); }
+
+        return count($below_tuples);
+    }
+}
+
+if (!function_exists('wpc_font_preload_lines')) {
+    /** The lines of a page's font-preload.txt: at most three first-party woff2 files of fonts rows that name a first-screen face, as "url" or "url<TAB>family". */
+    function wpc_font_preload_lines($fonts, $homeHost)
+    {
+        $lines = [];
+        $seen = [];
+        $strip = function ($h) { return strpos($h, 'www.') === 0 ? substr($h, 4) : $h; };
+        $homeHost = strtolower((string) $homeHost);
+        foreach ((array) $fonts as $face) {
+            if (count($lines) >= 3) { break; }
+            if (!is_array($face) || empty($face['src_url']) || !is_string($face['src_url'])) { continue; }
+            if (isset($face['kind']) && $face['kind'] === 'icon') { continue; }
+            if ((isset($face['role']) && $face['role'] === 'slice') || !empty($face['declared_only']) || !empty($face['metric_only'])
+                || (isset($face['atf_chars']) && (int) $face['atf_chars'] < 1)) { continue; }
+            $src_url = trim((string) $face['src_url']);
+            if (substr((string) parse_url($src_url, PHP_URL_PATH), -6) !== '.woff2') { continue; }
+            $src_host = strtolower((string) parse_url($src_url, PHP_URL_HOST));
+            if ($src_host !== '' && ($homeHost === '' || $strip($src_host) !== $strip($homeHost))) { continue; }
+            if (isset($seen[$src_url])) { continue; }
+            $seen[$src_url] = 1;
+            $family = trim(str_replace(["\t", "\r", "\n", '"', "'"], '', isset($face['family']) && is_string($face['family']) ? $face['family'] : ''));
+            $lines[] = $family === '' ? $src_url : $src_url . "\t" . $family;
+        }
+        return $lines;
     }
 }
 
@@ -11799,7 +15287,7 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
                     $fu = (string) $fe['url'];
                     $fh = (string) parse_url($fu, PHP_URL_HOST);
                     $fb = basename((string) parse_url($fu, PHP_URL_PATH));
-                    if (stripos($fh, 'critical-css-mc.b-cdn.net') === false || !preg_match('/^[A-Za-z0-9._-]+\.woff2$/', $fb)) { continue; }
+                    if (!(function_exists('wpc_crit_artifact_host_ok') ? wpc_crit_artifact_host_ok($fh) : stripos($fh, 'critical-css-mc.b-cdn.net') !== false) || !preg_match('/^[A-Za-z0-9._-]+\.woff2$/', $fb)) { continue; }
                     $dst = rtrim(WPS_IC_FONTS_DIR, '/') . '/' . $fb;
                     if (!file_exists($dst) || (int) @filesize($dst) !== (int) ($fe['bytes'] ?? -1)) {
                         $fr = wp_remote_get($fu, ['timeout' => 4]);
@@ -11915,29 +15403,16 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
 
 
                 $wpc_home_h = function_exists('home_url') ? strtolower((string) parse_url(home_url(), PHP_URL_HOST)) : '';
-                $wpc_strip_w = function ($h) { return strpos($h, 'www.') === 0 ? substr($h, 4) : $h; };
 
 
                 // Raleway 400/500/600 all in-chain); preloading only #1 left #2/#3 a full CSS→face
 
 
-                $preload_urls = [];
-                foreach ($fonts as $preload_face) {
-                    if (count($preload_urls) >= 3) { break; }
-                    if (!is_array($preload_face) || empty($preload_face['src_url']) || !is_string($preload_face['src_url'])) { continue; }
-
-
-                    if (isset($preload_face['kind']) && $preload_face['kind'] === 'icon') { continue; }
-                    $src_url = trim((string) $preload_face['src_url']);
-                    if (substr((string) parse_url($src_url, PHP_URL_PATH), -6) !== '.woff2') { continue; }
-                    $src_host = strtolower((string) parse_url($src_url, PHP_URL_HOST));
-                    if ($src_host !== '' && ($wpc_home_h === '' || $wpc_strip_w($src_host) !== $wpc_strip_w($wpc_home_h))) {
-                        continue;
-                    }
-                    if (!in_array($src_url, $preload_urls, true)) { $preload_urls[] = $src_url; }
-                }
+                $preload_urls = wpc_font_preload_lines($fonts, $wpc_home_h);
                 if (!empty($preload_urls)) { wpc_crit_meta_write($cd . 'font-preload.txt', implode("\n", $preload_urls)); }
                 elseif (@is_readable($cd . 'font-preload.txt')) { @unlink($cd . 'font-preload.txt'); }
+
+                wpc_font_below_fold_write($fonts, $cd);
             }
             // v7.10.398: persist remote_dup match tokens as a global option (fonts localization
             // is site-consistent — a family the service subsets is subset on every page). The
@@ -12099,9 +15574,6 @@ if (!function_exists('wpc_perf_debug_report')) {
         $wpc_suppress_why = [];
         $wpc_account_live = get_option('wps_ic_allow_live', 'unset');
         $wpc_suppress_why[] = 'account_live=' . ($wpc_account_live === 'unset' ? 'unset' : ($wpc_account_live ? '1' : '0 <-TRIP'));
-        $wpc_suppress_why[] = 'env_changed=' . ((function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed())
-            ? ((function_exists('wpc_v2_zone_origin_proved') && wpc_v2_zone_origin_proved()) ? 'YES (BRIDGED by measured origin-proof — not suppressing)' : 'YES <-TRIP')
-            : 'no');
         $wpc_cf_cname = (defined('WPS_IC_CF_CNAME')) ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
         $wpc_cf_settings = (defined('WPS_IC_CF')) ? get_option(WPS_IC_CF) : false;
         $wpc_cname_verified_flag = get_option('wpc_cf_cname_verified');
@@ -12113,49 +15585,6 @@ if (!function_exists('wpc_perf_debug_report')) {
         $wpc_suppress_why[] = 'zone_disabled=' . ((function_exists('wpc_v2_zone_cdn_disabled') && wpc_v2_zone_cdn_disabled()) ? 'YES <-TRIP' : 'no');
         $wpc_suppress_why[] = 'auto_disabled=' . ((function_exists('wpc_v2_zone_auto_disabled') && wpc_v2_zone_auto_disabled()) ? 'YES <-TRIP' : 'no');
         $o[] = "cdn_suppress_why: " . implode(' | ', $wpc_suppress_why);
-        // env_changed has NO standing healer unless force/unprov/moved already hold — a
-        // never-stamped fingerprint (site provisioned before the mechanism) trips FOREVER.
-        // The panel visit arms the bounded self-heal chain: reset (sets force_provision)
-        // then ensure_bg -> deferred config sync; a 2xx re-stamps the fingerprint and the
-        // suppression clears. Capped at 12 attempts, 2-min pacing — same belts as always.
-        if (function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed()
-            && function_exists('wpc_v2_provision_reset_for_env') && function_exists('wpc_v2_config_sync_lazy_enabled')
-            && apply_filters('wpc_env_heal_armtrip', true)) {
-            wpc_v2_provision_reset_for_env();
-            // v7.20.10 — run ONE sync inline and print the wire verdict. The ensure_bg path
-            // reported ARMED while the sync failed silently (its ok/http_code/reason were
-            // returned and dropped); a heal whose failure is invisible is not a heal.
-            $wpc_zone_id = '';
-            if (function_exists('wpc_v2_get_zone_id')) {
-                $wpc_zone_id = (string) wpc_v2_get_zone_id();
-            }
-            if ($wpc_zone_id === '' || !ctype_digit($wpc_zone_id)) {
-                $wpc_custom_cname = trim((string) get_option('ic_custom_cname'));
-                $wpc_zone_id = $wpc_custom_cname !== '' ? $wpc_custom_cname : trim((string) get_option('ic_cdn_zone_name'));
-            }
-            if ($wpc_zone_id !== '') {
-                $wpc_sync_result = wpc_v2_config_sync_lazy_enabled(
-                    $wpc_zone_id,
-                    function_exists('wpc_v2_get_lazy_enabled') ? wpc_v2_get_lazy_enabled() : false
-                );
-                $wpc_env_changed = function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed();
-                $o[] = "env_heal: sync ran inline -> ok=" . (!empty($wpc_sync_result['ok']) ? '1' : '0')
-                     . " http=" . (isset($wpc_sync_result['http_code']) ? (int) $wpc_sync_result['http_code'] : '?')
-                     . (isset($wpc_sync_result['reason']) ? " reason=" . (string) $wpc_sync_result['reason'] : '')
-                     . " | env_changed now: " . ($wpc_env_changed ? 'STILL TRIPPED' : 'CLEARED (suppression lifts this request)');
-                // v7.20.11 — outage bridge: when the declaration cannot re-stamp, MEASURE
-                // the invariant instead (uploads asset through the zone vs local bytes).
-                if ($wpc_env_changed && function_exists('wpc_v2_zone_origin_probe_run')) {
-                    delete_transient('wpc_v2_origin_probe_bk');
-                    $wpc_origin_probe = wpc_v2_zone_origin_probe_run();
-                    $o[] = "zone_origin_proof: " . ($wpc_origin_probe
-                        ? 'MEASURED OK -> env trip bridged, CDN emission unsuppressed (12h proof; re-proved hourly, re-stamped properly when the orchestrator returns)'
-                        : 'FAILED/mismatch -> suppression stands (zone did not serve this origin\'s bytes)');
-                }
-            } else {
-                $o[] = "env_heal: no zone id/cname resolvable — nothing to sync against";
-            }
-        }
         // Under WPC_CF_CNAME_GATE_LEGACY the site's own probe promotes the cname gate; make the
         // panel visit run it synchronously and report the promote/refuse verdict. Outside the
         // switch the orchestrator's witness is the gate and the probe does not run.
@@ -12227,6 +15656,7 @@ if (!function_exists('wpc_perf_debug_report')) {
             }
         }
         $wpc_consume_gate[] = 'page_exclude=' . $wpc_page_exclude;
+        $wpc_consume_gate[] = 'generation_off=' . (wpc_crit_generation_off($key, (string) $url) ? 'YES' : 'no');
         $wpc_consume_gate[] = 'caps.css=' . (function_exists('wpc_caps_enabled') ? (wpc_caps_enabled('css') ? 'allowed' : 'DENIED(ui)') : 'n/a');
         $wpc_consume_gate[] = 'purge_bypass=' . ((function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($key)) ? 'ACTIVE' : 'clear');
         $wpc_epoch_floor = (int) get_option('wpc_crit_epoch_min', 0);
@@ -12296,6 +15726,17 @@ if (!function_exists('wpc_perf_debug_report')) {
                         . (!empty($j['wpc_inherited']) ? ' INHERITED from=' . (string) $j['wpc_inherited']['from']
                             . ' age=' . max(0, time() - (int) $j['wpc_inherited']['t']) . 's' : '') . ')'
                     : 'absent');
+                if (isset($j['leg_status']) && is_array($j['leg_status'])) {
+                    $wpc_leg_parts = [];
+                    foreach (['mobile', 'desktop'] as $wpc_leg_device) {
+                        $wpc_leg = isset($j['leg_status'][$wpc_leg_device]) && is_array($j['leg_status'][$wpc_leg_device]) ? $j['leg_status'][$wpc_leg_device] : [];
+                        $wpc_leg_parts[] = $wpc_leg_device[0] . '=' . (!empty($wpc_leg['measured']) ? 'measured' : 'UNMEASURED' . (isset($wpc_leg['reason']) ? '(' . (string) $wpc_leg['reason'] . ')' : ''))
+                            . (isset($j['atf_images'][$wpc_leg_device]) && is_array($j['atf_images'][$wpc_leg_device]) ? ' list=' . count($j['atf_images'][$wpc_leg_device]) : ' list=null')
+                            . (!empty($j['atf_cut'][$wpc_leg_device]['dropped']) ? ' cut=' . (int) $j['atf_cut'][$wpc_leg_device]['dropped'] : '')
+                            . (!empty($j['carried_from'][$wpc_leg_device]) ? ' carried' : '');
+                    }
+                    $o[] = "  leg_status: " . implode(' | ', $wpc_leg_parts);
+                }
                 // Why the preload came out the way it did, per hint entry. A bare-href preload on
                 // a RESPONSIVE element is the double-fetch hazard, so the three fields that decide
                 // it must be visible: rungs_complete gates the ladder, url_is_authoritative gates
@@ -12797,7 +16238,7 @@ if (!empty($_GET['autoload'])) {
         // plainly carried one of the others.
         $wpc_preload_marker = function ($doc) {
             $hit = [];
-            foreach (['bg' => 'wpc-lcp-bg-preload', 'hero' => 'wpc-lcp-hero-preload', 'img' => 'wpc-lcp-img-preload'] as $wpc_preload_kind => $wpc_preload_id) {
+            foreach (['bg' => 'wpc-lcp-bg-preload', 'hero' => 'wpc-lcp-hero-preload', 'img' => 'wpc-lcp-img-preload', 'lqip' => 'id="wpc-hero-lqip"'] as $wpc_preload_kind => $wpc_preload_id) {
                 if (is_string($doc) && strpos($doc, $wpc_preload_id) !== false) { $hit[] = $wpc_preload_kind; }
             }
             return empty($hit) ? 'NONE' : implode('+', $hit);
@@ -12821,7 +16262,7 @@ if (!empty($_GET['autoload'])) {
         // code path) while controlParams() refuses cache read/write for it (a genuinely fresh
         // render, never stored). The timestamp value defeats the foreign edge's query-keyed cache.
         $wpc_fresh_url = $url . ((strpos($url, '?') !== false) ? '&' : '?') . 'disable_cache=' . time();
-        $rf = wp_remote_get($wpc_fresh_url, ['timeout' => 25, 'headers' => ['User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile', 'X-WPC-Cache-Warm' => '1', 'X-WPC-Diag' => '1']]);
+        $rf = wp_remote_get($wpc_fresh_url, ['timeout' => 25, 'headers' => ['User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile', 'X-WPC-Cache-Warm' => wpc_warm_header_for($wpc_fresh_url), 'X-WPC-Diag' => wpc_warm_header_for($wpc_fresh_url, 'diag')]]);
         $hf = is_wp_error($rf) ? '' : wp_remote_retrieve_body($rf);
         // An empty arm must say WHY: a transport error, a non-200, and an empty 200 are three
         // different diagnoses (blocked loopback / edge challenge / render died), and a bare 0B
@@ -12985,6 +16426,10 @@ if (!empty($_GET['autoload'])) {
             $sr = wp_remote_get($su, ['timeout' => 6]);
             if (!is_wp_error($sr)) {
                 $sd = json_decode((string) wp_remote_retrieve_body($sr), true);
+                if (wpc_crit_status_foreign($sd, (string) $key, 'status-doctor')) {
+                    $sd = null;
+                    $o[] = "/status (uuid=" . substr((string) $uuid, 0, 8) . "): url-key-is-another-page";
+                }
                 $o[] = "/status (uuid=" . substr((string) $uuid, 0, 8) . "): code=" . wp_remote_retrieve_response_code($sr)
                      . " status=" . (is_array($sd) ? ($sd['status'] ?? '?') : 'non-json')
                      . " | lcp_url=" . (is_array($sd) && !empty($sd['lcp_url']) ? 'Y' : '-')
@@ -13118,7 +16563,7 @@ if (!empty($_GET['autoload'])) {
         $o[] = "manifest_off (promotion kill-switch): " . ($wpc_fd_moff > 0 ? 'SET ' . max(0, time() - $wpc_fd_moff) . 's ago' . ($wpc_fd_mt > $wpc_fd_moff ? ' (gen NEWER → .367 overrides ✓)' : ' (gen OLDER → blocks unless bg-heal ran)') : 'clear');
         $o[] = "aggr_off (watchdog demote): " . ($wpc_fd_aoff > 0 ? 'SET ' . max(0, time() - $wpc_fd_aoff) . 's ago (DEMOTED)' : 'clear');
         $wpc_fd_master = class_exists('wps_ic_js_delay_v3') && method_exists('wps_ic_js_delay_v3', 'wpc_delay_master_on')
-            ? (wps_ic_js_delay_v3::wpc_delay_master_on($set) ? 'ON' : 'OFF') : '?';
+            ? (wps_ic_js_delay_v3::wpc_delay_master_on(function_exists('wpc_levered_settings') ? wpc_levered_settings($set) : $set) ? 'ON' : 'OFF') : '?';
         $wpc_fd_moffblk  = $wpc_fd_moff > 0 && $wpc_fd_mt <= $wpc_fd_moff;
         $wpc_fd_tele = apply_filters('wpc_delay_v3_telemetry', true) && apply_filters('wpc_delay_v3_io_when_measured', true);
         $o[] = "delay master: " . $wpc_fd_master . " | measured(this gen): " . ($wpc_fd_measured ? 'YES' : 'NO')
@@ -13161,7 +16606,7 @@ if (!function_exists('wpc_premint_upload_sizes')) {
     function wpc_premint_upload_sizes($data, $attachment_id)
     {
         try {
-            if (is_array($data) && wpc_premint_upload_zone() !== '') {
+            if (is_array($data) && empty($GLOBALS['wpc_premint_skip'][(int) $attachment_id]) && wpc_premint_upload_zone() !== '') {
                 wpc_premint_upload_record((int) $attachment_id);
             }
         } catch (\Throwable $e) {
@@ -13169,7 +16614,7 @@ if (!function_exists('wpc_premint_upload_sizes')) {
         return $data;
     }
 
-    /** The zone host a pre-mint goes to, or '' when this site pre-mints nothing. */
+    /** The zone host a pre-mint goes to, or '' when this site pre-mints nothing: Live CDN or the Images tile off, as the rewriters read them, serves nothing from the zone. */
     function wpc_premint_upload_zone()
     {
         if (!apply_filters('wpc_upload_premint', true) || !function_exists('wp_get_attachment_url')) {
@@ -13186,6 +16631,14 @@ if (!function_exists('wpc_premint_upload_sizes')) {
         }
         $zone = trim((string) get_option('ic_cdn_zone_name', ''));
         if ($zone === '' || (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed())) {
+            return '';
+        }
+        if (!class_exists('WPC_Negotiated_Delivery') && defined('WPS_IC_DIR') && is_readable(WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php')) {
+            include_once WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php';
+        }
+        $settings = defined('WPS_IC_SETTINGS') ? get_option(WPS_IC_SETTINGS) : false;
+        if (!is_array($settings) || !isset($settings['live-cdn']) || (string) $settings['live-cdn'] !== '1'
+            || !class_exists('WPC_Negotiated_Delivery') || !WPC_Negotiated_Delivery::cdn_images_enabled($settings)) {
             return '';
         }
         return $zone;
@@ -13274,13 +16727,12 @@ if (!function_exists('wpc_premint_upload_sizes')) {
 
     /**
      * Requests every recorded image's pre-mint URLs, one parallel batch per image. Each request
-     * carries the Accept header a current browser sends for an image, so the copy the zone mints
-     * is stored under the Accept class browsers read.
+     * carries the Accept header a current browser sends for an image (wpc_browser_accept), so the
+     * copy the zone mints is stored under the Accept class that browser reads.
      */
     function wpc_premint_upload_run($ids, $via = 'cron')
     {
         try {
-            $accept = wpc_browser_accept('image');
             $zone = wpc_premint_upload_zone();
             $requests_class = '\WpOrg\Requests\Requests';
             if ($zone === '' || !class_exists($requests_class)) {
@@ -13297,7 +16749,7 @@ if (!function_exists('wpc_premint_upload_sizes')) {
                     if (class_exists('WP_Http') && (new WP_Http())->block_request($u)) {
                         continue;
                     }
-                    $batch[] = array('url' => $u, 'headers' => array('Accept' => $accept), 'data' => array(), 'type' => 'GET');
+                    $batch[] = array('url' => $u, 'headers' => array('Accept' => wpc_browser_accept('image')), 'data' => array(), 'type' => 'GET');
                 }
                 if (!$batch) {
                     continue;
@@ -13381,8 +16833,7 @@ if (!function_exists('wpc_rum_census_receiver')) {
             $country = wpc_rum_visitor_country();
             if ($country !== '') { $payload['country'] = $country; }
         }
-        $endpoint = apply_filters('wpc_rum_census_endpoint',
-            defined('WPS_IC_CRITICAL_API_URL') ? str_replace('/generate', '/rum-census', WPS_IC_CRITICAL_API_URL) : '');
+        $endpoint = wpc_rum_census_endpoint();
         if (!is_string($endpoint) || strpos($endpoint, 'http') !== 0) { wpc_rum_count_drop('endpoint'); return 'endpoint'; }
         $body = wpc_rum_census_fit($payload, (int) apply_filters('wpc_rum_body_limit', 51200));
         if ($body === '') { wpc_rum_count_drop('size'); return 'size'; }
@@ -13400,13 +16851,25 @@ if (!function_exists('wpc_rum_census_receiver')) {
                 $headers['Content-Encoding'] = 'gzip';
             }
         }
-        wp_remote_post($endpoint, [
+        wpc_rum_census_post($endpoint, $body, $headers);
+        return 'sent';
+    }
+
+    function wpc_rum_census_endpoint()
+    {
+        return apply_filters('wpc_rum_census_endpoint',
+            defined('WPS_IC_CRITICAL_API_URL') ? str_replace('/generate', '/rum-census', WPS_IC_CRITICAL_API_URL) : '');
+    }
+
+    /** The one sender of every body that goes to crit's /rum-census. */
+    function wpc_rum_census_post($endpoint, $body, array $headers, $blocking = false)
+    {
+        return wp_remote_post($endpoint, [
             'timeout' => 2,
-            'blocking' => false,
+            'blocking' => (bool) $blocking,
             'headers' => $headers,
             'body' => $body,
         ]);
-        return 'sent';
     }
 
     /**
@@ -13582,31 +17045,41 @@ if (!function_exists('wpc_rum_census_receiver')) {
 
 if (!function_exists('wpc_device_mix_receiver')) {
     /**
-     * THE DEVICE MIX: a cache in front of the origin that stores one device's render and hands it
-     * to the other. Every page carries the device it was rendered for, and the visitor's browser
-     * tests its own agent against the same rule on every view (wps_cdn_rewrite::
-     * wpc_device_check_pass); when the two differ it posts here, at most once a day. This relay
-     * judges the report with the server's own rule (wpc_ua_is_mobile) on the report's request,
-     * and a confirmed mix holds the site in fix B: the store verdict keeps every copy local,
-     * served private with no Apache mirror, until 30 days pass without another confirmed report
-     * (filter wpc_device_mix_hold_s). The first confirmation of a hold purges the page copies and
-     * the caches in front of the origin. At most one report a day is recorded.
+     * THE DEVICE MIX: a cache in front of the origin hands one device's render to the other. The
+     * visitor's browser posts here (at most once a day) when its agent differs from the device the
+     * page was rendered for. A report holds nothing by itself: after the response is sent the relay
+     * checks the page's stamp and fetches the reported page as the visitor's device; an answer that
+     * carries the other device's critical CSS is a confirmed proof. The first confirmed proof is only
+     * recorded as pending; a second one at least wpc_device_mix_confirm_gap_s later (and within
+     * wpc_device_mix_pending_s of the first) holds the site in fix B (every copy local and private)
+     * for 30 days (wpc_device_mix_hold_s), recorded in wpc_report_effects with an Undo. A running
+     * hold is never extended. wpc_device_mix_clear removes a hold and any pending proof.
      *
-     * Kill switches: wpc_device_mix_check (the browser check and this relay), wpc_device_mix_fix
-     * (fix B; reports are still judged and logged).
+     * Kill switches: wpc_device_mix_check (the browser check and this relay), wpc_device_mix_fix (fix B).
      */
     function wpc_device_mix_receiver()
     {
         while (ob_get_level()) { @ob_end_clean(); }
         status_header(204);
+        if (!headers_sent()) {
+            header('Content-Length: 0');
+        }
+        @ignore_user_abort(true);
+        if (!function_exists('wpc_finish_request') || !wpc_finish_request()) {
+            @flush();
+        }
         wpc_device_mix_judge(wp_unslash($_POST));
         exit;
     }
 
     /**
-     * Judge one report (the check's form fields: host, path, page m|d) against this request's
-     * agent. Returns what was decided: off, day (one already recorded today), shape, host, same
-     * (the server's rule puts this agent in the page's own bucket), or mix (recorded).
+     * Judge one report (host, path, page m|d, s the page's stamp) against this request's agent.
+     * Returns off, day, tries, shape, host, stamp, same, held, gap (a pending proof is younger than the
+     * confirm gap: dropped before any fetch), unproven (the proof failed or got the device's own page:
+     * nothing held), pending (the first confirmed proof: recorded, nothing held) or mix (a second confirmed
+     * proof: held). The day is spent by a confirmed mix alone (wpc_device_mix_note); a proof that holds
+     * nothing spends one of the hour's tries, so a report that proves nothing never takes the place of one
+     * that does.
      */
     function wpc_device_mix_judge($report)
     {
@@ -13623,7 +17096,8 @@ if (!function_exists('wpc_device_mix_receiver')) {
         }
         if (!is_array($report) || !isset($report['host'], $report['path'], $report['page'])
             || !is_string($report['host']) || !is_string($report['path'])
-            || !in_array($report['page'], ['m', 'd'], true)) {
+            || !in_array($report['page'], ['m', 'd'], true)
+            || strlen($report['path']) > 300 || !preg_match('~^/[^\s?#\x00-\x1f\x7f]*$~', $report['path'])) {
             return $drop('shape');
         }
         $bare = function ($host) { return strpos($host, 'www.') === 0 ? substr($host, 4) : $host; };
@@ -13632,19 +17106,155 @@ if (!function_exists('wpc_device_mix_receiver')) {
         if ($host === '' || $home === '' || $bare($host) !== $bare($home)) {
             return $drop('host');
         }
+        if (!function_exists('wpc_device_report_stamp') || !isset($report['s']) || !is_string($report['s'])
+            || !hash_equals(wpc_device_report_stamp($report['path'], $report['page']), $report['s'])) {
+            return $drop('stamp');
+        }
         $visitor = wpc_ua_is_mobile() ? 'm' : 'd';
         if ($visitor === $report['page']) {
             return $drop('same');
         }
-        wpc_device_mix_note($report['page'], $visitor, substr($host . $report['path'], 0, 300));
+        if (wpc_device_mix_in_window()) {
+            return $drop('held');
+        }
+        $now = time();
+        $pending = wpc_device_mix_pending();
+        $age = $pending === [] ? 0 : $now - $pending['t'];
+        if ($pending !== [] && $age < wpc_device_mix_confirm_gap()) {
+            return $drop('gap');
+        }
+        $hour = gmdate('Y-m-d H');
+        $tries = (isset($state['tries']) && is_array($state['tries']) && ($state['tries']['h'] ?? '') === $hour) ? (int) ($state['tries']['n'] ?? 0) : 0;
+        if ($tries >= (int) apply_filters('wpc_device_mix_tries', 6)) {
+            return $drop('tries');
+        }
+        $state['tries'] = ['h' => $hour, 'n' => $tries + 1];
+        update_option('wpc_device_mix', $state, true);
+        $got = wpc_device_mix_prove($visitor, $report['path']);
+        $url = substr($host . $report['path'], 0, 300);
+        $confirmed = $got === $report['page'];
+        $second = $confirmed && $pending !== [] && $age <= wpc_device_mix_pending_window();
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('device-mix-proof', '', $url, ['page' => $report['page'], 'visitor' => $visitor,
+                'got' => $got, 'held' => $second ? 1 : 0]);
+        }
+        if (!$confirmed) {
+            return $drop('unproven');
+        }
+        if (!$second) {
+            $state['pending'] = ['t' => $now, 'url' => $url, 'page' => (string) $report['page'], 'visitor' => $visitor];
+            update_option('wpc_device_mix', $state, true);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('device-mix-pending', '', $url, ['page' => $report['page'], 'visitor' => $visitor]);
+            }
+            return 'pending';
+        }
+        wpc_device_mix_note($report['page'], $visitor, $url);
         return 'mix';
     }
 
-    /** The recorded mix: since, last (unix seconds), day (Y-m-d of the last), n, page, visitor, url; or []. */
+    /**
+     * Fetch the page at $path as a visitor of $device (this site's scheme and host, a canonical agent of
+     * that device, no cookie, no cache-buster). Returns the device (m or d) whose critical CSS the answer
+     * carries, 'none' for a 200 without any, 'error' for any other answer.
+     */
+    function wpc_device_mix_prove($device, $path)
+    {
+        $home = parse_url((string) home_url());
+        if (empty($home['host']) || !is_string($path) || strpos($path, '/') !== 0) {
+            return 'error';
+        }
+        $url = (isset($home['scheme']) ? $home['scheme'] : 'https') . '://' . $home['host'] . (isset($home['port']) ? ':' . (int) $home['port'] : '') . $path;
+        $agents = [
+            'm' => 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
+            'd' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        ];
+        $res = wp_remote_get($url, [
+            'timeout' => 6,
+            'redirection' => 0,
+            'sslverify' => true,
+            'limit_response_size' => 262144,
+            'headers' => ['User-Agent' => $agents[$device === 'm' ? 'm' : 'd'], 'Accept' => 'text/html,application/xhtml+xml'],
+        ]);
+        if (is_wp_error($res) || (int) wp_remote_retrieve_response_code($res) !== 200) {
+            return 'error';
+        }
+        if (!preg_match('/<style\b[^>]*\bclass=(["\'])wpc-critical-css-(mobile|desktop)\1/i', (string) wp_remote_retrieve_body($res), $m)) {
+            return 'none';
+        }
+        return $m[2] === 'mobile' ? 'm' : 'd';
+    }
+
+    /**
+     * The recorded mix: since, last (unix seconds), day (Y-m-d of the last attempt), n, page, visitor, url and
+     * proofs (2: the hold rests on two confirmed proofs), or pending (t, url, page, visitor: the first
+     * confirmed proof, no hold yet), or []. A hold without the proofs marker was written on one proof: it reads
+     * as a pending proof taken at its last time, with no hold and no spent day.
+     */
     function wpc_device_mix_state()
     {
         $state = get_option('wpc_device_mix', []);
-        return is_array($state) ? $state : [];
+        if (!is_array($state)) {
+            return [];
+        }
+        if ((int) ($state['last'] ?? 0) > 0 && (int) ($state['proofs'] ?? 0) < 2) {
+            $state['pending'] = ['t' => (int) $state['last'], 'url' => (string) ($state['url'] ?? ''),
+                'page' => (string) ($state['page'] ?? ''), 'visitor' => (string) ($state['visitor'] ?? '')];
+            unset($state['since'], $state['last'], $state['day']);
+        }
+        return $state;
+    }
+
+    /** The pending proof (t, url, page, visitor), or [] when there is none. */
+    function wpc_device_mix_pending()
+    {
+        $pending = wpc_device_mix_state()['pending'] ?? [];
+        return (is_array($pending) && (int) ($pending['t'] ?? 0) > 0) ? ['t' => (int) $pending['t'], 'url' => (string) ($pending['url'] ?? ''),
+            'page' => (string) ($pending['page'] ?? ''), 'visitor' => (string) ($pending['visitor'] ?? '')] : [];
+    }
+
+    /** Seconds a second proof must follow the pending one by (filter wpc_device_mix_confirm_gap_s, default 3600). */
+    function wpc_device_mix_confirm_gap()
+    {
+        return max(0, (int) apply_filters('wpc_device_mix_confirm_gap_s', 3600));
+    }
+
+    /** Seconds a pending proof stays the first of two (filter wpc_device_mix_pending_s, default 7 days). */
+    function wpc_device_mix_pending_window()
+    {
+        return max(0, (int) apply_filters('wpc_device_mix_pending_s', 7 * DAY_IN_SECONDS));
+    }
+
+    /** Whether a confirmed mix is within its hold, whatever the fix switch says. */
+    function wpc_device_mix_in_window()
+    {
+        $last = (int) (wpc_device_mix_state()['last'] ?? 0);
+        return $last > 0 && $last > time() - (int) apply_filters('wpc_device_mix_hold_s', 30 * DAY_IN_SECONDS);
+    }
+
+    /**
+     * Remove the hold and any pending proof; the number of things removed (0 when the site had neither).
+     * With a devmix report effect the undo path does it (option, soft purge); otherwise the option is
+     * deleted and the soft purge runs only when a hold was in force.
+     */
+    function wpc_device_mix_clear($reason)
+    {
+        $reason = (string) $reason;
+        $held = wpc_device_mix_held();
+        $had = (wpc_device_mix_in_window() ? 1 : 0) + (wpc_device_mix_pending() !== [] ? 1 : 0);
+        $effects = function_exists('wpc_report_effects_raw') ? wpc_report_effects_raw() : [];
+        if (isset($effects['devmix']) && function_exists('wpc_report_effect_revert') && wpc_report_effect_revert('devmix', $reason)) {
+            $had = max($had, 1);
+        } else {
+            delete_option('wpc_device_mix');
+            if ($held && class_exists('wps_ic_cache')) {
+                wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft');
+            }
+        }
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('device-mix-cleared', '', '', ['reason' => substr($reason, 0, 40), 'held' => $held ? 1 : 0, 'cleared' => $had]);
+        }
+        return $had;
     }
 
     /** Whether the site is held in fix B: a confirmed mix within the hold, and the fix switched on. */
@@ -13653,31 +17263,47 @@ if (!function_exists('wpc_device_mix_receiver')) {
         if (!apply_filters('wpc_device_mix_fix', true)) {
             return false;
         }
-        $last = (int) (wpc_device_mix_state()['last'] ?? 0);
-        return $last > 0 && $last > time() - (int) apply_filters('wpc_device_mix_hold_s', 30 * DAY_IN_SECONDS);
+        return wpc_device_mix_in_window();
     }
 
-    /** Record a confirmed mix. The first one of a hold purges what the caches in front of the origin hold. */
-    function wpc_device_mix_note($page, $visitor, $url)
+    /** The hold as the sync echo reports it: site state only. */
+    function wpc_device_mix_echo()
     {
         $held = wpc_device_mix_held();
         $state = wpc_device_mix_state();
+        return ['held' => $held ? 1 : 0, 'since' => $held ? (int) ($state['since'] ?? 0) : 0, 'n' => $held ? (int) ($state['n'] ?? 0) : 0];
+    }
+
+    /** Record a confirmed mix, once: a running hold is never written again. The hold purges what the caches in front of the origin hold. */
+    function wpc_device_mix_note($page, $visitor, $url)
+    {
+        if (wpc_device_mix_in_window()) {
+            return;
+        }
+        $state = wpc_device_mix_state();
         $now = time();
         update_option('wpc_device_mix', [
-            'since' => $held ? (int) ($state['since'] ?? $now) : $now,
+            'since' => $now,
             'last' => $now,
             'day' => gmdate('Y-m-d', $now),
             'n' => (int) ($state['n'] ?? 0) + 1,
             'page' => (string) $page,
             'visitor' => (string) $visitor,
             'url' => (string) $url,
+            'proofs' => 2,
         ], true);
         $fix = (bool) apply_filters('wpc_device_mix_fix', true);
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('device-mix', '', (string) $url, ['page' => (string) $page, 'visitor' => (string) $visitor,
-                'n' => (int) ($state['n'] ?? 0) + 1, 'engaged' => ($fix && !$held) ? 1 : 0, 'fix' => $fix ? 1 : 0]);
+                'n' => (int) ($state['n'] ?? 0) + 1, 'engaged' => $fix ? 1 : 0, 'fix' => $fix ? 1 : 0]);
         }
-        if ($fix && !$held && class_exists('wps_ic_cache')) {
+        if ($fix && function_exists('wpc_report_effect_note')) {
+            wpc_report_effect_note('devmix', [
+                'why' => 'a cache in front of this site handed the ' . ($page === 'm' ? 'handset' : 'desktop') . ' page of ' . substr((string) $url, 0, 120) . ' to a ' . ($visitor === 'm' ? 'handset' : 'desktop') . ', and this site\'s own request made as a ' . ($visitor === 'm' ? 'handset' : 'desktop') . ' was handed it too',
+                'url' => (string) $url,
+            ]);
+        }
+        if ($fix && class_exists('wps_ic_cache')) {
             wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft');
             wps_ic_cache::cfPurgeAllHtml(true, true);
         }
@@ -13775,9 +17401,12 @@ if (!function_exists('wpc_device_blind_cache_conflict')) {
             if (is_array($b)) {
                 if ($mode === 'breeze_off') { $b['breeze-desktop-cache'] = '0'; }
                 else { $b['breeze-mobile-cache'] = '1'; $b['breeze-mobile-separate'] = '1'; }
-                update_option('breeze_basic_settings', $b);
-                if (function_exists('do_action')) { do_action('breeze_clear_all_cache'); }
-                if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) { wps_ic_cache::removeHtmlCacheFiles('all'); }
+                $apply = function () use ($b) {
+                    update_option('breeze_basic_settings', $b);
+                    if (function_exists('do_action')) { do_action('breeze_clear_all_cache'); }
+                    if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) { wps_ic_cache::removeHtmlCacheFiles('all'); }
+                };
+                if (function_exists('wpc_purge_as_human_save')) { wpc_purge_as_human_save('devblind-fix', $apply); } else { $apply(); }
             }
         }
         wp_safe_redirect(wp_get_referer() ?: admin_url()); exit;
@@ -13808,13 +17437,7 @@ add_action('update_option_' . (defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'w
 if (!function_exists('wpc_auto_mode_on')) {
     function wpc_auto_mode_on()
     {
-        // Default ON for connected sites; an explicit off (option '0') is always respected.
-        $v = get_option('wpc_auto_mode', null);
-        if ($v === null || $v === false || $v === '') {
-            $o = get_option(defined('WPS_IC_OPTIONS') ? WPS_IC_OPTIONS : 'wps_ic');
-            $v = (is_array($o) && !empty($o['api_key'])) ? '1' : '0';
-        }
-        return apply_filters('wpc_auto_mode', $v === '1');
+        return apply_filters('wpc_auto_mode', get_option('wpc_auto_mode') === '1');
     }
     /**
      * v7.10.824 — a freeze is a verdict about ONE generation, not about the site forever.
@@ -13983,7 +17606,7 @@ if (!function_exists('wpc_auto_mode_on')) {
                         'lane'    => (defined('DOING_CRON') && DOING_CRON) ? 'cron'
                             : ((function_exists('is_admin') && is_admin() && !wp_doing_ajax()) ? 'admin'
                             : ((function_exists('wp_doing_ajax') && wp_doing_ajax()) ? 'ajax'
-                            : (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM']) ? 'warm' : 'visitor'))),
+                            : (wpc_warm_request() ? 'warm' : 'visitor'))),
                     ]);
                 }
             }, 999);
@@ -14075,12 +17698,31 @@ if (!function_exists('wpc_auto_mode_on')) {
             'R2' => ['key' => 'used-css', 'on' => '1', 'off' => '0'],
             'R3' => ['key' => 'replace-fonts', 'on' => 'local', 'off' => '', 'gate' => 'font-localizer'],
             'R8' => ['key' => 'delay-js-v3', 'on' => 1, 'off' => 0, 'also' => ['delay-js-v2' => [1, 0]]],
-            'R9' => ['key' => 'cache.advanced', 'nested' => ['cache', 'advanced'], 'on' => 1, 'off' => 0, 'gate' => 'foreign-cache'],
+            'R9' => ['key' => 'cache.advanced', 'nested' => ['cache', 'advanced'], 'on' => 1, 'off' => 0, 'gate' => 'foreign-cache', 'constant' => 'WPC_NO_PAGE_CACHE'],
             'R10' => ['key' => 'fontawesome-optimize', 'on' => '1', 'off' => '0'],
         ]);
     }
 
 
+    function wpc_auto_lever_person_set($lv, $cur)
+    {
+        if (!is_array($lv)) { return true; }
+        $nested = (!empty($lv['nested']) && is_array($lv['nested'])) ? array_values($lv['nested']) : [];
+        $own = $nested ? implode('.', $nested) : (isset($lv['key']) ? (string) $lv['key'] : '');
+        $keys = array_merge([$own], array_map('strval', array_keys((array) (isset($lv['also']) ? $lv['also'] : []))));
+        if (function_exists('wpc_setting_chosen')) {
+            foreach ($keys as $k) {
+                if ($k !== '' && wpc_setting_chosen($k)) { return true; }
+            }
+        }
+        $rec = get_option('wpc_settings_chosen', []);
+        $rec = is_array($rec) ? $rec : [];
+        if ($own !== '' && array_key_exists($own, $rec)) {
+            return false;
+        }
+        if ($nested && isset($rec[$nested[0]]) && (int) $rec[$nested[0]] > 0) { return true; }
+        return $cur !== null && (string) $cur !== (string) (isset($lv['on']) ? $lv['on'] : '1');
+    }
     function wpc_auto_lever_get($set, $lv)
     {
         if (!is_array($set) || !is_array($lv)) { return null; }
@@ -14166,11 +17808,29 @@ if (!function_exists('wpc_auto_mode_on')) {
     }
 
 
+    function wpc_auto_undo_actuation($rule, $from, $to, $wpCacheBefore)
+    {
+        if ($rule !== 'R9' || (string) $from === (string) $to) { return; }
+        try {
+            if (!class_exists('wps_ic_htaccess') && defined('WPS_IC_DIR')) {
+                include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+            }
+            if (!class_exists('wps_ic_htaccess')) { return; }
+            $h = new wps_ic_htaccess();
+            $dropin = function_exists('wpc_advanced_cache_dropin_state') ? wpc_advanced_cache_dropin_state() : 'absent';
+            if ($dropin === 'ours') { $h->removeAdvancedCache(); }
+            if ($wpCacheBefore !== null && (int) $wpCacheBefore === 0) { $h->setWPCache(false); }
+            wpc_auto_journal('actuation-undone', ['rule' => $rule, 'dropin' => $dropin === 'ours' ? 'removed' : $dropin,
+                'wp_cache' => $wpCacheBefore === null ? 'unknown' : (int) $wpCacheBefore]);
+        } catch (\Throwable $e) {
+        }
+    }
     function wpc_auto_actuate_lever($rule, $from, $to)
     {
         try {
             if ($rule === 'R3' && function_exists('wpc_font_rescan_handler')) {
                 if (function_exists('delete_transient')) { delete_transient('wpc_font_rescan_lock'); }
+                delete_option('wpc_font_rescan_fails');
                 wpc_font_rescan_handler();
                 update_option('wpc_auto_r3_actuated', '1', false);
             }
@@ -14185,7 +17845,9 @@ if (!function_exists('wpc_auto_mode_on')) {
                 if (!class_exists('wps_ic_htaccess') && defined('WPS_IC_DIR')) {
                     include_once WPS_IC_DIR . 'classes/htaccess.class.php';
                 }
-                if (class_exists('wps_ic_htaccess')) {
+                if (function_exists('wpc_advanced_cache_dropin_state') && wpc_advanced_cache_dropin_state() === 'foreign') {
+                    wpc_auto_journal('drop-in-foreign-kept', ['rule' => $rule]);
+                } elseif (class_exists('wps_ic_htaccess')) {
                     $h = new wps_ic_htaccess();
                     $h->setWPCache(true);
                     $h->setAdvancedCache();
@@ -14402,6 +18064,11 @@ if (!function_exists('wpc_auto_mode_on')) {
                 }
             }
             if (is_array($set)) { update_option(WPS_IC_SETTINGS, $set); }
+            foreach ($st['flipped_last'] as $f) {
+                if (isset($f['rule'], $levers[$f['rule']])) {
+                    wpc_auto_undo_actuation($f['rule'], isset($f['from']) ? $f['from'] : '', isset($f['to']) ? $f['to'] : '', isset($f['wp_cache']) ? $f['wp_cache'] : null);
+                }
+            }
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
                 try { wps_ic_cache::removeHtmlCacheFiles('all'); } catch (\Throwable $e) {}
             }
@@ -14480,6 +18147,10 @@ if (!function_exists('wpc_auto_mode_on')) {
                     continue;
                 }
             }
+            if (!empty($lv['constant']) && defined($lv['constant']) && constant($lv['constant'])) {
+                wpc_auto_journal('lever-gated', ['rule' => $rule, 'reason' => 'constant']);
+                continue;
+            }
             $key = isset($lv['key']) ? $lv['key'] : implode('.', (array) ($lv['nested'] ?? []));
             $on = $lv['on'];
             $cur = wpc_auto_lever_get($set, $lv);
@@ -14497,16 +18168,24 @@ if (!function_exists('wpc_auto_mode_on')) {
                 $flips[] = ['rule' => $rule, 'key' => $key, 'from' => $cur, 'to' => $on, 'from_also' => $fromAlso, 'reactuate' => true];
                 continue;
             }
+            if (wpc_auto_lever_person_set($lv, $cur)) {
+                wpc_auto_journal('lever-gated', ['rule' => $rule, 'reason' => 'person-set']);
+                continue;
+            }
             $flips[] = ['rule' => $rule, 'key' => $key, 'from' => $cur, 'to' => $on, 'from_also' => $fromAlso];
         }
 
 
         $flips = ($st['cycle'] >= 3) ? [] : array_slice($flips, 0, 1);
+        foreach ($flips as $fi => $fl) {
+            if ($fl['rule'] === 'R9') { $flips[$fi]['wp_cache'] = (defined('WP_CACHE') && WP_CACHE) ? 1 : 0; }
+        }
         if (!empty($flips) && is_array($set)) {
             foreach ($flips as $f) {
                 wpc_auto_lever_set($set, $levers[$f['rule']], $f['to']);
-                wpc_auto_journal('auto-apply', ['rule' => $f['rule'], 'key' => $f['key'],
-                    'from' => (string) $f['from'], 'to' => $f['to'], 'cycle' => $st['cycle'], 'score' => $score]);
+                wpc_auto_journal('auto-apply', array_merge(['rule' => $f['rule'], 'key' => $f['key'],
+                    'from' => (string) $f['from'], 'to' => $f['to'], 'cycle' => $st['cycle'], 'score' => $score],
+                    isset($f['wp_cache']) ? ['wp_cache' => $f['wp_cache']] : []));
             }
             update_option(WPS_IC_SETTINGS, $set); // P5d purges HTML on the fonts flip automatically
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
@@ -14552,38 +18231,7 @@ if (!function_exists('wpc_auto_mode_on')) {
             wp_send_json_error(['msg' => 'forbidden'], 403);
         }
     }
-    /**
-     * Arms the Auto loop on sites where it is on by default (no toggle click ever happens on a
-     * link-and-go install). One-shot latch; respects the explicit-off option, the connected
-     * gate, and developer mode. Journals its own arming for the status timeline.
-     */
-    function wpc_auto_bootstrap()
-    {
-        try {
-            if (!function_exists('wpc_auto_mode_on') || !wpc_auto_mode_on()) { return; }
-            if (get_option('wpc_auto_bootstrapped') === '1') { return; }
-            $set = get_option(defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings');
-            if (is_array($set) && !empty($set['developer_mode']) && $set['developer_mode'] == '1') { return; }
-            if (function_exists('wp_next_scheduled') && wp_next_scheduled('wpc_auto_mode_tick')) {
-                update_option('wpc_auto_bootstrapped', '1', false);
-                return;
-            }
-            $st = wpc_auto_state();
-            if (!in_array($st['status'], ['idle', ''], true)) { return; }
-            update_option('wpc_auto_bootstrapped', '1', false);
-            $st['status'] = 'starting'; $st['cycle'] = 0; $st['run_id'] = '';
-            $st['flipped_last'] = []; $st['msg'] = ''; $st['arm_tries'] = 0;
-            $st['next_tick_at'] = 0; $st['measure_started_at'] = 0; $st['run_id_d'] = '';
-            wpc_auto_state_save($st);
-            wpc_auto_journal('enabled-default');
-            wpc_auto_schedule('wpc_auto_mode_tick', 60, [1]);
-        } catch (\Throwable $e) {
-        }
-    }
-    add_action('admin_init', 'wpc_auto_bootstrap', 40);
     add_action('admin_init', 'wpc_artifact_refresh_on_update', 35);
-    add_action('wpc_lcp_repull', 'wpc_auto_bootstrap', 8);
-    add_action('wpc_autopurge_sweep', 'wpc_auto_bootstrap', 8);
 
 
 
@@ -14648,7 +18296,7 @@ if (!function_exists('wpc_auto_mode_on')) {
         $orig = [];
         foreach ($j as $e) {
             if (($e['event'] ?? '') === 'auto-apply' && isset($e['key']) && !array_key_exists($e['key'], $orig)) {
-                $orig[$e['key']] = ['from' => $e['from'] ?? '', 'rule' => (string) ($e['rule'] ?? '')];
+                $orig[$e['key']] = ['from' => $e['from'] ?? '', 'rule' => (string) ($e['rule'] ?? ''), 'to' => $e['to'] ?? '', 'wp_cache' => $e['wp_cache'] ?? null];
             }
         }
         if (is_array($set)) {
@@ -14673,6 +18321,9 @@ if (!function_exists('wpc_auto_mode_on')) {
                 $n++;
             }
             update_option(WPS_IC_SETTINGS, $set);
+            foreach ($orig as $o) {
+                wpc_auto_undo_actuation($o['rule'], $o['from'], $o['to'], $o['wp_cache']);
+            }
         }
         update_option('wpc_auto_mode', '0', false);
         if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
@@ -14713,6 +18364,7 @@ if (!function_exists('wpc_auto_mode_on')) {
     {
         try {
             if (!function_exists('wpc_auto_mode_on') || !wpc_auto_mode_on()) { return; }
+            if (function_exists('wpc_lever_test_active') && wpc_lever_test_active()) { return; }
             $st = wpc_auto_state();
             $what = '';
             if ($st['status'] === 'measuring' && !empty($st['run_id'])) {
@@ -14754,7 +18406,7 @@ if (!function_exists('wpc_auto_mode_on')) {
         $q = '?action=wpc_auto_kick&w=' . ($what === 'poll' ? 'poll' : 'tick') . '&k=' . rawurlencode($wpc_sig);
         if (function_exists('wp_remote_get') && function_exists('admin_url')) {
             wp_remote_get(admin_url('admin-ajax.php') . $q,
-                ['blocking' => false, 'timeout' => 2, 'headers' => ['X-WPC-Cache-Warm' => '1']]);
+                ['blocking' => false, 'timeout' => 2, 'headers' => ['X-WPC-Cache-Warm' => wpc_warm_header_for(admin_url('admin-ajax.php'))]]);
         }
 
         if (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'wpc_loopback_open_socket')
@@ -14767,7 +18419,7 @@ if (!function_exists('wpc_auto_mode_on')) {
                 if ($fp) {
                     $path = (isset($p['path']) ? $p['path'] : '/wp-admin/admin-ajax.php') . $q;
                     fwrite($fp, "GET " . $path . " HTTP/1.1\r\nHost: " . $p['host']
-                        . "\r\nX-WPC-Cache-Warm: 1\r\nConnection: Close\r\n\r\n");
+                        . "\r\nX-WPC-Cache-Warm: " . wpc_warm_header_for(admin_url('admin-ajax.php')) . "\r\nConnection: Close\r\n\r\n");
                     fclose($fp);
                 }
             }
@@ -14825,7 +18477,10 @@ if (!function_exists('wpc_sitechange_purge')) {
     function wpc_sitechange_purge($why)
     {
         try {
-
+            if (in_array((string) $why, ['theme-switch', 'plugin-deactivated'], true) && function_exists('wpc_cache_p1_on') && wpc_cache_p1_on()) {
+                wpc_hard_html_purge_after_response((string) $why, true);
+                return;
+            }
 
             static $alreadyDeferred = false;
             if ($alreadyDeferred) {
@@ -15046,6 +18701,17 @@ if (!function_exists('wpc_upgrader_purge')) {
         if (empty($pending['reasons'])) {
             return;
         }
+        // The front caches hear about this purge with THIS response: LiteSpeed Cache purges only
+        // through a response header and queues anything raised after the response is out for a
+        // later request; the local delete below runs after the release. Unthrottled, because
+        // the soft purge earlier in an update request (updateCSSHash, priority 1) takes the
+        // 120 s window and the once-per-request slot in removeHtmlCacheFiles, which left this
+        // purge with no purge-all of its own (ticket 12239, lifetimeglassmirror.com). The delete
+        // below ends in wpc_stale_hard_purge_done(), which asks again; that later ask, after the
+        // release and too late for LiteSpeed, is the silent once-per-request repeat.
+        if (function_exists('wpc_purge_foreign_caches')) {
+            wpc_purge_foreign_caches(false, 'hard-purge', true);
+        }
         if (function_exists('wpc_finish_request') && empty($GLOBALS['wpc_response_released'])) {
             wpc_finish_request();
         }
@@ -15111,7 +18777,7 @@ if (!function_exists('wpc_missing_asset_audit')) {
     function wpc_copy_page_folders($root, $entry)
     {
         $folders = [$entry];
-        if (preg_match('/^[a-f0-9]{32}$/', $entry)) {
+        if (wpc_copy_user_folder_name($entry)) {
             $folders = [];
             foreach ((array) @scandir($root . $entry) as $child) {
                 if ($child !== '.' && $child !== '..' && is_dir($root . $entry . '/' . $child)) {
@@ -15153,16 +18819,19 @@ if (!function_exists('wpc_missing_asset_audit')) {
                 @unlink($dir . '/' . $name);
                 continue;
             }
-            $records['ledgers']++;
-            $lines = (string) @file_get_contents($dir . '/' . $name);
-            $end = strrpos($lines, "\n");
-            if ($end === false) {
+            $record = wpc_copy_links_read($dir . '/' . $name);
+            if ($record === null) {
                 continue;
             }
-            foreach (explode("\n", substr($lines, 0, $end)) as $token) {
-                if ($token !== '') {
+            $audited = 0;
+            foreach ($record['tokens'] as $token) {
+                if (preg_match('/^[cis]:/', $token) === 1) {
                     $records['tokens'][] = $token;
+                    $audited++;
                 }
+            }
+            if ($audited > 0) {
+                $records['ledgers']++;
             }
         }
         return $records;
@@ -15236,6 +18905,55 @@ if (!function_exists('wpc_missing_asset_audit')) {
         return wps_ic_url_key::sanitizeSameHostUrl($url) !== '';
     }
 
+    function wpc_missing_asset_churn_key($token)
+    {
+        $token = (string) $token;
+        if (preg_match('#^(c:cache/wpc-(?:hostfix|bgset|fontsheet)/.+)-[0-9a-f]{10}(\.css)$#', $token, $sheet) === 1) {
+            return $sheet[1] . '-*' . $sheet[2];
+        }
+        return $token;
+    }
+
+    /**
+     * Counts, per missing file, the passes of the audit that purged pages for it within the last
+     * day, and writes `missing-asset-churn {file, n}` when a file has gone missing more than twice
+     * in that time, at most once a day per file: something else rebuilds and deletes it, and the
+     * line names the file so that optimizer's clear hook can join wpc_builder_file_clear_hooks().
+     * Option wpc_missing_asset_churn: token => [at => unix times, pass => the last pass counted,
+     * rx => the last line written]. The pages of one pass count once, whatever slice reaches them.
+     * A sheet copy under cache/wpc-hostfix, wpc-bgset or wpc-fontsheet counts as its sheet
+     * (wpc_missing_asset_churn_key): `c:cache/wpc-hostfix/style-*.css`.
+     */
+    function wpc_missing_asset_churn_note(array $tokens, $pass)
+    {
+        $rows = get_option('wpc_missing_asset_churn', []);
+        $rows = is_array($rows) ? $rows : [];
+        $now = time();
+        foreach ($tokens as $token) {
+            $token = wpc_missing_asset_churn_key($token);
+            $row = isset($rows[$token]) && is_array($rows[$token]) ? $rows[$token] : [];
+            $row += ['at' => [], 'pass' => '', 'rx' => 0];
+            if ((string) $row['pass'] !== (string) $pass) {
+                $row['at'][] = $now;
+                $row['pass'] = (string) $pass;
+            }
+            $row['at'] = array_values(array_filter((array) $row['at'], function ($at) use ($now) { return ($now - (int) $at) < DAY_IN_SECONDS; }));
+            if (count($row['at']) > 2 && ($now - (int) $row['rx']) >= DAY_IN_SECONDS) {
+                $row['rx'] = $now;
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('missing-asset-churn', '', '', ['file' => substr((string) $token, 0, 200), 'n' => count($row['at'])]);
+                }
+            }
+            $rows[$token] = $row;
+        }
+        foreach ($rows as $token => $row) {
+            if (!is_array($row) || ($row['at'] === [] && ($now - (int) $row['rx']) >= DAY_IN_SECONDS)) {
+                unset($rows[$token]);
+            }
+        }
+        update_option('wpc_missing_asset_churn', array_slice($rows, -200, null, true), false);
+    }
+
     /**
      * A stored page copy never outlives a file it links. Every copy keeps beside itself the local
      * stylesheets and scripts it linked that existed when it was stored (wpc_copy_links_record,
@@ -15244,16 +18962,16 @@ if (!function_exists('wpc_missing_asset_audit')) {
      * files is gone, through the per-URL purge owner, which removes stale copies as well as fresh
      * ones. A file missing at store time is never recorded, so a page re-rendered with a link that
      * is still dead is not purged for it again.
-     * One missing file linked by three distinct pages is a regeneration of the site's files: one
-     * site-wide hard purge (reason missing-asset) replaces the per-page ones, at most once an hour.
+     * A missing file purges only the pages whose stored copy links it, each through that per-URL
+     * purge, never the site, and every time the file is found missing: a copy never links a dead
+     * file for a day. A file that keeps going missing is named by `missing-asset-churn`
+     * (wpc_missing_asset_churn_note).
      * A slice reads the page folders after the saved cursor, until the time budget (3 s, filter
      * wpc_missing_asset_audit_budget) or 25 pages with a missing file; only the folders whose
      * url.txt names this site. It arms the next slice for an hour before it reads anything; one
      * that stops early brings it forward to a minute, and a finished pass that found no record
-     * cancels it, so a site that stores nothing is not woken. The tally of the pages seen per
-     * missing file is kept across the slices of one pass. A slice that cannot see the site's files
-     * (wpc_missing_asset_disk_visible) purges nothing and writes `missing-asset-audit-blind`. A
-     * network's site purges its own pages one by one: the site-wide purge would empty every site's.
+     * cancels it, so a site that stores nothing is not woken. A slice that cannot see the site's
+     * files (wpc_missing_asset_disk_visible) purges nothing and writes `missing-asset-audit-blind`.
      */
     function wpc_missing_asset_audit()
     {
@@ -15267,8 +18985,8 @@ if (!function_exists('wpc_missing_asset_audit')) {
             $state = get_option('wpc_missing_asset_audit', []);
             $state = is_array($state) ? $state : [];
             $after = isset($state['after']) ? (string) $state['after'] : '';
-            $tally = (isset($state['seen']) && is_array($state['seen'])) ? $state['seen'] : [];
             $ledgers = isset($state['ledgers']) ? (int) $state['ledgers'] : 0;
+            $pass = isset($state['pass']) ? (string) $state['pass'] : substr(md5(uniqid('', true)), 0, 12);
             $root = rtrim(WPS_IC_CACHE, '/') . '/';
             $known = [];
             $pages = [];
@@ -15283,9 +19001,6 @@ if (!function_exists('wpc_missing_asset_audit')) {
                     $ledgers += $report['ledgers'];
                     if ($report['missing'] !== [] && wpc_missing_asset_page_is_own($root . $folder)) {
                         $pages[$folder] = $report;
-                        foreach ($report['missing'] as $token) {
-                            $tally[$token][$folder] = 1;
-                        }
                     }
                 }
                 $after = $entry;
@@ -15296,29 +19011,6 @@ if (!function_exists('wpc_missing_asset_audit')) {
             }
             if ($pages !== [] && !wpc_missing_asset_disk_visible($known, $blind)) {
                 wpc_cache_first_log('missing-asset-audit-blind', '', '', ['why' => $blind, 'unique' => count($known), 'missing' => count(array_filter($known)), 'pages' => count($pages)]);
-                delete_option('wpc_missing_asset_audit');
-                return;
-            }
-            $shared = [];
-            foreach ($tally as $token => $seenOn) {
-                if (count($seenOn) >= 3) {
-                    $shared[] = (string) $token;
-                }
-            }
-            if ($shared !== [] && function_exists('wpc_hard_html_purge_after_response')
-                && !(function_exists('is_multisite') && is_multisite())
-                && (time() - (int) get_option('wpc_missing_asset_site_purge_at', 0)) >= 3600) {
-                update_option('wpc_missing_asset_site_purge_at', time(), false);
-                $sharing = [];
-                $sharedCopies = 0;
-                foreach ($shared as $token) {
-                    $sharing += array_fill_keys(array_map('strval', array_keys($tally[$token])), true);
-                }
-                foreach (array_intersect_key($pages, $sharing) as $report) {
-                    $sharedCopies += $report['copies'];
-                }
-                wpc_missing_asset_repair_receipt('', ['pages' => count($sharing), 'keys' => array_slice(array_keys($sharing), 0, 20), 'paths' => array_slice($shared, 0, 20), 'copies' => $sharedCopies, 'site' => 1]);
-                wpc_hard_html_purge_after_response('missing-asset', false);
                 delete_option('wpc_missing_asset_audit');
                 return;
             }
@@ -15336,10 +19028,11 @@ if (!function_exists('wpc_missing_asset_audit')) {
                 if ($pages !== []) {
                     $keys = array_map('strval', array_keys($pages));
                     wpc_missing_asset_repair_receipt(count($keys) === 1 ? $keys[0] : '', ['pages' => count($keys), 'keys' => array_slice($keys, 0, 20), 'paths' => array_slice(array_keys($paths), 0, 20), 'copies' => $copies, 'site' => 0]);
+                    wpc_missing_asset_churn_note(array_keys($paths), $pass);
                 }
             }
             if ($stopped) {
-                update_option('wpc_missing_asset_audit', ['after' => $after, 'seen' => array_slice($tally, 0, 200, true), 'ledgers' => $ledgers], false);
+                update_option('wpc_missing_asset_audit', ['after' => $after, 'ledgers' => $ledgers, 'pass' => $pass], false);
                 wpc_missing_asset_audit_arm(60);
                 return;
             }
@@ -15484,6 +19177,7 @@ if (!function_exists('wpc_combine_fonts_fetch_handler')) {
         if (function_exists('wpc_pipeline_key_junk') && wpc_pipeline_key_junk($url_key)) { return; }
         try {
             if (!defined('WPS_IC_CRITICAL') || $url_key === '') { return; }
+            if (wpc_crit_purge_stale_home((string) $url_key)) { return; }
             $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $url_key . '/';
             if (@is_readable($dir . 'font-subsets.css')) { return; }
             $fonts = [];
@@ -15494,6 +19188,9 @@ if (!function_exists('wpc_combine_fonts_fetch_handler')) {
                     $rs = wp_remote_get(wpc_crit_service_read_url('/status', ['uuid' => $uu], (string) $url_key), ['timeout' => 8]);
                     if (!is_wp_error($rs) && (int) wp_remote_retrieve_response_code($rs) === 200) {
                         $rd = json_decode((string) wp_remote_retrieve_body($rs), true);
+                        if (wpc_crit_status_foreign($rd, (string) $url_key, 'status-fonts')) {
+                            $rd = null;
+                        }
                         if (is_array($rd) && !empty($rd['fonts_url'])) {
                             $fu = trim((string) $rd['fonts_url']);
                             wpc_crit_meta_write($dir . 'fonts_url.txt', $fu);
@@ -15650,7 +19347,7 @@ if (!function_exists('wpc_update_window_active')) {
             // v7.10.682 — uuid.txt is the PENDING-GEN pointer, not an old-era locator: deleting
             // it under a live dispatch orphans the in-flight generation collection lane (the
             // update-day outage shape). An old-era uuid still clears (dispatch stamp aged out).
-            if ((time() - (int) @file_get_contents($d . 'dispatch_ts.txt')) >= 900) {
+            if ((time() - (int) @file_get_contents($d . 'dispatch_ts.txt')) >= 900 && !wpc_crit_purge_stale_home($hk)) {
                 @unlink($d . 'uuid.txt');
             }
             // A re-check needs a MARKER, not a wipe. Deleting the locator chain here fed the
@@ -15783,6 +19480,89 @@ if (!function_exists('wpc_update_window_active')) {
 
 
     /**
+     * The checks a render passes before it may become a stored copy (policy.cache_p1), cheap ones
+     * first: the answer is 200, the document ends in </html>, it is not an error or challenge page
+     * (the title of the head, and the markers a challenge prints), every generated-store file it
+     * links exists (the content-addressed css and js, the combined sheets, the parked-CSS bundles:
+     * only files our own purges delete), and it has not shrunk to a fraction of the copy it would
+     * replace. $ctx['old_bytes'] is that copy's size (0 when there is none). Answers the refusal's
+     * reason, or '' for a render that passes. A shrink under 70% of the old copy is receipted and
+     * kept; under 30% of a copy of 20 KB or more it is refused: a crit landing adds inline CSS and a
+     * real change can remove content, so the line is a large shrink and not a band.
+     */
+    function wpc_copy_health($buffer, array $ctx = [])
+    {
+        $urlKey = isset($ctx['url_key']) ? (string) $ctx['url_key'] : '';
+        $note = function ($reason, array $fields) use ($urlKey) {
+            if (function_exists('wpc_belt_receipt')) {
+                wpc_belt_receipt('copy-check', array_merge(['why' => $reason], $fields), true, $urlKey);
+            }
+            return $reason;
+        };
+        $status = function_exists('http_response_code') ? (int) http_response_code() : 0;
+        if ($status > 0 && $status !== 200) {
+            return $note('status', ['status' => $status]);
+        }
+        if (preg_match('~</html>\s*$~i', $buffer) !== 1) {
+            return $note('html-tail', []);
+        }
+        $head = substr($buffer, 0, 8192);
+        if (preg_match('~<title[^>]*>(.*?)</title>~is', $head, $title) === 1
+            && preg_match('~^(?:just a moment|attention required|access denied|checking your browser(?: before accessing .*)?|one more step|error establishing a database connection|database error|service unavailable|50[234] (?:bad gateway|service unavailable|gateway(?: time-?out)?)|429 too many requests|request blocked|security check)(?:[.!?]|…)*(?:(?:\s*[|:]|\s+(?:-|–|—))\s*\S.*)?\z~s', strtolower(trim(html_entity_decode(strip_tags($title[1]), ENT_QUOTES, 'UTF-8')))) === 1) {
+            return $note('error-page', []);
+        }
+        if (preg_match('~id=["\']challenge-form["\']|cf-browser-verification|id=["\']cf-wrapper["\']|class=["\']cf-error-details~i', $head) === 1) {
+            return $note('error-page', ['marker' => 1]);
+        }
+        if (function_exists('wpc_copy_links_scan') && function_exists('wpc_copy_tokens_missing')) {
+            $missing = wpc_copy_tokens_missing(wpc_copy_links_scan($buffer));
+            if ($missing !== []) {
+                return $note('asset-missing', ['files' => $missing]);
+            }
+        }
+        $old = isset($ctx['old_bytes']) ? (int) $ctx['old_bytes'] : 0;
+        if ($old >= 20000 && strlen($buffer) < $old * 0.7) {
+            $note('shrink', ['old' => $old, 'new' => strlen($buffer), 'refused' => strlen($buffer) < $old * 0.3 ? 1 : 0]);
+            if (strlen($buffer) < $old * 0.3) {
+                return 'shrink';
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Whether this render runs without a CDN zone although one is expected: the one answer to
+     * "is this CDN-off render a passing degradation or the site's normal state", asked by the
+     * store verdict below (a degraded render is refused a copy, `cdn-suppressed`) and by the
+     * early no-cache signal in wps_ic::init() that keeps a host or third-party page cache from
+     * storing it.
+     *
+     * A zone is expected only when the plugin's CDN setting is on AND the account allows the
+     * CDN. With `wps_ic_allow_live` false (the portal's Performance mode: CDN and Local
+     * Compression off for the site) no zone will ever serve whatever the setting says, so the
+     * zoneless render IS the page, and it is stored and cached like any CDN-off site's. The
+     * store verdict has read it that way since falknerei; the early signal derived its own answer
+     * from zone suppression alone, which the account flag has fed since 7.21 (99601ef8), so every
+     * Performance-mode site with the setting still on served every page `no-store` and
+     * `X-LiteSpeed-Cache-Control: no-cache` (academy.legiostyle.com, ticket 12240).
+     */
+    function wpc_cdn_off_is_transient()
+    {
+        if (!function_exists('get_option') || !defined('WPS_IC_SETTINGS')) {
+            return false;
+        }
+        $settings = get_option(WPS_IC_SETTINGS);
+        if (!is_array($settings) || empty($settings['live-cdn']) || $settings['live-cdn'] != '1') {
+            return false;
+        }
+        $accountAllowsLive = get_option('wps_ic_allow_live', 'unset');
+        if ($accountAllowsLive !== 'unset' && !$accountAllowsLive) {
+            return false;
+        }
+        return function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed();
+    }
+
+    /**
      * THE STORE VERDICT: whether this render becomes a stored copy, and whether any cache in
      * front of the origin may hold it. Decided once per render on the final buffer, before the
      * page cache sends its Cache-Control, so the header and the write can never disagree: a
@@ -15791,8 +19571,15 @@ if (!function_exists('wpc_update_window_active')) {
      * Returns ['local' => bool, 'edge' => bool, 'reason' => string]. First match wins:
      *   refusals ({local:false})   empty-buffer, body-floor, thin-buffer, combine-param,
      *                              disable-param, query, personal-cookie, cache-exclude, method,
-     *                              donotcachepage, logged-in, excluded-cookie, server-control,
+     *                              donotcachepage, logged-in, logged-in-unkeyed (a signed-in visitor
+     *                              whose copy would not be kept per visitor: it would be the copy every
+     *                              anonymous visitor reads), login-cookie-unverified (the copy's folder
+     *                              is named by a login cookie WordPress does not call signed in: a
+     *                              forged or expired one, so a request per forged value would be a
+     *                              folder), excluded-cookie, server-control,
      *                              mandatory-cookie, cdn-suppressed, rewrite-shed,
+     *                              status, html-tail, error-page, asset-missing and shrink (the
+     *                              copy checks of policy.cache_p1, wpc_copy_health),
      *                              crit-on-disk-not-rendered, lcp-bg-preload-missing,
      *                              crit-missing-parked-sheets, collecting and device-mix (only
      *                              with WPC_LOCALONLY_COPIES off), exception
@@ -15809,7 +19596,8 @@ if (!function_exists('wpc_update_window_active')) {
      * The copy-admission contract (wpc_copy_admissible) is judged by saveCache before this, on
      * the buffer before its belts run, and refuses with its own header.
      *
-     * $ctx: url_key (string), cache_logged_in (bool), ignore_server_control (bool). Every
+     * $ctx: url_key (string), cache_logged_in (bool), user_keyed (bool: the copy's folder carries the
+     * visitor's hash, wps_ic_url_key::userFolder()), ignore_server_control (bool). Every
      * verdict other than armed also leaves its reason in $GLOBALS['wpc_cache_unarmed_reason'],
      * so the header that names it is the one that decided.
      */
@@ -15856,7 +19644,7 @@ if (!function_exists('wpc_update_window_active')) {
             }
             $excludes = function_exists('get_option') ? get_option('wpc-excludes') : [];
             if (!empty($excludes['cache']) && is_array($excludes['cache']) && class_exists('wps_ic_url_key')
-                && wps_ic_url_key::excludedBy($excludes['cache'], wps_ic_url_key::requestHostPath()) !== false) {
+                && wps_ic_url_key::requestCacheExcludedBy($excludes['cache']) !== false) {
                 return $refuse('cache-exclude');
             }
             if (function_exists('wpc_request_excluded_from_plugin') && wpc_request_excluded_from_plugin() !== false) {
@@ -15869,12 +19657,21 @@ if (!function_exists('wpc_update_window_active')) {
             if (defined('DONOTCACHEPAGE') && DONOTCACHEPAGE) {
                 return $refuse('donotcachepage');
             }
-            if (function_exists('is_user_logged_in') && is_user_logged_in() && empty($ctx['cache_logged_in'])) {
-                return $refuse('logged-in');
+            $signedIn = function_exists('is_user_logged_in') && is_user_logged_in();
+            if ($signedIn) {
+                if (empty($ctx['cache_logged_in'])) {
+                    return $refuse('logged-in');
+                }
+                if (empty($ctx['user_keyed'])) {
+                    return $refuse('logged-in-unkeyed');
+                }
+            } elseif (!empty($ctx['user_keyed'])) {
+                return $refuse('login-cookie-unverified');
             }
-            if (defined('WPC_EXCLUDE_COOKIES') && is_array(WPC_EXCLUDE_COOKIES)) {
+            $excludeCookies = class_exists('wps_ic_url_key') ? wps_ic_url_key::excludeCookies() : [];
+            if ($excludeCookies) {
                 foreach (array_keys((array) $_COOKIE) as $cookieName) {
-                    foreach (WPC_EXCLUDE_COOKIES as $excludedCookie) {
+                    foreach ($excludeCookies as $excludedCookie) {
                         // A trailing underscore makes the entry a prefix ("wp-postpass_").
                         $matches = substr($excludedCookie, -1) === '_'
                             ? stripos((string) $cookieName, $excludedCookie) === 0
@@ -15898,8 +19695,9 @@ if (!function_exists('wpc_update_window_active')) {
                     return $refuse('server-control');
                 }
             }
-            if (defined('WPC_MANDATORY_COOKIES') && is_array(WPC_MANDATORY_COOKIES)) {
-                foreach (WPC_MANDATORY_COOKIES as $mandatoryCookie) {
+            $mandatoryCookies = class_exists('wps_ic_url_key') ? wps_ic_url_key::mandatoryCookies() : [];
+            if ($mandatoryCookies) {
+                foreach ($mandatoryCookies as $mandatoryCookie) {
                     $found = false;
                     if (substr($mandatoryCookie, -1) === '_') {
                         foreach ((array) $_COOKIE as $cookieName => $cookieValue) {
@@ -15918,21 +19716,7 @@ if (!function_exists('wpc_update_window_active')) {
             }
 
             $set = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
-            // Zone suppression is degradation only where a zone is expected (falknerei: on an
-            // account-CDN-off host wpc_v2_zone_cdn_suppressed() is true forever, and reading it
-            // as degradation refused every interior page a copy). On a CDN-off site the zoneless
-            // render is the normal copy.
-            $zoneExpected = is_array($set) && !empty($set['live-cdn']) && $set['live-cdn'] == '1';
-            if ($zoneExpected && function_exists('get_option')) {
-                // The account kill-switch outranks the user toggle: with wps_ic_allow_live=false
-                // no zone will ever serve regardless of live-cdn, so suppression there is the
-                // permanent normal, not degradation.
-                $allowLive = get_option('wps_ic_allow_live', 'unset');
-                if ($allowLive !== 'unset' && !$allowLive) {
-                    $zoneExpected = false;
-                }
-            }
-            if ($zoneExpected && function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
+            if (wpc_cdn_off_is_transient()) {
                 return $refuse('cdn-suppressed');
             }
 
@@ -15942,7 +19726,15 @@ if (!function_exists('wpc_update_window_active')) {
                 return $refuse('rewrite-shed');
             }
 
-            $critOn = is_array($set) && !empty($set['critical']['css']) && $set['critical']['css'] == '1';
+            if (function_exists('wpc_cache_p1_on') && wpc_cache_p1_on()) {
+                $unhealthy = wpc_copy_health($buffer, $ctx);
+                if ($unhealthy !== '') {
+                    return $refuse($unhealthy);
+                }
+            }
+
+            $critOn = is_array($set) && !empty($set['critical']['css']) && $set['critical']['css'] == '1'
+                && !wpc_crit_generation_off($urlKey);
             $critTagged = (bool) preg_match('/<style\b[^>]*id=(["\'])wpc-critical-css\1[^>]*>\s*(?!<\/style)\S/i', $buffer);
             $critDir = ($urlKey !== '' && defined('WPS_IC_CRITICAL')) ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/' : '';
             $requireCrit = !function_exists('apply_filters') || apply_filters('wpc_cache_require_crit', true);
@@ -15953,14 +19745,18 @@ if (!function_exists('wpc_update_window_active')) {
             if ($critOn && $critDir !== '' && $requireCrit && strpos($buffer, 'id="wpc-critical-css"') === false
                 && @filesize($critDir . 'critical_desktop.css') > 5 && @filesize($critDir . 'critical_mobile.css') > 5
                 && !(function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($urlKey))) {
+                $notInlinedWhy = (class_exists('wps_criticalCss', false) && method_exists('wps_criticalCss', 'inlineBlocker')) ? (string) wps_criticalCss::inlineBlocker($urlKey) : '';
+                $notInlinedWhy = $notInlinedWhy !== '' ? $notInlinedWhy : 'no-blocker';
+                wpc_crit_meta_write($critDir . 'inline_why.txt', $notInlinedWhy . ' ' . time());
+                if (function_exists('wpc_belt_receipt')) {
+                    wpc_belt_receipt('crit-not-inlined', ['why' => $notInlinedWhy], true, $urlKey);
+                }
                 return $refuse('crit-on-disk-not-rendered');
             }
 
             // A render still collecting its crit: no crit tag, the arm sentinel asking for it, and
-            // crit not switched off for this page alone.
-            $critOffForPage = class_exists('wps_cdn_rewrite', false) && is_array(wps_cdn_rewrite::$page_excludes)
-                && isset(wps_cdn_rewrite::$page_excludes['critical_css']) && wps_cdn_rewrite::$page_excludes['critical_css'] == '0';
-            $collecting = $critOn && !$critTagged && !$critOffForPage && strpos($buffer, 'id="wpc-arm-sentinel"') !== false;
+            // crit not switched off for this page (wpc_crit_generation_off).
+            $collecting = $critOn && !$critTagged && strpos($buffer, 'id="wpc-arm-sentinel"') !== false;
 
             // A measured background-image LCP whose preload this render does not carry is the
             // transition frame between an unarmed and an armed render: never the finished copy.
@@ -15982,18 +19778,53 @@ if (!function_exists('wpc_update_window_active')) {
                     $lcpElements = is_array($lcp) && isset($lcp['lcp_element']) && is_array($lcp['lcp_element']) ? $lcp['lcp_element'] : [];
                     $measuredBackground = false;
                     $covered = false;
-                    foreach (['mobile', 'desktop'] as $device) {
+                    $measuredHeroes = [];
+                    $heroFoldOn = class_exists('wps_ic_atf_observation') && wps_ic_atf_observation::heroFold();
+                    $guardDevices = ['mobile', 'desktop'];
+                    if (!(defined('WPC_LCP_PRELOAD_GUARD_PER_DEVICE_OFF') && WPC_LCP_PRELOAD_GUARD_PER_DEVICE_OFF)
+                        && !(function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('off_lcp_preload_guard_per_device') === 1)
+                        && function_exists('wpc_ua_is_mobile')
+                        && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_combined_crit_on')
+                        && !wps_rewriteLogic::wpc_combined_crit_on()) {
+                        $guardDevices = [wpc_ua_is_mobile() ? 'mobile' : 'desktop'];
+                    }
+                    foreach ($guardDevices as $device) {
+                        if ($heroFoldOn && wps_ic_atf_observation::documentHolds($lcp, $device)) {
+                            continue;
+                        }
                         if (!empty($lcpElements[$device]['type']) && $lcpElements[$device]['type'] === 'bg') {
                             $bgUrl = (string) ($lcpElements[$device]['url'] ?? '');
                             $bgPath = (string) parse_url(strtolower($bgUrl), PHP_URL_PATH);
-                            if ($bgPath !== '' && preg_match('/\.(jpe?g|png|webp|avif|gif|bmp|tiff?)$/', $bgPath)) {
+                            if ($bgPath !== '' && preg_match('/\.(jpe?g|png|webp|avif|gif|bmp|tiff?)$/', $bgPath)
+                                && (!class_exists('wps_rewriteLogic') || !method_exists('wps_rewriteLogic', 'wpc_lcp_bg_url_allowed')
+                                    || wps_rewriteLogic::wpc_lcp_bg_url_allowed($bgUrl))) {
                                 $measuredBackground = true;
+                                $measuredHeroes[$device] = $lcpElements[$device];
                                 $covered = $covered || wpc_lcp_bg_preloaded($buffer, $bgUrl, $device);
                             }
                         }
                     }
                     if ($measuredBackground && !$covered) {
-                        return $refuse('lcp-bg-preload-missing');
+                        if ((function_exists('apply_filters') && !apply_filters('wpc_cache_without_lcp_preload', true))
+                            || (function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('off_cache_without_lcp_preload') === 1)
+                            || !class_exists('wps_rewriteLogic') || !method_exists('wps_rewriteLogic', 'wpc_lcp_stem_url')) {
+                            return $refuse('lcp-bg-preload-missing');
+                        }
+                        $heroPainted = false;
+                        foreach ($measuredHeroes as $measuredHero) {
+                            $heroStem = wps_rewriteLogic::wpc_lcp_hero_stem($measuredHero);
+                            $heroUrl = (string) (!empty($measuredHero['net_url']) ? $measuredHero['net_url'] : ($measuredHero['url'] ?? ''));
+                            $heroPainted = $heroPainted || ($heroStem['stem'] !== ''
+                                && wps_rewriteLogic::wpc_lcp_stem_url($buffer, $heroStem['stem'], wps_rewriteLogic::wpc_lcp_image_parts($heroUrl)[2])['why'] !== 'not-found');
+                        }
+                        if (!$heroPainted) {
+                            return $refuse('lcp-bg-hero-stale');
+                        }
+                        if (function_exists('wpc_cache_first_log') && function_exists('get_transient')
+                            && !get_transient('wpc_lcp_unpreloaded_' . md5($urlKey))) {
+                            set_transient('wpc_lcp_unpreloaded_' . md5($urlKey), 1, 120);
+                            wpc_cache_first_log('lcp-bg-preload-missing-cached', $urlKey, '', ['dev' => implode(',', array_keys($measuredHeroes))]);
+                        }
                     }
                 }
             }
@@ -16638,7 +20469,7 @@ if (!function_exists('wpc_r2_probation_state')) {
             $wpc_sig = wpc_auto_kick_sig();
             if ($wpc_sig === '' || !function_exists('wp_remote_get') || !function_exists('admin_url')) { return; }
             wp_remote_get(admin_url('admin-ajax.php') . '?action=wpc_auto_kick&w=r2&k=' . rawurlencode($wpc_sig),
-                ['blocking' => false, 'timeout' => 2, 'headers' => ['X-WPC-Cache-Warm' => '1']]);
+                ['blocking' => false, 'timeout' => 2, 'headers' => ['X-WPC-Cache-Warm' => wpc_warm_header_for(admin_url('admin-ajax.php'))]]);
         } catch (\Throwable $e) {
         }
     }
@@ -16727,12 +20558,16 @@ if (!function_exists('wpc_autopurge_on_land')) {
         // visitor can be served — and the operator's own logged-in/cookie variant of
         // the homepage was exactly the copy it could not see: bare copy fresh ⇒ no
         // purge fired, while the variant served old crit for weeks.
-        foreach ([
+        $cache_globs = [
             WPS_IC_CACHE . $key . '/*index.html*',
-            WPS_IC_CACHE . $key . '_*/*index.html*',
             WPS_IC_CACHE . '*/' . $key . '/*index.html*',
-            WPS_IC_CACHE . '*/' . $key . '_*/*index.html*',
-        ] as $cache_glob) {
+        ];
+        if (class_exists('wps_ic_url_key')) {
+            $variant_separator = wps_ic_url_key::variantSeparator();
+            $cache_globs[] = WPS_IC_CACHE . $key . $variant_separator . '*/*index.html*';
+            $cache_globs[] = WPS_IC_CACHE . '*/' . $key . $variant_separator . '*/*index.html*';
+        }
+        foreach ($cache_globs as $cache_glob) {
             foreach ((array) @glob($cache_glob) as $f) {
                 $m = @filemtime($f);
                 if ($m && ($mt === 0 || $m < $mt)) { $mt = $m; }
@@ -16823,12 +20658,13 @@ if (!function_exists('wpc_autopurge_on_land')) {
                 }
             }
 
-            if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeUrlHtml')) {
+            $wpc_p2 = function_exists('wpc_p2_land_page') ? wpc_p2_land_page($key, '', 'land-auto-purge', true) : '';
+            if ($wpc_p2 === '' && class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeUrlHtml')) {
                 wps_ic_cache_integrations::purgeUrlHtml($key, '', ['context' => 'auto-purge-stale']);
             }
             if (function_exists('wpc_auto_journal')) {
                 wpc_auto_journal('auto-purge', ['scope' => 'page', 'key' => $key, 'trigger' => 'artifact-newer',
-                    'art' => $art, 'html' => $html, 'lag_s' => $art - $html]);
+                    'art' => $art, 'html' => $html, 'lag_s' => $art - $html] + ($wpc_p2 === '' ? [] : ['p2' => $wpc_p2]));
             }
         } catch (\Throwable $e) {
         }
@@ -16898,7 +20734,7 @@ if (!function_exists('wpc_sweep_crit_junk_dirs')) {
                 }
                 // Infrastructure and dot-dirs are never candidates, by name, before any file test.
                 if ($name[0] === '.' || strpos($name, 'inv2') === 0
-                    || $name === 'used-css' || $name === 'combine') {
+                    || in_array($name, ['used-css', 'combine', 'sidecar', 'combined'], true)) {
                     continue;
                 }
                 $dir = $crit_root . '/' . $name;
@@ -17023,7 +20859,7 @@ if (!function_exists('wpc_sweep_unserved_store_artifacts')) {
                 $file_path = $used_css_dir . '/' . $file;
                 if (!@is_file($file_path)) { continue; }
                 $stem = preg_replace('/\.live$/', '', $file);
-                $stem = preg_replace('/\.(sheets\.json|css)$/', '', $stem);
+                $stem = preg_replace('/\.(sheets\.json|css|url\.txt|obs\.txt)$/', '', $stem);
                 $stem = preg_replace('/\.(mobile|desktop|atf|rest)$/', '', $stem);
                 $stem = preg_replace('/\.(mobile|desktop|atf|rest)$/', '', $stem);
                 if (!isset($families[$stem])) { $families[$stem] = ['n' => 0, 'f' => []]; }
@@ -17183,6 +21019,7 @@ if (!function_exists('wpc_pipeline_debug_handler')) {
                 }
             }
             $set  = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
+            $wpc_set_as_rendered = function_exists('wpc_levered_settings') ? wpc_levered_settings($set) : $set;
             $ucOn = is_array($set) && !empty($set['used-css']) && $set['used-css'] == '1';
             $tpl  = trim((string) @file_get_contents($cd . 'used_tpl.txt'));
             $tplSrc = 'used_tpl.txt';
@@ -17219,7 +21056,7 @@ if (!function_exists('wpc_pipeline_debug_handler')) {
                 'cflog_db' => array_slice((array) get_option('wpc_cache_first_log', []), -15),
                 'flags' => [
                     'combined_crit' => (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_combined_crit_on')) ? (bool) wps_rewriteLogic::wpc_combined_crit_on() : null,
-                    'delay_v3' => is_array($set) && !empty($set['delay-js-v2']) && $set['delay-js-v2'] == '1',
+                    'delay_v3' => is_array($wpc_set_as_rendered) && !empty($wpc_set_as_rendered['delay-js-v2']) && $wpc_set_as_rendered['delay-js-v2'] == '1',
                     'replace_fonts' => (is_array($set) && isset($set['replace-fonts'])) ? $set['replace-fonts'] : null,
                     'css_icv' => function_exists('get_option') ? substr((string) get_option('css_hash'), 0, 8) : null,
                 ],
@@ -18079,6 +21916,7 @@ if (!function_exists('wpc_lcp_trace_emit')) {
     function wpc_lcp_trace_emit()
     {
         if (empty($_GET['wpc_lcp_trace']) || is_admin()) { return; }
+        if (function_exists('wpc_lever_test_active') && wpc_lever_test_active()) { return; }
         echo wpc_lcp_trace_script();
     }
     add_action('wp_head', 'wpc_lcp_trace_emit', -PHP_INT_MAX);

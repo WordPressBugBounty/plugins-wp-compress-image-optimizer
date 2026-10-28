@@ -102,8 +102,8 @@ class wps_ic_cache_integrations
         update_option(WPS_IC_OPTIONS, $options);
 
 
-        delete_option('wpc_v2_provisioned_fingerprint');
-        delete_option('wpc_v2_provisioned_site_url');
+        // The next connect provisions this key's zone, whatever the database held.
+        wpc_v2_identity_clear();
 
         self::purgeCombinedFiles(false);
         self::purgeAll(false, true);
@@ -112,10 +112,18 @@ class wps_ic_cache_integrations
 
     public static function purgeCombinedFiles($url_key = false)
     {
+        if ($url_key === '') {
+            return;
+        }
         $cache_dir = WPS_IC_COMBINE;
 
         if (!$url_key) {
-            self::removeDirectory($cache_dir);
+            if (function_exists('wpc_cache_p1_on') && wpc_cache_p1_on()) {
+                self::removeFilesOlderThan($cache_dir, 48 * HOUR_IN_SECONDS);
+                update_option('wpc_combine_stale_epoch', time(), false);
+            } else {
+                self::removeDirectory($cache_dir);
+            }
             // The parked-CSS bundles under critical/combined/ are not deleted here: every
             // site-wide caller sits beside a purge that may be serve-stale, and a stale copy
             // links them. wpc_delete_combined_bundles() owns that delete (defines.php).
@@ -145,6 +153,48 @@ class wps_ic_cache_integrations
         wpc_fs_remove_tree($path);
     }
 
+    /**
+     * Removes the files under $path that were last written more than $seconds ago, and the folders
+     * that are left empty; newer files stay. A link is not followed. Bounded: 5 s and 20000 entries
+     * a call, the rest waits for the next one. Answers how many files it removed.
+     */
+    public static function removeFilesOlderThan($path, $seconds)
+    {
+        $path = rtrim((string) $path, '/');
+        if ($path === '' || !@is_dir($path) || @is_link($path)) {
+            return 0;
+        }
+        $limit = time() - max(0, (int) $seconds);
+        $deadline = microtime(true) + 5.0;
+        $seen = 0;
+        $removed = 0;
+        $walk = function ($dir) use (&$walk, $limit, $deadline, &$seen, &$removed) {
+            foreach ((array) @scandir($dir) as $name) {
+                if ($name === '.' || $name === '..') {
+                    continue;
+                }
+                if (++$seen > 20000 || microtime(true) > $deadline) {
+                    return;
+                }
+                $item = $dir . '/' . $name;
+                if (@is_link($item)) {
+                    continue;
+                }
+                if (@is_dir($item)) {
+                    $walk($item);
+                    @rmdir($item);
+                } elseif ((int) @filemtime($item) < $limit && @unlink($item)) {
+                    $removed++;
+                }
+            }
+        };
+        $walk($path);
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('combine-aged-removed', '', '', ['removed' => $removed, 'hours' => (int) ($seconds / 3600)]);
+        }
+        return $removed;
+    }
+
 
     public static function removeDirectoryExcept($path, $except = [])
     {
@@ -163,17 +213,18 @@ class wps_ic_cache_integrations
 
     public static function purgeAll($url_key = false, $varnish = false, $critSave = false, $purgeJS = true, $forcePurge = false, $preserve_assets = false, $purge_mode = null)
     {
+        if ($url_key === '') {
+            return;
+        }
         // Deduplicate: skip if this url_key (or full site) was already purged in this request
         if ($url_key === false) {
             if (self::$purged['all']) {
                 return;
             }
-            self::$purged['all'] = true;
         } else {
             if (self::$purged['all'] || isset(self::$purged['keys'][$url_key])) {
                 return;
             }
-            self::$purged['keys'][$url_key] = true;
         }
 
         if (!$forcePurge && !$critSave) {
@@ -186,6 +237,12 @@ class wps_ic_cache_integrations
 
                 return;
             }
+        }
+
+        if ($url_key === false) {
+            self::$purged['all'] = true;
+        } else {
+            self::$purged['keys'][$url_key] = true;
         }
 
         // Allow integrations to modify parameters
@@ -271,7 +328,9 @@ class wps_ic_cache_integrations
      */
     public static function purgeCriticalFiles($url_key = false)
     {
-
+        if ($url_key === '') {
+            return false;
+        }
 
         if (function_exists('wpc_cache_first_log')) {
             $wpc_tw_via = [];
@@ -365,7 +424,7 @@ class wps_ic_cache_integrations
      */
     public static function removeFiles($path)
     {
-        $keep = (array) apply_filters('wpc_crit_purge_preserve', ['tpl.txt', 'url.txt', 'used_tpl.txt', 'page.html_gzip', 'page_mobile.html_gzip']);
+        $keep = (array) apply_filters('wpc_crit_purge_preserve', ['tpl.txt', 'url.txt', 'used_tpl.txt', 'page.html_gzip', 'page_mobile.html_gzip', 'page_dropped.txt', 'page_mobile_dropped.txt']);
         $path = rtrim($path, '/');
         if (@is_link($path)) {
             return;
@@ -403,6 +462,9 @@ class wps_ic_cache_integrations
 
     public static function purgeCacheFiles($url_key = false, $preserve_assets = false, $purge_mode = null)
     {
+        if ($url_key === '') {
+            return false;
+        }
         $cache_dir = WPS_IC_CACHE;
 
         if (!$url_key) {
@@ -425,41 +487,45 @@ class wps_ic_cache_integrations
                 }
                 return true;
             }
-            if ($preserve_assets) {
-
-
-                self::removeDirectoryExcept($cache_dir, ['css', 'js', 'wpc-cflog.php']);
-            } else {
-                self::removeDirectoryExcept($cache_dir, ['wpc-cflog.php']);
-            }
+            self::removeDirectoryExcept($cache_dir, array_merge(['css', 'js', 'wpc-cflog.php'], wpc_flag_entries()));
             if (function_exists('wpc_stale_hard_purge_done')) {
                 wpc_stale_hard_purge_done();
             }
         } else {
+            $mirror_url = '';
+            if (class_exists('wps_ic_url_key') && class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'removeStaticMirror')) {
+                $mirror_url = wps_ic_url_key::sanitizeSameHostUrl((string) wps_ic_url_key::getUrlFromKey((string) $url_key));
+            }
             self::removeFiles($cache_dir . $url_key);
-            // v7.10.643 — THE COOKIE-VARIANT GHOST (team atlas card; James's "homepage
-            // crit never purges, only inner pages"): logged-in variants (<md5>/<key>)
-            // and cookie variants (<key>_suffix) were invisible to every per-URL purge
-            // and to the autopurge clock's eviction — the operator's own variant copy
-            // of the homepage was precisely the copy nothing could evict, while bare-key
-            // visitors saw fresh renders. The glob can over-match an underscore-slug
-            // sibling page ('&'→'_' in keys, WP slugs allow '_'): accepted — an extra
-            // HTML re-render is fail-safe, an un-evictable stale page is not.
-            foreach ([
-                $cache_dir . $url_key . '_*',
-                $cache_dir . '*/' . $url_key,
-                $cache_dir . '*/' . $url_key . '_*',
-            ] as $pattern) {
-                foreach ((array) @glob($pattern, GLOB_ONLYDIR) as $variant_dir) {
-                    if (wpc_fs_link_below($cache_dir, $variant_dir)) {
-                        continue;
-                    }
-                    self::removeFiles($variant_dir);
-                }
+            self::purgeVariantFolders($url_key);
+            if ($mirror_url !== '') {
+                wps_cacheHtml::removeStaticMirror($mirror_url);
             }
         }
 
         return true;
+    }
+
+    /**
+     * The page's logged-in variants (<md5>/<key>) and cookie variants (<key>, the separator, the
+     * segments); the separator is in no page key, so a sibling page is never matched.
+     */
+    public static function purgeVariantFolders($url_key)
+    {
+        $cache_dir = WPS_IC_CACHE;
+        $variant_separator = wps_ic_url_key::variantSeparator();
+        foreach ([
+            $cache_dir . $url_key . $variant_separator . '*',
+            $cache_dir . '*/' . $url_key,
+            $cache_dir . '*/' . $url_key . $variant_separator . '*',
+        ] as $pattern) {
+            foreach ((array) @glob($pattern, GLOB_ONLYDIR) as $variant_dir) {
+                if (wpc_fs_link_below($cache_dir, $variant_dir)) {
+                    continue;
+                }
+                self::removeFiles($variant_dir);
+            }
+        }
     }
 
     public static function wpc_purgeCF($return = false)
@@ -723,14 +789,24 @@ class wps_ic_cache_integrations
         }
 
 
-        $rebuild = !empty($opts['warm']) && $clean !== ''
+        $rebuildable = !empty($opts['warm']) && $clean !== ''
             && function_exists('wpc_warm_url_queue')
-            && function_exists('wpc_cache_first_enabled') && wpc_cache_first_enabled()
-            && apply_filters('wpc_build_before_purge', false);
+            && function_exists('wpc_cache_first_enabled') && wpc_cache_first_enabled();
+        $swap = $rebuildable && function_exists('wpc_cache_phase_on') && wpc_cache_phase_on('p2')
+            && function_exists('wpc_p2_landing_context') && wpc_p2_landing_context($opts['context'])
+            && function_exists('wpc_p2_hold') && wpc_p2_hold($url_key, $clean, $opts['context']);
+        $rebuild = $rebuildable && ($swap || apply_filters('wpc_build_before_purge', false));
 
         // 1. Local hashed page cache. Rebuild mode: leave in place — the warm overwrite replaces it.
         if ($rebuild) {
             $layers['local'] = 'rebuild';
+            if ($swap) {
+                self::purgeVariantFolders($url_key);
+            }
+        } elseif (!empty($opts['soft']) && $clean !== '' && function_exists('wpc_purge_is_soft') && wpc_purge_is_soft('soft')
+            && class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'wpc_stale_mark_page_dir')) {
+            wps_cacheHtml::wpc_stale_mark_page_dir(WPS_IC_CACHE . $url_key);
+            $layers['local'] = 'stale';
         } else {
             $layers['local'] = (bool) self::purgeCacheFiles($url_key);
         }
@@ -757,6 +833,76 @@ class wps_ic_cache_integrations
             $layers['mirror'] = false;
         }
 
+        if ($swap) {
+            $layers['external'] = 'pending';
+        } else {
+            $layers = array_merge($layers, self::purgeExternalLayers($clean, $url_key, $opts));
+        }
+
+        // 8. Re-warm so the next visitor HITs an optimized page instead of paying the render.
+        if (!empty($opts['warm']) && function_exists('wpc_warm_url_queue')) {
+            wpc_warm_url_queue($clean, $opts['context']);
+        }
+
+
+        if ($rebuild && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')) {
+
+
+            $wpc_sw_delay = self::landSecondWaveDelay($url_key);
+            $wpc_sw_set = true;
+            if (!wp_next_scheduled('wpc_land_second_wave', [$clean])) {
+                if (function_exists('wpc_pl_sched')) {
+                    $wpc_sw_set = (bool) wpc_pl_sched(time() + $wpc_sw_delay, 'wpc_land_second_wave', [$clean]);
+                } else {
+                    $wpc_sw_set = wp_schedule_single_event(time() + $wpc_sw_delay, 'wpc_land_second_wave', [$clean]);
+                    $wpc_sw_set = $wpc_sw_set !== false && !(function_exists('is_wp_error') && is_wp_error($wpc_sw_set));
+                }
+            }
+            if ($swap && !$wpc_sw_set) {
+                @unlink(wpc_p2_marker_file($url_key));
+                $layers['local'] = (bool) self::purgeCacheFiles($url_key);
+                try {
+                    if (class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'removeStaticMirror')) {
+                        wps_cacheHtml::removeStaticMirror($clean);
+                        $layers['mirror'] = true;
+                    }
+                } catch (\Throwable $e) {
+                    $layers['mirror'] = false;
+                }
+                unset($layers['external']);
+                $layers = array_merge($layers, self::purgeExternalLayers($clean, $url_key, $opts));
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('p2-unclosable', (string) $url_key, $clean, ['ctx' => (string) $opts['context']]);
+                }
+            }
+        }
+
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log($opts['context'] !== '' ? $opts['context'] : 'purge-url', $url_key, $clean, $layers);
+        }
+        self::$purgedUrls[$url_key] = $layers;
+        return $layers;
+    }
+
+    /** Seconds after a rebuild-mode landing purge before the second wave looks at the copy (also how long a swap may stay open). */
+    public static function landSecondWaveDelay($url_key)
+    {
+        if (function_exists('get_transient') && get_transient('wpc_land_ready_' . md5((string) $url_key)) === 'crit_only') {
+            return 240;
+        }
+        return 75;
+    }
+
+    /**
+     * The layers in front of the local copy: Varnish, Cloudflare HTML, the third-party page
+     * caches, the full-only ones, and the extension hook. purgeUrlHtml runs them at once; a
+     * landing under policy cache_p2 runs them when the new copy has been stored
+     * (wpc_p2_external), so none of them can fetch the old page from this origin and keep it.
+     */
+    public static function purgeExternalLayers($clean, $url_key, array $opts)
+    {
+        $layers = [];
+
         // 3. Varnish by URL — non-blocking PURGE; a 4xx/405 on non-Varnish hosts is harmless.
         if (!empty($opts['varnish'])) {
             try {
@@ -774,8 +920,8 @@ class wps_ic_cache_integrations
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeEdgeHtmlUrls')) {
                 $forms   = [$clean];
                 $forms[] = (substr($clean, -1) === '/') ? rtrim($clean, '/') : $clean . '/';
-                wps_ic_cache::purgeEdgeHtmlUrls(array_filter($forms));
-                $layers['cf'] = 'queued';
+                wps_ic_cache::purgeEdgeHtmlUrls(array_filter($forms), !empty($opts['inline']));
+                $layers['cf'] = !empty($opts['inline']) ? 'sent' : 'queued';
             }
         } catch (\Throwable $e) {
             $layers['cf'] = false;
@@ -791,34 +937,8 @@ class wps_ic_cache_integrations
 
         // 7. Extensibility — deliberately NOT the legacy wps_ic_purge_all_cache hook (its listeners
 
-        do_action('wps_ic_purge_url_html', $clean, $url_key, $opts['context']);
+        do_action('wps_ic_purge_url_html', $clean, $url_key, isset($opts['context']) ? $opts['context'] : '');
 
-        // 8. Re-warm so the next visitor HITs an optimized page instead of paying the render.
-        if (!empty($opts['warm']) && function_exists('wpc_warm_url_queue')) {
-            wpc_warm_url_queue($clean, $opts['context']);
-        }
-
-
-        if ($rebuild && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')) {
-
-
-            $wpc_sw_delay = 75;
-            if (function_exists('get_transient') && get_transient('wpc_land_ready_' . md5((string) $url_key)) === 'crit_only') {
-                $wpc_sw_delay = 240;
-            }
-            if (!wp_next_scheduled('wpc_land_second_wave', [$clean])) {
-                if (function_exists('wpc_pl_sched')) {
-                    wpc_pl_sched(time() + $wpc_sw_delay, 'wpc_land_second_wave', [$clean]);
-                } else {
-                    wp_schedule_single_event(time() + $wpc_sw_delay, 'wpc_land_second_wave', [$clean]);
-                }
-            }
-        }
-
-        if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log($opts['context'] !== '' ? $opts['context'] : 'purge-url', $url_key, $clean, $layers);
-        }
-        self::$purgedUrls[$url_key] = $layers;
         return $layers;
     }
 

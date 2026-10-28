@@ -37,6 +37,7 @@ class wps_ic_upgrader extends wps_ic
                             remove_filter($gate_filter, '__return_true');
                         }
                     }
+                    $this->refresh_after_update();
                     update_option('wpc_version', parent::$version);
                     delete_option($wpc_tries_key);
                     return;
@@ -105,12 +106,33 @@ class wps_ic_upgrader extends wps_ic
         }
     }
 
+    public function refresh_after_update()
+    {
+        if (!function_exists('wpc_v2_fast404_sync') && defined('WPS_IC_DIR') && is_readable(WPS_IC_DIR . 'addons/v2/v2-fast-404.php')) {
+            include_once WPS_IC_DIR . 'addons/v2/v2-fast-404.php';
+        }
+        try {
+            if (function_exists('wpc_v2_fast404_sync')) {
+                wpc_v2_fast404_sync();
+            }
+        } catch (\Throwable $e) {
+        }
+        try {
+            if (defined('WPC_CC_PLUGIN_FILE') && function_exists('wpc_v2_probe_after_update')) {
+                wpc_v2_probe_after_update();
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+
     public function run_upgrade_work_inner()
     {
         // New plugin files are already on disk when the version delta trips — without this,
         // hosts with lazy opcache serve MIXED old/new bytecode until FPM restarts (liam:
         // three installs invisible). Shimmed no-op when opcache is absent (wp-compress.php:28).
         wpc_opcache_refresh('upgrade');
+
+        $this->refresh_after_update();
 
         self::$options = get_option(WPS_IC_OPTIONS);
 
@@ -122,24 +144,24 @@ class wps_ic_upgrader extends wps_ic
             unlink(WPS_IC_LOG . 'local_script_encode_2.txt');
         }
 
+        if (!class_exists('wps_ic_htaccess') && defined('WPS_IC_DIR') && is_readable(WPS_IC_DIR . 'classes/htaccess.class.php')) {
+            include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+        }
+        if (class_exists('wps_ic_htaccess')) {
+            try {
+                $browserCache = new wps_ic_htaccess();
+                if ($browserCache->wpcBrowserCacheEnabled() && !$browserCache->wpcBrowserCacheOldForm()) {
+                    $browserCache->wpcApplyBrowserCache(false, 'upgrade');
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
         // Purge CDN
         $this->purge_cdn();
 
         // Upgrade CDN
         $this->update_to_latest();
-
-        // v7.20.09 — env-fingerprint heal, fleet-wide on upgrade. env_changed suppresses the
-        // whole CDN, but ensure_bg only acts when force/unprov/moved already hold — a
-        // never-stamped fingerprint (site provisioned before the mechanism, or cloned)
-        // suppresses FOREVER with a healthy zone. Arm the bounded chain: reset sets
-        // force_provision, ensure_bg dispatches the deferred config sync, a 2xx re-stamps
-        // the fingerprint and suppression clears. 12-attempt cap + 2-min pacing inside.
-        if (function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed()
-            && function_exists('wpc_v2_provision_reset_for_env') && function_exists('wpc_v2_provision_ensure_bg')
-            && apply_filters('wpc_env_heal_armtrip', true)) {
-            wpc_v2_provision_reset_for_env();
-            wpc_v2_provision_ensure_bg('upgrade-env');
-        }
 
         // Notify API
         $this->api_notify();
@@ -167,7 +189,7 @@ class wps_ic_upgrader extends wps_ic
         $uri = WPS_IC_KEYSURL . '?action=upgrade_notify&apikey=' . $apikey . '&site_type=' . $site_type . '&domain=' . $siteurl . '&zone_name=' . $zone_name . '&plugin_version=' . self::$version . '&hash=' . md5(time()) . '&time_hash=' . time();
 
 
-        $get = wp_remote_get($uri, ['timeout' => 3, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        $get = wp_remote_get($uri, ['timeout' => 3, 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL), 'user-agent' => WPS_IC_API_USERAGENT]);
 
         if (wp_remote_retrieve_response_code($get) == 200) {
             $body = wp_remote_retrieve_body($get);

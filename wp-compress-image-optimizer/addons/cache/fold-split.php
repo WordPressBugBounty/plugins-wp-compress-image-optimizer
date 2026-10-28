@@ -258,7 +258,7 @@ WPCFS;
         if ($cached !== false) {                        // 'none' is a cached 404, [] its shape
             return is_array($cached) ? $cached : [];
         }
-        $base = (string) apply_filters('wpc_fs_artifact_base', 'https://critical-css-mc.b-cdn.net/foldsplit/');
+        $base = (string) apply_filters('wpc_fs_artifact_base', (function_exists('wpc_crit_artifact_base') ? wpc_crit_artifact_base() : 'https://critical-css-mc.b-cdn.net/') . 'foldsplit/');
         $resp = wp_remote_get($base . $key . '.json', ['timeout' => (int) apply_filters('wpc_fs_fetch_timeout', 3)]);
         if (is_wp_error($resp) || (int) wp_remote_retrieve_response_code($resp) !== 200) {
             set_transient($tk, 'none', (int) apply_filters('wpc_fs_miss_ttl', 600));   // 404 => serve whole, bounded

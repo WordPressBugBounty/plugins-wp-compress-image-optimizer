@@ -25,6 +25,7 @@ require_once WPC_V2_DIR . '/v2-rung-intercept.php';
 require_once WPC_V2_DIR . '/v2-fast-404.php';
 require_once WPC_V2_DIR . '/v2-sized-trigger.php';
 require_once WPC_V2_DIR . '/v2-policy.php';
+require_once WPC_V2_DIR . '/v2-sd-activity.php';
 
 // v7.10.654 — SELF-INTEGRITY: never assume our own code is still on disk.
 // Receipt (thepttv, 2026-07-31): a host malware scanner (Imunify-class, realtime/root)
@@ -46,6 +47,7 @@ if (!function_exists('wpc_v2_selfcheck_required_functions')) {
             'wpc_v2_store_bytes'        => 'v2-store.php',
             'wpc_v2_variant_identity'   => 'v2-variant-identity.php',
             'wpc_v2_get_apikey'            => 'v2-capabilities.php',
+            'wpc_v2_journal_root'          => 'v2-service.php',
         ] as $fn => $file) {
             if (!function_exists($fn)) {
                 $missing[$fn] = $file;
@@ -121,6 +123,11 @@ require_once WPC_V2_DIR . '/v2-customer-purge.php';
 
 
 require_once WPC_V2_DIR . '/v2-rendered-width-beacon.php';
+
+if (!(defined('DOING_CRON') && DOING_CRON)) {
+    add_action('wpc_hero_land_scan', ['wps_ic_hero_land', 'scan'], 10, 1);
+    add_action('wpc_hero_land_tick', ['wps_ic_hero_land', 'tick'], 10, 3);
+}
 
 // Mark that v2 is at least loaded so other plugin code can branch on it.
 if (!defined('WPC_V2_LOADED')) {

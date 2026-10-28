@@ -5,6 +5,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+require_once __DIR__ . '/v2-service.php';
+
 if (!function_exists('wpc_use_v2_protocol')) {
 
 
@@ -103,59 +105,6 @@ function wpc_probe_orchestrator_capabilities($force = false)
 }
 
 
-function wpc_v2_orchestrator_url()
-{
-
-    if (defined('WPC_V2_ORCHESTRATOR_URL') && WPC_V2_ORCHESTRATOR_URL !== '') {
-        return rtrim((string) WPC_V2_ORCHESTRATOR_URL, '/');
-    }
-
-    // 2) Filter override.
-    $override = apply_filters('wpc_v2_orchestrator_url', '');
-    if ($override !== '') return rtrim((string) $override, '/');
-
-
-    $valid_hosts = apply_filters('wpc_v2_orchestrator_valid_hosts', [
-        'local-mc.zapwp.net',
-    ]);
-    $geo = get_option('wps_ic_geo_locate_v2');
-    if (is_array($geo) && !empty($geo['server'])) {
-        $server = trim((string) $geo['server'], '/');
-        // Strip scheme for the whitelist check; preserve original for return.
-        $host_only = preg_replace('#^https?://#i', '', $server);
-        if (in_array($host_only, $valid_hosts, true)) {
-            if (preg_match('#^https?://#i', $server)) return $server;
-            return 'https://' . $server;
-        }
-
-
-    }
-
-
-    return 'https://local-mc.zapwp.net';
-}
-
-/**
- * The signature headers of a request to the image service's signed plugin routes (the manifest
- * GET, ack and purge, and the variants list and delete). $message is what the route verifies:
- * the canonical query for a GET, the raw body for a POST.
- *
- * Rule: X-WPC-Sig = HMAC-SHA256(apikey, "<X-WPC-Timestamp>.<message>"), the timestamp being the
- * exact header string sent, as verifyHmacRawBytes() in the orchestrator's lib/manifestPull.js
- * checks its v2 form. Observed: the v1 form HMAC(apikey, message) bound nothing to the timestamp,
- * so a captured request replayed with a fresh X-WPC-Timestamp still verified; the service
- * accepts v2 since v3.24.143 and drops v1 once its sig_form counter shows v1 near zero (hub ask
- * 047, item 1).
- */
-function wpc_v2_service_sign($apikey, $message, $ts = null)
-{
-    $ts = (string) ($ts === null ? time() : (int) $ts);
-    return [
-        'X-WPC-Sig'       => hash_hmac('sha256', $ts . '.' . (string) $message, (string) $apikey),
-        'X-WPC-Timestamp' => $ts,
-    ];
-}
-
 /**
  * The capabilities answered when the probe fails and no prior cache exists (read by
  * `wp wpcompress v2-probe`; the protocol gate no longer asks).
@@ -233,6 +182,30 @@ if (!function_exists('wpc_lazy_mode_active')) {
     function wpc_lazy_mode_active()
     {
         return strpos(wpc_get_optimization_mode(), 'lazy_') === 0;
+    }
+}
+
+if (!function_exists('wpc_sd_mode_on')) {
+    function wpc_sd_mode_on()
+    {
+        return function_exists('wpc_get_optimization_mode') && wpc_get_optimization_mode() === 'lazy_cdn';
+    }
+}
+
+if (!function_exists('wpc_sd_subtitle')) {
+    function wpc_sd_subtitle()
+    {
+        return __("Optimized on demand as visitors view them \u{2014} the exact size and format each browser needs.", 'wp-compress-image-optimizer');
+    }
+}
+
+if (!function_exists('wpc_sd_only_install')) {
+    function wpc_sd_only_install()
+    {
+        if (!wpc_sd_mode_on() || (string) get_option('wpc_fresh_sd24', '') !== 'set') {
+            return false;
+        }
+        return !apply_filters('wpc_show_optimization_strategies', false);
     }
 }
 
@@ -525,6 +498,10 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
         if (function_exists('wpc_v2_is_store_broken_active') && wpc_v2_is_store_broken_active()) {
             return false;
         }
+        $apikey = wpc_v2_get_apikey();
+        if ($apikey === '') {
+            return false;
+        }
         // The dispatch door answers whether the image may go (attempt back-off, lock, parked,
         // journal, a pending job, a restore); asked here too so a refused image fires no loopback.
         $refused_by = wps_ic_image_optimize::refusal($attachment_id, 'lazy');
@@ -603,8 +580,6 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
         error_log('[WPC LazyV2] queued image=' . $attachment_id . ' mode=' . wpc_get_optimization_mode() . ' smart_widths=' . (empty($widths_clean) ? 'all' : implode(',', $widths_clean)));
 
 
-        $options  = get_option(WPS_IC_OPTIONS);
-        $apikey   = is_array($options) && !empty($options['api_key']) ? (string) $options['api_key'] : '';
         $nonce    = substr(hash('sha256', $apikey . '|' . $attachment_id . '|' . floor(time() / 60)), 0, 32);
         $ajax_url = admin_url('admin-ajax.php');
 
@@ -656,8 +631,10 @@ if (!function_exists('wpc_lazy_v2_drain_ajax')) {
         }
 
 
-        $options = get_option(WPS_IC_OPTIONS);
-        $apikey  = is_array($options) && !empty($options['api_key']) ? (string) $options['api_key'] : '';
+        $apikey = wpc_v2_get_apikey();
+        if ($apikey === '') {
+            wp_die('bad nonce', 403);
+        }
         $now_min = floor(time() / 60);
         $valid = false;
         foreach ([$now_min, $now_min - 1] as $bucket) {

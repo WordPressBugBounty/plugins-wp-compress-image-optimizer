@@ -1,3 +1,117 @@
+// The speed-test poll, one for both callers (the settings page's first result and the Retest
+// button), on the site's own admin and in the agency portal. Both used to poll with setInterval
+// (10 s and 5 s) until a result landed, and the plugin answered "not-done" in every other state,
+// so a test that never finished was polled for as long as the page stayed open: ecotechie.io
+// (ticket 12241, 14 Oct) logged the portal's poll every 10 s, each answered 499 (the client gave
+// up, PHP kept working), until the box sat at 100 % CPU. Now: one request at a time (the next is
+// scheduled when the last one answered), 10 s, 30 s, 60 s, then every 120 s (or the answer's
+// retry_after when longer), nothing while the tab is hidden, and a stop after 10 minutes or at a
+// `failed`/`idle` answer. An answer with no `state` (an older plugin or relay) counts as running.
+window.wpcGpsPoll = function($) {
+    var steps = [ 1e4, 3e4, 6e4, 12e4 ];
+    var limitMs = 10 * 60 * 1e3;
+    var run = null;
+    function ajaxUrl() {
+        return typeof wpc_ajaxVar !== "undefined" && wpc_ajaxVar.ajaxurl ? wpc_ajaxVar.ajaxurl : window.ajaxurl || "";
+    }
+    function payload() {
+        var isAgency = typeof wpc_ajaxVar !== "undefined" && wpc_ajaxVar.apikey ? true : false;
+        return isAgency ? {
+            action: "wpc_agency_fetch_gps",
+            apikey: wpc_ajaxVar.apikey,
+            nonce: wpc_ajaxVar.nonce
+        } : {
+            action: "wps_fetchInitialTest",
+            nonce: typeof wpc_ajaxVar !== "undefined" ? wpc_ajaxVar.nonce : ""
+        };
+    }
+    function stop() {
+        if (!run) return;
+        clearTimeout(run.timer);
+        if (run.onVisible) document.removeEventListener("visibilitychange", run.onVisible);
+        run = null;
+    }
+    // The card must not spin forever when the poll ends without a result.
+    function showNotFinished() {
+        var sentence = "The speed test did not finish. Run it again.";
+        $(".wpc-v2-scores-loading").find("img, svg").hide();
+        $(".wpc-v2-scores-loading span").text(sentence);
+        $(".wpc-pagespeed-preparing").text(sentence);
+        var $btn = $(".wps-ic-initial-retest");
+        $btn.removeClass("wpc-v2-retest-loading").css("pointer-events", "");
+        $btn.find("img").removeClass("wpc-spin");
+    }
+    function giveUp(r) {
+        if (r !== run) return;
+        stop();
+        showNotFinished();
+    }
+    function schedule(r, delay) {
+        if (r !== run) return;
+        // A wait that would run past the 10 minutes ends at the 10 minutes, so the card does not
+        // keep spinning after the poll has stopped.
+        delay = Math.min(delay, Math.max(0, limitMs - (Date.now() - r.startedAt)));
+        r.timer = setTimeout(function() {
+            tick(r);
+        }, delay);
+    }
+    function tick(r) {
+        if (r !== run) return;
+        if (Date.now() - r.startedAt >= limitMs) return giveUp(r);
+        if (document.hidden) {
+            if (!r.onVisible) {
+                r.onVisible = function() {
+                    if (document.hidden || r !== run) return;
+                    document.removeEventListener("visibilitychange", r.onVisible);
+                    r.onVisible = null;
+                    tick(r);
+                };
+                document.addEventListener("visibilitychange", r.onVisible);
+            }
+            return;
+        }
+        var answer = null;
+        $.ajax({
+            url: ajaxUrl(),
+            type: "POST",
+            data: payload(),
+            timeout: 25e3
+        }).done(function(res) {
+            answer = res;
+        }).always(function() {
+            if (r !== run) return;
+            if (answer && answer.success) {
+                stop();
+                setTimeout(function() {
+                    window.location.reload();
+                }, r.reloadDelay);
+                return;
+            }
+            var state = answer && answer.state ? answer.state : "running";
+            if (state === "failed" || state === "idle") return giveUp(r);
+            var delay = steps[Math.min(r.polls, steps.length - 1)];
+            var retryMs = answer && answer.retry_after ? 1e3 * parseInt(answer.retry_after, 10) : 0;
+            r.polls++;
+            schedule(r, retryMs > delay ? retryMs : delay);
+        });
+    }
+    return {
+        start: function(opts) {
+            opts = opts || {};
+            stop();
+            run = {
+                startedAt: Date.now(),
+                polls: 1,
+                timer: null,
+                onVisible: null,
+                reloadDelay: opts.mode === "initial" ? 2e3 : 0
+            };
+            schedule(run, steps[0]);
+        },
+        stop: stop
+    };
+}(jQuery);
+
 jQuery(document).ready((function($) {
     var ajaxurl = typeof wpc_ajaxVar !== "undefined" && wpc_ajaxVar.ajaxurl ? wpc_ajaxVar.ajaxurl : window.ajaxurl || "";
     $(".wpc-lite-toggle-advanced").on("click", (function(e) {
@@ -233,7 +347,6 @@ jQuery(document).ready((function($) {
         }
         var isAgency = wpc_ajaxVar.apikey ? true : false;
         var resetAction = isAgency ? "wpc_agency_reset_test" : "wps_ic_resetTest";
-        var pollAction = isAgency ? "wpc_agency_fetch_gps" : "wps_fetchInitialTest";
         var resetPayload = isAgency ? {
             action: resetAction,
             apikey: wpc_ajaxVar.apikey
@@ -246,21 +359,9 @@ jQuery(document).ready((function($) {
             type: "POST",
             data: resetPayload,
             success: function(response) {
-                var retestPoll = setInterval((function() {
-                    var pollPayload = isAgency ? {
-                        action: pollAction,
-                        apikey: wpc_ajaxVar.apikey
-                    } : {
-                        action: pollAction,
-                        nonce: wpc_ajaxVar.nonce
-                    };
-                    $.post(ajaxurl, pollPayload, (function(res) {
-                        if (res.success) {
-                            clearInterval(retestPoll);
-                            window.location.reload();
-                        }
-                    }));
-                }), 5e3);
+                window.wpcGpsPoll.start({
+                    mode: "retest"
+                });
             }
         });
         return false;

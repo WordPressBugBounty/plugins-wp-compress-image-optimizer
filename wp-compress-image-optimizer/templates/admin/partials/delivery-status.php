@@ -35,6 +35,7 @@ $pending    = $has('cdn_pending_verify') || $has('htaccess_pending_verify');
 $optimizing = $has('cdn_pending_orch');
 $degraded   = $has('cdn_verify_failed') || $has('htaccess_verify_failed') || $has('override_');
 $jpeg_forced_off = $has('next_gen_disabled_jpeg_only');
+$wpc_ngd_cf_closed = in_array('cdn_edge_cloudflare_unkeyed', $warnings, true);
 
 // The sub-line describes the METHOD (the "how"), not the value prop — the hero already states
 // "best format per browser", so repeating it here is just noise.
@@ -58,9 +59,9 @@ if ($ceiling === 'off') {
 
         // Automatic (CDN), but keep the CHOSEN mode visible so the radio and the status agree.
         $state = 'ok';    $badge = '✓ Verified'; $method = 'Edge negotiate';
-        $sub = 'Next-gen on clean URLs, no picture tags — delivered &amp; cached at the edge.';
+        $sub = 'Next-gen on clean URLs, no picture tags — delivered & cached at the edge.';
     } else {
-        $state = 'ok';    $badge = '✓ Verified'; $method = 'Automatic (CDN)';          $sub = 'Delivered &amp; cached at the edge — fastest.';
+        $state = 'ok';    $badge = '✓ Verified'; $method = 'Automatic (CDN)';          $sub = 'Delivered & cached at the edge — fastest.';
     }
 } elseif ($tier === WPC_Delivery_Resolver::TIER_HTACCESS) {
     $state = 'ok';    $badge = '✓ Verified'; $method = 'Automatic (server-level)'; $sub = 'Served by your server on clean URLs.';
@@ -90,6 +91,79 @@ $formats = ($ceiling === 'off') ? ['JPEG'] : (($ceiling === 'webp') ? ['WebP', '
 
 $sel = ($ceiling === 'off') ? 'off' : 'on';
 $nonce = wp_create_nonce('wps_ic_nonce_action');
+
+$wpc_io_edge = ($tier === WPC_Delivery_Resolver::TIER_CDN_EDGE);
+$wpc_io_floor = ($ceiling === 'off' || $tier >= WPC_Delivery_Resolver::TIER_JPEG);
+$wpc_io_origin_bytes = ($wpc_io_edge && isset($rv['redirect_target']) && (string) $rv['redirect_target'] === 'origin');
+$wpc_io_cdn_lane = $images_on && empty($caps['cdn_disabled'])
+    && (!empty($caps['cdn_on']) || ($wpc_io_edge && !$wpc_io_origin_bytes));
+$wpc_io_state = function_exists('wpc_sd_state') ? wpc_sd_state() : 'other';
+$wpc_io_mode = function_exists('wpc_get_optimization_mode') ? wpc_get_optimization_mode() : 'legacy';
+$wpc_io_sd_on = ($wpc_io_mode === 'lazy_cdn');
+$wpc_io_agency = defined('WPS_IC_AGENCY') && WPS_IC_AGENCY;
+
+if ($wpc_io_floor) {
+    $wpc_io_line = __('Visitors get your optimized JPEG and PNG files.', WPS_IC_TEXTDOMAIN);
+} elseif ($wpc_io_cdn_lane) {
+    $wpc_io_line = __('Visitors get AVIF or WebP from the CDN, sized for their screen.', WPS_IC_TEXTDOMAIN);
+} elseif ($wpc_io_sd_on && !$wpc_io_agency) {
+    $wpc_io_line = __('Visitors get AVIF or WebP from your server, sized as they view.', WPS_IC_TEXTDOMAIN);
+} else {
+    $wpc_io_line = __('Visitors get AVIF or WebP for your optimized images.', WPS_IC_TEXTDOMAIN);
+}
+
+if ($wpc_io_state === 'paused') {
+    $wpc_io_paused_at = (int) get_option(WPC_SD_PAUSED_AT_OPTION, 0);
+    $wpc_io_pill = ' is-warn';
+    $wpc_io_pill_text = __('Paused', WPS_IC_TEXTDOMAIN);
+} elseif ($ceiling === 'off') {
+    $wpc_io_pill = ' is-off';
+    $wpc_io_pill_text = __('Off', WPS_IC_TEXTDOMAIN);
+} elseif ($wpc_io_floor) {
+    $wpc_io_pill = ' is-warn';
+    $wpc_io_pill_text = __('Limited', WPS_IC_TEXTDOMAIN);
+} else {
+    $wpc_io_pill = '';
+    $wpc_io_pill_text = __('On', WPS_IC_TEXTDOMAIN);
+}
+
+$wpc_io_format_label = __('Format', WPS_IC_TEXTDOMAIN);
+if ($wpc_io_floor) {
+    $wpc_io_format = __('JPEG / PNG', WPS_IC_TEXTDOMAIN);
+} elseif ($ceiling === 'webp') {
+    $wpc_io_format = __('WebP', WPS_IC_TEXTDOMAIN);
+} else {
+    $wpc_io_format = __('Next-Gen', WPS_IC_TEXTDOMAIN);
+    $wpc_io_format_label = __('Formats', WPS_IC_TEXTDOMAIN);
+}
+
+$wpc_io_count = isset($optimizedImages) ? (int) $optimizedImages : 0;
+$wpc_io_avg = null;
+$wpc_io_sizes = null;
+if ($wpc_io_state !== 'other' && function_exists('wpc_sd_totals')) {
+    $wpc_io_totals = wpc_sd_totals();
+    $wpc_io_count = (int) $wpc_io_totals['images'];
+    $wpc_io_avg = $wpc_io_totals['smaller'];
+    $wpc_io_sizes = isset($wpc_io_totals['sizes']) ? (int) $wpc_io_totals['sizes'] : null;
+} elseif ($wpc_io_count > 0 && isset($wpdb)) {
+    if (function_exists('wpc_sd_totals')) {
+        $wpc_io_legacy_totals = wpc_sd_totals();
+        $wpc_io_sizes = !empty($wpc_io_legacy_totals['sizes']) ? (int) $wpc_io_legacy_totals['sizes'] : null;
+    }
+    $wpc_io_avg_raw = (float) $wpdb->get_var("SELECT AVG(CAST(meta_value AS DECIMAL(5,1))) FROM {$wpdb->postmeta} WHERE meta_key = 'ic_savings' AND meta_value > 0");
+    $wpc_io_avg = $wpc_io_avg_raw > 0 ? (int) round($wpc_io_avg_raw) : null;
+}
+
+if ($wpc_io_state === 'paused') {
+    $wpc_io_line = ($wpc_io_paused_at > 0
+        ? sprintf(__('Paused on %s when you restored all images.', WPS_IC_TEXTDOMAIN), wp_date(get_option('date_format', 'F j, Y'), $wpc_io_paused_at))
+        : __('Paused when you restored all images.', WPS_IC_TEXTDOMAIN))
+        . ' ' . ($wpc_io_count > 0
+        ? sprintf(_n('%s optimized image is still delivered; new images wait until you resume.', '%s optimized images are still delivered; new images wait until you resume.', $wpc_io_count, WPS_IC_TEXTDOMAIN), number_format_i18n($wpc_io_count))
+        : __('Visitors get your original images; new images wait until you resume.', WPS_IC_TEXTDOMAIN));
+}
+
+$wpc_io_bulk_url = admin_url('options-general.php?page=' . (class_exists('wps_ic') && isset(wps_ic::$slug) ? wps_ic::$slug : 'wpcompress') . '&view=bulk');
 ?>
 <div class="wpc-ngd-card wpc-ngd-state-<?php echo esc_attr($state); ?>" id="wpc-ngd-card" data-nonce="<?php echo esc_attr($nonce); ?>">
 
@@ -130,7 +204,49 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
     <input type="hidden"   name="options[wpc_delivery_override]" value="<?php echo esc_attr($override); ?>">
   </div>
 
-  <div class="wpc-ngd-status">
+</div>
+<?php
+$wpc_io_icons = [
+    'image' => '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+    'percent' => '<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+    'layers' => '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+    'sparkle' => '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
+];
+$wpc_io_icon = function ($name) use ($wpc_io_icons) {
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' . $wpc_io_icons[$name] . '</svg>';
+};
+ob_start();
+?>
+<div class="wpc-tab-content-box wpc-card-rows wpc-perf-section wpc-ngd-status-section wpc-ngd-state-<?php echo esc_attr($state); ?>" id="nextgen-status">
+  <div class="d-flex align-items-top gap-3 tab-title-checkbox">
+    <div class="wpc-checkbox-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+    <div class="wpc-checkbox-description">
+      <h4 class="fs-500 text-dark-300 fw-500 p-inline"><?php echo esc_html__('Delivery Status', WPS_IC_TEXTDOMAIN); ?><span class="wpc-ngd-pill<?php echo esc_attr($wpc_io_pill); ?>"><?php echo esc_html($wpc_io_pill_text); ?></span></h4>
+      <p class="wpc-ngd-lede">
+        <span class="wpc-ngd-line"><?php echo esc_html($wpc_io_line); ?></span>
+        <?php if ($wpc_io_state === 'paused') : ?>
+          <a class="wpc-ngd-link" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=wpc_sd_resume'), 'wpc_sd_resume')); ?>"><?php echo esc_html__('Resume Smart Delivery', WPS_IC_TEXTDOMAIN); ?></a>
+        <?php elseif ($wpc_io_sd_on) : ?>
+          <a class="wpc-ngd-link" href="<?php echo esc_url($wpc_io_bulk_url . '#wpc-sd-activity'); ?>"><?php echo esc_html__('See optimized images', WPS_IC_TEXTDOMAIN); ?></a>
+        <?php else : ?>
+          <a class="wpc-ngd-link" href="<?php echo esc_url($wpc_io_bulk_url); ?>"><?php echo esc_html__('Optimize Media Library', WPS_IC_TEXTDOMAIN); ?></a>
+        <?php endif; ?>
+      </p>
+    </div>
+  </div>
+
+  <div class="wpc-perf-grid wpc-perf-grid-single">
+  <div class="wpc-grid-full-width">
+  <div class="wpc-ngd-status" id="wpc-ngd-status">
+
+    <div class="wpc-ngd-tiles<?php echo $wpc_io_sizes !== null ? ' wpc-ngd-tiles--4' : ''; ?>">
+      <div class="wpc-stat-tile wpc-ngd-stat"><span class="wpc-ngd-tile-icon"><?php echo $wpc_io_icon('image'); ?></span><div class="wpc-ngd-tile-text"><span class="wpc-stat-value wpc-ngd-stat-num"><?php echo esc_html(number_format_i18n($wpc_io_count)); ?></span><span class="wpc-stat-label wpc-ngd-stat-label"><?php echo esc_html__('Images optimized', WPS_IC_TEXTDOMAIN); ?></span></div></div>
+      <?php if ($wpc_io_sizes !== null) : ?>
+      <div class="wpc-stat-tile wpc-ngd-stat"><span class="wpc-ngd-tile-icon"><?php echo $wpc_io_icon('layers'); ?></span><div class="wpc-ngd-tile-text"><span class="wpc-stat-value wpc-ngd-stat-num"><?php echo esc_html(number_format_i18n($wpc_io_sizes)); ?></span><span class="wpc-stat-label wpc-ngd-stat-label"><?php echo esc_html__('Variants', WPS_IC_TEXTDOMAIN); ?></span></div></div>
+      <?php endif; ?>
+      <div class="wpc-stat-tile wpc-ngd-stat"><span class="wpc-ngd-tile-icon"><?php echo $wpc_io_icon('percent'); ?></span><div class="wpc-ngd-tile-text"><span class="wpc-stat-value wpc-ngd-stat-num"><?php echo $wpc_io_avg === null ? "\u{2014}" : esc_html(number_format_i18n((int) $wpc_io_avg) . '%'); ?></span><span class="wpc-stat-label wpc-ngd-stat-label"><?php echo esc_html__('Average savings', WPS_IC_TEXTDOMAIN); ?></span></div></div>
+      <div class="wpc-stat-tile wpc-ngd-stat"><span class="wpc-ngd-tile-icon"><?php echo $wpc_io_icon('sparkle'); ?></span><div class="wpc-ngd-tile-text"><span class="wpc-stat-value wpc-ngd-stat-num"><?php echo esc_html($wpc_io_format); ?></span><span class="wpc-stat-label wpc-ngd-stat-label"><?php echo esc_html($wpc_io_format_label); ?></span></div></div>
+    </div>
 
     <?php // ── HERO — the value prop leads the section: best format per browser, automatically ──
 
@@ -145,9 +261,13 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
         </div>
       </div>
 
-    <div class="wpc-ngd-row">
+    <div class="wpc-ngd-method-card">
+    <div class="wpc-ngd-row"<?php echo ($wpc_ngd_cf_closed && $tier === WPC_Delivery_Resolver::TIER_PICTURE) ? ' style="flex-wrap:wrap"' : ''; ?>>
       <span class="wpc-ngd-method"><?php echo esc_html($method); ?></span>
       <span class="wpc-ngd-badge"><?php echo esc_html($badge); ?></span>
+      <?php if ($wpc_ngd_cf_closed && $tier === WPC_Delivery_Resolver::TIER_PICTURE) : ?>
+        <span class="wpc-ngd-chip" style="display:inline-flex;align-items:center;font-family:'proxima_semibold',sans-serif;font-size:12px;line-height:1;padding:4px 10px;border-radius:30px;background:#f1f5f9;color:#64748b;" title="<?php echo esc_attr__('Cloudflare caches one copy per image URL, so each browser\'s best format is chosen with picture tags.', WPS_IC_TEXTDOMAIN); ?>"><?php echo esc_html__('Switched to Universal for Cloudflare', WPS_IC_TEXTDOMAIN); ?></span>
+      <?php endif; ?>
     </div>
     <div class="wpc-ngd-sub"><?php echo esc_html($sub); ?></div>
 
@@ -163,7 +283,7 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
     $wpc_ngd_caps    = (isset($rv['capabilities']) && is_array($rv['capabilities'])) ? $rv['capabilities'] : [];
     $wpc_ngd_edge_ok = !empty($rv['verify']['cdn']['ok']) && !empty($wpc_ngd_caps['edge_available']) && !empty($wpc_ngd_caps['cdn_on']);
     $wpc_ngd_on_edge = (isset($rv['tier_name']) && $rv['tier_name'] === 'cdn-edge');
-    if ($override !== 'auto' && !$wpc_ngd_on_edge && $wpc_ngd_edge_ok) :
+    if ($override !== 'auto' && !$wpc_ngd_on_edge && $wpc_ngd_edge_ok && !$wpc_ngd_cf_closed) :
         $wpc_ngd_ov_lbls  = ['auto' => 'Auto (recommended)', 'picture' => 'Picture tags', 'htaccess' => 'Server-level', 'cdn' => 'CDN edge', 'edge' => 'Edge negotiate'];
         $wpc_ngd_ov_label = isset($wpc_ngd_ov_lbls[$override]) ? $wpc_ngd_ov_lbls[$override] : $override;
     ?>
@@ -179,6 +299,7 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
     <div class="wpc-ngd-meta">
       <button type="button" class="wpc-ngd-recheck"><?php echo esc_html__('Re-check now', WPS_IC_TEXTDOMAIN); ?></button>
       <span class="wpc-ngd-spinner" hidden aria-hidden="true"></span>
+    </div>
     </div>
 
     <details class="wpc-ngd-advanced">
@@ -201,13 +322,20 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
       </div>
     </details>
   </div>
-
+  </div>
+  </div>
+</div>
+<?php
+$wpc_ngd_status_html = ob_get_clean();
+ob_start();
+?>
   <script>
   (function () {
     var card = document.getElementById('wpc-ngd-card');
-    if (!card || card.dataset.bound) return; card.dataset.bound = '1';
+    var st = document.getElementById('wpc-ngd-status');
+    if (!card || !st || card.dataset.bound) return; card.dataset.bound = '1';
     var nonce = card.getAttribute('data-nonce');
-    var sp = card.querySelector('.wpc-ngd-spinner');
+    var sp = st.querySelector('.wpc-ngd-spinner');
     function post(data, cb) {
       if (sp) sp.hidden = false;
       data.nonce = nonce; data.action = data.action || 'wpc_delivery_save';
@@ -242,18 +370,18 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
     // until Save runs the verify), and restores the real rendered state if toggled back.
     var ngdInit = sw ? {
       on:   sw.checked,
-      hero: (function (h) { return h ? h.style.display : ''; })(card.querySelector('.wpc-ngd-hero')),
-      fmts: (function (f) { return f ? f.innerHTML : ''; })(card.querySelector('.wpc-ngd-formats')),
-      m:    (card.querySelector('.wpc-ngd-method') || {}).textContent || '',
-      b:    (card.querySelector('.wpc-ngd-badge')  || {}).textContent || '',
-      s:    (card.querySelector('.wpc-ngd-sub')    || {}).textContent || ''
+      hero: (function (h) { return h ? h.style.display : ''; })(st.querySelector('.wpc-ngd-hero')),
+      fmts: (function (f) { return f ? f.innerHTML : ''; })(st.querySelector('.wpc-ngd-formats')),
+      m:    (st.querySelector('.wpc-ngd-method') || {}).textContent || '',
+      b:    (st.querySelector('.wpc-ngd-badge')  || {}).textContent || '',
+      s:    (st.querySelector('.wpc-ngd-sub')    || {}).textContent || ''
     } : null;
     function preview(on) {
-      var hero = card.querySelector('.wpc-ngd-hero');
-      var fmts = card.querySelector('.wpc-ngd-formats');
-      var meth = card.querySelector('.wpc-ngd-method');
-      var badge = card.querySelector('.wpc-ngd-badge');
-      var sub = card.querySelector('.wpc-ngd-sub');
+      var hero = st.querySelector('.wpc-ngd-hero');
+      var fmts = st.querySelector('.wpc-ngd-formats');
+      var meth = st.querySelector('.wpc-ngd-method');
+      var badge = st.querySelector('.wpc-ngd-badge');
+      var sub = st.querySelector('.wpc-ngd-sub');
       if (ngdInit && on === ngdInit.on) { // back to the saved state → restore the real card
         if (hero) hero.style.display = ngdInit.hero;
         if (fmts) fmts.innerHTML = ngdInit.fmts;
@@ -279,7 +407,7 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
     // v7.01.22 — cascade entrance: the chips fill in sequentially (AVIF → arrow → WebP → …)
     // whenever the hero appears: on page load with the card On, and on every flip to On.
     function cascade() {
-      var f = card.querySelector('.wpc-ngd-formats');
+      var f = st.querySelector('.wpc-ngd-formats');
       if (!f) return;
       f.classList.remove('is-cascading');
       void f.offsetWidth; // reflow → restart the animation
@@ -314,8 +442,8 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
     // method + badge. So returning to Auto (the saved override) with the switch untouched fully
     // clears the unsaved preview.
     function refreshOverridePreview() {
-      var meth  = card.querySelector('.wpc-ngd-method');
-      var badge = card.querySelector('.wpc-ngd-badge');
+      var meth  = st.querySelector('.wpc-ngd-method');
+      var badge = st.querySelector('.wpc-ngd-badge');
       if (!meth || !badge) return;
       var ovNow      = ovField ? ovField.value : ovInit;
       var ovDirty    = (ovNow !== ovInit);
@@ -329,26 +457,27 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
       // Something is pending → honest unsaved preview. Prefer the override label if the override is
       // the dirty one; otherwise the switch handler's own preview text already set On/Off — leave it.
       if (ovDirty) {
-        var selLab = card.querySelector('.wpc-ngd-ov.is-active');
+        var selLab = st.querySelector('.wpc-ngd-ov.is-active');
         var ovLabel = selLab ? (selLab.textContent || '').trim() : ovNow;
         meth.textContent = (ovLabel || ovNow) + ' — not saved yet';
       }
       badge.textContent = 'Unsaved';
     }
-    card.querySelectorAll('input[name="wpc_ngd_override"]').forEach(function (r) {
+    st.querySelectorAll('input[name="wpc_ngd_override"]').forEach(function (r) {
       r.addEventListener('change', function () {
         if (!r.checked) return;
         if (ovField) ovField.value = r.value;
         // Move the selected pill highlight to the chosen radio (mirrors the server is-active class).
-        card.querySelectorAll('.wpc-ngd-ov').forEach(function (lbl) { lbl.classList.remove('is-active'); });
+        st.querySelectorAll('.wpc-ngd-ov').forEach(function (lbl) { lbl.classList.remove('is-active'); });
         var lab = r.closest('.wpc-ngd-ov'); if (lab) lab.classList.add('is-active');
         refreshOverridePreview();
         if (window.checkUnsavedChanges) window.checkUnsavedChanges();
         else if (window.showSaveButton) window.showSaveButton();
       });
     });
-    var rc = card.querySelector('.wpc-ngd-recheck');
+    var rc = st.querySelector('.wpc-ngd-recheck');
     if (rc) rc.addEventListener('click', function () { post({action: 'wpc_delivery_recheck'}); });
   })();
   </script>
-</div>
+<?php
+$wpc_ngd_status_html .= ob_get_clean();

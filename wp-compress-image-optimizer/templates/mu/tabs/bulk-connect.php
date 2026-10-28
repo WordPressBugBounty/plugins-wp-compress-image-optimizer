@@ -88,7 +88,7 @@ if (!empty($settings['optimization'])) {
                                 class="fa fa-question-circle"></i></span>
 
                     <div style="" class="wp-ic-select-box">
-                        <input type="hidden" name="wp-ic-setting[optimization]" id="wp-ic-setting-optimization" value="<?php echo $settings['optimization']; ?>"/>
+                        <input type="hidden" name="wp-ic-setting[optimization]" id="wp-ic-setting-optimization" value="<?php echo esc_attr($settings['optimization']); ?>"/>
                         <ul>
                             <li <?php echo $wps_ic_active_settings['optimization']['lossless']; ?>><a href="#" class="wps-ic-change-optimization" data-value="lossless">Lossless</a>
                             </li>
@@ -264,7 +264,7 @@ if (!empty($settings['optimization'])) {
                                 </div>
                                 <div class="setting-option wpc-checkbox" style="margin-top:20px;">
                                     <div class="wp-ic-select-box full-width-box">
-                                        <input type="hidden" name="wp-ic-setting[search-through]" id="wp-ic-search-through" value="<?php echo $settings['search-through']; ?>">
+                                        <input type="hidden" name="wp-ic-setting[search-through]" id="wp-ic-search-through" value="<?php echo esc_attr($settings['search-through']); ?>">
                                         <ul>
                                             <?php
                                             $options = ['html' => 'HTML Only', 'html+css' => 'HTML + CSS', 'all' => 'All URLs'];
@@ -306,6 +306,7 @@ if (!empty($settings['optimization'])) {
                                 </div>
                             </div>
 
+                            <?php if (!function_exists('wpc_sd_mode_on') || !wpc_sd_mode_on()) : ?>
                             <div class="setting-option">
                                 <div class="setting-label">Optimize on Upload</div>
                                 <div class="setting-value ic-custom-tooltip" title="Compress future image uploads with local mode settings.">
@@ -318,6 +319,7 @@ if (!empty($settings['optimization'])) {
                                     </div>
                                 </div>
                             </div>
+                            <?php endif; ?>
 
                             <div class="setting-option">
                                 <div class="setting-label">Disable WP Emoji Script</div>
@@ -413,7 +415,7 @@ if (!empty($settings['optimization'])) {
             </div>
 
             <div class="cdn-popup-content">
-                <p class="wpc-dynamic-text">We have detected that your server is located in <?php echo $geolocation_text; ?>, if that's not correct, please select the nearest
+                <p class="wpc-dynamic-text">We have detected that your server is located in <?php echo esc_html($geolocation_text); ?>, if that's not correct, please select the nearest
                     region below.</p>
                 <form method="post" action="#">
                     <select name="location-select">
@@ -471,7 +473,7 @@ if (!empty($settings['optimization'])) {
                     }
                     ?>
                     <textarea name="exclude-list-textarea" class="exclude-list-textarea-value"
-                              placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"><?php echo $external_url_exclude; ?></textarea>
+                              placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"><?php echo esc_textarea(is_string($external_url_exclude) ? $external_url_exclude : ''); ?></textarea>
                     <div class="wps-empty-row">&nbsp;</div>
                     <div class="wps-example-list">
                         <div>

@@ -425,7 +425,7 @@ class wps_ic_compress
             $request_params['attachment_id'] = $attachment_id;
             $request_params['site'] = site_url();
 
-            $params = ['method' => 'POST', 'timeout' => 120, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
+            $params = ['method' => 'POST', 'timeout' => 120, 'redirection' => 3, 'sslverify' => wpc_service_sslverify(WPS_IC_APIURL), 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
                 'headers' => ['user-agent' => WPS_IC_API_USERAGENT], 'body' => $request_params, 'cookies' => [], 'user-agent' => WPS_IC_API_USERAGENT];
 
             $call = wp_remote_post(WPS_IC_APIURL, $params);
@@ -720,7 +720,7 @@ class wps_ic_compress
             $request_params['resize_max'] = $params['size'];
         }
 
-        $params = ['method' => 'POST', 'timeout' => 120, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
+        $params = ['method' => 'POST', 'timeout' => 120, 'redirection' => 3, 'sslverify' => wpc_service_sslverify(WPS_IC_APIURL), 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
             'headers' => [], 'body' => $request_params, 'cookies' => [], 'user-agent' => WPS_IC_API_USERAGENT];
 
         $start = microtime(true);
@@ -1091,7 +1091,7 @@ class wps_ic_compress
         $request_params['action'] = 'fetch_thumbnails';
         $request_params['attachments'] = json_encode($attachments);
 
-        $params = ['method' => 'POST', 'timeout' => 60, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
+        $params = ['method' => 'POST', 'timeout' => 60, 'redirection' => 3, 'sslverify' => wpc_service_sslverify(WPS_IC_APIURL), 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
             'headers' => ['user-agent' => WPS_IC_API_USERAGENT], 'body' => $request_params, 'cookies' => [], 'user-agent' => WPS_IC_API_USERAGENT];
 
         // Send call to API

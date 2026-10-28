@@ -40,10 +40,14 @@ class wps_ic_requests
   }
 
 
-  public function GET($baseUrl, $params, $configParams = ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]) {
+  public function GET($baseUrl, $params, $configParams = null) {
 
     // Append parameters to the URL
     $url = add_query_arg($params, $baseUrl);
+
+    if ($configParams === null) {
+      $configParams = ['timeout' => 30, 'sslverify' => wpc_service_sslverify($url), 'user-agent' => WPS_IC_API_USERAGENT];
+    }
 
     if (!isset($configParams['timeout']) || $configParams['timeout'] == '0') {
       $configParams['timeout'] = 30;
@@ -89,7 +93,7 @@ class wps_ic_requests
   public function keys($action, array $params, $timeout = 8) {
     $t0   = microtime(true);
     $url  = add_query_arg(array_merge(['action' => $action], $params), WPS_IC_KEYSURL);
-    $call = wp_remote_get($url, ['timeout' => (int) $timeout, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+    $call = wp_remote_get($url, ['timeout' => (int) $timeout, 'sslverify' => wpc_service_sslverify($url), 'user-agent' => WPS_IC_API_USERAGENT]);
     $out  = ['ok' => false, 'data' => null, 'why' => '', 'code' => '', 'step' => '', 'ms' => 0];
     if (is_wp_error($call)) {
       $msg = $call->get_error_message();

@@ -32,7 +32,7 @@
           <span class="ic-tooltip" title="Select your preferred balance of speed and quality. Over-Compression Prevention™ is included in all modes."><i class="fa fa-question-circle"></i></span>
 
           <div style="" class="wp-ic-select-box">
-            <input type="hidden" name="wp-ic-setting[optimization]" value="<?php echo $settings['optimization']; ?>"/>
+            <input type="hidden" name="wp-ic-setting[optimization]" value="<?php echo esc_attr($settings['optimization']); ?>"/>
             <ul>
               <li <?php echo $wps_ic_active_settings['optimization']['lossless']; ?>><a href="#" class="wps-ic-change-optimization" data-value="lossless">Lossless</a></li>
               <li <?php echo $wps_ic_active_settings['optimization']['intelligent']; ?>><a href="#" class="wps-ic-change-optimization" data-value="intelligent">Intelligent</a></li>
@@ -182,7 +182,7 @@
                 </div>
                 <div class="setting-option wpc-checkbox" style="margin-top:20px;">
                   <div class="wp-ic-select-box full-width-box">
-                    <input type="hidden" name="wp-ic-setting[search-through]" value="<?php echo $settings['search-through']; ?>">
+                    <input type="hidden" name="wp-ic-setting[search-through]" value="<?php echo esc_attr($settings['search-through']); ?>">
                     <ul>
 											<?php
 											$options = ['html' => 'HTML Only', 'html+css' => 'HTML + CSS', 'all' => 'All URLs'];
@@ -224,6 +224,7 @@
                 </div>
               </div>
 
+              <?php if (!function_exists('wpc_sd_mode_on') || !wpc_sd_mode_on()) : ?>
               <div class="setting-option">
                 <div class="setting-label">Optimize on Upload</div>
                 <div class="setting-value ic-custom-tooltip" title="Compress future image uploads with local mode settings.">
@@ -235,6 +236,7 @@
                   </div>
                 </div>
               </div>
+              <?php endif; ?>
 
               <div class="setting-option">
                 <div class="setting-label">Disable WP Emoji Script</div>
@@ -317,7 +319,7 @@
               </div>
 
               <div class="setting-value">
-                <p>We've detected your server is in <strong><?php echo $geolocation_text; ?></strong>.</p>
+                <p>We've detected your server is in <strong><?php echo esc_html($geolocation_text); ?></strong>.</p>
               </div>
 
               <a href="#" class="wps-ic-configure-popup" data-popup="geo-location"><i class="svg-icon icon-configure"></i> Configure</a>
@@ -363,7 +365,7 @@
 							if ( ! empty($zone_name)) {
 								?>
                 <div class="setting-value setting-configured cname-configured">
-                  <strong>Connected Domain: </strong><br/><?php echo $zone_name; ?><br/>
+                  <strong>Connected Domain: </strong><br/><?php echo esc_html(is_string($zone_name) ? $zone_name : ''); ?><br/>
                 </div>
                 <div class="setting-value setting-configure" style="display: none;">
                   <p>Use <strong>any domain</strong> you own to serve images and assets.</p>
@@ -373,7 +375,7 @@
 							else {
 								?>
                 <div class="setting-value setting-configured cname-configured" style="display: none;">
-                  <strong>Connected Domain: </strong><br/><?php echo $zone_name; ?><br/>
+                  <strong>Connected Domain: </strong><br/><?php echo esc_html(is_string($zone_name) ? $zone_name : ''); ?><br/>
                 </div>
                 <div class="setting-value setting-configure">
                   <p>Use <strong>any domain</strong> you own to serve images and assets.</p>

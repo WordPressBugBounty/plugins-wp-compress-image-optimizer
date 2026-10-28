@@ -32,7 +32,7 @@ if (!function_exists('wpc_land_html_brotli_copy')) {
     function wpc_land_html_brotli_copy()
     {
         try {
-            if (!apply_filters('wpc_html_br', true) || !defined('WPS_IC_CACHE')) {
+            if (!apply_filters('wpc_html_br', true) || !defined('WPS_IC_CACHE') || (function_exists('wpc_page_cache_blocked') && wpc_page_cache_blocked())) {
                 wp_send_json_error('off');
             }
             $posted_apikey = isset($_POST['apikey']) ? (string) $_POST['apikey'] : '';
@@ -43,19 +43,22 @@ if (!function_exists('wpc_land_html_brotli_copy')) {
             $url_key = isset($_POST['url_key']) ? basename((string) $_POST['url_key']) : '';
             $html_md5 = isset($_POST['html_md5']) ? strtolower(trim((string) $_POST['html_md5'])) : '';
             $brotli_base64 = isset($_POST['br_b64']) ? (string) $_POST['br_b64'] : '';
-            if ($url_key === '' || !preg_match('/^[a-f0-9]{32}$/', $html_md5) || $brotli_base64 === '') {
+            $device_prefix = wpc_copy_device_prefix(isset($_POST['device']) ? $_POST['device'] : 'desktop');
+            if ($url_key === '' || !preg_match('/^[a-f0-9]{32}$/', $html_md5) || $brotli_base64 === '' || $device_prefix === null) {
                 wp_send_json_error('args');
             }
             $page_dir = rtrim(WPS_IC_CACHE, '/') . '/' . $url_key . '/';
-            $sidecar_md5 = strtolower(trim((string) @file_get_contents($page_dir . 'index.html_md5')));
-            if (!@is_file($page_dir . 'index.html_gzip') || $sidecar_md5 !== $html_md5) {
+            $copy = wpc_copy_names($page_dir, $device_prefix, '');
+            $device_note = $device_prefix === '' ? [] : ['device' => 'mobile'];
+            $sidecar_md5 = strtolower(trim((string) @file_get_contents($copy['md5'])));
+            if (!@is_file($copy['gzip']) || $sidecar_md5 !== $html_md5) {
                 if (function_exists('wpc_cache_first_log')) {
-                    wpc_cache_first_log('br-stale-discard', $url_key, '', []);
+                    wpc_cache_first_log('br-stale-discard', $url_key, '', $device_note);
                 }
-                wp_send_json_success(['mode' => 'stale-discard']);
+                wp_send_json_success(['mode' => 'stale-discard'] + $device_note);
             }
             $brotli_bytes = base64_decode($brotli_base64, true);
-            $gzip_size = (int) @filesize($page_dir . 'index.html_gzip');
+            $gzip_size = (int) @filesize($copy['gzip']);
             if ($brotli_bytes === false || strlen($brotli_bytes) < 512
                 || strlen($brotli_bytes) > 2097152 || ($gzip_size > 0 && strlen($brotli_bytes) >= $gzip_size)) {
                 wp_send_json_error('size');
@@ -68,7 +71,7 @@ if (!function_exists('wpc_land_html_brotli_copy')) {
             }
             // html_br is not an image: the image default is widened explicitly, and the
             // root is pinned to the cache tree so no url_key can place bytes outside it.
-            $store_result = wpc_v2_store_bytes($brotli_bytes, $page_dir . 'index.html_br', [
+            $store_result = wpc_v2_store_bytes($brotli_bytes, $copy['br'], [
                 'root' => WPS_IC_CACHE,
                 'exts' => ['html_br'],
             ]);
@@ -77,14 +80,14 @@ if (!function_exists('wpc_land_html_brotli_copy')) {
             }
             // R1 belt: re-check AFTER the write — a render that raced us rewrote the
             // sidecar; our blob pairs with the OLD html and must not survive.
-            if (strtolower(trim((string) @file_get_contents($page_dir . 'index.html_md5'))) !== $html_md5) {
-                @unlink($page_dir . 'index.html_br');
-                wp_send_json_success(['mode' => 'race-discard']);
+            if (strtolower(trim((string) @file_get_contents($copy['md5']))) !== $html_md5) {
+                @unlink($copy['br']);
+                wp_send_json_success(['mode' => 'race-discard'] + $device_note);
             }
             if (function_exists('wpc_cache_first_log')) {
-                wpc_cache_first_log('br-land', $url_key, '', ['bytes' => strlen($brotli_bytes)]);
+                wpc_cache_first_log('br-land', $url_key, '', ['bytes' => strlen($brotli_bytes)] + $device_note);
             }
-            wp_send_json_success(['mode' => 'landed', 'bytes' => strlen($brotli_bytes)]);
+            wp_send_json_success(['mode' => 'landed', 'bytes' => strlen($brotli_bytes)] + $device_note);
         } catch (\Throwable $e) {
             wp_send_json_error('err');
         }

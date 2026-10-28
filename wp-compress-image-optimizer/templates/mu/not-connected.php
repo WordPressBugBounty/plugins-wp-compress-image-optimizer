@@ -37,25 +37,25 @@ else {
 }
 ?>
 <script type="text/javascript">
-    var wpc_siteID = "<?php echo $wpc_siteID; ?>";
+    var wpc_siteID = "<?php echo absint($wpc_siteID); ?>";
 </script>
 <form method="POST" action="#" class="wpc-ic-mu-settting-form">
 
-  <input type="hidden" name="siteID" value="<?php echo $wpc_siteID; ?>"/>
+  <input type="hidden" name="siteID" value="<?php echo absint($wpc_siteID); ?>"/>
 
   <div class="wpc-ic-mu-site-container ic-advanced-settings-v2">
     <div class="wpc-ic-mu-site-header">
       <div class="wpc-ic-mu-site-left-side">
         <div class="wpc-ic-mu-site-name">
           <span class="wpc-ic-mu-site-status-circle"></span>
-          <h3><?php echo $current_blog_details->blogname; ?></h3>
-          <h5><?php echo $current_blog_details->siteurl; ?></h5>
+          <h3><?php echo esc_html($current_blog_details->blogname); ?></h3>
+          <h5><?php echo esc_html($current_blog_details->siteurl); ?></h5>
         </div>
         <div class="wpc-ic-mu-site-action">
         </div>
       </div>
       <div class="wpc-ic-mu-site-right-side">
-        <a href="#" class="wpc-mu-individual-connect" data-site-id="<?php echo $wpc_siteID; ?>">Connect</a>
+        <a href="#" class="wpc-mu-individual-connect" data-site-id="<?php echo absint($wpc_siteID); ?>">Connect</a>
       </div>
     </div>
     <div class="wpc-ic-mu-separator"></div>

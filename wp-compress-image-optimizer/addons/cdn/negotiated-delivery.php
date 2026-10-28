@@ -19,9 +19,22 @@ class WPC_Negotiated_Delivery
 
     private static $jpeg_mode = false;
 
+    private static $plain = null;
+
     /** @var wps_ic_image_sizing|null  The render's image-sizing owner for the rewrite in progress
      *  (rewrite_buffer's argument): the width/height and `sizes` this lane writes are its answers. */
     private static $imageSizing = null;
+
+    /** @var wps_ic_lazy_verdict|null  The render's lazy verdict owner for the rewrite in progress
+     *  (rewrite_buffer's argument): the `loading` this lane writes is its answer. */
+    private static $lazyVerdict = null;
+
+    /** @var array  The rewrite in progress: the images the markup hides on this device. */
+    private static $walkDeviceHidden = [];
+    /** @var int  The <img> being rewritten: its leading-slot position in document order (0: none). */
+    private static $walkPosition = 0;
+    /** @var string  The <img> being rewritten: its hidden reason ('' when painted). */
+    private static $walkHiddenReason = '';
 
     /**
      * Mode-B flag. build_natural_url() appends ?_wpc_m=r&_redirect_target=origin so the edge
@@ -178,14 +191,7 @@ class WPC_Negotiated_Delivery
 
     public static function cdn_host()
     {
-        $cf_cname  = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
-        $cf_set    = defined('WPS_IC_CF') ? get_option(WPS_IC_CF) : false;
-        $cf_cdn_on = is_array($cf_set) && !empty($cf_set['settings']['cdn']);
-        if ($cf_cname !== '' && $cf_cdn_on) return $cf_cname;
-
-        $cname = trim((string) get_option('ic_custom_cname'));
-        if ($cname !== '') return $cname;
-        return trim((string) get_option('ic_cdn_zone_name'));
+        return function_exists('wpc_cdn_host') ? (string) wpc_cdn_host() : '';
     }
 
     /**
@@ -207,9 +213,10 @@ class WPC_Negotiated_Delivery
      * Touches <img> ONLY — the caller must still run the CSS/font/JS rewriters. try/catch → on any error
      * returns the buffer unchanged (never blank a page).
      */
-    public static function rewrite_buffer($html, $imageSizing = null)
+    public static function rewrite_buffer($html, $imageSizing = null, $lazyVerdict = null)
     {
         self::$imageSizing = ($imageSizing instanceof wps_ic_image_sizing) ? $imageSizing : null;
+        self::$lazyVerdict = ($lazyVerdict instanceof wps_ic_lazy_verdict) ? $lazyVerdict : null;
         try {
             // Page-context guards: reuse the legacy gate verbatim (single source of truth).
             if (class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'dontRunif')
@@ -231,6 +238,14 @@ class WPC_Negotiated_Delivery
 
             self::$modeb_test = (self::test_force_mode() === 'modeb') || self::edge_origin_active();
 
+            self::$plain = null;
+            self::$plain = self::plain_now();
+
+            // The images the markup hides on this device take no leading slot and stay lazy
+            // (rule 4). Read here, before the stashes below, the way the builders read it.
+            self::$walkDeviceHidden = function_exists('wpc_device_hidden_image_set')
+                ? wpc_device_hidden_image_set($html, function_exists('wpc_ua_is_mobile') ? (bool) wpc_ua_is_mobile() : false) : [];
+
             // Protect <noscript> and any pre-existing <picture> from being touched.
             $picture_stash = [];
             $html = preg_replace_callback('/<noscript\b[^>]*>.*?<\/noscript>/is', function ($m) use (&$picture_stash) {
@@ -244,13 +259,39 @@ class WPC_Negotiated_Delivery
                 return $i;
             }, $html);
 
+            // The leading count is the page's first N painted images in document order, not this
+            // lane's first N (wps_ic_lazy_verdict, "one leading count for the page"): every <img>
+            // is numbered here in document order, the stashed <noscript>/<picture> ones at their
+            // placeholder, because the builder that runs later counts those too.
+            $lazyVerdict = self::lazyVerdictOwner();
+            if ($lazyVerdict !== null) {
+                $lazyVerdict->startDocumentWalk();
+            }
+
             // Negative lookbehind on quote: don't match <img> inside an attribute string.
-            $html = preg_replace_callback('/(?<![\\"\'])<img\b[^>]*>/i', function ($m) {
-                try {
-                    return self::rewrite_one_img($m[0]);
-                } catch (\Throwable $e) {
+            $html = preg_replace_callback('/___WPCND_(?:NOSCRIPT|PICTURE)_\d+___|(?<![\\"\'])<img\b[^>]*>/i', function ($m) use ($lazyVerdict, $picture_stash) {
+                if ($m[0][0] === '_') {
+                    if ($lazyVerdict !== null && isset($picture_stash[$m[0]])) {
+                        $block = strtr($picture_stash[$m[0]], $picture_stash);
+                        if (preg_match_all('/(?<![\\"\'])<img\b[^>]*>/i', $block, $stashedImages)) {
+                            foreach ($stashedImages[0] as $stashedImage) {
+                                $lazyVerdict->takeDocumentPosition($stashedImage, $lazyVerdict->hiddenReason($stashedImage, self::$walkDeviceHidden));
+                            }
+                        }
+                    }
                     return $m[0];
                 }
+                self::$walkHiddenReason = $lazyVerdict !== null ? $lazyVerdict->hiddenReason($m[0], self::$walkDeviceHidden) : '';
+                self::$walkPosition = $lazyVerdict !== null ? $lazyVerdict->takeDocumentPosition($m[0], self::$walkHiddenReason) : 0;
+                try {
+                    $rewritten = self::rewrite_one_img($m[0]);
+                } catch (\Throwable $e) {
+                    $rewritten = $m[0];
+                }
+                if ($lazyVerdict !== null && $rewritten !== $m[0] && strpos($rewritten, self::MARK) !== false) {
+                    $lazyVerdict->noteNegotiatedImage(self::$walkPosition);
+                }
+                return $rewritten;
             }, $html);
 
             if (!empty($picture_stash)) {
@@ -261,8 +302,28 @@ class WPC_Negotiated_Delivery
             return $html;
         } catch (\Throwable $e) {
             error_log('[WPC NegotiatedDelivery] rewrite_buffer error — passthrough: ' . $e->getMessage());
+            if (isset($lazyVerdict) && $lazyVerdict !== null) {
+                $lazyVerdict->abandonDocumentWalk();
+            }
             return $html;
+        } finally {
+            self::$plain = null;
         }
+    }
+
+    /** The render's lazy verdict owner, or the request's when the lane was called without one. */
+    private static function lazyVerdictOwner()
+    {
+        if (self::$lazyVerdict !== null) {
+            return self::$lazyVerdict;
+        }
+        return class_exists('wps_ic_lazy_verdict') ? wps_ic_lazy_verdict::forRequest() : null;
+    }
+
+    /** One fetchpriority=high per page: the CDN lane's counter and rule (wps_cdn_rewrite::first_n_high_allowed) decide this lane's high too. */
+    private static function highWithinCap($lazyVerdict, $tag, $imageUrl)
+    {
+        return !class_exists('wps_cdn_rewrite') || wps_cdn_rewrite::first_n_high_allowed($lazyVerdict, $tag, $imageUrl);
     }
 
     /**
@@ -293,7 +354,10 @@ class WPC_Negotiated_Delivery
             if (isset($attrs[$k])) return $tag;
         }
         $cls = isset($attrs['class']) ? $attrs['class'] : '';
-        if (preg_match('/\b(skip-lazy|notlazy|nolazy|breakdance|jet-image|data-lazy)\b/i', $cls)) return $tag;
+        // An author marker or a JS lazy library's class keeps the tag out of this lane; the
+        // builders decide it. The words are this lane's own, kept beside the verdict's lists
+        // (wps_ic_lazy_verdict::NEGOTIATION_OPT_OUT_PATTERN).
+        if (class_exists('wps_ic_lazy_verdict') && wps_ic_lazy_verdict::classOptsOutOfNegotiation($cls)) return $tag;
 
         // Resolve the attachment + metadata (need the registered -WxH sub-sizes).
         $att = (class_exists('WPC_Modern_Delivery') && method_exists('WPC_Modern_Delivery', 'resolve_attachment_id'))
@@ -338,6 +402,7 @@ class WPC_Negotiated_Delivery
      */
     private static function build_negotiated_img($tag, $attrs, $att, $meta)
     {
+        $hardCrop = isset($attrs['src']) && class_exists('wps_ic_image_sizing') && wps_ic_image_sizing::hardCropSrc($attrs['src'], $meta);
         // Width → -WxH .webp URL for each registered sub-size (+ the full size).
         $entries = [];   // "url Ww"
         $by_width = [];
@@ -364,7 +429,9 @@ class WPC_Negotiated_Delivery
         }
 
 
-        if (!empty($att) && !empty($meta['file'])) {
+        $ndFlatGraphic = function_exists('wpc_rung_flat_graphic') && !empty($meta['file']) && !empty($meta['width'])
+            && wpc_rung_flat_graphic($meta['file'], $meta['width']);
+        if (!empty($att) && !empty($meta['file']) && !$ndFlatGraphic) {
             $lv = get_post_meta((int) $att, 'ic_local_variants', true);
             if (is_array($lv) && !empty($lv)) {
                 $up_pr   = function_exists('wp_get_upload_dir') ? wp_get_upload_dir() : [];
@@ -374,6 +441,24 @@ class WPC_Negotiated_Delivery
                 $oext_pr = strtolower((string) pathinfo((string) $meta['file'], PATHINFO_EXTENSION));
                 $seen_wh = [];
                 foreach ($lv as $lk => $le) {
+                    if (self::plain_now() && preg_match('/^(\d+)w(?:-[a-z0-9]+)?$/', (string) $lk, $nwm)) {
+                        $nw = (int) $nwm[1];
+                        if ($nw <= 0 || isset($by_width[$nw]) || $base_pr === '') continue;
+                        $nw_close = false;
+                        foreach (array_keys($by_width) as $ew) {
+                            if ($ew > 0 && abs($ew - $nw) / $ew < 0.08) { $nw_close = true; break; }
+                        }
+                        if ($nw_close) continue;
+                        $nw_base = $stem_pr . '-' . $nw . 'w';
+                        foreach (['webp', 'avif'] as $nw_ext) {
+                            if (@file_exists($base_pr . '/' . $dir_pr . $nw_base . '.' . $nw_ext)) {
+                                $nw_url = self::build_natural_url($nw_base . '.' . $oext_pr, $meta);
+                                if ($nw_url !== '') $by_width[$nw] = $nw_url;
+                                break;
+                            }
+                        }
+                        continue;
+                    }
                     if (!preg_match('/^(\d+)x(\d+)(?:-[a-z0-9]+)?$/', (string) $lk, $am)) continue;
                     $aw = (int) $am[1];
                     $wh = $am[1] . 'x' . $am[2];
@@ -439,7 +524,7 @@ class WPC_Negotiated_Delivery
         if (!empty($attrs['src'])) {
             $measured = self::ownerSizes((string) $attrs['src'],
                 isset($attrs['width']) ? (int) preg_replace('/\D/', '', (string) $attrs['width']) : 0,
-                isset($attrs['height']) ? (int) preg_replace('/\D/', '', (string) $attrs['height']) : 0,
+                isset($attrs['height']) && class_exists('wps_ic_image_sizing') ? wps_ic_image_sizing::pixelValue($attrs['height']) : 0,
                 isset($attrs['sizes']) ? (string) $attrs['sizes'] : '');
             if ($measured !== '') {
                 $wpc_lcp_sizes = $measured;
@@ -456,8 +541,9 @@ class WPC_Negotiated_Delivery
                 || $ng_has_auto
                 || $wpc_crit_sized
             )
+            && !$hardCrop
             && apply_filters('wpc_ideal_width_generator', true);
-        if ($ng_confident && !empty($meta['width']) && function_exists('wpc_v2_sized_trigger_queue')) {
+        if ($ng_confident && !$ndFlatGraphic && !empty($meta['width']) && function_exists('wpc_v2_sized_trigger_queue')) {
             $ng_natural = (int) $meta['width'];
             $ng_cap     = (int) wpc_get_theme_content_width();
 
@@ -488,7 +574,7 @@ class WPC_Negotiated_Delivery
                 if ($ng_boot && $ng_zone !== '' && !self::$jpeg_mode
                     && function_exists('wpc_v2_adaptive_variant_suffix')) {
                     $sfx_b = wpc_v2_adaptive_variant_suffix($tw, $meta);
-                    if ($sfx_b !== '' && strpos($sfx_b, 'x') !== false) {
+                    if ($sfx_b !== '') {
                         $stem_b = preg_replace('/(-scaled)?\.[^.]+$/', '', basename((string) $meta['file']));
                         $u_b = self::build_natural_url($stem_b . $sfx_b . '.webp', $meta);
                         if ($u_b !== '') $by_width[$tw] = $u_b;
@@ -567,6 +653,16 @@ class WPC_Negotiated_Delivery
         reset($by_width);
         $nd_single_rung = (count($by_width) === 1)
             && ((int) key($by_width) === $nd_w_attr || (int) key($by_width) === (int) (isset($meta['width']) ? $meta['width'] : 0));
+        if (!$nd_single_rung && $orig_src !== ''
+            && function_exists('wpc_image_src_is_attachment_file')
+            && !(function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('off_attach_match') === 1)
+            && apply_filters('wpc_nd_require_owned_src', true, $attrs, $meta)
+            && !wpc_image_src_is_attachment_file($orig_src, $att, $meta)) {
+            $nd_single_rung = true;
+        }
+        if ($hardCrop) {
+            $nd_single_rung = true;
+        }
         $out = '<img ' . self::MARK . ' src="' . esc_attr($src_url) . '"';
         if (!$nd_single_rung && ($nd_has_basis || $nd_nobasis_rs)) {
             $out .= ' srcset="' . esc_attr(implode(', ', $entries)) . '"';
@@ -576,27 +672,61 @@ class WPC_Negotiated_Delivery
 
 
         self::$img_index++;
-        if (empty($attrs['loading'])) {
-            $nd_s         = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
-
-
-            $nd_lazy_off  = is_array($nd_s)
-                && isset($nd_s['nativeLazy']) && (string) $nd_s['nativeLazy'] === '0'
-                && (!isset($nd_s['lazy']) || (string) $nd_s['lazy'] !== '1');
-            $nd_skip_first = (is_array($nd_s) && !empty($nd_s['lazySkipCount'])) ? (int) $nd_s['lazySkipCount'] : 4;
-            $nd_cls       = isset($attrs['class']) ? strtolower($attrs['class']) : '';
-            $nd_is_slider = (bool) preg_match('/\b(rs|slide|lgx_app|dynamic-image|breakdance)\b/', $nd_cls);
-            if (!$nd_lazy_off && !$nd_is_slider && self::$img_index > $nd_skip_first) {
-                $attrs['loading'] = 'lazy';
-            } else {
-                $attrs['loading'] = 'eager';
+        // The lazy verdict, asked like every other writer. This lane used to keep whatever
+        // `loading` the page wrote and never read "Exclude from Lazy", so a WordPress-core
+        // loading="lazy" stayed on a leading image and a listed file stayed lazy. Its position
+        // is the tag's place among the page's leading-slot candidates in document order, taken
+        // by rewrite_buffer's walk, and its hidden reason is read with this device's hidden set:
+        // with this lane's own image count (self::$img_index) the ninth image it built on
+        // staging /pricing/ was document position 21, and nine screenshots past the page's leading
+        // count were made eager over WordPress's loading="lazy" (no longer parked by quiet-wire).
+        $lazyVerdict = self::lazyVerdictOwner();
+        if ($lazyVerdict !== null) {
+            $lazyVerdictForTag = $lazyVerdict->forTag($tag, $pageSrc,
+                self::$walkPosition > 0 && self::$walkPosition <= $lazyVerdict->leadingCount(), self::$walkHiddenReason, $ownerDims !== null);
+            $lazyVerdict->record($lazyVerdictForTag);
+            if ($lazyVerdictForTag['loading'] !== 'keep') {
+                $attrs['loading'] = $lazyVerdictForTag['loading'];
+            }
+            if ($lazyVerdictForTag['why'] === 'slide-below' && $lazyVerdictForTag['loading'] === 'lazy') {
+                $attrs[wps_ic_lazy_verdict::SLIDE_LAZY_MARK] = '1';
             }
         }
         if ($nd_nobasis_rs) {
             $attrs['loading'] = 'lazy';
         }
-        if (self::$img_index === 1 && !isset($attrs['fetchpriority'])) {
-            $attrs['fetchpriority'] = 'high';
+        // This lane's first image is fetched at high priority only when its verdict left it eager.
+        // Since the verdict asks the document position, that image can sit past the leading
+        // count; written regardless, it went out loading="lazy" fetchpriority="high", which
+        // quiet-wire never parks (a tag with fetchpriority is skipped) and the preload guess
+        // refuses (review 2026-10-09: the /pricing/ page at count 1, ProShip).
+        $ndPriority = null;
+        $ndOffer = $lazyVerdict !== null && isset($lazyVerdictForTag) && class_exists('wps_ic_lazy_verdict') && wps_ic_lazy_verdict::firstNTrimOn();
+        if ($lazyVerdict !== null && isset($lazyVerdictForTag) && $lazyVerdict->heroPriorityOn()) {
+            $ndSettings = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array();
+            $ndFirst = $ndOffer ? $lazyVerdict->firstImageOpen(self::$walkPosition) : self::$walkPosition === 1;
+            $ndPriority = (is_array($ndSettings) && !empty($ndSettings['fetchpriority-high']) && $ndSettings['fetchpriority-high'] == '1')
+                ? $lazyVerdict->priorityFor($tag, $pageSrc, $ndFirst, $lazyVerdictForTag) : '';
+        }
+        $ndEagerNow = !isset($attrs['loading']) || strtolower((string) $attrs['loading']) !== 'lazy';
+        if ($ndPriority === null) {
+            if ((self::$img_index === 1 || $ndOffer) && !isset($attrs['fetchpriority']) && $ndEagerNow && self::highWithinCap($lazyVerdict, $tag, $pageSrc)) {
+                $attrs['fetchpriority'] = 'high';
+            }
+        } elseif (!isset($attrs['fetchpriority'])) {
+            if ($ndPriority === 'low') {
+                $attrs['fetchpriority'] = 'low';
+            } elseif ($ndPriority === 'high' && $ndEagerNow && self::highWithinCap($lazyVerdict, $tag, $pageSrc)) {
+                $attrs['fetchpriority'] = 'high';
+            }
+        }
+        if (!isset($attrs['fetchpriority']) && $ndEagerNow && $lazyVerdict !== null && method_exists($lazyVerdict, 'lcpCopyLow')) {
+            $ndCopySettings = isset($ndSettings) ? $ndSettings
+                : ((function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array());
+            if (is_array($ndCopySettings) && !empty($ndCopySettings['fetchpriority-high']) && $ndCopySettings['fetchpriority-high'] == '1'
+                && $lazyVerdict->lcpCopyLow($tag, $pageSrc)) {
+                $attrs['fetchpriority'] = 'low';
+            }
         }
 
 
@@ -681,6 +811,14 @@ class WPC_Negotiated_Delivery
     }
 
 
+    private static function plain_now()
+    {
+        if (self::$plain !== null) {
+            return self::$plain;
+        }
+        return !self::$jpeg_mode && !self::$modeb_test && function_exists('wpc_image_plain_on') && wpc_image_plain_on();
+    }
+
     public static function build_natural_url($sub_file, $meta)
     {
         $host = self::cdn_host();
@@ -697,7 +835,8 @@ class WPC_Negotiated_Delivery
         }
         $rel = (strpos($sub_file, '/') !== false) ? ltrim($sub_file, '/') : ($subdir . basename($sub_file));
 
-        if (self::$jpeg_mode) {
+        $plain = self::plain_now();
+        if (self::$jpeg_mode || $plain) {
 
 
             $orig_ext = ($meta && !empty($meta['file'])) ? strtolower((string) pathinfo((string) $meta['file'], PATHINFO_EXTENSION)) : '';
@@ -721,6 +860,10 @@ class WPC_Negotiated_Delivery
             // FALSE (KILL / unknown) → keep the proven .webp cache-key default (safe under KILL because
             // this whole path is gated off when negotiated is_active() is false).
             $swap_ext = (is_string($fmt) && $fmt !== '') ? $fmt : 'webp';
+            if (in_array($cur_ext, ['jpg', 'jpeg', 'png'], true) && function_exists('wpc_nextgen_rival_source') && function_exists('wpc_nextgen_url_to_path')
+                && wpc_nextgen_rival_source(wpc_nextgen_url_to_path(trailingslashit((string) $up['baseurl']) . $rel)) !== '') {
+                $swap_ext = $cur_ext;
+            }
             $rel = preg_replace('/\.(jpe?g|png|gif|webp|avif)$/i', '.' . $swap_ext, $rel);
         }
 
@@ -736,7 +879,7 @@ class WPC_Negotiated_Delivery
         }
 
 
-        if (!self::$jpeg_mode
+        if (!self::$jpeg_mode && !$plain
             && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'src_hint_enabled')
             && wps_rewriteLogic::src_hint_enabled()) {
             $sh_oe  = isset($orig_ext) ? strtolower((string) $orig_ext) : '';

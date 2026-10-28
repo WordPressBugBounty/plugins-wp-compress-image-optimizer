@@ -41,7 +41,48 @@ class wps_ic_mu extends wps_ic
 
     public function add_ajax($hook)
     {
-        add_action('wp_ajax_' . $hook, [$this, $hook]);
+        if (strpos($hook, 'mu_') !== 0) {
+            add_action('wp_ajax_' . $hook, [$this, $hook]);
+            return;
+        }
+
+        add_action('wp_ajax_' . $hook, function () use ($hook) {
+            if (!is_super_admin()) {
+                wp_send_json_error('Forbidden.');
+            }
+            if (isset($_POST['siteID']) && $this->existing_site_id($_POST['siteID']) === 0) {
+                wp_send_json_error('invalid-site');
+            }
+            $this->$hook();
+        });
+    }
+
+    private function existing_site_id($raw)
+    {
+        $siteID = is_scalar($raw) ? (int) $raw : 0;
+
+        return ($siteID > 0 && get_site($siteID)) ? $siteID : 0;
+    }
+
+    private function enter_posted_site()
+    {
+        if (!isset($_POST['siteID'])) {
+            return;
+        }
+
+        $siteID = is_scalar($_POST['siteID']) ? (int) $_POST['siteID'] : 0;
+        if ($siteID === (int) get_current_blog_id()) {
+            return;
+        }
+
+        if (!is_super_admin()) {
+            wp_send_json_error('Forbidden.');
+        }
+        if ($this->existing_site_id($siteID) === 0) {
+            wp_send_json_error('invalid-site');
+        }
+
+        switch_to_blog($siteID);
     }
 
     public function wps_ic_cname_retry()
@@ -50,7 +91,7 @@ class wps_ic_mu extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-        switch_to_blog($_POST['siteID']);
+        $this->enter_posted_site();
         $cname = get_option('ic_custom_cname');
         $retry_count = get_option('ic_cname_retry_count');
 
@@ -67,7 +108,7 @@ class wps_ic_mu extends wps_ic
         // Wait for SSL?
         wpc_diag_sleep(2, 'cname-retry');
 
-        wp_send_json_success(['image' => 'https://' . $cname . '/' . WPS_IC_IMAGES . '/fireworks.svg', 'configured' => 'Connected Domain: <strong>' . $cname . '</strong>']);
+        wp_send_json_success(['image' => 'https://' . $cname . '/' . WPS_IC_IMAGES . '/fireworks.svg', 'configured' => 'Connected Domain: <strong>' . esc_html($cname) . '</strong>']);
     }
 
     public function mu_autoconnect_setting()
@@ -135,7 +176,13 @@ class wps_ic_mu extends wps_ic
 
         $results = [];
 
-        foreach ($sites as $index => $siteID) {
+        foreach ((array) $sites as $index => $rawSiteID) {
+            $siteID = $this->existing_site_id($rawSiteID);
+            if ($siteID === 0) {
+                $results['failed'][] = $rawSiteID;
+                continue;
+            }
+
             // Change Active Blog
             switch_to_blog($siteID);
 
@@ -146,7 +193,7 @@ class wps_ic_mu extends wps_ic
             $uri = WPS_IC_KEYSURL . '?action=connect_mu_single&token=' . $token . '&domain=' . $siteurl . '&hash=' . md5(time()) . '&time_hash=' . time();
 
             // Verify API Key is our database and user has is confirmed getresponse
-            $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+            $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL), 'user-agent' => WPS_IC_API_USERAGENT]);
 
             if (wp_remote_retrieve_response_code($get) == 200) {
                 $body = wp_remote_retrieve_body($get);
@@ -224,7 +271,7 @@ class wps_ic_mu extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-        switch_to_blog($_POST['siteID']);
+        $this->enter_posted_site();
         $cname = get_option('ic_custom_cname');
         $zone_name = get_option('ic_cdn_zone_name');
         $options = get_option(WPS_IC_OPTIONS);
@@ -232,8 +279,8 @@ class wps_ic_mu extends wps_ic
 
         $url = WPS_IC_KEYSURL . '?action=cdn_removecname&apikey=' . $apikey . '&cname=' . $cname . '&zone_name=' . $zone_name . '&time=' . time() . '&no_cache=' . md5(mt_rand(999, 9999));
 
-        $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
-        $call = wp_remote_get(WPS_IC_KEYSURL . '?action=cdn_purge&domain=' . site_url() . '&apikey=' . $options['api_key'], ['timeout' => '10', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL), 'user-agent' => WPS_IC_API_USERAGENT]);
+        $call = wp_remote_get(WPS_IC_KEYSURL . '?action=cdn_purge&domain=' . site_url() . '&apikey=' . $options['api_key'], ['timeout' => '10', 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL), 'user-agent' => WPS_IC_API_USERAGENT]);
 
         delete_option('ic_custom_cname');
 
@@ -274,7 +321,7 @@ class wps_ic_mu extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-        switch_to_blog($_POST['siteID']);
+        $this->enter_posted_site();
         $zone_name = get_option('ic_cdn_zone_name');
         $options = get_option(WPS_IC_OPTIONS);
         $apikey = $options['api_key'];
@@ -327,7 +374,7 @@ class wps_ic_mu extends wps_ic
                             if ($recordsTarget == $zone_name) {
                                 $url = WPS_IC_KEYSURL . '?action=cdn_setcname&apikey=' . $apikey . '&cname=' . $cname . '&zone_name=' . $zone_name . '&time=' . time() . '&no_cache=' . md5(mt_rand(999, 9999));
 
-                                $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+                                $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL), 'user-agent' => WPS_IC_API_USERAGENT]);
                                 $legacyAnswer = $call;
 
                                 // Rule: a host keys refused is not stored and its v6 twin is not sent.
@@ -345,19 +392,19 @@ class wps_ic_mu extends wps_ic
                                 //v6 call:
                                 $url = WPS_IC_KEYSURL . '?action=cdn_setcname_v6&apikey=' . $apikey . '&cname=' . $cname . '&zone_name=' . $zone_name . '&time=' . time() . '&no_cache=' . md5(mt_rand(999, 9999));
 
-                                $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+                                $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL), 'user-agent' => WPS_IC_API_USERAGENT]);
                                 if (class_exists('wps_ic_cname') && method_exists('wps_ic_cname', 'log_twin_registration')) {
                                     wps_ic_cname::log_twin_registration($cname, $legacyAnswer, $call, 'multisite');
                                 }
                                 wpc_diag_sleep(2, 'cname-add');
 
-                                $call = wp_remote_get(WPS_IC_KEYSURL . '?action=cdn_purge&domain=' . site_url() . '&apikey=' . $options['api_key'], ['timeout' => '10', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+                                $call = wp_remote_get(WPS_IC_KEYSURL . '?action=cdn_purge&domain=' . site_url() . '&apikey=' . $options['api_key'], ['timeout' => '10', 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL), 'user-agent' => WPS_IC_API_USERAGENT]);
 
 
                                 // Wait for SSL?
                                 wpc_diag_sleep(2, 'cname-add');
 
-                                wp_send_json_success(['image' => 'https://' . $cname . '/' . WPS_IC_IMAGES . '/fireworks.svg', 'configured' => 'Connected Domain: <strong>' . $cname . '</strong>']);
+                                wp_send_json_success(['image' => 'https://' . $cname . '/' . WPS_IC_IMAGES . '/fireworks.svg', 'configured' => 'Connected Domain: <strong>' . esc_html($cname) . '</strong>']);
                             }
                         }
 
@@ -389,7 +436,7 @@ class wps_ic_mu extends wps_ic
 
         global $wps_ic;
 
-        switch_to_blog($_POST['siteID']);
+        $this->enter_posted_site();
         $post = $_POST['location'];
 
         if ($post == 'Automatic') {
@@ -426,7 +473,7 @@ class wps_ic_mu extends wps_ic
         }
 
         global $wps_ic;
-        switch_to_blog($_POST['siteID']);
+        $this->enter_posted_site();
         $geolocation = $this->geoLocateAjax();
         wp_send_json_success($geolocation);
     }
@@ -437,7 +484,7 @@ class wps_ic_mu extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-        switch_to_blog($_POST['siteID']);
+        $this->enter_posted_site();
         $excludeList = $_POST['excludeList'];
         $lazyExcludeList = $_POST['lazyExcludeList'];
 
@@ -449,13 +496,8 @@ class wps_ic_mu extends wps_ic
             delete_option('wpc-ic-external-url-exclude');
         }
 
-        if (!empty($lazyExcludeList)) {
-            $lazyExcludeList = rtrim($lazyExcludeList, "\n");
-            $lazyExcludeList = explode("\n", $lazyExcludeList);
-            update_option('wpc-ic-lazy-exclude', $lazyExcludeList);
-        } else {
-            delete_option('wpc-ic-lazy-exclude');
-        }
+        // The lazy textarea writes the one list the render reads (wpc-excludes['lazy']).
+        wpc_lazy_excludes_write(!empty($lazyExcludeList) ? explode("\n", rtrim($lazyExcludeList, "\n")) : []);
 
         wp_send_json_success();
     }
@@ -507,7 +549,12 @@ class wps_ic_mu extends wps_ic
         parse_str($_POST['settings'], $form_settings);
         $form_settings = $form_settings['options'];
 
-        foreach ($sites as $i => $siteID) {
+        foreach ($sites as $i => $rawSiteID) {
+            $siteID = $this->existing_site_id(trim($rawSiteID));
+            if ($siteID === 0) {
+                continue;
+            }
+
             // Change Active Blog
             switch_to_blog($siteID);
             $saved_settings = get_option(WPS_IC_SETTINGS);
@@ -554,7 +601,10 @@ class wps_ic_mu extends wps_ic
         global $wpc_siteID;
         $output = '';
 
-        $wpc_siteID = $siteID = sanitize_title($_POST['siteID']);
+        $wpc_siteID = $siteID = $this->existing_site_id(isset($_POST['siteID']) ? $_POST['siteID'] : 0);
+        if ($siteID === 0) {
+            wp_send_json_error('invalid-site');
+        }
 
         parse_str($_POST['form'], $form_settings);
         $form_settings = $form_settings['wp-ic-setting'];
@@ -606,7 +656,10 @@ class wps_ic_mu extends wps_ic
         global $wpc_siteID;
         $output = '';
 
-        $wpc_siteID = $siteID = sanitize_title($_POST['siteID']);
+        $wpc_siteID = $siteID = $this->existing_site_id(isset($_POST['siteID']) ? $_POST['siteID'] : 0);
+        if ($siteID === 0) {
+            wp_send_json_error('invalid-site');
+        }
         ob_start();
 
         if ($this->mu_is_connected($siteID)) {
@@ -670,7 +723,7 @@ class wps_ic_mu extends wps_ic
             $uri = WPS_IC_KEYSURL . '?action=connect_mu_single&token=' . $token . '&domain=' . $siteurl . '&hash=' . md5(time()) . '&time_hash=' . time();
 
             // Verify API Key is our database and user has is confirmed getresponse
-            $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+            $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL), 'user-agent' => WPS_IC_API_USERAGENT]);
 
             if (wp_remote_retrieve_response_code($get) == 200) {
                 $body = wp_remote_retrieve_body($get);
@@ -773,7 +826,10 @@ class wps_ic_mu extends wps_ic
             // Error, token does not exist
         }
 
-        $siteID = sanitize_text_field($_POST['siteID']);
+        $siteID = $this->existing_site_id(isset($_POST['siteID']) ? $_POST['siteID'] : 0);
+        if ($siteID === 0) {
+            wp_send_json_error('invalid-site');
+        }
 
         // Change Active Blog
         switch_to_blog($siteID);
@@ -795,7 +851,7 @@ class wps_ic_mu extends wps_ic
         update_option(WPS_IC_OPTIONS, $options);
 
         // Verify API Key is our database and user has is confirmed getresponse
-        $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL), 'user-agent' => WPS_IC_API_USERAGENT]);
 
         wp_send_json_success(['html_status' => '<a href="#" class="wps-ic-mu-connect wpc-mu-individual-connect-bulk hvr-grow" data-site-id="' . $siteID . '"><i class="icon icon-link"></i> Connect</a>']);
 
@@ -844,7 +900,10 @@ class wps_ic_mu extends wps_ic
             $single = true;
         }
 
-        $siteID = sanitize_text_field($_POST['siteID']);
+        $siteID = $this->existing_site_id(isset($_POST['siteID']) ? $_POST['siteID'] : 0);
+        if ($siteID === 0) {
+            wp_send_json_error('invalid-site');
+        }
 
         // Change Active Blog
         switch_to_blog($siteID);
@@ -857,7 +916,7 @@ class wps_ic_mu extends wps_ic
 
 
         // Verify API Key is our database and user has is confirmed getresponse
-        $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL), 'user-agent' => WPS_IC_API_USERAGENT]);
 
 
         $body_msg = '';
@@ -897,7 +956,7 @@ class wps_ic_mu extends wps_ic
                 global $wpc_siteID;
                 $output = '';
 
-                $wpc_siteID = $siteID = sanitize_title($_POST['siteID']);
+                $wpc_siteID = $siteID;
                 ob_start();
 
                 if ($this->mu_is_connected($siteID)) {

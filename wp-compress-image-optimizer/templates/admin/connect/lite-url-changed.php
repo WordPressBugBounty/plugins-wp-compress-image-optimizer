@@ -101,6 +101,15 @@ global $wps_ic;
                                     <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                                 </div>
                                 <p><?php echo esc_html__('Looks like your site URL has changed, please reconnect with a new API key.', WPS_IC_TEXTDOMAIN); ?></p>
+                                <?php $wpc_address_change = function_exists('wpc_site_address_change') ? wpc_site_address_change() : null; ?>
+                                <?php if (is_array($wpc_address_change) && ($wpc_address_change['registered'] !== '' || $wpc_address_change['local'] !== '')) { ?>
+                                    <p class="wpc-connect-address-change">
+                                        <?php echo esc_html__('Registered address:', WPS_IC_TEXTDOMAIN); ?>
+                                        <strong><?php echo esc_html($wpc_address_change['registered'] !== '' ? $wpc_address_change['registered'] : __('unknown', WPS_IC_TEXTDOMAIN)); ?></strong><br>
+                                        <?php echo esc_html__('This site:', WPS_IC_TEXTDOMAIN); ?>
+                                        <strong><?php echo esc_html($wpc_address_change['local']); ?></strong>
+                                    </p>
+                                <?php } ?>
                             </div>
 
                             <span class="wps-ic-lite-input-field-error" style="display: none;"><?php echo esc_html__('Please enter your API Key.', WPS_IC_TEXTDOMAIN); ?></span>
@@ -123,7 +132,7 @@ global $wps_ic;
                             </div>
 
                             <div class="wps-spacer"></div>
-                            <input type="submit" class="wps-ic-button wps-ic-submit-btn" name="submit" value="<?php echo esc_attr__('Activate Plugin', WPS_IC_TEXTDOMAIN); ?>"/>
+                            <input type="submit" class="wps-ic-button wps-ic-submit-btn" name="submit" value="<?php echo esc_attr__('Reconnect', WPS_IC_TEXTDOMAIN); ?>"/>
 
                             <div class="wpc-connect-lite-link">
                                 <a href="#" class="wps-use-lite">

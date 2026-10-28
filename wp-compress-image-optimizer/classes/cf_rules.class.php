@@ -33,6 +33,9 @@ class wps_ic_cf_rules
     const SKIP_TOKEN_SLOT = '{bypass-token}';
     const SKIP_PHASES = ['http_request_firewall_managed', 'http_ratelimit', 'http_request_sbfm'];
 
+    /** The HTML edge-cache modes the panel offers; desired() reads 'all' and 'home', every other value as off. */
+    const EDGE_MODES = ['off', 'home', 'all'];
+
     /** Requests that carry one of these query parameters are never served from the edge. */
     const QUERY_BYPASS = 'lower(http.request.uri.query) contains "nocache=" or lower(http.request.uri.query) contains "no-cache=" or lower(http.request.uri.query) contains "wc-ajax=" or lower(http.request.uri.query) contains "add-to-cart=" or lower(http.request.uri.query) contains "edd_action=" or lower(http.request.uri.query) contains "preview=" or lower(http.request.uri.query) contains "currency=" or lower(http.request.uri.query) contains "wc-api="';
 
@@ -68,6 +71,49 @@ class wps_ic_cf_rules
             return (bool) wps_rewriteLogic::wpc_deploy_combined();
         }
         return false;
+    }
+
+    /**
+     * A submitted HTML edge-cache mode: $value when the panel offers it, off for the spellings of off
+     * that panel_settings() reads (an empty value, 0, false and their strings), otherwise $keep when
+     * that is a mode, otherwise 'off'. Any other value the panel cannot have sent changes nothing.
+     */
+    public static function edge_mode($value, $keep = 'off')
+    {
+        if (is_scalar($value) && ((string) $value === '' || (string) $value === '0')) {
+            return 'off';
+        }
+        if (is_string($value) && in_array($value, self::EDGE_MODES, true)) {
+            return $value;
+        }
+        return (is_string($keep) && in_array($keep, self::EDGE_MODES, true)) ? $keep : 'off';
+    }
+
+    /**
+     * Whether a stored HTML edge-cache value is one a person's site may keep as it is although the panel does not list it:
+     * a plain word or number (an earlier release's spelling), not a mode, not an off spelling, nothing that carries markup.
+     */
+    public static function edge_value_kept($value)
+    {
+        if (is_int($value)) {
+            $value = (string) $value;
+        }
+        return is_string($value) && $value !== '0' && !in_array($value, self::EDGE_MODES, true) && preg_match('/^[A-Za-z0-9_.-]{1,32}$/', $value) === 1;
+    }
+
+    /**
+     * edge_mode() for a save: a submitted value equal to the stored value that edge_value_kept() allows stays as stored; anything
+     * else is edge_mode()'s answer.
+     */
+    public static function edge_mode_saved($value, $stored = 'off')
+    {
+        if (is_int($stored)) {
+            $stored = (string) $stored;
+        }
+        if (is_string($value) && $value === $stored && self::edge_value_kept($stored)) {
+            return $stored;
+        }
+        return self::edge_mode($value, $stored);
     }
 
     /**

@@ -65,8 +65,7 @@ class wps_ic_cache
         }
 
         if (!empty($_GET['wpc_action'])) {
-            $apikey = sanitize_text_field($_GET['apikey']);
-            if ($apikey !== self::$options['api_key']) {
+            if (!wpc_site_key_matches(wpc_get_string('apikey'))) {
                 wp_send_json_error('Bad API Key');
             }
 
@@ -150,11 +149,19 @@ class wps_ic_cache
         }
     }
 
+    /**
+     * Remove the generated store (WPS_IC_CACHE: the processed sheets and scripts, the page copies).
+     * The saved pages link sheets from it, so they are retired with it (wpc_saved_pages_retire).
+     */
     public static function purge_cache_files()
     {
         $cache_dir = WPS_IC_CACHE;
+        $existed = @is_dir($cache_dir);
 
         self::removeDirectory($cache_dir);
+        if ($existed && function_exists('wpc_saved_pages_retire')) {
+            wpc_saved_pages_retire('css-rebuilt');
+        }
 
         return true;
     }
@@ -162,6 +169,20 @@ class wps_ic_cache
     public static function removeDirectory($path)
     {
         wpc_fs_remove_tree($path);
+    }
+
+    /** True when the settings arm the purge hooks: advanced cache and purge-hooks on, with at least one hook chosen. */
+    public static function purgeHooksArmed()
+    {
+        $options = get_option(WPS_IC_SETTINGS);
+        if (empty($options['cache']['advanced']) || $options['cache']['advanced'] != '1') {
+            return false;
+        }
+        if (empty($options['cache']['purge-hooks']) || $options['cache']['purge-hooks'] != '1') {
+            return false;
+        }
+        $rules = get_option('wps_ic_purge_rules');
+        return !empty($rules) && !empty($rules['hooks']);
     }
 
     public static function purgeHooks()
@@ -226,6 +247,11 @@ class wps_ic_cache
         add_action('publish_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
         add_action('wp_trash_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
         add_action('delete_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
+
+        add_action('pre_post_update', ['wps_ic_cache', 'noteBeforeUpdate'], 10, 1);
+        add_action('post_updated', ['wps_ic_cache', 'purgeIfUnpublished'], 10, 3);
+        add_action('transition_post_status', ['wps_ic_cache', 'purgeIfUnpublishedByTransition'], 10, 3);
+        add_action('before_delete_post', ['wps_ic_cache', 'purgeBeforeDelete'], 10, 2);
 
         add_action('comment_post', ['wps_ic_cache', 'purgeOnCommentPost'], 10, 2);
         add_action('edit_comment', ['wps_ic_cache', 'purgeOnCommentAction'], 10, 1);
@@ -301,6 +327,179 @@ class wps_ic_cache
         }
     }
 
+    /**
+     * Whether a post is one every visitor is served: published, with no password, of a type that has
+     * a public page. A post that stops being so is taken out of every layer by purgeUnpublished().
+     */
+    public static function postIsPublic($post)
+    {
+        if (!is_object($post) || empty($post->ID) || (string) $post->post_status !== 'publish' || (string) $post->post_password !== '') {
+            return false;
+        }
+        return !function_exists('is_post_type_viewable') || is_post_type_viewable($post->post_type);
+    }
+
+    /**
+     * The addresses that serve a public post's own content: its pretty permalink (for a page or post
+     * that was never public, or is not any more, the address it would have: WordPress answers
+     * ?p=<id> for a draft and appends __trashed to a trashed one's name, neither of which was ever
+     * cached), the home page when it is the static front page, the pages of a paginated post, its
+     * AMP page, and the same address in every language WPML serves it in. Site code adds to the list
+     * with the filter wpc_post_public_urls.
+     */
+    public static function postPublicUrls($post, $asIfPublic = false)
+    {
+        if (!is_object($post) || empty($post->ID)) {
+            return [];
+        }
+        $row = $post;
+        if ($asIfPublic) {
+            $row = clone $post;
+            $row->post_status = 'publish';
+            $row->post_password = '';
+            if (substr((string) $row->post_name, -9) === '__trashed') {
+                $desired = function_exists('get_post_meta') ? (string) get_post_meta((int) $post->ID, '_wp_desired_post_name', true) : '';
+                $row->post_name = $desired !== '' ? $desired : substr((string) $row->post_name, 0, -9);
+            }
+        }
+        $permalink = get_permalink($row);
+        $urls = [];
+        if (is_string($permalink) && $permalink !== '' && strpos($permalink, '?p=') === false && strpos($permalink, '&p=') === false) {
+            $urls[] = $permalink;
+            $pages = substr_count((string) $post->post_content, '<!--nextpage-->') + 1;
+            for ($page = 2; $page <= min($pages, 50); $page++) {
+                $urls[] = trailingslashit($permalink) . $page . '/';
+            }
+            $urls[] = trailingslashit($permalink) . 'amp/';
+            if (function_exists('apply_filters')) {
+                $languages = apply_filters('wpml_active_languages', null, 'skip_missing=0');
+                foreach (is_array($languages) ? array_keys($languages) : [] as $code) {
+                    $inLanguage = apply_filters('wpml_permalink', $permalink, (string) $code);
+                    if (is_string($inLanguage) && $inLanguage !== '') {
+                        $urls[] = $inLanguage;
+                    }
+                }
+            }
+        }
+        if ((string) $post->post_type === 'page' && (int) get_option('page_on_front') === (int) $post->ID) {
+            $urls[] = home_url('/');
+        }
+        $urls = function_exists('apply_filters') ? apply_filters('wpc_post_public_urls', $urls, $post) : $urls;
+        return array_values(array_unique(array_filter(array_map('strval', (array) $urls))));
+    }
+
+    private static $publicBeforeUpdate = [];
+
+    /** Whether the service turned the takedown of a post that stops being public off for this site (policy.off_post_takedown). The one reader. */
+    public static function takedownOff()
+    {
+        return function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('off_post_takedown') === 1;
+    }
+
+    /** Before WordPress writes an update: what the post is served as now, which no later hook can rebuild. */
+    public static function noteBeforeUpdate($postId)
+    {
+        if (self::takedownOff()) {
+            return;
+        }
+        $post = get_post((int) $postId);
+        if (self::postIsPublic($post)) {
+            self::$publicBeforeUpdate[(int) $post->ID] = self::postPublicUrls($post);
+        }
+    }
+
+    /** After the write: a post that was public and is not, or is at another address, is taken out at the address it was served at. */
+    public static function purgeIfUnpublished($postId, $after, $before)
+    {
+        $postId = (int) $postId;
+        if (!isset(self::$publicBeforeUpdate[$postId])) {
+            return;
+        }
+        $urls = self::$publicBeforeUpdate[$postId];
+        unset(self::$publicBeforeUpdate[$postId]);
+        if (!self::postIsPublic($after)) {
+            self::purgeUnpublished($urls, 'unpublished', $postId);
+        } elseif ($urls !== self::postPublicUrls($after)) {
+            self::purgeUnpublished(array_diff($urls, self::postPublicUrls($after)), 'moved', $postId);
+        }
+    }
+
+    /** A status change nothing noted before (a plugin writing the row itself): the address it would have been served at. */
+    public static function purgeIfUnpublishedByTransition($newStatus, $oldStatus, $post)
+    {
+        if (self::takedownOff() || $oldStatus !== 'publish' || $newStatus === 'publish' || !is_object($post) || empty($post->ID)) {
+            return;
+        }
+        if (isset(self::$publicBeforeUpdate[(int) $post->ID])) {
+            return;
+        }
+        $was = clone $post;
+        $was->post_status = 'publish';
+        if (self::postIsPublic($was)) {
+            self::purgeUnpublished(self::postPublicUrls($post, true), 'unpublished', (int) $post->ID);
+        }
+    }
+
+    /** A published post deleted outright. */
+    public static function purgeBeforeDelete($postId, $post = null)
+    {
+        if (self::takedownOff()) {
+            return;
+        }
+        $post = is_object($post) ? $post : get_post((int) $postId);
+        if (self::postIsPublic($post)) {
+            self::purgeUnpublished(self::postPublicUrls($post), 'deleted', (int) $post->ID);
+        }
+    }
+
+    /**
+     * The one owner of "this post's content stopped being public": every address it was served at
+     * leaves every layer that can serve it, hard, now, for one post only (the home page, archives and
+     * recent-posts lists keep the rules they have). Per address: the page store's folder with the
+     * cookie and signed-in variants and the stale copies, the pre-load warm-up's copies, the static
+     * mirror, Varnish, Cloudflare by URL and the third-party page caches that purge by URL
+     * (wps_ic_cache_integrations::purgeUrlHtml). The edge purge is let through whatever request asks:
+     * the coalescing window and the gate for a request that is another plugin's ajax action are for
+     * the purges of a page that is still public.
+     */
+    public static function purgeUnpublished(array $urls, $why, $postId = 0)
+    {
+        if (!class_exists('wps_ic_cache_integrations') || !class_exists('wps_ic_url_key')) {
+            return [];
+        }
+        $coalesce = function () { return 0; };
+        $allow = '__return_true';
+        add_filter('wpc_cf_purge_coalesce_s', $coalesce, PHP_INT_MAX);
+        add_filter('wpc_purge_allow_foreign_ajax', $allow, PHP_INT_MAX);
+        $purged = [];
+        try {
+            foreach (array_values(array_unique($urls)) as $url) {
+                $clean = wps_ic_url_key::sanitizeSameHostUrl((string) $url);
+                if ($clean === '') {
+                    continue;
+                }
+                $key = (new wps_ic_url_key())->setup($clean);
+                if ($key === '' || isset($purged[$key])) {
+                    continue;
+                }
+                $purged[$key] = wps_ic_cache_integrations::purgeUrlHtml($key, $clean, ['context' => 'post-unpublished-url', 'warm' => false, 'force' => true]);
+                if (class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'removeStaticMirrorSubtree')) {
+                    wps_cacheHtml::removeStaticMirrorSubtree($clean);
+                }
+                if (defined('WP_CONTENT_DIR')) {
+                    wps_cacheHtml::removeDirectory(WP_CONTENT_DIR . '/cache/wp-preload/' . $key);
+                }
+            }
+        } finally {
+            remove_filter('wpc_cf_purge_coalesce_s', $coalesce, PHP_INT_MAX);
+            remove_filter('wpc_purge_allow_foreign_ajax', $allow, PHP_INT_MAX);
+        }
+        if ($purged !== [] && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('post-unpublished', '', '', ['post' => (int) $postId, 'why' => (string) $why, 'urls' => count($purged), 'keys' => array_slice(array_keys($purged), 0, 12)]);
+        }
+        return $purged;
+    }
+
     public static function purgeCachePerPage()
     {
         // Get the excludes option
@@ -341,8 +540,25 @@ class wps_ic_cache
         return $src;
     }
 
-    public static function removeHtmlCacheFiles($post_id = 'all', $post = '', $update = '', $purge_mode = null)
+    /**
+     * Removes the plugin's stored page copies and, unless $layers is false, purges the layers in
+     * front of them: Varnish and the host and edge caches that listen on wps_ic_purge_all_cache.
+     * $layers false leaves every one of those alone. A soft purge stale-marks the copies; a purge
+     * is hard (copies removed) until a hard purge has recorded the running version
+     * (wpc_stale43_ver), so right after an update it is hard whatever the caller asked.
+     * The scope is one post (a positive id, an int or the digits of one), 'home' (the home page
+     * alone) or 'all'. 0 names no post and is 'all', like anything else.
+     */
+    public static function removeHtmlCacheFiles($post_id = 'all', $post = '', $update = '', $purge_mode = null, $layers = true)
     {
+        if (!function_exists('wpc_purge_scope_old') || !wpc_purge_scope_old()) {
+            if (is_string($post_id) && ctype_digit($post_id) && (int) $post_id > 0) {
+                $post_id = (int) $post_id;
+            }
+            if ($post_id === 0) {
+                $post_id = 'all';
+            }
+        }
         if (!is_int($post_id) && $post_id !== 'all' && $post_id !== 'home') {
             $post_id = 'all';
         }
@@ -377,30 +593,32 @@ class wps_ic_cache
         $cacheHtml = new wps_cacheHtml();
         $cacheHtml->removeCacheFiles($post_id, $purge_mode);
 
-        $cache_integrations = new wps_ic_cache_integrations();
+        if ($layers) {
+            $cache_integrations = new wps_ic_cache_integrations();
 
 
-        if (is_int($post_id)) {
-            $cache_integrations->purgeVarnish($post_id);
-        } elseif ($post_id === 'home') {
-            $cache_integrations->purgeVarnish(0);
-        } else {
-            $cache_integrations->purgeVarnish(0, true);            // 'all' → full-site
-        }
-
-        // Fire integration hook once per request (Breeze, LiteSpeed, SG, etc.)
-        static $integrations_fired = false;
-        if (!$integrations_fired) {
-            $integrations_fired = true;
             if (is_int($post_id)) {
-                // Listeners treat this as purge-EVERYTHING — a single-post purge must not
-                // nuke LiteSpeed/Nginx/Varnish more than once per 2 min
-                $last_foreign_purge_at = (int) get_option('wpc_tp_purge_at');
-                if (time() - $last_foreign_purge_at >= 120 && update_option('wpc_tp_purge_at', time(), false)) {
-                    wpc_purge_foreign_caches(get_permalink($post_id), 'post-purge');
-                }
+                $cache_integrations->purgeVarnish($post_id);
+            } elseif ($post_id === 'home') {
+                $cache_integrations->purgeVarnish(0);
             } else {
-                wpc_purge_foreign_caches(false, 'purge-all');
+                $cache_integrations->purgeVarnish(0, true);            // 'all' → full-site
+            }
+
+            // Fire integration hook once per request (Breeze, LiteSpeed, SG, etc.)
+            static $integrations_fired = false;
+            if (!$integrations_fired) {
+                $integrations_fired = true;
+                if (is_int($post_id)) {
+                    // Listeners treat this as purge-EVERYTHING — a single-post purge must not
+                    // nuke LiteSpeed/Nginx/Varnish more than once per 2 min
+                    $last_foreign_purge_at = (int) get_option('wpc_tp_purge_at');
+                    if (time() - $last_foreign_purge_at >= 120 && update_option('wpc_tp_purge_at', time(), false)) {
+                        wpc_purge_foreign_caches(get_permalink($post_id), 'post-purge');
+                    }
+                } else {
+                    wpc_purge_foreign_caches(false, 'purge-all');
+                }
             }
         }
 
@@ -426,7 +644,7 @@ class wps_ic_cache
             return;
         }
         // Loop-guard: a warm render must never schedule another warm.
-        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+        if (wpc_warm_request()) {
             return;
         }
         if (defined('WPC_WARM_HOMEPAGE_DISABLE') && WPC_WARM_HOMEPAGE_DISABLE) {
@@ -450,7 +668,7 @@ class wps_ic_cache
         // v7.10.521 — PARITY, same gap .520 closed in wpc_warm_url_fire(): this schedules a
         // LOOPBACK render, so a warm request reaching it can fan out another warm. queue()
         // has always refused; fire() didn't until .520; this never did.
-        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+        if (wpc_warm_request()) {
             return;
         }
         // A request that cannot be cached must not trigger a warm: nothing is stored, so the
@@ -515,7 +733,7 @@ class wps_ic_cache
                  . "Host: {$host}\r\n"
                  . "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0\r\n"
                  . "Accept: text/html\r\n"
-                 . "X-WPC-Cache-Warm: 1\r\n"
+                 . "X-WPC-Cache-Warm: " . wpc_warm_header_for(($https ? 'https' : 'http') . '://' . $host . $path) . "\r\n"
                  . "Connection: close\r\n\r\n";
             $fp = wps_ic_ajax::wpc_loopback_open_socket($host, $port, $https, 0.2);
             if ($fp) {
@@ -974,8 +1192,21 @@ class wps_ic_cache
                         $method .= '+hosts-FAIL';
                     }
                 }
+                $backstop = '';
+                if (function_exists('wpc_cache_phase_on') && wpc_cache_phase_on('p4') && method_exists($sdk, 'purgeFilesAsync')) {
+                    $homeUrl = (string) home_url('/');
+                    $homeResult = $sdk->purgeFilesAsync($cf['zone'], array_values(array_unique([$homeUrl, rtrim($homeUrl, '/')])));
+                    $backstop = (!is_wp_error($homeResult) && !empty($homeResult['success'])) ? 'ok' : 'fail';
+                    $describe = function ($result) {
+                        return is_wp_error($result) ? $result->get_error_message()
+                            : (is_array($result) && !empty($result['errors'][0]['message']) ? $result['errors'][0]['message'] : (is_array($result) && !empty($result['success']) ? 'success' : 'unknown'));
+                    };
+                    $plog   = get_option('wpc_purge_debug_log', []);
+                    $plog[] = date('Y-m-d H:i:s') . ' | CF html tag-purge ' . ($ok ? 'ok' : 'FAIL') . ' (' . $method . ': ' . substr((string) $describe($res), 0, 80) . ') | home backstop ' . strtoupper($backstop) . ' (' . substr((string) $describe($homeResult), 0, 80) . ')';
+                    update_option('wpc_purge_debug_log', array_slice((array) $plog, -20), false);
+                }
                 if (function_exists('wpc_cache_first_log')) {
-                    wpc_cache_first_log('cf-purge-allhtml', '', '', ['ok' => $ok ? 1 : 0, 'method' => $method, 'reset' => $reset, 'src' => $purgeSource, 'uri' => $requestUri]);
+                    wpc_cache_first_log('cf-purge-allhtml', '', '', ['ok' => $ok ? 1 : 0, 'method' => $method, 'reset' => $reset, 'src' => $purgeSource, 'uri' => $requestUri, 'backstop' => $backstop]);
                 }
                 // A successful edge purge IS the crown proof: long edge TTL is safe exactly
                 // because purge-on-land works — stamp the verification from the live receipt.
@@ -1414,6 +1645,7 @@ class wps_ic_cache
                 // faces until the next gen lands) exactly like the delay pair re-opened the
                 // unmeasured lane. Same serve-stale doctrine, same supersede-on-land bound.
                 $keep[] = 'font-subsets.css';
+                $keep[] = 'font-below-fold.json';
                 $keep[] = 'icon-subsets.css';
                 $keep[] = 'fonts_url.txt';
                 return array_values(array_unique($keep));

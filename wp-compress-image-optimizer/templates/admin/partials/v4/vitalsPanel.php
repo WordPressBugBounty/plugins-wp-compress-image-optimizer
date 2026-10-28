@@ -229,6 +229,7 @@ $wpc_vp_lcp = ['m' => [], 'd' => []];
 $wpc_vp_fcp = ['m' => [], 'd' => []];
 $wpc_vp_lcpq = ['m' => ['p25' => [], 'p50' => []], 'd' => ['p25' => [], 'p50' => []]];
 $wpc_vp_views28 = $wpc_vp_hits28 = $wpc_vp_raw28 = 0;
+$wpc_vp_sampled = max(1, (int) get_option('wpc_vitals_sample', 1)) > 1;
 foreach ($wpc_vp_curM as $wpc_vp_k => $wpc_vp_d) {
     $s = max(1, (int) ($wpc_vp_d['s'] ?? 1));
     $v = (int) ($wpc_vp_d['v'] ?? 0);
@@ -237,6 +238,7 @@ foreach ($wpc_vp_curM as $wpc_vp_k => $wpc_vp_d) {
     $wpc_vp_cached[]   = $h * $s;
     $wpc_vp_rendered[] = ($v - $h) * $s;
     $wpc_vp_views28   += $v * $s;
+    if ($s > 1) { $wpc_vp_sampled = true; }
     $wpc_vp_hits28    += $h;
     $wpc_vp_raw28     += $v;
     foreach (['m', 'd'] as $wpc_vp_dev) {
@@ -251,6 +253,15 @@ foreach ($wpc_vp_curM as $wpc_vp_k => $wpc_vp_d) {
     }
 }
 $wpc_vp_share = $wpc_vp_raw28 > 0 ? (int) round($wpc_vp_hits28 / $wpc_vp_raw28 * 100) : 0;
+$wpc_vp_visits_word = $wpc_vp_sampled
+    ? esc_html__('interacting visits (sampled)', WPS_IC_TEXTDOMAIN)
+    : esc_html__('interacting visits', WPS_IC_TEXTDOMAIN);
+$wpc_vp_fmt_opt28 = $wpc_vp_sampled
+    ? esc_html__('%s optimized interacting visits (sampled) in the past 28 days', WPS_IC_TEXTDOMAIN)
+    : esc_html__('%s optimized interacting visits in the past 28 days', WPS_IC_TEXTDOMAIN);
+$wpc_vp_fmt_all28 = $wpc_vp_sampled
+    ? esc_html__('%s interacting visits (sampled) in the past 28 days', WPS_IC_TEXTDOMAIN)
+    : esc_html__('%s interacting visits in the past 28 days', WPS_IC_TEXTDOMAIN);
 
 // v7.21.28 — the empty state must name its cause, not promise blindly: per-device window
 // totals of paint samples (fcp) and of ANY metrics-record signal (lcp+fcp+ttfb). met=0 with
@@ -279,10 +290,10 @@ if ($wpc_vp_base_lcp > 0 && $wpc_vp_cur_lcp_m > 0 && $wpc_vp_cur_lcp_m < $wpc_vp
     $wpc_vp_banner     = sprintf(__("Your visitors' experience improved %d%% since optimization began.", WPS_IC_TEXTDOMAIN), $wpc_vp_imp);
     $wpc_vp_banner_sub = sprintf(__('p75 LCP went from %1$s to %2$s', WPS_IC_TEXTDOMAIN), $bn . $bu, $cn . $cu)
         . ' · ' . sprintf(__('%d%% of pageviews served from cache', WPS_IC_TEXTDOMAIN), $wpc_vp_share)
-        . ' · ' . sprintf(__('%s optimized views in the past 28 days', WPS_IC_TEXTDOMAIN), number_format($wpc_vp_views28));
+        . ' · ' . sprintf($wpc_vp_fmt_opt28, number_format($wpc_vp_views28));
 } elseif ($wpc_vp_views28 > 0) {
     $wpc_vp_banner     = __('Optimized delivery is live — measuring your visitors\' real experience.', WPS_IC_TEXTDOMAIN);
-    $wpc_vp_banner_sub = sprintf(__('%s views in the past 28 days', WPS_IC_TEXTDOMAIN), number_format($wpc_vp_views28))
+    $wpc_vp_banner_sub = sprintf($wpc_vp_fmt_all28, number_format($wpc_vp_views28))
         . ' · ' . sprintf(__('%d%% served from cache', WPS_IC_TEXTDOMAIN), $wpc_vp_share);
 }
 
@@ -458,7 +469,7 @@ if ($wpc_vp_specm['ghost'] > 0 && $wpc_vp_bsamp['m'] >= 30 && $wpc_vp_cur_lcp_m 
 } elseif ($wpc_vp_banner === '' && $wpc_vp_specm['sh1'] >= 40) {
     $wpc_vp_banner = sprintf(__('%d%%%% of your visits painted in under 1 second.', WPS_IC_TEXTDOMAIN), $wpc_vp_specm['sh1']);
     $wpc_vp_banner = str_replace('%%', '%', $wpc_vp_banner);
-    $wpc_vp_banner_sub = sprintf(__('%s optimized views in the past 28 days', WPS_IC_TEXTDOMAIN), number_format($wpc_vp_views28))
+    $wpc_vp_banner_sub = sprintf($wpc_vp_fmt_opt28, number_format($wpc_vp_views28))
         . ' · ' . sprintf(__('%d%% served from cache', WPS_IC_TEXTDOMAIN), $wpc_vp_share);
 }
 
@@ -583,7 +594,7 @@ if (!$wpc_vp_demo && (!function_exists('apply_filters') || apply_filters('wpc_vi
         $wpc_vp_bpair = null;
         if ($wpc_vp_views28 > 0) {
             $wpc_vp_banner = __('Optimized delivery is live — measuring your visitors\' real experience.', WPS_IC_TEXTDOMAIN);
-            $wpc_vp_banner_sub = sprintf(__('%s views in the past 28 days', WPS_IC_TEXTDOMAIN), number_format($wpc_vp_views28))
+            $wpc_vp_banner_sub = sprintf($wpc_vp_fmt_all28, number_format($wpc_vp_views28))
                 . ' · ' . sprintf(__('%d%% served from cache', WPS_IC_TEXTDOMAIN), $wpc_vp_share);
         }
     }
@@ -1120,12 +1131,12 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             }
             if (activeReg) {
                 marker(plotP75, activeReg.label.toUpperCase() + ' · <?php echo esc_js(strtoupper(__('Slowest quarter', WPS_IC_TEXTDOMAIN))); ?>', true, '', false,
-                    '<b>' + esc(activeReg.label) + ' — <?php echo esc_js(__('Slowest quarter starts here', WPS_IC_TEXTDOMAIN)); ?></b><br><?php echo esc_js(__('p75 — the number Google scores', WPS_IC_TEXTDOMAIN)); ?> · ' + (activeReg.v || 0) + ' <?php echo esc_js(__('visits', WPS_IC_TEXTDOMAIN)); ?>');
+                    '<b>' + esc(activeReg.label) + ' — <?php echo esc_js(__('Slowest quarter starts here', WPS_IC_TEXTDOMAIN)); ?></b><br><?php echo esc_js(__('p75 — the number Google scores', WPS_IC_TEXTDOMAIN)); ?> · ' + (activeReg.v || 0) + ' <?php echo esc_js($wpc_vp_visits_word); ?>');
             } else {
             marker(s.opt, '<?php echo esc_js(strtoupper(__('Fully optimized visit', WPS_IC_TEXTDOMAIN))); ?>', true, '', false,
-                '<b><?php echo esc_js(__('Fully optimized visit', WPS_IC_TEXTDOMAIN)); ?></b><br><?php echo esc_js(__('Median cached repeat visit', WPS_IC_TEXTDOMAIN)); ?> · ' + (s.hn || 0) + ' <?php echo esc_js(__('visits', WPS_IC_TEXTDOMAIN)); ?>');
+                '<b><?php echo esc_js(__('Fully optimized visit', WPS_IC_TEXTDOMAIN)); ?></b><br><?php echo esc_js(__('Median cached repeat visit', WPS_IC_TEXTDOMAIN)); ?> · ' + (s.hn || 0) + ' <?php echo esc_js($wpc_vp_visits_word); ?>');
             marker(s.p50, '<?php echo esc_js(strtoupper(__('Typical visit', WPS_IC_TEXTDOMAIN))); ?>', false, '', false,
-                '<b><?php echo esc_js(__('Typical visit', WPS_IC_TEXTDOMAIN)); ?></b><br><?php echo esc_js(__('Median of all visits (p50)', WPS_IC_TEXTDOMAIN)); ?> · ' + (s.n || 0) + ' <?php echo esc_js(__('visits', WPS_IC_TEXTDOMAIN)); ?>');
+                '<b><?php echo esc_js(__('Typical visit', WPS_IC_TEXTDOMAIN)); ?></b><br><?php echo esc_js(__('Median of all visits (p50)', WPS_IC_TEXTDOMAIN)); ?> · ' + (s.n || 0) + ' <?php echo esc_js($wpc_vp_visits_word); ?>');
             marker(s.p75, '<?php echo esc_js(strtoupper(__('Slowest quarter', WPS_IC_TEXTDOMAIN))); ?>', true, '', false,
                 '<b><?php echo esc_js(__('Slowest quarter starts here', WPS_IC_TEXTDOMAIN)); ?></b><br><?php echo esc_js(__('p75 — the number Google scores', WPS_IC_TEXTDOMAIN)); ?>');
             marker(s.ghost, VPBRANDU, false, '', true,
@@ -1494,8 +1505,8 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                     place(tip, wrap, (X(i) / W) * r.width, hy,
                         '<span class="wpc-vp-tiphead">' + esc(tlLabels[i]) + '</span>' + rows +
                         (seeded
-                            ? '<span class="wpc-vp-tipfoot"><?php echo esc_js(__('Measured from this browser — real visitors take over as they arrive', WPS_IC_TEXTDOMAIN)); ?>' + (tot ? ' \u00b7 <b>' + tot.toLocaleString() + '</b> <?php echo esc_js(__('views', WPS_IC_TEXTDOMAIN)); ?>' : '') + '</span>'
-                            : '<span class="wpc-vp-tipfoot"><b>' + tot.toLocaleString() + '</b> <?php echo esc_js(__('views', WPS_IC_TEXTDOMAIN)); ?>' + (tot ? ' \u00b7 ' + Math.round(cached / tot * 100) + '% <?php echo esc_js(__('from cache', WPS_IC_TEXTDOMAIN)); ?>' : '') + '</span>'));
+                            ? '<span class="wpc-vp-tipfoot"><?php echo esc_js(__('Measured from this browser — real visitors take over as they arrive', WPS_IC_TEXTDOMAIN)); ?>' + (tot ? ' \u00b7 <b>' + tot.toLocaleString() + '</b> <?php echo esc_js($wpc_vp_visits_word); ?>' : '') + '</span>'
+                            : '<span class="wpc-vp-tipfoot"><b>' + tot.toLocaleString() + '</b> <?php echo esc_js($wpc_vp_visits_word); ?>' + (tot ? ' \u00b7 ' + Math.round(cached / tot * 100) + '% <?php echo esc_js(__('from cache', WPS_IC_TEXTDOMAIN)); ?>' : '') + '</span>'));
                 });
                 hz.addEventListener('pointerleave', function () { tip.classList.remove('show'); endB(true); });
                 hover.appendChild(hz);

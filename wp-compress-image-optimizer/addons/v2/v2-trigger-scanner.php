@@ -10,6 +10,9 @@ if (!function_exists('wpc_v2_defer_lazy_trigger')) {
     function wpc_v2_defer_lazy_trigger($id, $widths = [], $upgrade_partial = false, $release_sig = '', array $trigger_opts = [])
     {
         global $wpc_v2_deferred_triggers;
+        if (function_exists('wpc_sized_report_armed') && wpc_sized_report_armed()) {
+            return;
+        }
         if (!is_array($wpc_v2_deferred_triggers)) {
             $wpc_v2_deferred_triggers = [];
             add_action('shutdown', 'wpc_v2_run_deferred_lazy_triggers', PHP_INT_MAX);
@@ -108,6 +111,7 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
         if (!is_string($html) || $html === '') return 0;
         if (!function_exists('wpc_lazy_trigger_v2')) return 0;
         if (!function_exists('wpc_lazy_mode_active') || !wpc_lazy_mode_active()) return 0;
+        if (function_exists('wpc_sized_report_armed') && wpc_sized_report_armed()) return 0;
 
         // Scanner kill switch. In lazy_cdn mode the canonical path
         // is CDN-driven (CDN sees 404 → fires /optimize-v2 for the SPECIFIC
@@ -118,10 +122,7 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
 
         $wpc_llb_full_ladder = false;
         if (!$default_enabled) {
-            $wpc_s = get_option('wps_ic_settings');
-            $wpc_cdn_drives = is_array($wpc_s) && !empty($wpc_s['live-cdn']) && (string) $wpc_s['live-cdn'] === '1'
-                && (!class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled($wpc_s));
-            if (!$wpc_cdn_drives) {
+            if (!wpc_cdn_drives_images()) {
                 $default_enabled = true;
                 $wpc_llb_full_ladder = !function_exists('wpc_policy');
             }
@@ -129,10 +130,11 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
         if (!apply_filters('wpc_v2_lazy_trigger_scanner_enabled', $default_enabled)) return 0;
 
         $skip_if_compressed = !isset($opts['skip_if_compressed']) || (bool) $opts['skip_if_compressed'];
+        $widths_required = !empty($opts['widths_required']);
 
 
         static $request_cache = [];
-        $cache_key = sha1($html);
+        $cache_key = sha1($html . '|' . (int) $widths_required);
         if (isset($request_cache[$cache_key])) {
             return $request_cache[$cache_key];
         }
@@ -153,7 +155,13 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
 
         $triggered = 0;
         $skipped   = 0;
+        $skipped_edge = 0;
+        $skipped_no_widths = 0;
         foreach ($ids as $id) {
+            if ($widths_required && empty($widths_map[$id])) {
+                $skipped_no_widths++;
+                continue;
+            }
             $wpc_upgrade_partial = false;
             $trigger_reason      = 'new';
             $fill_formats    = [];
@@ -209,8 +217,9 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
             //
 
 
-            if ($trigger_reason === 'new' && function_exists('wpc_policy') && function_exists('wpc_v2_get_lazy_enabled') && wpc_v2_get_lazy_enabled()) {
-                $skipped++;
+            if ($trigger_reason === 'new' && function_exists('wpc_policy') && function_exists('wpc_v2_get_lazy_enabled') && wpc_v2_get_lazy_enabled()
+                && !wpc_encode_on_view_origin_images()) {
+                $skipped_edge++;
                 continue;
             }
             $trigger_opts = ['reason' => $trigger_reason];
@@ -222,13 +231,15 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
             $triggered++;
         }
 
-        if ($triggered > 0 || $skipped > 0) {
+        if ($triggered > 0 || $skipped > 0 || $skipped_edge > 0 || $skipped_no_widths > 0) {
             error_log(sprintf(
-                '[WPC TriggerScan] source=%s scanned=%d triggered=%d skipped_compressed=%d',
+                '[WPC TriggerScan] source=%s scanned=%d triggered=%d skipped_compressed=%d skipped_edge=%d skipped_no_widths=%d',
                 $source,
                 count($ids),
                 $triggered,
-                $skipped
+                $skipped,
+                $skipped_edge,
+                $skipped_no_widths
             ));
         }
 
@@ -256,7 +267,8 @@ add_action('save_post', function ($post_id, $post, $update) {
 
     wpc_v2_scan_html_for_lazy_triggers(
         (string) $post->post_content,
-        'save_post:' . (int) $post_id
+        'save_post:' . (int) $post_id,
+        ['widths_required' => true]
     );
 }, 20, 3);
 

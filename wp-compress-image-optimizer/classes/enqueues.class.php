@@ -30,7 +30,7 @@ class wps_ic_enqueues extends wps_ic
     {
         $this::$slug = parent::$slug;
         $this::$version = parent::$version;
-        self::$settings = parent::$settings;
+        self::$settings = (!empty(parent::$settings) && function_exists('wpc_levered_settings')) ? wpc_levered_settings(parent::$settings) : parent::$settings;
         self::$zone_name = parent::$zone_name;
         self::$quality = parent::$quality;
         self::$js_debug = parent::$js_debug;
@@ -94,13 +94,7 @@ class wps_ic_enqueues extends wps_ic
 
         $this->js_delay = new wps_ic_js_delay();
 
-        // Setup CF CNAME
-        $cfCname = get_option(WPS_IC_CF_CNAME);
-        $cf = get_option(WPS_IC_CF);
-        // Honor the fail-open verified-gate (consistent with the cdn-rewrite resolver) so
-        // CSS/JS + the localized zoneName don't emit a cname that's mid-change-unverified ('0').
-        $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok())) ? $cfCname : get_option('ic_custom_cname');
-        if (!empty($custom_cname) && function_exists('wpc_cdn_cname_is_reachable') && !wpc_cdn_cname_is_reachable($custom_cname)) { $custom_cname = ''; }
+        $custom_cname = wpc_cdn_custom_host();
         if (!empty($custom_cname)) {
             self::$zone_name = $custom_cname;
         }
@@ -263,14 +257,30 @@ JS;
         if (isset($wp_scripts->registered[$slug]) && $wp_scripts->registered[$slug]) {
             $load_cart_fragments_path = $wp_scripts->registered[$slug]->src;
             $wp_scripts->registered[$slug]->src = null;
+            // The loader rides jQuery's -after slot so it moves wherever jQuery's tag moves
+            // (eager, deferred, delayed). cart-fragments.js calls jQuery the moment it runs, so
+            // the loader injects it only once jQuery exists and otherwise looks again shortly:
+            // when the loader ran before a deferred jQuery the injected script threw "jQuery is
+            // not defined", and the click retry then found the script element already there and
+            // never tried again, so shoppers on the cached /shop/ never saw their cart
+            // (rosella.com.co, anacletababy.com, babypinkworld.com).
             wp_add_inline_script('jquery', 'function wpc_getCookie(name) {
 					var c = document.cookie.match("(^|;) ?" + name + "=([^;]*)(;|$)");
 					return c ? c[2] : null;
 				}
 
+				var wpc_cart_jquery_waits = 0;
+
 				function wpc_check_cart_script() {
 
 					if( document.getElementById("wpc_cart_fragments") !== null ) {
+						return false;
+					}
+
+					if( typeof jQuery === "undefined" ) {
+						if( wpc_cart_jquery_waits++ < 200 ) {
+							setTimeout(wpc_check_cart_script, 50);
+						}
 						return false;
 					}
 
@@ -315,53 +325,13 @@ JS;
 
     public function inlineFrontend()
     {
-
-        global $post;
-        $excludes = get_option('wpc-excludes');
-        if ($this->is_home_url()) {
-            $page_excludes = isset($excludes['page_excludes']['home']) ? $excludes['page_excludes']['home'] : [];
-        } else if (!empty(get_queried_object_id())) {
-            $page_excludes = isset($excludes['page_excludes'][get_queried_object_id()]) ? $excludes['page_excludes'][get_queried_object_id()] : [];
-        } elseif (!empty($post->ID)) {
-            $page_excludes = isset($excludes['page_excludes'][$post->ID]) ? $excludes['page_excludes'][$post->ID] : [];
-        } else {
-            $page_excludes = [];
-        }
-
-
-        $delayActive = !(isset($page_excludes['delay_js']) && $page_excludes['delay_js'] == '0') && ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1') || (isset($page_excludes['delay_js']) && $page_excludes['delay_js'] == '1'));
-
-        if (!$delayActive) {
-            echo '<script type="text/javascript">';
-        } else {
-            echo '<script type="text/javascript">';
-        }
-
-        $triggerDom = "true";
-        if (!empty(self::$settings['disable-trigger-dom-event']) && self::$settings['disable-trigger-dom-event'] == '1') {
-            $triggerDom = "false";
-        }
-
-        $triggerElementor = "true";
-        if (!empty(self::$settings['disable-elementor-triggers']) && self::$settings['disable-elementor-triggers'] == '1') {
-            $triggerElementor = "false";
-        }
-
-        $delayOn = "false";
-        if ($delayActive) {
-            $delayOn = "true";
-        }
-
-        // Preload links on hover, hardcoded!
-        $linkPreload = "false";
-        if (is_user_logged_in()) {
-            $linkPreload = "false";
-        }
-
-        $excludeLink = ['add-to-cart'];
-
-        echo 'var n489D_vars={"triggerDomEvent":"' . $triggerDom . '", "delayOn":"' . $delayOn . '", "triggerElementor":"' . $triggerElementor . '", "linkPreload":"' . $linkPreload . '", "excludeLink":' . json_encode($excludeLink) . '};';
-        echo '</script>';
+        // Until ticket 12267 this printed `var n489D_vars = {...}` for the optimizer scripts'
+        // hover link-preload branch: hard-disabled on 2025-07-03 (8267aae8, linkPreload always
+        // "false") and now deleted from the scripts, so nothing reads the variable. The scripts
+        // read it at parse through this hook while the script itself rides wp_enqueue_scripts;
+        // on syr-o.com this hook's output never reached the page and every optimizer script
+        // died at parse ("n489D_vars is not defined"), images unoptimised. A config nothing
+        // consumes is not printed; the lazy style below is all that remains here.
 
         // The legacy service-hosted optimize.js (v2 delay engine) is never emitted: the v3 lane is
         // the only engine, and "no v3 on this page" (a per-page JS-off writes delay-js-v2=0 into
@@ -421,10 +391,7 @@ JS;
             $background_sizing = 'true';
         }
 
-        $retina = 'false';
-        if (!empty($options['retina']) && $options['retina'] == '1') {
-            $retina = 'true';
-        }
+        $retina = wpc_retina_on(is_array($options) ? $options : []) ? 'true' : 'false';
 
         $exif = 'false';
         if (!empty($options['preserve_exif']) && $options['preserve_exif'] == '1') {
@@ -446,7 +413,8 @@ JS;
         }
 
 
-        if (function_exists('wpc_v2_rendered_width_beacon_enabled') && wpc_v2_rendered_width_beacon_enabled()) {
+        if (function_exists('wpc_v2_rendered_width_beacon_enabled') && wpc_v2_rendered_width_beacon_enabled()
+            && !(function_exists('wpc_lever_test_active') && wpc_lever_test_active())) {
             wp_enqueue_script(
                 $this::$slug . '-v2-rw-beacon',
                 WPS_IC_URI . 'addons/v2/v2-rendered-width-beacon.js',
@@ -728,6 +696,11 @@ JS;
         wp_enqueue_script($this::$slug . '-' . $name, WPS_IC_URI . 'assets/js/' . $filename, ['jquery'], $this::$version, $footer);
     }
 
+    public function sd_page_script()
+    {
+        wp_enqueue_script($this::$slug . '-sd-page', WPS_IC_URI . 'assets/js/admin/sd-page.js', ['jquery', 'heartbeat'], $this::$version, true);
+    }
+
     public function lite()
     {
         wp_enqueue_script($this::$slug . '-lite-js', WPS_IC_URI . 'assets/v4/js/lite.js', ['jquery'], $this::$version, true);
@@ -902,6 +875,7 @@ JS;
                         $this->script('media-library-bulk', 'admin/media-library-bulk' . WPS_IC_MIN . '.js');
                         wp_localize_script($this::$slug . '-media-library-bulk', 'ajaxVar', $this->get_ajax_var_data());
                         $this->script('check-bulk-running', 'admin/check-bulk-running' . WPS_IC_MIN . '.js');
+                        $this->sd_page_script();
 
                         // Manifest/activity poller — bulk screen only, gated on enablement.
                         if ((function_exists('wpc_v2_head_poll_enabled') && wpc_v2_head_poll_enabled())
@@ -1070,6 +1044,7 @@ JS;
                         $this->script('media-library-bulk', 'admin/media-library-bulk' . WPS_IC_MIN . '.js');
                         wp_localize_script($this::$slug . '-media-library-bulk', 'ajaxVar', $this->get_ajax_var_data());
                         $this->script('check-bulk-running', 'admin/check-bulk-running' . WPS_IC_MIN . '.js');
+                        $this->sd_page_script();
 
                         // Manifest/activity poller — bulk screen only, gated on enablement.
                         if ((function_exists('wpc_v2_head_poll_enabled') && wpc_v2_head_poll_enabled())
@@ -1140,7 +1115,7 @@ JS;
             'background_sizing'  => $flag('background-sizing'),
             'lazy_enabled'       => $flag('lazy'),
             'webp_enabled'       => $flag('generate_webp'),
-            'retina_enabled'     => $flag('retina'),
+            'retina_enabled'     => wpc_retina_on($s) ? 'true' : 'false',
             'force_retina'       => '0',
             'exif_enabled'       => $flag('preserve-exif'),
 

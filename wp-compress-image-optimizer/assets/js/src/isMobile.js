@@ -28,12 +28,26 @@ checkMobile();
  * Each bundle calls this once with its own rescan entry point; that entry point must be safe
  * to re-run, since it is called again for every injected batch.
  * childList only + the match test means a lane's own src writes cannot re-enter the callback.
+ *
+ * Armed only once the document has finished parsing: the initial markup is scanned by each
+ * bundle's own DOMContentLoaded pass, so the observer exists only for markup injected after
+ * that. These bundles run as a synchronous <script> in <head>; armed at execution, the
+ * observer saw every parser chunk that added a parked <img> as "injected", re-ran the scan,
+ * and each scan's getBoundingClientRect() reads forced a full layout of the half-parsed page
+ * (mvcustom.be, ticket 12247: 3-4 forced layouts of ~200 ms each before DOMContentLoaded at
+ * 4x CPU).
  */
 var wpcInjectedObserver = null;
 
 function wpcWatchInjected(rescan, sel) {
     try {
         if (wpcInjectedObserver || !window.MutationObserver) {
+            return;
+        }
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", function () {
+                wpcWatchInjected(rescan, sel);
+            }, {once: true});
             return;
         }
         wpcInjectedObserver = new MutationObserver(function (mutations) {

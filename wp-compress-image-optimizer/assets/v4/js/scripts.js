@@ -1950,12 +1950,21 @@ jQuery(document).ready(function ($) {
     /**
      * Contextual Purge Buttons
      */
+    function wpcPurgeErrorText(response) {
+        var d = response && response.data;
+        if (d && typeof d === 'object') {
+            return d.message || d.label || 'Failed';
+        }
+        return (typeof d === 'string' && d) ? d : 'Failed';
+    }
+
     function handlePurge(el, action, successText) {
         var $el = $(el);
         if ($el.hasClass('wpc-purging')) return false;
 
         $el.addClass('wpc-purging');
         var originalText = $el.text();
+        var originalTitle = $el.attr('title');
 
         $el.text('Purging...');
 
@@ -1966,13 +1975,24 @@ jQuery(document).ready(function ($) {
             if (response.success) {
                 $el.addClass('wpc-purge-success');
                 $el.text(successText || 'Purged');
+                if (response.data && typeof response.data === 'object' && response.data.label) {
+                    $el.attr('title', response.data.label);
+                }
                 setTimeout(function () {
                     $el.removeClass('wpc-purging wpc-purge-success');
                     $el.text(originalText);
                 }, 2000);
             } else {
-                $el.removeClass('wpc-purging');
-                $el.text(originalText);
+                var message = wpcPurgeErrorText(response);
+                $el.text(message.length > 28 ? 'Not cleared' : message);
+                $el.attr('title', message);
+                setTimeout(function () {
+                    $el.removeClass('wpc-purging');
+                    $el.text(originalText);
+                    if (originalTitle !== undefined) {
+                        $el.attr('title', originalTitle);
+                    }
+                }, 3000);
             }
         }).fail(function () {
             $el.removeClass('wpc-purging');
@@ -1990,7 +2010,29 @@ jQuery(document).ready(function ($) {
     $(document).on('click', '.wpc-purge-cdn-cache', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        handlePurge(this, 'wps_ic_purge_cdn', 'CDN Purged');
+        var link = this;
+        var confirmTitle = $(link).attr('data-confirm-title');
+        if (!confirmTitle || typeof WPCSwal === 'undefined') {
+            handlePurge(link, 'wps_ic_purge_cdn', 'CDN Cleared');
+            return false;
+        }
+        WPCSwal.fire({
+            title: '',
+            html: '<h2>' + $('<div>').text(confirmTitle).html() + '</h2><p>' + $('<div>').text($(link).attr('data-confirm-body')).html() + '</p>',
+            width: 600,
+            showCancelButton: true,
+            showConfirmButton: true,
+            allowOutsideClick: true,
+            showCloseButton: true,
+            customClass: {
+                container: 'no-padding-popup-bottom-bg switch-legacy-popup',
+            },
+            confirmButtonText: $(link).attr('data-confirm-ok'),
+            cancelButtonText: $(link).attr('data-confirm-cancel'),
+            preConfirm: function () {
+                handlePurge(link, 'wps_ic_purge_cdn', 'CDN Cleared');
+            }
+        });
         return false;
     });
 
@@ -2311,56 +2353,6 @@ jQuery(document).ready(function ($) {
         });
     })();
 
-    // ─── Local Optimization Card — Mode Pill + SweetAlert Popup ──────────
-    var localModePresets = {
-        'recommended': { quality: 2, webp: 1, avif: 1, backup: 'local', label: 'Smart Optimization' },
-        'save-space':  { quality: 2, webp: 0, avif: 0, backup: 'cloud', label: 'Disk Saver' },
-        'custom':      { quality: null, webp: null, avif: null, backup: null, label: 'Custom' }
-    };
-
-    function saveLocalSettings(changes, callback) {
-        if (!changes.length) { if (callback) callback(); return; }
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'wps_ic_ajax_v2_checkbox_batch',
-                wps_ic_nonce: wpc_ajaxVar.nonce,
-                changes: JSON.stringify(changes),
-                apikey: wpc_ajaxVar.apikey || ''
-            },
-            success: function () { if (callback) callback(); },
-            error: function () { if (callback) callback(); }
-        });
-    }
-
-    function updateModePill(preset) {
-        var data = localModePresets[preset];
-        if (!data) return;
-        $('.wpc-local-mode-pill-label').text(data.label);
-        $('.wpc-local-mode-pill').data('current', preset);
-        $('#local-image-optimization').attr('data-current-mode', preset);
-    }
-
-    // Detect if current settings match a preset (ignoring maxWidth and backup)
-    function detectCurrentMode() {
-        var quality = parseInt($('#localQualityLevel').val(), 10) || 2;
-        var webp = $('input[name="options[generate_webp]"]').is(':checked') ? 1 : 0;
-        var avif = $('input[name="options[picture_avif]"]').is(':checked') ? 1 : 0;
-
-        for (var key in localModePresets) {
-            var p = localModePresets[key];
-            if (p.quality !== null && p.quality === quality && p.webp === webp && p.avif === avif) {
-                return key;
-            }
-        }
-        return 'custom';
-    }
-
-    function syncModePill() {
-        updateModePill(detectCurrentMode());
-    }
-
     // Configure button — toggle settings body
     $(document).on('click', '.wpc-local-configure-btn', function (e) {
         e.preventDefault();
@@ -2368,115 +2360,31 @@ jQuery(document).ready(function ($) {
         $body.slideToggle(250);
     });
 
-    // Mode pill click — open SweetAlert popup
-    $(document).on('click', '.wpc-local-mode-pill', function (e) {
+    // Image optimization — segmented choice
+    $(document).on('click', '.wpc-seg-opt', function (e) {
         e.preventDefault();
-        var currentMode = $(this).data('current') || 'recommended';
-
-        WPCSwal.fire({
-            title: '',
-            position: 'center',
-            html: jQuery('#local-preset-mode').html(),
-            width: 1050,
-            showCloseButton: true,
-            showCancelButton: false,
-            showConfirmButton: false,
-            allowOutsideClick: true,
-            customClass: {
-                container: 'no-padding-popup-bottom-bg switch-legacy-popup',
-            },
-            onOpen: function () {
-                var popup = $('.swal2-container .ajax-settings-popup');
-
-                // Set initial active column
-                $('.wpc-popup-column', popup).removeClass('wpc-active');
-                $('.wpc-popup-column[data-preset="' + currentMode + '"]', popup).addClass('wpc-active');
-
-                // Column click
-                $('.wpc-popup-column', popup).on('click', function (e) {
-                    e.preventDefault();
-                    $('.wpc-popup-column', popup).removeClass('wpc-active');
-                    $(this).addClass('wpc-active');
-                });
-
-                // Save button
-                $('.wpc-local-preset-save-btn', popup).on('click', function (e) {
-                    e.preventDefault();
-                    var $btn = $(this);
-                    var selected = $('.wpc-popup-column.wpc-active', popup).data('preset');
-                    if (!selected) return;
-
-                    // If same mode, just close — don't reset toggles
-                    if (selected === currentMode) {
-                        WPCSwal.close();
-                        return;
-                    }
-
-                    $btn.css('opacity', '0.6').css('pointer-events', 'none');
-
-                    var presetData = localModePresets[selected];
-                    if (presetData && presetData.quality) {
-                        // Apply preset values — update quality dropdown
-                        $('#localQualityLevel').val(presetData.quality);
-                        var $qdd = $('.wpc-custom-dropdown[data-target="localQualityLevel"]');
-                        $qdd.find('.wpc-custom-dropdown-item').removeClass('wpc-active').find('.wpc-dropdown-check').html('');
-                        var $qItem = $qdd.find('.wpc-custom-dropdown-item[data-value="' + presetData.quality + '"]');
-                        $qItem.addClass('wpc-active').find('.wpc-dropdown-check').html('&#10003;');
-                        var $qLabel = $qItem.find('.wpc-dropdown-item-label');
-                        $qdd.find('.wpc-custom-dropdown-label').text($qLabel.length ? $qLabel.clone().children('.wpc-dropdown-badge').remove().end().text().trim() : $qItem.clone().children('.wpc-dropdown-check, .wpc-dropdown-badge, .wpc-dropdown-tooltip').remove().end().text().trim());
-
-                        // Update toggles on the page
-                        var $webp = $('input[name="options[generate_webp]"]');
-                        var $avif = $('input[name="options[picture_avif]"]');
-                        if ($webp.length) $webp.prop('checked', presetData.webp == 1).trigger('change');
-                        if ($avif.length) $avif.prop('checked', presetData.avif == 1).trigger('change');
-
-                        // Apply backup if preset specifies one
-                        if (presetData.backup) {
-                            $('#localBackup').val(presetData.backup);
-                            // Update custom dropdown UI
-                            var $dd = $('.wpc-custom-dropdown[data-target="localBackup"]');
-                            $dd.find('.wpc-custom-dropdown-item').removeClass('wpc-active').find('.wpc-dropdown-check').html('');
-                            var $item = $dd.find('.wpc-custom-dropdown-item[data-value="' + presetData.backup + '"]');
-                            $item.addClass('wpc-active').find('.wpc-dropdown-check').html('&#10003;');
-                            var $bLabel = $item.find('.wpc-dropdown-item-label');
-                            $dd.find('.wpc-custom-dropdown-label').text($bLabel.length ? $bLabel.clone().children('.wpc-dropdown-badge').remove().end().text().trim() : $item.clone().children('.wpc-dropdown-check, .wpc-dropdown-badge, .wpc-dropdown-tooltip').remove().end().text().trim());
-                        }
-
-                        var optMap = { 0: 'none', 1: 'lossless', 2: 'intelligent', 3: 'ultra' };
-                        var changes = [
-                            { name: 'local_qualityLevel', value: String(presetData.quality) },
-                            { name: 'local_optimization', value: optMap[presetData.quality] || 'none' },
-                            { name: 'generate_webp', value: String(presetData.webp) },
-                            { name: 'picture_avif', value: String(presetData.avif) }
-                        ];
-                        if (presetData.backup) {
-                            changes.push({ name: 'backup', value: presetData.backup });
-                        }
-                        saveLocalSettings(changes);
-                    }
-
-                    updateModePill(selected);
-                    WPCSwal.close();
-                });
+        var $opt = $(this);
+        if ($opt.hasClass('wpc-seg-locked') || $opt.attr('aria-disabled') === 'true') { return; }
+        var $seg = $opt.closest('.wpc-seg');
+        var $hidden = $('#' + $seg.data('target'));
+        var val = String($opt.data('value'));
+        if (!$hidden.length) { return; }
+        var previousVal = $hidden.val();
+        $seg.find('.wpc-seg-opt').removeClass('wpc-active').attr('aria-checked', 'false');
+        $opt.addClass('wpc-active').attr('aria-checked', 'true');
+        $seg.siblings('.wpc-opt-mode-desc').text($opt.attr('data-tip') || '');
+        $hidden.val(val).trigger('change');
+        if (previousVal !== val) {
+            var inputName = $hidden.attr('name');
+            if (inputName) {
+                window.wpcAdvInitialStates = window.wpcAdvInitialStates || {};
+                if (typeof window.wpcAdvInitialStates[inputName] === 'undefined') {
+                    window.wpcAdvInitialStates[inputName] = previousVal;
+                }
             }
-        });
-
-        return false;
-    });
-
-    // Settings — check for unsaved changes on change
-    $(document).on('change', '#localQualityLevel', function () {
-        syncModePill();
-        if (typeof checkUnsavedChanges === 'function') { checkUnsavedChanges(); } else { $('.save-button').fadeIn(400); }
-    });
-
-    $(document).on('change', 'input[name="options[generate_webp]"]', function () {
-        syncModePill();
-    });
-
-    $(document).on('change', 'input[name="options[picture_avif]"]', function () {
-        syncModePill();
+            $('.save-button').stop(true, true).fadeIn(400);
+        }
+        if (typeof checkUnsavedChanges === 'function') { checkUnsavedChanges(); }
     });
 
     $(document).on('change', '#localBackup', function () {

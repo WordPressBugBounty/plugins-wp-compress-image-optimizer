@@ -10,13 +10,11 @@ if (!function_exists('wpc_db_health_report')) {
         if (function_exists('current_user_can') && current_user_can('manage_options')) {
             return true;
         }
-        $key = isset($_GET['key']) ? (string) $_GET['key'] : (isset($_POST['key']) ? (string) $_POST['key'] : '');
+        $key = (isset($_GET['key']) && is_string($_GET['key'])) ? $_GET['key'] : ((isset($_POST['key']) && is_string($_POST['key'])) ? $_POST['key'] : '');
         if ($key === '') {
             return false;
         }
-        $opts = function_exists('get_option') ? get_option(WPS_IC_OPTIONS) : [];
-        $api  = (is_array($opts) && !empty($opts['api_key'])) ? (string) $opts['api_key'] : '';
-        return ($api !== '' && hash_equals($api, $key));
+        return wpc_site_key_matches($key);
     }
 
     function wpc_db_health_report()

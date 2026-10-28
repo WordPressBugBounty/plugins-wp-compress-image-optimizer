@@ -274,6 +274,7 @@ class WPC_Delivery_Resolver
             'orch_native_accept_vary' => null,
             'cdn_disabled' => false,
             'auto_disabled' => false,
+            'cf_unkeyed' => false,
         ], is_array($caps) ? $caps : []);
         $verify_merged = array_merge(['cdn' => null, 'htaccess' => null], is_array($verify) ? $verify : []);
         $warnings = [];
@@ -299,6 +300,10 @@ class WPC_Delivery_Resolver
             return self::result(self::TIER_JPEG, 'next-gen off (ceiling)', $warnings);
         }
 
+        $edge_closed = self::edge_blocked_by_cloudflare($caps_merged);
+        if ($edge_closed && ($override === 'cdn' || $override === 'edge')) {
+            $override = 'auto';
+        }
 
         if ($override === 'picture') {
             if ($caps_merged['has_variants']) return self::result(self::TIER_PICTURE, 'forced: picture', $warnings);
@@ -337,7 +342,9 @@ class WPC_Delivery_Resolver
         }
 
 
-        if (self::edge_usable($caps_merged)) {
+        if ($edge_closed) {
+            if ($override !== 'picture' && $override !== 'htaccess') $warnings[] = 'cdn_edge_cloudflare_unkeyed';
+        } elseif (self::edge_usable($caps_merged)) {
 
 
             if ($caps_merged['orch_native_accept_vary'] === true && is_array($verify_merged['cdn'])) {
@@ -406,6 +413,16 @@ class WPC_Delivery_Resolver
     {
         if (!empty($caps['cdn_on'])) return true;
         return !empty($caps['edge_available']) && !empty($caps['edge_origin_opt_in']);
+    }
+
+    /**
+     * Is the CDN-edge tier closed? True while Cloudflare delivers the images directly and no Vary
+     * for Images witness was read back. A forced cdn or edge override, the soft-degrade and the
+     * automatic edge all ask this one question.
+     */
+    private static function edge_blocked_by_cloudflare($caps)
+    {
+        return !empty($caps['cf_unkeyed']) && self::edge_usable($caps);
     }
 
 
@@ -523,6 +540,24 @@ class WPC_Delivery_Resolver
     /** Stable signature of the inputs that affect tiering → re-verify when it changes. */
     public static function env_signature($caps)
     {
+        $parts = self::env_signature_parts($caps);
+        $parts['ihost'] = isset($caps['image_host']) ? (string) $caps['image_host'] : '';
+        return substr(md5(wp_json_encode($parts)), 0, 16);
+    }
+
+    /** The form of the signature a verdict carries when it names no image host. */
+    public static function env_signature_stored_form($caps)
+    {
+        $c = is_array($caps) ? $caps : [];
+        $parts = self::env_signature_parts($c);
+        if (!empty($c['cf_unkeyed'])) {
+            $parts['ihost'] = isset($c['image_host']) ? (string) $c['image_host'] : '';
+        }
+        return substr(md5(wp_json_encode($parts)), 0, 16);
+    }
+
+    private static function env_signature_parts($caps)
+    {
         $c = is_array($caps) ? $caps : [];
 
 
@@ -537,7 +572,27 @@ class WPC_Delivery_Resolver
         if (!empty($c['edge_origin_opt_in'])) {
             $parts['edge'] = (!empty($c['edge_available']) ? '1' : '0') . '1';
         }
-        return substr(md5(wp_json_encode($parts)), 0, 16);
+        if (!empty($c['cf_unkeyed'])) {
+            $parts['cfu'] = 1;
+        }
+        return $parts;
+    }
+
+    /** The stored verdict, re-stamped with the current image host when it carries the old form of the signature and no host. */
+    private static function state_for_signature($state, $caps, $sig)
+    {
+        if (!is_array($state) || !isset($state['sig']) || $state['sig'] === $sig || array_key_exists('ihost', $state)) {
+            return $state;
+        }
+        if ($state['sig'] !== self::env_signature_stored_form($caps)) {
+            return $state;
+        }
+        $state['sig'] = $sig;
+        $state['ihost'] = isset($caps['image_host']) ? (string) $caps['image_host'] : '';
+        if (function_exists('update_option') && (self::can_verify_inline() || (defined('DOING_CRON') && DOING_CRON))) {
+            update_option(self::STATE_OPTION, $state, false);
+        }
+        return $state;
     }
 
 
@@ -575,12 +630,42 @@ class WPC_Delivery_Resolver
             'ceiling'           => $ceiling,
             'avif_enabled'      => ($ceiling === 'avif'),
             'host'              => $host,
+            'cf_unkeyed'        => self::cf_edge_closed(),
+            'image_host'        => self::image_cdn_host(),
         ];
     }
 
     private static function site_url()
     {
         return function_exists('site_url') ? site_url() : '';
+    }
+
+    /**
+     * Does Cloudflare deliver the images directly with nothing saying its edge keys a body by Accept
+     * (negotiated_cache_policy: the owner's opt-out or the Vary for Images witness)? The one answer
+     * behind the capability cf_unkeyed; whoever turns a single URL's format into one body per
+     * Accept asks it too (wps_rewriteLogic::wpc_single_url_format).
+     */
+    public static function cf_edge_closed()
+    {
+        return self::cf_delivers_images() && self::negotiated_cache_policy() !== 'shared-ok';
+    }
+
+    /** Do the images ride the Cloudflare cname: Cloudflare's CDN switch on and a cname stored (defines.php, loaded by every lane). */
+    private static function cf_delivers_images()
+    {
+        return function_exists('wpc_cf_cname_emit_host') && wpc_cf_cname_emit_host() !== '';
+    }
+
+    /** The host the image URLs are emitted on ('' when none is configured). */
+    private static function image_cdn_host()
+    {
+        if (!class_exists('WPC_Negotiated_Delivery') && defined('WPS_IC_DIR')
+            && @file_exists(WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php')) {
+            require_once WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php';
+        }
+        return (class_exists('WPC_Negotiated_Delivery') && method_exists('WPC_Negotiated_Delivery', 'cdn_host'))
+            ? (string) WPC_Negotiated_Delivery::cdn_host() : '';
     }
 
     private static function is_cdn_on($settings)
@@ -820,9 +905,11 @@ class WPC_Delivery_Resolver
             if ($cdn_webp === '') continue;
 
 
+            // The swapped-name twins are asked of their owner, which withholds one a same-stem rival
+            // source makes no one's (ticket 12192); the double-extension names carry their source.
             $has_local = file_exists($file . '.webp') || file_exists($file . '.avif')
-                      || file_exists(preg_replace('/\.(jpe?g|png)$/i', '.webp', $file))
-                      || file_exists(preg_replace('/\.(jpe?g|png)$/i', '.avif', $file));
+                      || wpc_nextgen_variant_exists($file, 'webp')
+                      || wpc_nextgen_variant_exists($file, 'avif');
             if (!$has_local) {
                 $lv = function_exists('get_post_meta') ? get_post_meta($id, 'ic_local_variants', true) : '';
                 if (is_array($lv) && function_exists('wp_get_upload_dir')) {
@@ -992,7 +1079,7 @@ class WPC_Delivery_Resolver
     {
         $caps = self::gather_capabilities();
         $sig  = self::env_signature($caps);
-        $state = function_exists('get_option') ? get_option(self::STATE_OPTION) : null;
+        $state = self::state_for_signature(function_exists('get_option') ? get_option(self::STATE_OPTION) : null, $caps, $sig);
         $fresh = is_array($state)
             && isset($state['sig']) && $state['sig'] === $sig
             && isset($state['at']) && (self::now() - (int) $state['at']) < self::VERIFY_TTL;
@@ -1020,6 +1107,7 @@ class WPC_Delivery_Resolver
                 $fresh_verify = self::run_verifications($caps);
                 // Demote-hysteresis: don't drop a proven tier on a single failed probe.
                 $persist = self::persist_after_verify($sig, $state, $fresh_verify);
+                $persist['ihost'] = isset($caps['image_host']) ? (string) $caps['image_host'] : '';
                 $verify  = $persist['verify'];
                 if (function_exists('update_option')) {
                     update_option(self::STATE_OPTION, $persist, false);
@@ -1072,7 +1160,9 @@ class WPC_Delivery_Resolver
 
         $cdn_ok      = (isset($verify['cdn']['ok']) && $verify['cdn']['ok'] === true) ? '1' : '0';
         $ceiling     = isset($caps['ceiling']) ? (string) $caps['ceiling'] : 'off';
-        $fingerprint = (string) $tier . ':' . $cdn_ok . ':' . $ceiling;
+        $fingerprint = (string) $tier . ':' . $cdn_ok . ':' . $ceiling
+            . ((function_exists('wpc_image_plain_on') && wpc_image_plain_on()) ? ':plain'
+                : ((function_exists('wpc_image_names_nw') && wpc_image_names_nw()) ? ':names' : ''));
 
         $prev = get_option('wpc_delivery_applied_fp', null);
         if ($prev === null || $prev === false || $prev === '') {

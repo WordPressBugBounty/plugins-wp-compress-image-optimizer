@@ -103,7 +103,7 @@ else {
 					<span class="ic-tooltip" title="Select your preferred balance of speed and quality. Over-Compression Prevention™ is included in all modes."><i class="fa fa-question-circle"></i></span>
 
 					<div style="" class="wp-ic-select-box">
-						<input type="hidden" name="wp-ic-setting[optimization]" id="wp-ic-setting-optimization" value="<?php echo $settings['optimization']; ?>"/>
+						<input type="hidden" name="wp-ic-setting[optimization]" id="wp-ic-setting-optimization" value="<?php echo esc_attr($settings['optimization']); ?>"/>
 						<ul>
 							<li <?php echo $wps_ic_active_settings['optimization']['lossless']; ?>><a href="#" class="wps-ic-change-optimization" data-value="lossless">Lossless</a></li>
 							<li <?php echo $wps_ic_active_settings['optimization']['intelligent']; ?>><a href="#" class="wps-ic-change-optimization" data-value="intelligent">Intelligent</a></li>
@@ -257,7 +257,7 @@ else {
 								</div>
 								<div class="setting-option wpc-checkbox" style="margin-top:20px;">
 									<div class="wp-ic-select-box full-width-box">
-										<input type="hidden" name="wp-ic-setting[search-through]" id="wp-ic-search-through" value="<?php echo $settings['search-through']; ?>">
+										<input type="hidden" name="wp-ic-setting[search-through]" id="wp-ic-search-through" value="<?php echo esc_attr($settings['search-through']); ?>">
 										<ul>
 											<?php
 											$options = ['html' => 'HTML Only', 'html+css' => 'HTML + CSS', 'all' => 'All URLs'];
@@ -299,6 +299,7 @@ else {
 								</div>
 							</div>
 
+							<?php if (!function_exists('wpc_sd_mode_on') || !wpc_sd_mode_on()) : ?>
 							<div class="setting-option">
 								<div class="setting-label">Optimize on Upload</div>
 								<div class="setting-value ic-custom-tooltip" title="Compress future image uploads with local mode settings.">
@@ -310,6 +311,7 @@ else {
 									</div>
 								</div>
 							</div>
+							<?php endif; ?>
 
 							<div class="setting-option">
 								<div class="setting-label">Disable WP Emoji Script</div>

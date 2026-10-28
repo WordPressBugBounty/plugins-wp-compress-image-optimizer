@@ -40,7 +40,7 @@
             <div class="wps-default-excludes-container">
                 <?php echo esc_html__('Maximum mobile image width', WPS_IC_TEXTDOMAIN); ?> <input type="number" value="<?php
 	            $mobile_width = get_option('wpc-min-mobile-width');
-	            echo $mobile_width ? $mobile_width : 400;
+	            echo esc_attr($mobile_width ? $mobile_width : 400);
 	            ?>" name="min-mobile-width" class="wps-min-mobile-width" style="max-height:30px;margin-left:5px;margin-right:5px;max-width:80px;"> <?php echo esc_html__('px', WPS_IC_TEXTDOMAIN); ?>
             </div>
 

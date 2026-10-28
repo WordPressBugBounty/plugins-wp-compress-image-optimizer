@@ -5,6 +5,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+require_once __DIR__ . '/v2-service.php';
 
 if (!function_exists('wpc_v2_pull_enabled')) {
     function wpc_v2_pull_enabled()
@@ -63,6 +64,7 @@ if (!function_exists('wpc_v2_pull_manifest_fetch')) {
         $orch_url = function_exists('wpc_v2_orchestrator_url') ? wpc_v2_orchestrator_url() : '';
         $apikey   = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
         if ($orch_url === '' || $apikey === '') {
+            wpc_v2_pull_state_note('get', ['reason' => 'no_orch_or_apikey']);
             return ['ok' => false, 'variants' => [], 'cursor_high_water_ms' => 0, 'pages_fetched' => 0, 'error' => 'no_orch_or_apikey'];
         }
 
@@ -72,6 +74,8 @@ if (!function_exists('wpc_v2_pull_manifest_fetch')) {
         // 0 = short-poll. Capped at 25s to stay under the shared-host 30s
         // max_execution_time default.
         $wait_ms  = max(0, min(25000, (int) $wait_ms));
+
+        $orch_host = (string) parse_url((string) $orch_url, PHP_URL_HOST);
 
         $all_variants  = [];
         $high_water    = $since_ms;
@@ -100,15 +104,22 @@ if (!function_exists('wpc_v2_pull_manifest_fetch')) {
 
             $sig_headers = wpc_v2_manifest_sign_get($apikey, $next_since, $limit, $page_wait_ms);
 
+            $get_fields = ['page' => $pages_fetched, 'timeout_s' => $http_timeout, 'host' => $orch_host];
+            wpc_v2_pull_state_note('getstart', $get_fields);
+            $get_t0 = microtime(true);
             $resp = wp_remote_get($url, [
                 'timeout' => $http_timeout,
                 'headers' => array_merge([
                     'Accept' => 'application/json',
                 ], $sig_headers),
             ]);
+            $get_fields['ms'] = (int) round((microtime(true) - $get_t0) * 1000);
 
             if (is_wp_error($resp)) {
-                error_log(sprintf('[WPC PullManifest] http_error since=%d page=%d err=%s', $next_since, $pages_fetched, $resp->get_error_message()));
+                $err_msg   = preg_replace('~apikey=[^&\s]*~i', 'apikey=*', (string) $resp->get_error_message());
+                $err_class = preg_match('/cURL error (\d+)/', $err_msg, $err_m) ? 'curl_' . $err_m[1] : (string) $resp->get_error_code();
+                error_log(sprintf('[WPC PullManifest] http_error since=%d page=%d ms=%d class=%s err=%s', $next_since, $pages_fetched, $get_fields['ms'], $err_class, $err_msg));
+                wpc_v2_pull_state_note('get', ['reason' => 'http_error', 'err' => $err_msg, 'err_class' => $err_class] + $get_fields);
                 return ['ok' => false, 'variants' => $all_variants, 'cursor_high_water_ms' => $high_water, 'pages_fetched' => $pages_fetched, 'error' => 'http_error'];
             }
             $code = (int) wp_remote_retrieve_response_code($resp);
@@ -129,14 +140,17 @@ if (!function_exists('wpc_v2_pull_manifest_fetch')) {
                         '[WPC PullManifest] http_429_backoff retry_after=%ds since=%d',
                         $retry_after, $next_since
                     ));
+                    wpc_v2_pull_state_note('get', ['reason' => 'rate_limited', 'code' => 429, 'retry_after' => $retry_after] + $get_fields);
                     return ['ok' => false, 'variants' => $all_variants, 'cursor_high_water_ms' => $high_water, 'pages_fetched' => $pages_fetched, 'error' => 'rate_limited', 'retry_after' => $retry_after];
                 }
                 error_log(sprintf('[WPC PullManifest] http_status=%d since=%d page=%d', $code, $next_since, $pages_fetched));
+                wpc_v2_pull_state_note('get', ['reason' => 'http_status_' . $code, 'code' => $code] + $get_fields);
                 return ['ok' => false, 'variants' => $all_variants, 'cursor_high_water_ms' => $high_water, 'pages_fetched' => $pages_fetched, 'error' => 'http_status_' . $code];
             }
 
             $body = json_decode(wp_remote_retrieve_body($resp), true);
             if (!is_array($body)) {
+                wpc_v2_pull_state_note('get', ['reason' => 'invalid_json', 'code' => $code] + $get_fields);
                 return ['ok' => false, 'variants' => $all_variants, 'cursor_high_water_ms' => $high_water, 'pages_fetched' => $pages_fetched, 'error' => 'invalid_json'];
             }
 
@@ -165,6 +179,7 @@ if (!function_exists('wpc_v2_pull_manifest_fetch')) {
             $next_since = $next;
         }
 
+        wpc_v2_pull_state_note('get', ['reason' => 'ok', 'code' => 200, 'variants' => count($all_variants)] + $get_fields);
         return [
             'ok'                   => true,
             'variants'             => $all_variants,
@@ -179,6 +194,7 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
     function wpc_v2_pull_manifest_queue_for_drain(array $variants)
     {
         if (!function_exists('wpc_v2_journal_write_batch')) {
+            wpc_v2_pull_state_note('queue', ['reason' => 'journal_writer_missing', 'seen' => count($variants)]);
             return ['queued' => 0, 'skipped_dedup' => 0, 'skipped_invalid' => 0, 'imageIDs' => []];
         }
 
@@ -203,8 +219,9 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
                 'sizeLabel' => isset($v['sizeLabel']) ? (string) $v['sizeLabel'] : '',
                 'format'    => isset($v['format'])    ? (string) $v['format']    : '',
                 'reason'    => (string) $reason,
-            ];
+            ] + (!empty($v['sha256']) ? ['sha256' => (string) $v['sha256']] : []);
         };
+        $refused_sha256s = [];
 
         foreach ($variants as $v) {
 
@@ -244,7 +261,12 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
 
 
                     $t_i0 = microtime(true);
-                    if (wpc_v2_lazy_cdn_ingest($v)) {
+                    $lazy_state = wpc_v2_lazy_cdn_ingest_state($v);
+                    if ($lazy_state === 'refused') {
+                        $lazycdn_failed++;
+                        $record_failure($v, isset($GLOBALS['wpc_v2_lazy_last_outcome']) ? (string) $GLOBALS['wpc_v2_lazy_last_outcome'] : 'refused');
+                        if ($sha_for_ack !== '') $refused_sha256s[$sha_for_ack] = true;
+                    } elseif ($lazy_state === 'landed') {
                         $t_i_ms = (int) round((microtime(true) - $t_i0) * 1000);
                         if ($t_i_ms > 1500) {
                             error_log(sprintf('[WPC PullManifest] slow_ingest size=%s fmt=%s ms=%d',
@@ -330,18 +352,33 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
                 continue;
             }
 
-            // Already on disk (matching sha256)? The pull would be idempotent
-            // but skipping it saves the bandwidth + round trip.
-            if (wpc_v2_pull_manifest_already_on_disk($imageID, $size, $format, $sha256)) {
-                $skipped_dedup++;
+            if (!wpc_v2_pull_fetch_allowed($url)) {
+                error_log('[WPC PullManifest] foreign_fetch_host host=' . substr((string) parse_url($url, PHP_URL_HOST), 0, 80));
+                $skipped_invalid++;
+                $record_failure($v, 'foreign_fetch_host');
+                if ($sha256 !== '') $refused_sha256s[$sha256] = true;
                 continue;
             }
 
-
             $abs_parent = get_attached_file($imageID);
+            $entry_file = isset($v['filename']) ? basename((string) $v['filename']) : '';
+            $entry_dest = ($abs_parent && $entry_file !== '') ? dirname($abs_parent) . '/' . $entry_file : '';
+
+            // Already on disk (matching sha256)? The pull would be idempotent
+            // but skipping it saves the bandwidth + round trip.
+            $on_disk = wpc_v2_pull_manifest_disk_file($imageID, $size, $format, $sha256, $entry_dest);
+            if ($on_disk !== '') {
+                $skipped_dedup++;
+                if (function_exists('wpc_v2_landed_receipt')) {
+                    wpc_v2_landed_receipt($imageID, $size, $format, $on_disk, 'pull_manifest', isset($v['jobId']) ? (string) $v['jobId'] : '');
+                }
+                continue;
+            }
+
             if (!$abs_parent) {
                 $skipped_invalid++;
                 $record_failure($v, 'no_attached_file');
+                if ($sha256 !== '') $refused_sha256s[$sha256] = true;
                 continue;
             }
             $dest_dir = dirname($abs_parent);
@@ -413,6 +450,18 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
             ], false);
         }
 
+        if (!empty($variants)) {
+            wpc_v2_pull_state_note('queue', [
+                'reason'  => $queued > 0 ? 'queued' : 'queued_nothing',
+                'seen'    => count($variants),
+                'queued'  => $queued,
+                'dedup'   => $skipped_dedup,
+                'invalid' => $skipped_invalid,
+                'lazycdn' => (int) $lazycdn_ingested,
+                'jfailed' => count($journal_failed_sha256s),
+            ]);
+        }
+
         return [
             'queued'          => $queued,
             'skipped_dedup'   => $skipped_dedup,
@@ -426,6 +475,7 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
             'lazycdn_acked_sha256s' => array_values(array_unique($lazycdn_acked)),
             // Journal-write failures (same pattern) — caller excludes from ack.
             'journal_failed_sha256s' => array_keys($journal_failed_sha256s),
+            'refused_sha256s'        => array_keys($refused_sha256s),
             // Oldest retry-eligible failure ms (0 = none); caller clamps cursor below.
             'min_failed_completed_ms' => $min_failed_ms,
             'failed_entries197'       => $failed_entries,
@@ -434,25 +484,47 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
 }
 
 
-if (!function_exists('wpc_v2_pull_manifest_already_on_disk')) {
-    function wpc_v2_pull_manifest_already_on_disk($imageID, $size, $format, $sha256)
+if (!function_exists('wpc_v2_pull_manifest_disk_file')) {
+    /**
+     * The file that proves a manifest entry is already landed, or '' when there is none: the set
+     * records the entry's hash AND the file at $dest (when none is named, the set's own url
+     * entry) exists and hashes to it. A variant the set remembers whose file is gone or changed
+     * is not on disk, and the pull fetches it.
+     */
+    function wpc_v2_pull_manifest_disk_file($imageID, $size, $format, $sha256, $dest = '')
     {
         if ($sha256 === '') {
-            return false;
+            return '';
         }
         $variants = get_post_meta($imageID, 'ic_local_variants', true);
         if (!is_array($variants) || empty($variants)) {
-            return false;
+            return '';
         }
         // Canonical key (jpeg = no suffix, all sizes). Must match wpc_v2_variant_key().
         $key = function_exists('wpc_v2_variant_key')
             ? wpc_v2_variant_key($size, $format)
             : ($format === 'jpeg' || $format === 'jpg' ? $size : $size . '-' . $format);
         if (!isset($variants[$key]) || !is_array($variants[$key])) {
-            return false;
+            return '';
         }
-        $on_disk_sha = isset($variants[$key]['bytes_sha256']) ? (string) $variants[$key]['bytes_sha256'] : '';
-        return ($on_disk_sha !== '' && hash_equals($on_disk_sha, (string) $sha256));
+        $recorded_sha = isset($variants[$key]['bytes_sha256']) ? (string) $variants[$key]['bytes_sha256'] : '';
+        if ($recorded_sha === '' || !hash_equals($recorded_sha, (string) $sha256)) {
+            return '';
+        }
+        $dest = (string) $dest;
+        if ($dest === '' && !empty($variants[$key]['url'])) {
+            $up = wp_get_upload_dir();
+            $base_url = isset($up['baseurl']) ? rtrim((string) $up['baseurl'], '/') . '/' : '';
+            $url = preg_replace('/[?#].*$/', '', (string) $variants[$key]['url']);
+            if ($base_url !== '/' && isset($up['basedir']) && strpos($url, $base_url) === 0) {
+                $dest = rtrim((string) $up['basedir'], '/\\') . '/' . substr($url, strlen($base_url));
+            }
+        }
+        if ($dest === '' || !@is_file($dest)) {
+            return '';
+        }
+        $disk_sha = @hash_file('sha256', $dest);
+        return ($disk_sha !== false && hash_equals(strtolower((string) $sha256), $disk_sha)) ? $dest : '';
     }
 }
 
@@ -487,40 +559,7 @@ if (!function_exists('wpc_v2_pull_manifest_ack')) {
             'body' => $body_raw,
         ]);
         if (is_wp_error($resp)) {
-            error_log('[WPC PullManifest] ack_http_error: ' . $resp->get_error_message());
-            return false;
-        }
-        $code = (int) wp_remote_retrieve_response_code($resp);
-        return ($code >= 200 && $code < 300);
-    }
-}
-
-
-if (!function_exists('wpc_v2_pull_manifest_purge')) {
-    function wpc_v2_pull_manifest_purge($imageID = 0, $reason = 'manual')
-    {
-        $orch_url = function_exists('wpc_v2_orchestrator_url') ? wpc_v2_orchestrator_url() : '';
-        $apikey   = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
-        if ($orch_url === '' || $apikey === '') {
-            return false;
-        }
-        $body_arr = ['reason' => (string) $reason];
-        if ((int) $imageID > 0) {
-            $body_arr['imageID'] = (int) $imageID;
-        }
-
-        $body_raw    = wp_json_encode($body_arr);
-        $sig_headers = wpc_v2_manifest_sign_body($apikey, $body_raw);
-
-        $url = rtrim($orch_url, '/') . '/optimize-v2/manifest/purge?apikey=' . rawurlencode($apikey);
-        $resp = wp_remote_post($url, [
-            'timeout' => 4,
-            'headers' => array_merge([
-                'Content-Type' => 'application/json',
-            ], $sig_headers),
-            'body' => $body_raw,
-        ]);
-        if (is_wp_error($resp)) {
+            error_log('[WPC PullManifest] ack_http_error: ' . preg_replace('~apikey=[^&\s]*~i', 'apikey=*', (string) $resp->get_error_message()));
             return false;
         }
         $code = (int) wp_remote_retrieve_response_code($resp);
@@ -536,13 +575,13 @@ if (!function_exists('wpc_v2_pull_drain_fire')) {
 
         if (!wpc_v2_pull_enabled()) {
             error_log('[WPC DrainFire] skip reason=pull_disabled');
-            if (wpc_v2_ingest_diag_on()) update_option('wpc_v2_last_drain_skip', ['t'=>time(),'reason'=>'pull_disabled'], false);
+            wpc_v2_pull_state_note('fire', ['dispatched' => 0, 'reason' => 'pull_disabled']);
             return false;
         }
         // Honor the rate-limit cool-off the drain loop sets on 429.
         if (($cooloff_ts = (int) get_transient('wpc_v2_pull_cooloff')) > 0) {
             error_log(sprintf('[WPC DrainFire] skip reason=cooloff_active until=%d', $cooloff_ts));
-            if (wpc_v2_ingest_diag_on()) update_option('wpc_v2_last_drain_skip', ['t'=>time(),'reason'=>'cooloff_active','until'=>$cooloff_ts], false);
+            wpc_v2_pull_state_note('fire', ['dispatched' => 0, 'reason' => 'cooloff_active', 'since' => $cooloff_ts]);
             return false;
         }
         // Skip if another drain worker is already running. Short TTL (15s)
@@ -558,10 +597,10 @@ if (!function_exists('wpc_v2_pull_drain_fire')) {
                 set_transient('wpc_v2_drain_skip_logged', 1, 60);
                 set_transient('wpc_v2_drain_skips_win', 0, 120);
                 error_log(sprintf('[WPC DrainFire] skip reason=drain_running_lock_held since=%d age_s=%d redrain_pending=1 skips_last_window=%d (windowed 1/min)', $lock_ts, time() - $lock_ts, $wpc_skips));
-                if (wpc_v2_ingest_diag_on()) update_option('wpc_v2_last_drain_skip', ['t'=>time(),'reason'=>'drain_running_lock_held','redrain_pending'=>1,'lock_age_s'=>time()-$lock_ts,'skips_last_window'=>$wpc_skips], false);
             } else {
                 set_transient('wpc_v2_drain_skips_win', $wpc_skips + 1, 120);
             }
+            wpc_v2_pull_state_note('fire', ['dispatched' => 0, 'reason' => 'drain_running_lock_held', 'redrain_pending' => 1, 'lock_age_s' => time() - $lock_ts, 'skips_last_window' => $wpc_skips]);
             return false;
         }
         set_transient('wpc_v2_drain_running', time(), 15);
@@ -570,6 +609,7 @@ if (!function_exists('wpc_v2_pull_drain_fire')) {
         if ($apikey === '') {
             error_log('[WPC DrainFire] skip reason=empty_apikey');
             delete_transient('wpc_v2_drain_running');
+            wpc_v2_pull_state_note('fire', ['dispatched' => 0, 'reason' => 'empty_apikey']);
             return false;
         }
 
@@ -581,6 +621,7 @@ if (!function_exists('wpc_v2_pull_drain_fire')) {
         if (empty($parts['host'])) {
             error_log(sprintf('[WPC DrainFire] skip reason=bad_admin_url url=%s', $url));
             delete_transient('wpc_v2_drain_running');
+            wpc_v2_pull_state_note('fire', ['dispatched' => 0, 'reason' => 'bad_admin_url']);
             return false;
         }
         $is_https = (!empty($parts['scheme']) && $parts['scheme'] === 'https');
@@ -589,7 +630,7 @@ if (!function_exists('wpc_v2_pull_drain_fire')) {
         $path     = (!empty($parts['path']) ? $parts['path'] : '/') . '?action=wpc_v2_pull_drain_loop';
 
 
-        $body_params = ['t' => $ts, 'sig' => $sig];
+        $body_params = ['t' => $ts, 'sig' => $sig, 'src' => 'fire'];
         if (is_array($wake_items) && !empty($wake_items)) {
             $items_json = wp_json_encode(array_slice(array_values($wake_items), 0, 50));
             if (is_string($items_json)) {
@@ -630,6 +671,7 @@ if (!function_exists('wpc_v2_pull_drain_fire')) {
             delete_transient('wpc_v2_drain_running');
             error_log('[WPC PullDrain] fsockopen_failed errno=' . $errno . ' err=' . $errstr);
             wpc_cache_first_log('image-drain-fire', '', '', ['dispatched' => 0, 'items' => is_array($wake_items) ? count($wake_items) : 0]);
+            wpc_v2_pull_state_note('fire', ['dispatched' => 0, 'reason' => 'fsockopen_failed', 'errno' => (int) $errno, 'err' => (string) $errstr]);
             return false;
         }
         @stream_set_timeout($fp, 0, 100000);
@@ -639,6 +681,7 @@ if (!function_exists('wpc_v2_pull_drain_fire')) {
         // worker held the lock.
         delete_transient('wpc_v2_redrain_pending');
         wpc_cache_first_log('image-drain-fire', '', '', ['dispatched' => 1, 'items' => is_array($wake_items) ? count($wake_items) : 0]);
+        wpc_v2_pull_state_note('fire', ['dispatched' => 1, 'reason' => 'dispatched', 'items' => is_array($wake_items) ? count($wake_items) : 0]);
         return true;
     }
 }
@@ -650,11 +693,8 @@ if (!function_exists('wpc_v2_pull_drain_fire')) {
 
 if (!function_exists('wpc_v2_pull_state_file')) {
     function wpc_v2_pull_state_file() {
-        $up = wp_get_upload_dir();
-        if (empty($up['basedir'])) return '';
-        $dir = rtrim($up['basedir'], '/\\') . '/wpci-journal';
-        if (!is_dir($dir) && function_exists('wp_mkdir_p')) { @wp_mkdir_p($dir); }
-        return is_dir($dir) ? $dir . '/.pull_state' : '';
+        $dir = wpc_v2_journal_root(true);
+        return $dir !== '' ? $dir . '/.pull_state' : '';
     }
     function wpc_v2_pull_backoff_until() {
         $f = wpc_v2_pull_state_file();
@@ -681,6 +721,163 @@ if (!function_exists('wpc_v2_pull_state_file')) {
     }
 }
 
+if (!function_exists('wpc_v2_pull_state_note')) {
+    /**
+     * The one owner of the wake-to-manifest-GET trail. Each stage (wake, fire, inline, loop, tick,
+     * get, queue, cron) keeps its last {t, reason, ...} in uploads/wpci-journal/.pull_notes, one
+     * small JSON file beside .pull_state that the breaker reset never removes. A stage writes at
+     * most once per 30 seconds unless its reason changed, and the in-process copy is always
+     * current. The get, loop and loopstart stages write every time: their timing is what a reader of
+     * the trail needs. The read-modify-write runs under the file lock. Never call it before a request has authenticated.
+     */
+    function wpc_v2_pull_notes_file()
+    {
+        $dir = wpc_v2_journal_root(true);
+        return $dir !== '' ? $dir . '/.pull_notes' : '';
+    }
+
+    function wpc_v2_pull_notes_read()
+    {
+        $f = wpc_v2_pull_notes_file();
+        if ($f === '' || !@is_file($f)) {
+            return [];
+        }
+        $s = json_decode((string) @file_get_contents($f), true);
+        return is_array($s) ? $s : [];
+    }
+
+    function wpc_v2_pull_state_note($stage, array $fields = [])
+    {
+        $stage = preg_replace('/[^a-z0-9_]/', '', strtolower((string) $stage));
+        if ($stage === '') {
+            return false;
+        }
+        $row = ['t' => time()];
+        foreach ($fields as $k => $v) {
+            $k = preg_replace('/[^a-z0-9_]/', '', strtolower((string) $k));
+            if ($k === '' || $k === 't') {
+                continue;
+            }
+            if (is_bool($v)) {
+                $row[$k] = $v ? 1 : 0;
+            } elseif (is_int($v) || is_float($v)) {
+                $row[$k] = $v;
+            } elseif (is_string($v)) {
+                $row[$k] = substr($v, 0, 80);
+            }
+        }
+        if (!isset($row['reason'])) {
+            $row['reason'] = '';
+        }
+        if (!isset($GLOBALS['wpc_v2_pull_state_mem']) || !is_array($GLOBALS['wpc_v2_pull_state_mem'])) {
+            $GLOBALS['wpc_v2_pull_state_mem'] = [];
+        }
+        $GLOBALS['wpc_v2_pull_state_mem'][$stage] = $row;
+        $f = wpc_v2_pull_notes_file();
+        if ($f === '') {
+            return false;
+        }
+        $always = in_array($stage, ['get', 'getstart', 'loop', 'loopstart', 'loopback'], true);
+        $res    = wpc_fs_update($f, function ($cur) use ($stage, $row, $always) {
+            $all = json_decode((string) $cur, true);
+            if (!is_array($all)) {
+                $all = [];
+            }
+            $prev    = isset($all[$stage]['reason']) ? (string) $all[$stage]['reason'] : null;
+            $changed = ($prev === null || $prev !== (string) $row['reason']);
+            $allowed = $always ? true : wpc_v2_telemetry_throttle('pn_' . $stage, 30);
+            if (!$changed && !$allowed) {
+                return [null, false];
+            }
+            $all[$stage] = $row;
+            return [json_encode($all), true];
+        });
+        return !empty($res[0]) && $res[1] === true;
+    }
+
+    /**
+     * The trail as last written, newest in-process notes laid over the file: {stage: {t, reason, ...}}.
+     */
+    function wpc_v2_pull_state()
+    {
+        $all = wpc_v2_pull_notes_read();
+        if (!empty($GLOBALS['wpc_v2_pull_state_mem']) && is_array($GLOBALS['wpc_v2_pull_state_mem'])) {
+            foreach ($GLOBALS['wpc_v2_pull_state_mem'] as $stage => $row) {
+                $all[$stage] = $row;
+            }
+        }
+        return $all;
+    }
+
+    /**
+     * The two facts a wake answer carries: how the last drain loop ended ({t, reason}) and the last
+     * finished manifest GET ({t, code} or {t, err}, plus ms and err_class when the note has them, started_t of the latest start
+     * and inflight 1 while that start is newer than the finished one); null for one that has not happened yet.
+     */
+    function wpc_v2_pull_state_last()
+    {
+        $ps   = wpc_v2_pull_state();
+        $exit = null;
+        $get  = null;
+        if (isset($ps['loop']) && is_array($ps['loop'])) {
+            $exit = ['t' => (int) $ps['loop']['t'], 'reason' => (string) $ps['loop']['reason']];
+        }
+        if (isset($ps['get']) && is_array($ps['get'])) {
+            $get = ['t' => (int) $ps['get']['t']];
+            if (isset($ps['get']['code'])) {
+                $get['code'] = (int) $ps['get']['code'];
+            } else {
+                $get['err'] = (string) (isset($ps['get']['err']) ? $ps['get']['err'] : $ps['get']['reason']);
+            }
+            if (isset($ps['get']['ms'])) {
+                $get['ms'] = (int) $ps['get']['ms'];
+            }
+            if (isset($ps['get']['err_class'])) {
+                $get['err_class'] = (string) $ps['get']['err_class'];
+            }
+        }
+        if (isset($ps['getstart']) && is_array($ps['getstart'])) {
+            $started_t = (int) $ps['getstart']['t'];
+            if ($get === null) {
+                $get = ['t' => 0];
+            }
+            $get['started_t'] = $started_t;
+            if ($started_t > $get['t']) {
+                $get['inflight'] = 1;
+            }
+        }
+        return ['last_exit' => $exit, 'last_get' => $get];
+    }
+
+    /**
+     * The stages plus what is true right now: lock ages, cool-off, breaker, restore, heartbeat age,
+     * pressure. Read-time only; nothing here writes, and the run flag is read, not judged.
+     */
+    function wpc_v2_pull_state_report()
+    {
+        $now  = time();
+        $lock = (int) get_transient('wpc_v2_drain_running');
+        $cool = (int) get_transient('wpc_v2_pull_cooloff');
+        $wrk  = (int) get_transient('wpc_v2_drain_worker_started');
+        $hb   = (int) get_transient('wpc_bulk_heartbeat');
+        $bp   = get_option('wps_ic_bulk_process');
+        $out  = wpc_v2_pull_state();
+        $out['now'] = [
+            'lock_age_s'        => $lock > 0 ? max(0, $now - $lock) : 0,
+            'redrain_pending'   => get_transient('wpc_v2_redrain_pending') ? 1 : 0,
+            'cooloff_age_s'     => $cool > 0 ? max(0, $now - $cool) : 0,
+            'backoff_until'     => (int) wpc_v2_pull_backoff_until(),
+            'worker_age_s'      => $wrk > 0 ? max(0, $now - $wrk) : 0,
+            'restore_active'    => function_exists('wpc_v2_active_restore_count') ? (int) wpc_v2_active_restore_count() : 0,
+            'heartbeat_age_s'   => $hb > 0 ? max(0, $now - $hb) : -1,
+            'bulk_status'       => is_array($bp) && isset($bp['status']) ? (string) $bp['status'] : '',
+            'pressure'          => function_exists('wpc_under_pressure') && wpc_under_pressure() ? 1 : 0,
+            'stop_signal'       => get_transient('wpc_bulk_stop_signal') ? 1 : 0,
+        ];
+        return $out;
+    }
+}
+
 if (!function_exists('wpc_v2_telemetry_throttle')) {
 
 
@@ -688,10 +885,8 @@ if (!function_exists('wpc_v2_telemetry_throttle')) {
         static $mem = [];
         $now = time();
         if (isset($mem[$key]) && ($now - $mem[$key]) < $min_s) { return false; }
-        $up  = function_exists('wp_get_upload_dir') ? wp_get_upload_dir() : ['basedir' => ''];
-        $dir = rtrim((string) (isset($up['basedir']) ? $up['basedir'] : ''), '/\\') . '/wpci-journal';
-        if (!is_dir($dir) && function_exists('wp_mkdir_p')) { @wp_mkdir_p($dir); }
-        if (!is_dir($dir)) { $mem[$key] = $now; return true; }
+        $dir = wpc_v2_journal_root(true);
+        if ($dir === '') { $mem[$key] = $now; return true; }
         $f = $dir . '/.tt_' . preg_replace('/[^a-z0-9_]/', '', (string) $key);
         if (@is_file($f) && ($now - (int) @filemtime($f)) < $min_s) { $mem[$key] = $now; return false; }
         @touch($f);
@@ -712,11 +907,8 @@ if (!function_exists('wpc_v2_pull_failcount')) {
 
 
     function wpc_v2_pull_failcount_file() {
-        if (!function_exists('wp_get_upload_dir')) { return ''; }
-        $up = wp_get_upload_dir();
-        $dir = rtrim((string) (isset($up['basedir']) ? $up['basedir'] : ''), '/\\') . '/wpci-journal';
-        if (!is_dir($dir) && function_exists('wp_mkdir_p')) { @wp_mkdir_p($dir); }
-        return is_dir($dir) ? $dir . '/.pull_failcounts' : '';
+        $dir = wpc_v2_journal_root(true);
+        return $dir !== '' ? $dir . '/.pull_failcounts' : '';
     }
     // $delta: +1 = record a failure (returns new count); 0 = clear on success (returns 0).
     function wpc_v2_pull_failcount($sha, $delta) {
@@ -740,9 +932,25 @@ if (!function_exists('wpc_v2_pull_failcount')) {
     }
 }
 
+if (!function_exists('wpc_v2_pull_loop_end')) {
+    /**
+     * How a drain loop ends: the loopback request exits. The wake's inline fallback sets
+     * $GLOBALS['wpc_pull_loop_inline'] and gets control back, so the shutdown callbacks queued
+     * behind it (the policy pull a wake owes) still run.
+     */
+    function wpc_v2_pull_loop_end($message = '')
+    {
+        if (!empty($GLOBALS['wpc_pull_loop_inline'])) {
+            return;
+        }
+        exit($message);
+    }
+}
+
 if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
     function wpc_v2_pull_drain_loop_handler()
     {
+        $handler_t0 = microtime(true);
         // HMAC auth — matches journal drain pattern.
         $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
         $ts     = isset($_POST['t']) ? (int) $_POST['t'] : 0;
@@ -758,17 +966,23 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
         }
 
 
+        $wpc_loop_src = (isset($_POST['src']) && in_array((string) $_POST['src'], ['fire', 'inline'], true)) ? (string) $_POST['src'] : 'ext';
+        if ($wpc_loop_src === 'fire') {
+            wpc_v2_pull_loopback_arrived();
+        }
+
         if (wpc_v2_pull_backoff_until() > time()) {
             error_log('[WPC PullDrain] breaker backoff active — idle exit');
-            exit('backoff');
+            wpc_v2_pull_state_note('loop', ['reason' => 'backoff', 'src' => $wpc_loop_src, 'polls' => 0, 'queued' => 0, 'wall_ms' => (int) round((microtime(true) - $handler_t0) * 1000), 'until' => (int) wpc_v2_pull_backoff_until()]);
+            return wpc_v2_pull_loop_end('backoff');
         }
 
 
-        if (wpc_v2_ingest_diag_on()) update_option('wpc_v2_last_extdrain', [
-            't'   => time(),
-            'src' => isset($_POST['src']) ? substr(preg_replace('/[^a-z0-9_.-]/i', '', (string) $_POST['src']), 0, 24) : 'ext',
-            'ua'  => isset($_SERVER['HTTP_USER_AGENT']) ? substr((string) $_SERVER['HTTP_USER_AGENT'], 0, 40) : '',
-        ], false);
+        wpc_v2_pull_state_note('loopstart', [
+            'reason' => 'started',
+            'src'    => $wpc_loop_src,
+            'ua'     => isset($_SERVER['HTTP_USER_AGENT']) ? substr((string) $_SERVER['HTTP_USER_AGENT'], 0, 40) : '',
+        ]);
 
         // Close client connection immediately — work runs in background.
         if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
@@ -805,7 +1019,18 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
         $total_queued   = 0;
 
 
-        $iter_budget_s  = 25.0;
+        $iter_budget_s  = (!empty($GLOBALS['wpc_pull_loop_inline']) && !empty($GLOBALS['wpc_pull_loop_budget_s'])) ? min(25.0, (float) $GLOBALS['wpc_pull_loop_budget_s']) : 25.0;
+        $tick_reason    = '';
+        $failed_ticks   = 0;
+        $loop_exit      = function ($reason, array $extra = []) use (&$polls, &$total_queued, &$tick_reason, $handler_t0) {
+            wpc_v2_pull_state_note('loop', array_merge([
+                'reason'  => $reason,
+                'polls'   => $polls,
+                'queued'  => $total_queued,
+                'wall_ms' => (int) round((microtime(true) - $handler_t0) * 1000),
+                'tick'    => $tick_reason,
+            ], $extra));
+        };
 
         while ((microtime(true) - $started) < $iter_budget_s) {
             $now_ms = (int) (microtime(true) * 1000);
@@ -820,7 +1045,8 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
                     $polls, $total_queued, (int) round((microtime(true) - $started) * 1000)
                 ));
                 delete_transient('wpc_v2_drain_running');
-                exit;
+                $loop_exit('deadline_reached');
+                return wpc_v2_pull_loop_end();
             }
 
             $polls++;
@@ -831,7 +1057,8 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
                 error_log('[WPC PullDrain] stop_signal — standing down (bulk stopped)');
                 delete_option('wpc_v2_drain_alive_until_ms');
                 delete_transient('wpc_v2_drain_running');
-                exit;
+                $loop_exit('stop_signal');
+                return wpc_v2_pull_loop_end();
             }
 
             $restoring = wpc_v2_active_restore_count();
@@ -843,7 +1070,8 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
                 update_option('wpc_v2_drain_alive_until_ms', (int) (microtime(true) * 1000) + 60000, false);
                 error_log(sprintf('[WPC PullDrain] yield_to_restore restoring=%d queued_total=%d — defer (deadline bumped)', $restoring, $total_queued));
                 delete_transient('wpc_v2_drain_running');
-                exit;
+                $loop_exit('yield_to_restore', ['restoring' => (int) $restoring]);
+                return wpc_v2_pull_loop_end();
             }
             // v7.21.363 — the box belongs to the visitor too. .360 sheds the kick lane
             // under pressure; this lane was never gated and held a worker 26-29s with
@@ -859,7 +1087,8 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
                 }
                 error_log(sprintf('[WPC PullDrain] yield_to_pressure iter=%d queued_total=%d — defer (deadline bumped)', $polls, $total_queued));
                 delete_transient('wpc_v2_drain_running');
-                exit;
+                $loop_exit('yield_to_pressure');
+                return wpc_v2_pull_loop_end();
             }
             $wait_ms   = 3000;
 
@@ -877,7 +1106,23 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
 
                 set_transient('wpc_v2_pull_cooloff', time(), max(10, $retry_after));
                 delete_transient('wpc_v2_drain_running');
-                exit;
+                $loop_exit('rate_limited', ['retry_after' => $retry_after]);
+                return wpc_v2_pull_loop_end();
+            }
+            if (!empty($tick['ok'])) {
+                $failed_ticks = 0;
+            } elseif ($tick_reason !== 'restore_active_yield') {
+                $failed_ticks++;
+                if ($failed_ticks >= 3) {
+                    error_log(sprintf(
+                        '[WPC PullDrain] fetch_failed_exit iter=%d fails=%d last=%s queued_total=%d',
+                        $polls, $failed_ticks, $tick_reason, $total_queued
+                    ));
+                    delete_transient('wpc_v2_drain_running');
+                    wpc_v2_pull_note_progress((int) ($total_queued + $wake_ingested), true);
+                    $loop_exit('fetch_failed', ['fails' => $failed_ticks, 'last' => $tick_reason]);
+                    return wpc_v2_pull_loop_end();
+                }
             }
             $queued_this = isset($tick['queued']) ? (int) $tick['queued'] : 0;
             $total_queued += $queued_this;
@@ -916,7 +1161,8 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
 
                     delete_option('wpc_v2_drain_alive_until_ms');
                     delete_transient('wpc_v2_drain_running');
-                    exit;
+                    $loop_exit('idle_exit');
+                    return wpc_v2_pull_loop_end();
                 }
             }
 
@@ -941,10 +1187,12 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
 
 
         wpc_v2_pull_note_progress((int) ($total_queued + $wake_ingested), (bool) $has_work);
-        if ($has_work && wpc_v2_pull_backoff_until() <= time()) {
+        $chained = $has_work && wpc_v2_pull_backoff_until() <= time() && wpc_v2_pull_loopback() !== 'blocked';
+        $loop_exit($has_work ? ($chained ? 'budget_self_chain' : (wpc_v2_pull_loopback() === 'blocked' ? 'budget_loopback_blocked' : 'budget_breaker_held')) : 'budget_idle');
+        if ($chained) {
             wpc_v2_pull_drain_fire();
         }
-        exit;
+        return wpc_v2_pull_loop_end();
     }
 }
 
@@ -1029,11 +1277,13 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
     function wpc_v2_pull_manifest_tick($limit = 100, $wait_ms = 0)
     {
         if (!wpc_v2_pull_enabled()) {
+            wpc_v2_pull_state_note('tick', ['reason' => 'flag_off']);
             return ['ok' => false, 'reason' => 'flag_off'];
         }
 
         // Honor bulk STOP (hard): don't fetch/queue/drain after Stop.
         if (get_transient('wpc_bulk_stop_signal')) {
+            wpc_v2_pull_state_note('tick', ['reason' => 'bulk_stopped']);
             return ['ok' => false, 'reason' => 'bulk_stopped'];
         }
         // Yield to an active restore (soft): skip the FPM-heavy fetch+
@@ -1041,6 +1291,7 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
 
         if (wpc_v2_active_restore_count() > 0) {
             update_option('wpc_v2_drain_alive_until_ms', (int) (microtime(true) * 1000) + 60000, false);
+            wpc_v2_pull_state_note('tick', ['reason' => 'restore_active_yield']);
             return ['ok' => false, 'reason' => 'restore_active_yield'];
         }
 
@@ -1062,6 +1313,7 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
             if (isset($fetch['retry_after'])) {
                 $ret['retry_after'] = (int) $fetch['retry_after'];
             }
+            wpc_v2_pull_state_note('tick', ['reason' => (string) $ret['reason'], 'wall_ms' => (int) $ret['wall_ms'], 'fetch_ms' => $t_fetch_ms]);
             return $ret;
         }
 
@@ -1072,11 +1324,13 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
             if (!empty($fetch['cursor_high_water_ms'])) {
                 wpc_v2_pull_set_cursor((int) $fetch['cursor_high_water_ms']);
             }
+            $empty_wall_ms = (int) round((microtime(true) - $started) * 1000);
+            wpc_v2_pull_state_note('tick', ['reason' => 'empty', 'wall_ms' => $empty_wall_ms, 'fetch_ms' => $t_fetch_ms]);
             return [
                 'ok'      => true,
                 'queued'  => 0,
                 'pages'   => (int) $fetch['pages_fetched'],
-                'wall_ms' => (int) round((microtime(true) - $started) * 1000),
+                'wall_ms' => $empty_wall_ms,
             ];
         }
 
@@ -1112,10 +1366,17 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
                 $journal_failed_set[(string) $s] = true;
             }
         }
+        $refused_set = [];
+        if (function_exists('wpc_v2_ack_landed_only') && wpc_v2_ack_landed_only() && isset($queue['refused_sha256s']) && is_array($queue['refused_sha256s'])) {
+            foreach ($queue['refused_sha256s'] as $s) {
+                $refused_set[(string) $s] = true;
+            }
+        }
         $acks = [];
         foreach ($variants as $v) {
             if (!is_array($v) || empty($v['sha256'])) continue;
             $sha = (string) $v['sha256'];
+            if (isset($refused_set[$sha])) continue;
             // Check three shapes (see queue_for_drain comment for details).
             $is_lazycdn_entry = (isset($v['source']) && $v['source'] === 'lazycdn')
                              || (isset($v['tags']['source']) && $v['tags']['source'] === 'lazycdn')
@@ -1126,7 +1387,7 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
 
 
                 $acks[] = [
-                    'imageID'   => isset($v['imageID']) ? (int) $v['imageID'] : 0,
+                    'imageID'   => isset($v['imageID']) ? wpc_v2_service_image_id($v['imageID']) : 0,
                     'sizeLabel' => isset($v['sizeLabel']) ? (string) $v['sizeLabel'] : '',
                     'format'    => isset($v['format'])    ? (string) $v['format']    : '',
                     'sha256'    => $sha,
@@ -1139,7 +1400,7 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
             // 8d manifest TTL gives plenty of retry window.
             if (isset($journal_failed_set[$sha])) continue;
             $acks[] = [
-                'imageID'   => (int) $v['imageID'],
+                'imageID'   => wpc_v2_service_image_id($v['imageID']),
                 'sizeLabel' => isset($v['sizeLabel']) ? (string) $v['sizeLabel'] : '',
                 'format'    => isset($v['format'])    ? (string) $v['format']    : '',
                 'sha256'    => $sha,
@@ -1390,7 +1651,7 @@ if (!function_exists('wpc_v2_status_land')) {
             if (!wpc_v2_inbound_image_ok($raw, $format, $imageID, 'status')) continue;
             // Through the one writer, so a variant no smaller than the WordPress file of that size
             // is settled as no improvement (variant-larger-refused) instead of recorded.
-            $stored = wpc_v2_store_bytes($raw, $path, ['variant' => ['id' => $imageID, 'size' => $size, 'fmt' => $format, 'src' => 'status']]);
+            $stored = wpc_v2_store_bytes($raw, $path, ['variant' => ['id' => $imageID, 'size' => $size, 'fmt' => $format, 'src' => 'status', 'job' => (string) ($answer['jobId'] ?? '')]]);
             if (empty($stored['ok'])) continue;
             $entry = [
                 'size'          => strlen($raw),
@@ -1425,6 +1686,159 @@ if (!function_exists('wpc_v2_status_land')) {
 }
 
 
+if (!function_exists('wpc_v2_pull_loopback')) {
+    /**
+     * Whether the site's own loopback delivers the drain: 'blocked' after two dispatched fires that never
+     * reached the handler, 'ok' once one did, 'unknown' before either.
+     */
+    function wpc_v2_pull_loopback()
+    {
+        $st = wpc_v2_pull_state();
+        $r  = isset($st['loopback']['reason']) ? (string) $st['loopback']['reason'] : '';
+        return $r === 'blocked' ? 'blocked' : ($r === 'ok' ? 'ok' : 'unknown');
+    }
+}
+
+if (!function_exists('wpc_v2_pull_loopback_arrived')) {
+    /** A fire reached the handler: the loopback works, so any block or miss count is cleared. */
+    function wpc_v2_pull_loopback_arrived()
+    {
+        $st = wpc_v2_pull_state();
+        if (isset($st['loopback']['reason']) && (string) $st['loopback']['reason'] === 'ok') {
+            return;
+        }
+        wpc_v2_pull_state_note('loopback', ['reason' => 'ok', 'misses' => 0, 'miss_t' => 0]);
+    }
+}
+
+if (!function_exists('wpc_v2_pull_loopback_assess')) {
+    /**
+     * Counts the last dispatched fire as a miss when no handler start followed it; the second miss in a
+     * row records the loopback as blocked (since = when), a handler start after the fire clears it.
+     */
+    function wpc_v2_pull_loopback_assess()
+    {
+        $st = wpc_v2_pull_state();
+        if (empty($st['fire']['dispatched']) || empty($st['fire']['t'])) {
+            return;
+        }
+        $ft = (int) $st['fire']['t'];
+        if (time() - $ft < 20) {
+            return;
+        }
+        $arrival = max(
+            (isset($st['loopstart']['src']) && (string) $st['loopstart']['src'] === 'fire' && isset($st['loopstart']['t'])) ? (int) $st['loopstart']['t'] : 0,
+            (isset($st['loop']['src']) && (string) $st['loop']['src'] === 'fire' && isset($st['loop']['t'])) ? (int) $st['loop']['t'] : 0
+        );
+        if ($arrival >= $ft) {
+            wpc_v2_pull_loopback_arrived();
+            return;
+        }
+        $lb = isset($st['loopback']) && is_array($st['loopback']) ? $st['loopback'] : [];
+        if (isset($lb['miss_t']) && (int) $lb['miss_t'] === $ft) {
+            return;
+        }
+        $misses  = (isset($lb['misses']) ? (int) $lb['misses'] : 0) + 1;
+        $blocked = $misses >= 2;
+        $since   = ($blocked && isset($lb['reason']) && (string) $lb['reason'] === 'blocked' && !empty($lb['since'])) ? (int) $lb['since'] : time();
+        wpc_v2_pull_state_note('loopback', ['reason' => $blocked ? 'blocked' : 'miss', 'misses' => $misses, 'miss_t' => $ft, 'since' => $blocked ? $since : 0]);
+    }
+}
+
+if (!function_exists('wpc_v2_pull_drain_inline')) {
+    /**
+     * One drain pass in this process, no socket: the drain loop body behind the drain lock, capped at
+     * $budget_s seconds of loop. False when the pull is off, cooling off, or another drain holds the lock.
+     */
+    function wpc_v2_pull_drain_inline($src = 'cron', $budget_s = 12.0)
+    {
+        if (!function_exists('wpc_v2_pull_drain_loop_handler') || !wpc_v2_pull_enabled()) {
+            return false;
+        }
+        if ((int) get_transient('wpc_v2_pull_cooloff') > 0) {
+            wpc_v2_pull_state_note('inline', ['reason' => 'cooloff_active', 'src' => (string) $src]);
+            return false;
+        }
+        if ((int) get_transient('wpc_v2_drain_running') > 0) {
+            wpc_v2_pull_state_note('inline', ['reason' => 'lock_held', 'src' => (string) $src]);
+            return false;
+        }
+        $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
+        if ($apikey === '') {
+            return false;
+        }
+        set_transient('wpc_v2_drain_running', time(), 15);
+        @ignore_user_abort(true);
+        @set_time_limit(40);
+        $was_post = $_POST;
+        $_POST    = ['t' => (string) time(), 'src' => 'inline'];
+        $_POST['sig'] = hash_hmac('sha256', 'wpc_v2_pull_drain.' . $_POST['t'], $apikey);
+        $GLOBALS['wpc_pull_loop_inline']   = true;
+        $GLOBALS['wpc_pull_loop_budget_s'] = (float) $budget_s;
+        wpc_v2_pull_state_note('inline', ['reason' => 'ran', 'src' => (string) $src]);
+        try {
+            wpc_v2_pull_drain_loop_handler();
+        } finally {
+            unset($GLOBALS['wpc_pull_loop_inline'], $GLOBALS['wpc_pull_loop_budget_s']);
+            $_POST = $was_post;
+            delete_transient('wpc_v2_drain_running');
+        }
+        return true;
+    }
+}
+
+if (!function_exists('wpc_v2_pull_assist')) {
+    /**
+     * When the cron has not ticked for 15 minutes (or the loopback is blocked) and images are pending, a
+     * report request or an admin heartbeat runs one inline drain pass after its response is released: at
+     * most one per 60 s for the site, and only on a host that can release the response.
+     */
+    function wpc_v2_pull_assist($via)
+    {
+        $held = (int) get_option('wpc_v2_pull_assist_claim', 0);
+        if (!function_exists('wpc_v2_pull_enabled') || !wpc_v2_pull_enabled() || ($held > 0 && time() - $held < 60)) {
+            return false;
+        }
+        if (!apply_filters('wpc_szt_can_detach79', function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+            return false;
+        }
+        $st   = wpc_v2_pull_state();
+        $tick = isset($st['cron']['t']) ? (int) $st['cron']['t'] : 0;
+        if (wpc_v2_pull_loopback() !== 'blocked' && $tick > 0 && time() - $tick <= 15 * MINUTE_IN_SECONDS) {
+            return false;
+        }
+        if (!wpc_v2_pull_drain_pending_anywhere()) {
+            return false;
+        }
+        if (!function_exists('wpc_policy_claim') || !wpc_policy_claim('wpc_v2_pull_assist_claim', time(), 60)) {
+            return false;
+        }
+        register_shutdown_function('wpc_v2_pull_assist_run', (string) $via);
+        return true;
+    }
+}
+
+if (!function_exists('wpc_v2_pull_assist_run')) {
+    /** The shutdown half of the assist: releases the response, then drains once; nothing runs on a host that cannot release it. */
+    function wpc_v2_pull_assist_run($via)
+    {
+        if (!function_exists('wpc_finish_request') || !wpc_finish_request()) {
+            return;
+        }
+        wpc_v2_pull_state_note('assist', ['reason' => 'ran', 'via' => (string) $via]);
+        wpc_v2_pull_drain_inline('assist', 12.0);
+    }
+}
+
+if (function_exists('add_filter')) {
+    add_filter('heartbeat_received', function ($response) {
+        if (function_exists('current_user_can') && current_user_can('manage_options')) {
+            wpc_v2_pull_assist('heartbeat');
+        }
+        return $response;
+    }, 10, 1);
+}
+
 if (!function_exists('wpc_v2_pull_cron_run')) {
     /**
      * The 5-minute cron, the one scheduled drain: the status poll first, then the manifest
@@ -1446,10 +1860,32 @@ if (!function_exists('wpc_v2_pull_cron_run')) {
             wpc_probe_orchestrator_capabilities();
         }
         wpc_v2_status_poll();
+        if (function_exists('wpc_v2_landed_flush')) {
+            wpc_v2_landed_flush();
+        }
+        if (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'wpc_bulk_restore_reap')) {
+            wps_ic_ajax::wpc_bulk_restore_reap();
+        }
+        if (function_exists('wpc_bulk_process_active')) {
+            wpc_bulk_process_active();
+        }
         if (!function_exists('wpc_v2_pull_enabled') || !wpc_v2_pull_enabled()) {
+            if (function_exists('wpc_v2_pull_state_note')) {
+                wpc_v2_pull_state_note('cron', ['reason' => 'pull_disabled']);
+            }
             return;
         }
         if (function_exists('wpc_v2_pull_drain_fire')) {
+            wpc_v2_pull_loopback_assess();
+            if (wpc_v2_pull_loopback() === 'blocked') {
+                $st_lb = wpc_v2_pull_state();
+                if (time() - (isset($st_lb['loopback']['t']) ? (int) $st_lb['loopback']['t'] : 0) < HOUR_IN_SECONDS) {
+                    wpc_v2_pull_state_note('cron', ['reason' => 'inline']);
+                    wpc_v2_pull_drain_inline('cron', 12.0);
+                    return;
+                }
+            }
+            wpc_v2_pull_state_note('cron', ['reason' => 'fired']);
             wpc_v2_pull_drain_fire();
         }
     }
@@ -1461,25 +1897,37 @@ add_filter('cron_schedules', function ($schedules) {
     }
     return $schedules;
 });
-add_action('init', function () {
-    // The cron also carries the status poll, so it stays scheduled while an image is watched.
-    $wpc_status_watch = get_option('wpc_v2_status_watch', []);
-    if ((!function_exists('wpc_v2_pull_enabled') || !wpc_v2_pull_enabled()) && empty($wpc_status_watch)) {
-        // Pull off and nothing watched → make sure no stale event lingers.
-        if (function_exists('wp_next_scheduled') && wp_next_scheduled('wpc_v2_pull_cron')) {
-            wp_clear_scheduled_hook('wpc_v2_pull_cron');
+if (!function_exists('wpc_v2_pull_cron_ensure')) {
+    /** Schedules the 5-minute wpc_v2_pull_cron event when none is queued (spread over the 5 minutes by the site's address). */
+    function wpc_v2_pull_cron_ensure()
+    {
+        if (!function_exists('wp_next_scheduled') || !function_exists('wp_schedule_event') || wp_next_scheduled('wpc_v2_pull_cron')) {
+            return;
         }
-        return;
-    }
-    if (function_exists('wp_next_scheduled') && !wp_next_scheduled('wpc_v2_pull_cron')) {
-
-        // 5-min drain cron at the same wall-clock second (thundering herd of manifest GETs
-
-
         $wpc_cron_jit = 0;
         if (function_exists('site_url')) {
             $wpc_cron_jit = (int) (hexdec(substr(md5((string) site_url()), 0, 6)) % 300);
         }
         wp_schedule_event(time() + 60 + $wpc_cron_jit, 'wpc_v2_5min', 'wpc_v2_pull_cron');
     }
-}, 20);
+}
+if (!function_exists('wpc_v2_pull_cron_sync')) {
+    /**
+     * The event stays scheduled while the pull is on, while an image is on the status watch and
+     * while receipts wait in the landed spool for a service that takes them and a key to send them
+     * with; with none of the three it is cleared.
+     */
+    function wpc_v2_pull_cron_sync()
+    {
+        $wpc_status_watch = get_option('wpc_v2_status_watch', []);
+        if ((!function_exists('wpc_v2_pull_enabled') || !wpc_v2_pull_enabled()) && empty($wpc_status_watch)
+            && !(function_exists('wpc_v2_landed_pending') && wpc_v2_landed_pending())) {
+            if (function_exists('wp_next_scheduled') && wp_next_scheduled('wpc_v2_pull_cron')) {
+                wp_clear_scheduled_hook('wpc_v2_pull_cron');
+            }
+            return;
+        }
+        wpc_v2_pull_cron_ensure();
+    }
+}
+add_action('init', 'wpc_v2_pull_cron_sync', 20);

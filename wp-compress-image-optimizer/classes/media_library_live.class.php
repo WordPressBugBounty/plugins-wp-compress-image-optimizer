@@ -1,5 +1,191 @@
 <?php
 
+if (!function_exists('wpc_sd_ready_seconds')) {
+    function wpc_sd_ready_seconds()
+    {
+        $held = get_option(defined('WPC_SIZED_SLO_OPTION') ? WPC_SIZED_SLO_OPTION : 'wpc_szr_slo', []);
+        $landings = is_array($held) && isset($held['v']) && is_array($held['v']) ? array_values(array_filter(array_map('intval', $held['v']))) : [];
+        if (count($landings) < 3) {
+            return 0;
+        }
+        sort($landings);
+        return max(1, (int) $landings[(int) floor((count($landings) - 1) / 2)]);
+    }
+}
+
+if (!function_exists('wpc_ml_purge_hint')) {
+    function wpc_ml_purge_hint()
+    {
+        $domain = 'wp-compress-image-optimizer';
+        return function_exists('wpc_sd_mode_on') && wpc_sd_mode_on()
+            ? __('Optimized again on their next view.', $domain)
+            : __('Run Optimize to make them again.', $domain);
+    }
+}
+
+if (!function_exists('wpc_ml_purge_action')) {
+    function wpc_ml_purge_action($imageID)
+    {
+        $domain = 'wp-compress-image-optimizer';
+        return [
+            'class' => 'wpc-purge-variants-link',
+            'label' => __('Purge Variants', $domain),
+            'title' => __('Remove locally generated AVIF/WebP variant files for this image', $domain),
+            'attrs' => [
+                'data-attachment_id' => (string) (int) $imageID,
+                'data-confirm' => __('Remove the locally generated AVIF/WebP variant files for this image?', $domain) . ' ' . wpc_ml_purge_hint(),
+            ],
+        ];
+    }
+}
+
+if (!function_exists('wpc_ml_purge_modal_footer')) {
+    function wpc_ml_purge_modal_footer($imageID)
+    {
+        $action = wpc_ml_purge_action($imageID);
+        $attrs = '';
+        foreach ($action['attrs'] as $name => $value) {
+            $attrs .= ' ' . esc_attr($name) . '="' . esc_attr($value) . '"';
+        }
+        return '<p class="wpc-stats-purge"><a href="#" role="button" class="wpc-ml-action ' . esc_attr($action['class']) . '" title="' . esc_attr($action['title']) . '"' . $attrs . '>' . esc_html($action['label']) . '</a> ' . esc_html(wpc_ml_purge_hint()) . '</p>';
+    }
+}
+
+if (!function_exists('wpc_ml_purge_under_details')) {
+    function wpc_ml_purge_under_details($imageID)
+    {
+        $imageID = (int) $imageID;
+        if (function_exists('wpc_sd_mode_on') && wpc_sd_mode_on()) {
+            $status = wpc_sd_image_status($imageID);
+            return $status['state'] === 'ok';
+        }
+        $compressing = get_post_meta($imageID, 'ic_compressing', true);
+        $compressing_status = is_array($compressing) ? (string) ($compressing['status'] ?? '') : '';
+        $optimized = $compressing_status === 'compressed' || $compressing_status === 'no-further' || !empty(get_post_meta($imageID, 'ic_stats', true));
+        $variants = get_post_meta($imageID, 'ic_local_variants', true);
+        return $optimized && is_array($variants) && !empty($variants);
+    }
+}
+
+if (!function_exists('wpc_ml_purge_into_modal')) {
+    function wpc_ml_purge_into_modal($html, $imageID)
+    {
+        $html = (string) $html;
+        $close = '</div>';
+        $at = strrpos($html, $close);
+        if ($at === false) {
+            return $html . wpc_ml_purge_modal_footer($imageID);
+        }
+        return substr($html, 0, $at) . wpc_ml_purge_modal_footer($imageID) . substr($html, $at);
+    }
+}
+
+if (!function_exists('wpc_sd_image_status')) {
+    function wpc_sd_image_status($imageID)
+    {
+        $imageID = (int) $imageID;
+        $domain = 'wp-compress-image-optimizer';
+        $now = time();
+        $ic_status = (string) get_post_meta($imageID, 'ic_status', true);
+        $stats = get_post_meta($imageID, 'ic_stats', true);
+        $compressing = get_post_meta($imageID, 'ic_compressing', true);
+        $compressing_status = is_array($compressing) ? (string) ($compressing['status'] ?? '') : '';
+        $optimized = $ic_status === 'compressed' || $compressing_status === 'compressed'
+            || ($ic_status !== 'restored' && ($compressing_status === 'no-further' || !empty($stats)));
+
+        $cooloff_min = max(1, (int) round((function_exists('wpc_v2_restore_cooloff') ? (int) wpc_v2_restore_cooloff() : 300) / 60));
+        $restore = ['class' => 'wps-ic-restore-live', 'label' => __('Restore original', $domain), 'title' => sprintf(__('Removes the optimized copies (and puts back the original if it was compressed earlier). Smart Delivery never changes the original; it makes fresh copies on the next view after %d minutes.', $domain), $cooloff_min), 'attrs' => ['data-attachment_id' => (string) $imageID]];
+        $exclude = ['class' => 'wps-ic-exclude-live', 'label' => __('Exclude', $domain), 'title' => __('Stops optimizing this image; it is always delivered as the original.', $domain), 'attrs' => ['data-action' => 'exclude', 'data-attachment_id' => (string) $imageID]];
+
+        if ($optimized) {
+            $variants = get_post_meta($imageID, 'ic_local_variants', true);
+            $widths = [];
+            $avif = false;
+            $webp = false;
+            if (is_array($variants)) {
+                foreach ($variants as $key => $entry) {
+                    $key = (string) $key;
+                    if (strpos($key, '-avif') !== false) {
+                        $avif = true;
+                    } elseif (strpos($key, '-webp') !== false) {
+                        $webp = true;
+                    }
+                    $widths[preg_replace('/-(webp|avif|png)$/', '', $key)] = true;
+                }
+            }
+            $sizes = count($widths);
+            if (!$sizes && is_array($stats)) {
+                $sizes = count($stats);
+            }
+            $pct = 0;
+            $ic_savings = get_post_meta($imageID, 'ic_savings', true);
+            $ic_base = get_post_meta($imageID, 'ic_savings_baseline', true);
+            if (!empty($ic_savings) && !empty($ic_base) && $ic_base > 0) {
+                $pct = (float) $ic_savings;
+            } elseif (!empty($stats['original']['original']['size']) && !empty($stats['original']['compressed']['size'])) {
+                $orig = (float) $stats['original']['original']['size'];
+                $comp = (float) $stats['original']['compressed']['size'];
+                if ($orig > 0 && $comp > 0 && $orig != $comp) {
+                    $pct = (1 - ($comp / $orig)) * 100;
+                }
+            }
+            $parts = [];
+            if ($sizes > 0) {
+                $parts[] = sprintf(_n('%d size', '%d sizes', $sizes, $domain), $sizes);
+            }
+            if ($avif && $webp) {
+                $parts[] = __('AVIF & WebP', $domain);
+            } elseif ($avif) {
+                $parts[] = 'AVIF';
+            } elseif ($webp) {
+                $parts[] = 'WebP';
+            }
+            if (round($pct) > 0) {
+                $parts[] = sprintf(__('%d%% smaller', $domain), (int) round($pct));
+            }
+            return ['state' => 'ok', 'card' => 'wpc-ml-card--compressed', 'label' => __('Optimized', $domain), 'text' => $parts ? implode(' · ', $parts) : __('Delivered optimized.', $domain), 'actions' => [$restore, wpc_ml_purge_action($imageID)], 'hint' => wpc_ml_purge_hint()];
+        }
+
+        $excluded = (string) get_post_meta($imageID, 'wps_ic_exclude_live', true) !== ''
+            || isset(wps_ic_media_library_live::$exclude_list[$imageID]);
+        if ($excluded) {
+            return ['state' => 'ex', 'card' => 'wpc-ml-card--excluded is-excluded', 'label' => __('Excluded', $domain), 'text' => __('Always delivered as the original.', $domain), 'actions' => [['class' => 'wps-ic-exclude-live', 'label' => __('Include again', $domain), 'attrs' => ['data-action' => 'include', 'data-attachment_id' => (string) $imageID]]]];
+        }
+
+        $job = get_transient('wps_ic_compress_' . $imageID);
+        $pending = get_transient('wpc_v2_pending_' . $imageID);
+        $job_live = !empty($job) && !(is_array($job) && !empty($job['time']) && ($now - (int) $job['time']) > 600);
+        if ($job_live || !empty($pending) || $compressing_status === 'optimizing' || $compressing_status === 'queueing') {
+            $ready = wpc_sd_ready_seconds();
+            if ($ready > 0 && $ready <= 90) {
+                $text = sprintf(__('Usually ready in %d s.', $domain), $ready);
+            } elseif ($ready > 90) {
+                $text = sprintf(__('Usually ready in %d min.', $domain), (int) round($ready / 60));
+            } else {
+                $text = __('Optimizing now.', $domain);
+            }
+            return ['state' => 'run', 'card' => 'is-compressing', 'label' => __('Optimizing', $domain), 'text' => $text, 'actions' => []];
+        }
+
+        $restored_at = $ic_status === 'restored' ? (int) get_post_meta($imageID, 'wpc_restored_at', true) : 0;
+        if ($restored_at > 0) {
+            $cooloff = function_exists('wpc_v2_restore_cooloff') ? (int) wpc_v2_restore_cooloff() : 300;
+            $age = max(0, $now - $restored_at);
+            if ($age < $cooloff) {
+                $ago = (int) floor($age / 60);
+                $left = max(1, (int) ceil(($cooloff - $age) / 60));
+                $text = ($ago < 1 ? __('Restored just now.', $domain) : sprintf(__('Restored %d min ago.', $domain), $ago))
+                    . ' ' . sprintf(__('Optimized again on its next view, from %d min.', $domain), $left);
+            } else {
+                $text = __('Optimized again on its next view.', $domain);
+            }
+            return ['state' => 'orig', 'card' => 'wpc-ml-card--uncompressed', 'label' => __('Restored', $domain), 'text' => $text, 'actions' => [$exclude]];
+        }
+
+        return ['state' => 'wait', 'card' => 'wpc-ml-card--uncompressed', 'label' => __('Not viewed yet', $domain), 'text' => __('Optimized on its first view.', $domain), 'actions' => [$exclude]];
+    }
+}
+
 /**
  * Class - Media Library
  */
@@ -36,7 +222,7 @@ class wps_ic_media_library_live extends wps_ic
         self::$exclude_list = get_option('wps_ic_exclude_list');
         self::$allow_local = $this->get_local_status();
 
-        if (!empty($_GET['regen'])) {
+        if (wpc_admin_flag('regen')) {
             if (!function_exists('download_url')) {
                 require_once(ABSPATH . "wp-admin" . '/includes/image.php');
                 require_once(ABSPATH . "wp-admin" . '/includes/file.php');
@@ -149,6 +335,8 @@ class wps_ic_media_library_live extends wps_ic
 
 	public static function popups()
 	{
+		self::sd_popover_script();
+
 		$support_url = function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url() : 'https://www.wpcompress.com/';
 		$pricing_url = function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://www.wpcompress.com/pricing') : 'https://www.wpcompress.com/pricing';
 
@@ -279,6 +467,11 @@ class wps_ic_media_library_live extends wps_ic
         $post = get_post();
         $attachment_id = $post->ID;
         $stats = get_post_meta($attachment_id, 'ic_stats', true);
+
+        if (function_exists('wpc_sd_mode_on') && wpc_sd_mode_on()) {
+            echo self::sd_card($attachment_id, true);
+            return;
+        }
 
         if (!$stats) {
             $output = '<strong>Not yet compressed.</strong>';
@@ -576,7 +769,16 @@ class wps_ic_media_library_live extends wps_ic
         $plugin_name = function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : __('WP Compress', 'wp-compress-image-optimizer');
         $stats = get_post_meta($post->ID, 'ic_stats', true);
         $status = get_post_meta($post->ID, 'ic_status', true);
-        $excluded = !empty(self::$exclude_list) && in_array($post->ID, self::$exclude_list);
+        $excluded = isset(self::$exclude_list[(int) $post->ID]);
+
+        if (function_exists('wpc_sd_mode_on') && wpc_sd_mode_on()) {
+            $form_fields['wps_ic_status'] = [
+                'label' => esc_html($plugin_name),
+                'input' => 'html',
+                'html'  => self::sd_card($post->ID, true),
+            ];
+            return $form_fields;
+        }
 
         if ($excluded) {
             $html = '<span style="color:#94a3b8;">' . esc_html__('Excluded', 'wp-compress-image-optimizer') . '</span>';
@@ -599,6 +801,8 @@ class wps_ic_media_library_live extends wps_ic
             if ($savings_pct > 0) {
                 $html .= ' <span style="color:#64748b;">(' . number_format($savings_pct, 1) . '% ' . esc_html__('savings', 'wp-compress-image-optimizer') . ')</span>';
             }
+        } elseif ($status === 'restored') {
+            $html = '<span style="color:#94a3b8;">' . esc_html__('Original (restored)', 'wp-compress-image-optimizer') . '</span>';
         } else {
             $html = '<span style="color:#94a3b8;">' . esc_html__('Not Compressed', 'wp-compress-image-optimizer') . '</span>';
         }
@@ -663,7 +867,7 @@ class wps_ic_media_library_live extends wps_ic
 
             echo $output;
         } else {
-            if (in_array($id, self::$exclude_list)) {
+            if (isset(self::$exclude_list[(int) $id]) && !(function_exists('wpc_sd_mode_on') && wpc_sd_mode_on())) {
                 // Excluded
                 $output .= '<div class="wps-ic-media-actions-container wps-ic-media-actions-' . $id . '">';
                 $output .= $this->excluded_details($id);
@@ -764,8 +968,60 @@ class wps_ic_media_library_live extends wps_ic
         return '<svg width="12" height="12" viewBox="0 0 512 512" fill="currentColor"><path d="M256 512a256 256 0 1 1 0-512 256 256 0 1 1 0 512zm0-480a224 224 0 1 0 0 448 224 224 0 1 0 0-448zM374.3 172.5l-9.4 12.9-128 176-11 15.2-88.6-88.6 22.6-22.6 62.1 62.1 117-160.8 9.4-12.9 25.9 18.8z"/></svg>';
     }
 
+    public static function sd_card($imageID, $wrap = false)
+    {
+        $imageID = (int) $imageID;
+        $status = wpc_sd_image_status($imageID);
+        $pop = 'wpc-sd-pop-' . $imageID;
+        $output = '<div class="wpc-ml-card ' . esc_attr($status['card']) . '">';
+        $output .= self::icon_stack();
+        $output .= '<div class="wpc-ml-body"><div class="wpc-sd-pw">';
+        $output .= '<div class="wpc-ml-title"><button type="button" class="wpc-sd-pill wpc-sd-pill--' . esc_attr($status['state']) . '" aria-expanded="false" aria-controls="' . esc_attr($pop) . '">' . esc_html($status['label']) . '</button></div>';
+        $output .= '<div class="wpc-sd-pop" id="' . esc_attr($pop) . '" role="dialog" hidden><span class="wpc-sd-pop-text">' . esc_html($status['text']) . '</span>';
+        if (!empty($status['actions'])) {
+            $output .= '<span class="wpc-sd-acts">';
+            foreach ($status['actions'] as $action) {
+                $attrs = '';
+                foreach ((array) ($action['attrs'] ?? []) as $name => $value) {
+                    $attrs .= ' ' . esc_attr($name) . '="' . esc_attr($value) . '"';
+                }
+                $title = !empty($action['title']) ? ' title="' . esc_attr($action['title']) . '"' : '';
+                $output .= '<a href="#" role="button" class="wpc-ml-action ' . esc_attr($action['class']) . '"' . $title . $attrs . '>' . esc_html($action['label']) . '</a>';
+            }
+            $output .= '</span>';
+        }
+        if (!empty($status['hint'])) {
+            $output .= '<span class="wpc-sd-pop-hint">' . esc_html($status['hint']) . '</span>';
+        }
+        $output .= '</div></div></div></div>';
+        if ($wrap) {
+            $output = '<div class="wps-ic-media-actions-container wps-ic-media-actions-' . $imageID . '">' . $output . '</div>';
+        }
+        return $output;
+    }
+
+    private static function sd_popover_script()
+    {
+        static $printed = false;
+        if ($printed) {
+            return;
+        }
+        $printed = true;
+        echo '<script>(function(){if(window.wpcSdPop){return;}window.wpcSdPop=1;'
+            . 'function shut(keep){var o=document.querySelectorAll(".wpc-sd-pill[aria-expanded=true]");for(var i=0;i<o.length;i++){if(o[i]===keep){continue;}o[i].setAttribute("aria-expanded","false");var p=document.getElementById(o[i].getAttribute("aria-controls"));if(p){p.hidden=true;}}}'
+            . 'document.addEventListener("click",function(e){var t=e.target;var pill=t&&t.closest?t.closest(".wpc-sd-pill"):null;'
+            . 'if(pill){var open=pill.getAttribute("aria-expanded")==="true";shut(open?null:pill);var pop=document.getElementById(pill.getAttribute("aria-controls"));if(pop){pop.hidden=open;pill.setAttribute("aria-expanded",open?"false":"true");}return;}'
+            . 'if(!(t&&t.closest&&t.closest(".wpc-sd-pop"))){shut(null);}});'
+            . 'document.addEventListener("keydown",function(e){if(e.key==="Escape"||e.keyCode===27){var o=document.querySelector(".wpc-sd-pill[aria-expanded=true]");shut(null);if(o){o.focus();}}});'
+            . '})();</script>';
+    }
+
     public function excluded_details($imageID)
     {
+        if (function_exists('wpc_sd_mode_on') && wpc_sd_mode_on()) {
+            return self::sd_card($imageID);
+        }
+
         $filedata = get_attached_file($imageID);
         $originalFilepath = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : false;
         $scaled_size = ($filedata && file_exists($filedata)) ? filesize($filedata) : 0;
@@ -839,6 +1095,8 @@ class wps_ic_media_library_live extends wps_ic
         $post_restore_regen_pending = ($ic_status_for_regen === 'restored' && $regen_still_pending);
 
 
+        $sd_on = function_exists('wpc_sd_mode_on') && wpc_sd_mode_on();
+
         $ic_status_actual = get_post_meta($imageID, 'ic_status', true);
         $ic_compressing_status = is_array($compressing) ? ($compressing['status'] ?? '') : '';
         $is_already_compressed = ($ic_status_actual === 'compressed' || $ic_compressing_status === 'compressed');
@@ -855,6 +1113,10 @@ class wps_ic_media_library_live extends wps_ic
                 delete_post_meta($imageID, 'ic_compressing');
             }
 
+
+            if ($sd_on) {
+                return self::sd_card($imageID);
+            }
 
             $ex_filedata = get_attached_file($imageID);
             $ex_origpath = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : false;
@@ -877,6 +1139,9 @@ class wps_ic_media_library_live extends wps_ic
             // renders the correct animation state (wps_ic_restore_live sets status=restoring).
             $is_restoring = (is_array($imageStatus) && isset($imageStatus['status']) && $imageStatus['status'] === 'restoring')
                 || $isBulkRestoreRunning;
+            if ($sd_on && !$is_restoring) {
+                return self::sd_card($imageID);
+            }
             $css_class = $is_restoring ? 'is-restoring' : 'is-compressing';
             $label     = $is_restoring ? esc_html__('Restoring', 'wp-compress-image-optimizer') : esc_html__('Optimizing', 'wp-compress-image-optimizer');
 
@@ -900,6 +1165,10 @@ class wps_ic_media_library_live extends wps_ic
             $output .= '</div></div>';
             $output .= '</div>';
             return $output;
+        }
+
+        if ($sd_on) {
+            return self::sd_card($imageID);
         }
 
         // ─── Compressed state ─────────────────────
@@ -989,11 +1258,6 @@ class wps_ic_media_library_live extends wps_ic
 
 
                 $compress_label = esc_html__('Compress', 'wp-compress-image-optimizer');
-                $compress_title = '';
-                if (function_exists('wpc_lazy_mode_active') && wpc_lazy_mode_active()) {
-                    $compress_label = esc_html__('Pre-warm now', 'wp-compress-image-optimizer');
-                    $compress_title = ' title="' . esc_attr__('Lazy mode is on — variants encode on first view. Click to force encoding now.', 'wp-compress-image-optimizer') . '"';
-                }
 
 
                 // Animated webp: dispatch permanently declines (frames would mangle) —
@@ -1021,7 +1285,6 @@ class wps_ic_media_library_live extends wps_ic
                 $output .= '<div class="wpc-ml-subtitle">';
 
 
-                $is_lazy_mode = function_exists('wpc_lazy_mode_active') && wpc_lazy_mode_active();
                 if ($post_restore_regen_pending) {
                     $regen_tip = esc_attr__('Finishing restore — regenerating sub-size thumbnails. Compress will be available in a few seconds.', 'wp-compress-image-optimizer');
                     if ($regen_age >= 120) {
@@ -1034,11 +1297,11 @@ class wps_ic_media_library_live extends wps_ic
                     } else {
                         $output .= '<span class="wpc-ml-action wpc-ml-action--primary wpc-ml-action--disabled" title="' . $regen_tip . '" aria-disabled="true">' . self::svg_bolt() . ' ' . esc_html__('Regenerating Thumbnails…', 'wp-compress-image-optimizer') . '</span>';
                     }
-                } elseif ($is_lazy_mode) {
-                    $lazy_tip = esc_attr__('Optimized automatically on first view, we\'ll generate and serve modern, right-sized variants the moment a visitor loads this image. No manual compression needed.', 'wp-compress-image-optimizer');
-                    $output .= '<span class="wpc-ml-action wpc-ml-action--lazy" data-wpc-tip="' . $lazy_tip . '" aria-label="' . $lazy_tip . '">' . self::svg_bolt() . ' ' . esc_html__('Smart Delivery', 'wp-compress-image-optimizer') . '</span>';
                 } else {
-                    $output .= '<a class="wpc-ml-action wpc-ml-action--primary wps-ic-compress-live" data-attachment_id="' . $imageID . '"' . $compress_title . '>' . self::svg_bolt() . ' ' . $compress_label . '</a>';
+                    if ($ic_status_actual === 'restored') {
+                        $output .= '<span class="wpc-ml-action wpc-ml-action--disabled" aria-disabled="true">' . esc_html__('Original (restored)', 'wp-compress-image-optimizer') . '</span> ';
+                    }
+                    $output .= '<a class="wpc-ml-action wpc-ml-action--primary wps-ic-compress-live" data-attachment_id="' . $imageID . '">' . self::svg_bolt() . ' ' . $compress_label . '</a>';
                 }
 
                 // Thumbnails…" label + Exclude overflow the card. Exclude returns the moment regen ends
@@ -1254,7 +1517,10 @@ class wps_ic_media_library_live extends wps_ic
 
         // Lifecycle for local next-gen siblings on EVERY image type incl. webp/avif
         // sources ("unsupported" rows had no way to evict a bad on-disk variant)
-        $actions['wpc_purge_variants'] = '<a href="#" class="wpc-purge-variants-link" data-attachment_id="' . $att->ID . '" title="' . esc_attr__('Remove locally generated AVIF/WebP variant files for this image', 'wp-compress-image-optimizer') . '">' . esc_html__('Purge Variants', 'wp-compress-image-optimizer') . '</a>';
+        if (!wpc_ml_purge_under_details($att->ID)) {
+            $purge = wpc_ml_purge_action($att->ID);
+            $actions['wpc_purge_variants'] = '<a href="#" class="wpc-purge-variants-link" data-attachment_id="' . (int) $att->ID . '" data-confirm="' . esc_attr($purge['attrs']['data-confirm']) . '" title="' . esc_attr($purge['title']) . '">' . esc_html($purge['label']) . '</a>';
+        }
 
         return $actions;
     }

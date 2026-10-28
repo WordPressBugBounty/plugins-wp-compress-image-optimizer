@@ -62,23 +62,32 @@ class wps_ic_image_optimize
      * is refused without counting one, and a vanished id also leaves the parked list and its
      * attempt record. Observed (ticket 12006): old uploads whose files were gone were retried
      * as "backup failed" on every bulk run until parked for seven days, and two deleted ids
-     * were still processed by the bulk run.
+     * were still processed by the bulk run. The render-driven `lazy`, `sized-trigger` and `hero` also ask
+     * `excluded` (the Media Library exclusion, any value of wps_ic_exclude_live) and `restored`
+     * (ic_status restored): a visit does not undo what a person chose for an image.
      */
     const GATES = [
-        'upload'        => ['not-attachment', 'source-missing', 'service-hold', 'attempts', 'in-flight', 'parked', 'journal', 'job-pending', 'restoring'],
+        'upload'        => ['not-attachment', 'source-missing', 'excluded', 'restored', 'service-hold', 'attempts', 'in-flight', 'parked', 'journal', 'job-pending', 'restoring'],
         'bulk'          => ['not-attachment', 'source-missing', 'service-hold', 'attempts', 'in-flight', 'parked', 'job-pending', 'restoring'],
-        'lazy'          => ['not-attachment', 'source-missing', 'service-hold', 'attempts', 'in-flight', 'parked', 'journal', 'job-pending', 'restoring'],
+        'lazy'          => ['not-attachment', 'source-missing', 'excluded', 'restored', 'service-hold', 'attempts', 'in-flight', 'parked', 'journal', 'job-pending', 'restoring'],
         // Parked pending decision D5 (delete the Modern Delivery ladder, modern-delivery.php in
         // scope): its remote leg is refused before any request. Observed: routing it through this
         // door turned a POST to the dead v1 /optimize route into real /optimize-v2 traffic nobody
         // asked for or measured; the service builds WordPress sub-sizes, not the ladder's widths,
         // so the rung stays missing and the ladder asks again (review 2026-09-26, finding 5).
         'ladder'        => ['not-attachment', 'source-missing', 'ladder-retired'],
-        'sized-trigger' => ['not-attachment', 'source-missing', 'parked', 'journal', 'restoring'],
+        'sized-trigger' => ['not-attachment', 'source-missing', 'excluded', 'restored', 'parked', 'journal', 'restoring'],
         'ml-button'     => ['not-attachment', 'source-missing', 'in-flight'],
+        'hero'          => ['not-attachment', 'source-missing', 'excluded', 'restored', 'service-hold', 'attempts', 'in-flight', 'parked', 'journal', 'job-pending', 'restoring'],
         'edit'          => ['not-attachment', 'source-missing', 'in-flight'],
         'cli'           => ['not-attachment', 'source-missing', 'in-flight'],
     ];
+
+    /** The reasons a person asked for: each writes the image's wpc_reopt_intent before it dispatches. */
+    const INTENT_REASONS = ['bulk', 'ml-button', 'edit', 'cli'];
+
+    /** The image's wpc_reopt_intent: the time a person last asked for it to be optimised. */
+    const INTENT_META = 'wpc_reopt_intent';
 
     /**
      * Dispatch one image. Answers the dispatch result: ['ok' => true, 'jobId', 'wall_ms',
@@ -205,7 +214,11 @@ class wps_ic_image_optimize
         if ($apikey === '' || $orch === '') {
             return new WP_Error('wpc_no_service', 'no apikey or orchestrator url');
         }
-        $body_raw = wp_json_encode(['apikey' => $apikey, 'items' => array_values($items)]);
+        $body = ['apikey' => $apikey, 'items' => array_values($items)];
+        if (function_exists('wpc_cdn_drives_images')) {
+            $body['cdn'] = wpc_cdn_drives_images() ? 'on' : 'off';
+        }
+        $body_raw = wp_json_encode($body);
         if ($body_raw === false) {
             return new WP_Error('wpc_encode', 'items do not encode');
         }
@@ -242,7 +255,7 @@ class wps_ic_image_optimize
             return 'unknown-reason';
         }
         foreach (self::GATES[$reason] as $gate) {
-            if (self::gate_refuses($id, $gate)) {
+            if (self::gate_refuses($id, $gate, $reason)) {
                 return $gate === 'attempts' ? self::$attempt_verdict : $gate;
             }
         }
@@ -267,7 +280,7 @@ class wps_ic_image_optimize
     /** The attempt admission's own verdict ('backoff_wait', 'parked_attempt_cap'), kept for the receipt. */
     private static $attempt_verdict = 'attempts';
 
-    private static function gate_refuses($id, $gate)
+    private static function gate_refuses($id, $gate, $reason = '')
     {
         switch ($gate) {
             case 'ladder-retired':
@@ -284,6 +297,13 @@ class wps_ic_image_optimize
                 $verdict = function_exists('wpc_v2_admit_optimize_attempt') ? wpc_v2_admit_optimize_attempt($id) : true;
                 self::$attempt_verdict = is_string($verdict) ? $verdict : 'attempts';
                 return $verdict !== true;
+            case 'excluded':
+                return (string) get_post_meta($id, 'wps_ic_exclude_live', true) !== '';
+            case 'restored':
+                if ($reason === 'upload') {
+                    return (string) get_post_meta($id, 'ic_status', true) === 'restored';
+                }
+                return self::restore_held($id);
             case 'in-flight':
                 $held = (int) get_option(self::lock_key($id), 0);
                 return $held > 0 && (time() - $held) <= self::LOCK_STALE_SECONDS;
@@ -474,6 +494,7 @@ class wps_ic_image_optimize
      */
     private static function failed($id, $reason, array $result)
     {
+        self::clear_intent($id, $reason);
         if (!function_exists('wpc_cache_first_log')) {
             return;
         }
@@ -488,6 +509,44 @@ class wps_ic_image_optimize
             'http_code'    => (int) ($result['http_code'] ?? 0),
             'body_snippet' => self::snippet($body),
         ]);
+    }
+
+    /** A person's request that did not reach the service no longer lets landings through for the restored image. */
+    private static function clear_intent($id, $reason)
+    {
+        if (in_array((string) $reason, self::INTENT_REASONS, true) || self::releases((int) $id, (string) $reason)) {
+            delete_post_meta((int) $id, self::INTENT_META);
+        }
+    }
+
+    /** The restore owner's answer (wps_ic_image_variants::restore_held); plain ic_status before that class loads. */
+    private static function restore_held($id)
+    {
+        if (class_exists('wps_ic_image_variants')) {
+            return wps_ic_image_variants::restore_held($id);
+        }
+        return (string) get_post_meta($id, 'ic_status', true) === 'restored';
+    }
+
+    /** Whether this render-driven reason, asked of a restored image whose cool-off has ended, is a Smart Delivery re-optimisation. */
+    private static function releases($id, $reason)
+    {
+        return in_array($reason, ['lazy', 'sized-trigger', 'hero'], true)
+            && (string) get_post_meta($id, 'ic_status', true) === 'restored'
+            && !self::restore_held($id);
+    }
+
+    /**
+     * A render-driven dispatch that passed the restored gate on a restored image (Smart Delivery,
+     * cool-off over) is that image's re-optimisation: it takes the intent a person's click takes, so
+     * the landing is admitted and promotes the image out of restored.
+     */
+    public static function release_restored($id, $reason)
+    {
+        $id = (int) $id;
+        if (self::releases($id, (string) $reason)) {
+            update_post_meta($id, self::INTENT_META, time());
+        }
     }
 
     /** At most 160 characters of an answer, on one line, with every key-shaped value masked. */
@@ -530,6 +589,10 @@ class wps_ic_image_optimize
         if (!class_exists('wps_ic_ajax') || !method_exists('wps_ic_ajax', 'prepare_v2_optimize')) {
             return ['ok' => false, 'error' => 'handler-unavailable'];
         }
+        if (function_exists('wpc_encode_on_view_formats_off') && wpc_encode_on_view_formats_off($reason)
+            && function_exists('wpc_should_rewrite_jpeg_inplace') && !wpc_should_rewrite_jpeg_inplace()) {
+            return ['ok' => false, 'error' => 'encode_on_view'];
+        }
         if (in_array('attempts', self::GATES[$reason], true) && function_exists('wpc_v2_bump_attempts')) {
             $why = isset($opts['resubmit_reason']) && $opts['resubmit_reason'] !== '' ? (string) $opts['resubmit_reason'] : 'new';
             $n = (int) wpc_v2_bump_attempts($id, $why);
@@ -538,9 +601,15 @@ class wps_ic_image_optimize
                 $opts['resubmit_reason'] = $n > 1 ? 'retry_' . $n : 'new';
             }
         }
+        $opts['dispatch_reason'] = $reason;
         $prep = wps_ic_ajax::prepare_v2_optimize($id, $opts);
         if (empty($prep['ok'])) {
             return $prep;
+        }
+        if (in_array($reason, self::INTENT_REASONS, true)) {
+            update_post_meta($id, self::INTENT_META, time());
+        } else {
+            self::release_restored($id, $reason);
         }
         $variants_count = is_array($prep['variants']) ? count($prep['variants']) : 0;
         $formats = isset($prep['options']['formats']) && is_array($prep['options']['formats'])
@@ -616,6 +685,7 @@ class wps_ic_image_optimize
             if (empty($env['ok'])) {
                 error_log('[WPC Bulk] envelope_build_failed image=' . $id . ' — ' . ($env['error'] ?? 'unknown'));
                 $answers[$id] = 'envelope_build_failed';
+                self::clear_intent($id, $reason);
                 continue;
             }
             $hdrs = [];

@@ -90,46 +90,17 @@ class wps_ic_litespeed extends wps_ic_integrations {
 	}
 
 	public function purge_cache($url_key = false) {
-		// Primary: use LiteSpeed Cache plugin if available
+		// The LiteSpeed Cache plugin owns the purge when it is there (its own header or queue).
 		if (defined('LSCWP_V')) {
 			do_action('litespeed_purge_all');
-			if (is_callable(['LiteSpeed_Cache_Tags', 'add_purge_tag'])) {
-				LiteSpeed_Cache_Tags::add_purge_tag('*');
-			}
 			return;
 		}
-
-		// Fallback: native HTTP header purge (works without plugin)
-		if (self::is_litespeed_server()) {
-			self::native_purge($url_key);
+		// LiteSpeed server without the plugin: the server reads purge directives from the
+		// RESPONSE headers of this request; the same directive sent as a request header on a
+		// loopback GET purges nothing. Nothing to send once headers are out.
+		if (self::is_litespeed_server() && !headers_sent()) {
+			header('X-LiteSpeed-Purge: *', false);
 		}
-	}
-
-	/**
-	 * Purge LiteSpeed cache via native X-LiteSpeed-Purge header.
-	 * Works directly with LiteSpeed/OpenLiteSpeed server without any plugin.
-	 */
-	private static function native_purge($url_key = false) {
-		$url = home_url('/');
-		$parsed = parse_url($url);
-
-		if (empty($parsed['host'])) {
-			return;
-		}
-
-		// Purge all public cache
-		$purge_header = '*';
-
-		wp_remote_get($url, [
-			'timeout'     => 5,
-			'blocking'    => false,
-			'redirection' => 0,
-			'sslverify'   => false,
-			'headers'     => [
-				'Host'              => $parsed['host'],
-				'X-LiteSpeed-Purge' => $purge_header,
-			],
-		]);
 	}
 
 }

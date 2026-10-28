@@ -591,7 +591,7 @@ class WPC_CloudflareAPI
 
         $response = wp_remote_get(
             WPS_IC_KEYSURL . '?action=get_cf_bypass_token&apikey=' . $options['api_key'],
-            ['timeout' => 15, 'sslverify' => false]
+            ['timeout' => 15, 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL)]
         );
 
         if (is_wp_error($response)) {
@@ -917,7 +917,7 @@ class WPC_CloudflareAPI
 
         $keysResponse = wp_remote_get(
             WPS_IC_KEYSURL . '?action=rotate_cf_bypass_token&apikey=' . urlencode((string) $options['api_key']),
-            ['timeout' => (int) apply_filters('wpc_cf_keys_timeout', 20), 'sslverify' => false]
+            ['timeout' => (int) apply_filters('wpc_cf_keys_timeout', 20), 'sslverify' => wpc_service_sslverify(WPS_IC_KEYSURL)]
         );
         if (is_wp_error($keysResponse)) {
             error_log('[WPC] rotateCdnBypassToken: keys request error: ' . $keysResponse->get_error_message());

@@ -73,6 +73,75 @@ if (!function_exists('wpc_v2_discover_referencing_posts')) {
             }
         }
 
+        $attached = get_post_meta($image_id, '_wp_attached_file', true);
+        $stem = is_string($attached) ? preg_replace('/\.[^.\/]+$/', '', ltrim($attached, '/')) : '';
+        $stem_likes = [];
+        if ($stem !== '') {
+            $stem_likes[] = '%' . $wpdb->esc_like('/' . $stem . '.') . '%';
+            $stem_likes[] = '%' . $wpdb->esc_like('\\/' . str_replace('/', '\\/', $stem) . '.') . '%';
+        }
+
+        $id_likes = [
+            '%' . $wpdb->esc_like('"id":' . $image_id . ',') . '%',
+            '%' . $wpdb->esc_like('"id":' . $image_id . '}') . '%',
+            '%' . $wpdb->esc_like('"id":"' . $image_id . '"') . '%',
+            '%' . $wpdb->esc_like('s:2:"id";i:' . $image_id . ';') . '%',
+            '%' . $wpdb->esc_like('s:5:"photo";i:' . $image_id . ';') . '%',
+        ];
+        $builder_keys = ['_elementor_data', '_fl_builder_data', '_bricks_page_content_2', 'ct_builder_shortcodes'];
+        $builder_likes = array_merge($id_likes, $stem_likes);
+        $builder_ids = $wpdb->get_col($wpdb->prepare(
+            "SELECT DISTINCT pm.post_id FROM {$wpdb->postmeta} pm
+               INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+              WHERE pm.meta_key IN (" . implode(',', array_fill(0, count($builder_keys), '%s')) . ")
+                AND p.post_status = 'publish'
+                AND p.post_type NOT IN ('revision','nav_menu_item','attachment','elementor_library','bricks_template','ct_template','fl-builder-template')
+                AND (" . implode(' OR ', array_fill(0, count($builder_likes), 'pm.meta_value LIKE %s')) . ")
+              LIMIT 200",
+            ...array_merge($builder_keys, $builder_likes)
+        ));
+        if (!empty($builder_ids)) {
+            foreach ($builder_ids as $id) {
+                $post_ids[(int) $id] = true;
+            }
+        }
+
+        if ($stem_likes) {
+            $divi_ids = $wpdb->get_col($wpdb->prepare(
+                "SELECT ID FROM {$wpdb->posts}
+                  WHERE post_status = 'publish'
+                    AND post_type NOT IN ('revision','nav_menu_item','attachment')
+                    AND post_content LIKE %s
+                    AND (post_content LIKE %s OR post_content LIKE %s)
+                  LIMIT 200",
+                '%' . $wpdb->esc_like('et_pb_') . '%',
+                $stem_likes[0],
+                $stem_likes[1]
+            ));
+            if (!empty($divi_ids)) {
+                foreach ($divi_ids as $id) {
+                    $post_ids[(int) $id] = true;
+                }
+            }
+
+            $front = get_option('show_on_front') === 'page' ? (int) get_option('page_on_front') : 0;
+            if ($front > 0) {
+                $front_id = $wpdb->get_var($wpdb->prepare(
+                    "SELECT ID FROM {$wpdb->posts}
+                      WHERE ID = %d
+                        AND post_status = 'publish'
+                        AND (post_content LIKE %s OR post_content LIKE %s)
+                      LIMIT 1",
+                    $front,
+                    $stem_likes[0],
+                    $stem_likes[1]
+                ));
+                if (!empty($front_id)) {
+                    $post_ids[(int) $front_id] = true;
+                }
+            }
+        }
+
         $post_ids = array_keys($post_ids);
 
         // Extension point for ACF image fields, custom post builders,
@@ -92,16 +161,20 @@ if (!function_exists('wpc_v2_fire_clean_post_cache_cascade')) {
      * Per-post cache invalidation cascade. Each step is independent and
      * silently no-ops if the target plugin isn't installed.
      */
-    function wpc_v2_fire_clean_post_cache_cascade($post_id)
+    function wpc_v2_fire_clean_post_cache_cascade($post_id, $mode = null)
     {
         $post_id = (int) $post_id;
         if ($post_id <= 0) return;
 
 
+        if ($mode !== 'hard' && function_exists('wpc_p2_land_post') && wpc_p2_land_post($post_id)) {
+            return;
+        }
+
         if (class_exists('wps_ic_cache')
             && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
             try {
-                wps_ic_cache::removeHtmlCacheFiles($post_id);
+                wps_ic_cache::removeHtmlCacheFiles($post_id, '', '', $mode);
                 return;
             } catch (\Throwable $e) {
                 error_log(sprintf(
@@ -120,12 +193,41 @@ if (!function_exists('wpc_v2_fire_clean_post_cache_cascade')) {
     }
 }
 
+if (!function_exists('wpc_v2_purge_page_within_budget')) {
+    /**
+     * One page's cascade inside this request's page budget (wpc_v2_landed_pages_budget): 'purged', 'memo'
+     * when this request already purged the page as hard as asked, or 'queued' once the budget is spent
+     * (wpc_landed_pages_pending, taken by wpc_landed_pages_drain).
+     */
+    function wpc_v2_purge_page_within_budget($post_id, $mode = null)
+    {
+        $post_id = (int) $post_id;
+        if ($post_id <= 0) return 'memo';
+
+        $rank = $mode === 'hard' ? 2 : 1;
+        if ((int) ($GLOBALS['wpc_v2_html_purged_pages'][$post_id] ?? 0) >= $rank) {
+            return 'memo';
+        }
+        if (function_exists('wpc_v2_landed_pages_budget') && function_exists('wpc_v2_landed_pages_defer_post')
+            && wpc_v2_landed_pages_budget() <= 0) {
+            wpc_v2_landed_pages_defer_post($post_id, $mode);
+            return 'queued';
+        }
+        if (function_exists('wpc_v2_landed_pages_budget')) {
+            wpc_v2_landed_pages_budget(1);
+        }
+        wpc_v2_fire_clean_post_cache_cascade($post_id, $mode);
+        $GLOBALS['wpc_v2_html_purged_pages'][$post_id] = $rank;
+        return 'purged';
+    }
+}
+
 if (!function_exists('wpc_v2_purge_html_for_attachment')) {
 
-    function wpc_v2_purge_html_for_attachment($image_id, $source = 'unknown')
+    function wpc_v2_purge_html_for_attachment($image_id, $source = 'unknown', $mode = null, $any_delivery = false)
     {
         $image_id = (int) $image_id;
-        if (!wpc_v2_should_purge_html($image_id)) {
+        if ($any_delivery ? ($image_id <= 0 || !apply_filters('wpc_v2_html_purge_enabled', true, $image_id)) : !wpc_v2_should_purge_html($image_id)) {
             return null;
         }
 
@@ -134,7 +236,10 @@ if (!function_exists('wpc_v2_purge_html_for_attachment')) {
         if (is_array($bulk) && !empty($bulk['status']) && in_array($bulk['status'], ['restoring', 'optimizing', 'running'], true)) {
 
 
-            update_option('wpc_v2_html_purge_pending_bulk', 1, false);
+            $wpc_bulk_hard = ($mode === 'hard' || $bulk['status'] === 'restoring') ? 'hard' : '1';
+            if ($wpc_bulk_hard === 'hard' || get_option('wpc_v2_html_purge_pending_bulk') !== 'hard') {
+                update_option('wpc_v2_html_purge_pending_bulk', $wpc_bulk_hard, false);
+            }
             return false;
         }
 
@@ -143,6 +248,10 @@ if (!function_exists('wpc_v2_purge_html_for_attachment')) {
         if ($throttle_seconds < 1) $throttle_seconds = 1;
 
         $throttle_key = 'wpc_html_purge_throttle_' . $image_id;
+        if ($mode === 'hard') {
+            delete_transient($throttle_key);
+            delete_transient('wpc_html_purge_posts_' . $image_id);
+        }
         if (get_transient($throttle_key)) {
             return false;
         }
@@ -161,10 +270,12 @@ if (!function_exists('wpc_v2_purge_html_for_attachment')) {
         }
 
         $purged = 0;
+        $queued = 0;
         foreach ($post_ids as $post_id) {
             try {
-                wpc_v2_fire_clean_post_cache_cascade((int) $post_id);
-                $purged++;
+                $took = wpc_v2_purge_page_within_budget((int) $post_id, $mode);
+                if ($took === 'purged') $purged++;
+                if ($took === 'queued') $queued++;
             } catch (\Throwable $e) {
                 error_log(sprintf(
                     '[WPC HtmlPurge] post_id=%d image_id=%d error=%s',
@@ -178,8 +289,8 @@ if (!function_exists('wpc_v2_purge_html_for_attachment')) {
         do_action('wpc_variant_landed_purge_html', $image_id, $post_ids, $source);
 
         error_log(sprintf(
-            '[WPC HtmlPurge] source=%s image_id=%d posts_purged=%d throttle_s=%d',
-            (string) $source, $image_id, $purged, $throttle_seconds
+            '[WPC HtmlPurge] source=%s image_id=%d posts_purged=%d posts_queued=%d throttle_s=%d',
+            (string) $source, $image_id, $purged, $queued, $throttle_seconds
         ));
 
         return true;
@@ -254,11 +365,12 @@ if ((defined('WPC_LAZY_TEST_ENDPOINTS') && WPC_LAZY_TEST_ENDPOINTS)
 
 add_action('delete_option', function ($option_name) {
     if ($option_name !== 'wps_ic_bulk_process') return;
-    if (!get_option('wpc_v2_html_purge_pending_bulk')) return;
+    $wpc_pending = get_option('wpc_v2_html_purge_pending_bulk');
+    if (!$wpc_pending) return;
     delete_option('wpc_v2_html_purge_pending_bulk');
     if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
         try {
-            wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft');
+            wps_ic_cache::removeHtmlCacheFiles('all', '', '', $wpc_pending === 'hard' ? 'hard' : 'soft');
             error_log('[WPC HtmlPurge] end-of-bulk global purge fired');
         } catch (\Throwable $e) {
             error_log('[WPC HtmlPurge] end-of-bulk failed: ' . $e->getMessage());

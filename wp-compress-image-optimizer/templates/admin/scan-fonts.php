@@ -6,15 +6,9 @@ $fontsMode = !empty($fontSettings['replace-fonts']) ? $fontSettings['replace-fon
 
 // Handle purge font cache before any output (skip in agency mode — handled via AJAX relay instead)
 if (!empty($_GET['purgeFontCache']) && !$wps_ic->isAgencyPortal()) {
-    delete_option(WPS_IC_FONTS_MAP);
-
-    $fonts = new wps_ic_fonts();
-    $response = $fonts->callAPI(site_url());
-    $found = $fonts->scanForFonts($response);
-
-    $hasGoogleFonts = !empty($found['googleFontsStylesheets']) || !empty($found['gstaticUrls']);
-    if ($hasGoogleFonts) {
-        $fonts->readGoogleStylesheet($found);
+    if (current_user_can('manage_wpc_settings') && wp_verify_nonce(isset($_GET['wps_ic_nonce']) && is_scalar($_GET['wps_ic_nonce']) ? (string) $_GET['wps_ic_nonce'] : '', 'wps_ic_nonce_action')) {
+        $fonts = new wps_ic_fonts();
+        $fonts->scanAndLocalize(site_url(), true);
     }
 
     echo '<script>window.location.href = "' . esc_url(admin_url('options-general.php?page=' . $wps_ic::$slug . '#scan-fonts')) . '";</script>';
@@ -92,7 +86,7 @@ if (!empty($_GET['purgeFontCache']) && !$wps_ic->isAgencyPortal()) {
         // the portal host's own wp-admin (permission error). The wpsPurgeFontCache ajax relay
         // has existed all along (portal branch forwards by apikey; local branch purges+rescans)
         // — the button now uses it in both contexts.
-        echo $gui::buttonAction(esc_html__('Purge & Rescan Font Cache', WPS_IC_TEXTDOMAIN), esc_html__('Clear the font cache and re-scan your homepage to detect newly added or removed fonts.', WPS_IC_TEXTDOMAIN), esc_html__('Purge', WPS_IC_TEXTDOMAIN), '', '#', 'wpc-purge-font-cache');
+        echo $gui::buttonAction(esc_html__('Purge & Rescan Font Cache', WPS_IC_TEXTDOMAIN), esc_html__('Purge the font cache and re-scan your homepage to detect newly added or removed fonts.', WPS_IC_TEXTDOMAIN), esc_html__('Purge', WPS_IC_TEXTDOMAIN), '', '#', 'wpc-purge-font-cache');
         ?>
         <script type="text/javascript">
         jQuery(function ($) {

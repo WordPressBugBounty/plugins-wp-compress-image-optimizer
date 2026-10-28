@@ -91,8 +91,9 @@ if (!function_exists('wpc_v2_delivery_config')) {
             : (function_exists('get_option') ? (string) get_option('wpc_optimization_mode', '') : '');
         $writes_variants = in_array($opt_mode, ['lazy_cdn', 'local'], true);
 
+        // No site_url: the registered address is written once, by keys at connect. A database
+        // copy on chop.lan sent its own and re-targeted the live zone's origin (ticket 12238).
         return [
-            'site_url'        => function_exists('site_url') ? site_url() : '',
             'cname'           => $cname,
             'delivery_mode'   => $natural ? 'natural_url' : 'transform_url',
             'writes_variants' => $writes_variants,
@@ -223,6 +224,7 @@ if (!function_exists('wpc_v2_detect_host')) {
 }
 
 
+
 if (!function_exists('wpc_v2_report_lifecycle_event')) {
     function wpc_v2_report_lifecycle_event($event)
     {
@@ -230,15 +232,15 @@ if (!function_exists('wpc_v2_report_lifecycle_event')) {
         $apikey   = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
         $orch_url = function_exists('wpc_v2_orchestrator_url') ? wpc_v2_orchestrator_url() : '';
         if ($apikey === '' || $orch_url === '') return;
+        if (!wpc_site_address_confirmed('lifecycle')) return;
 
         $body_payload = ['apikey' => $apikey, 'event' => $event];
         if (defined('WPC_PLUGIN_VERSION')) {
             $body_payload['plugin_version'] = (string) WPC_PLUGIN_VERSION;
             $body_payload['plan_version'] = class_exists('wps_ic_plan') ? wps_ic_plan::version() : '';
-            $body_payload['policy_version'] = function_exists('wpc_policy_version') ? (int) wpc_policy_version() : 0;
-            $body_payload['policy_version_seen'] = $body_payload['policy_version'];
-            if (function_exists('wpc_policy_serve') && function_exists('wpc_policy_land')) {
-                $body_payload['policy_effective'] = ['serve' => (string) wpc_policy_serve(), 'land' => (string) wpc_policy_land()];
+            $body_payload['crit_state'] = function_exists('wpc_crit_state') ? wpc_crit_state() : '';
+            if (function_exists('wpc_policy_echo_fields')) {
+                $body_payload = array_merge($body_payload, wpc_policy_echo_fields());
             }
         }
         $body_raw = wp_json_encode($body_payload);
@@ -304,9 +306,10 @@ if (!function_exists('wpc_v2_log_config_sync_result')) {
     }
 }
 if (!function_exists('wpc_v2_config_sync_zones')) {
-    function wpc_v2_config_sync_zones(array $zones)
+    function wpc_v2_config_sync_zones(array $zones, $zoneless = false)
     {
-        if (empty($zones)) {
+        $zoneless = (bool) $zoneless;
+        if (empty($zones) && !$zoneless) {
             return ['ok' => false, 'http_code' => 0, 'reason' => 'no_zones_provided'];
         }
 
@@ -323,9 +326,8 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
                 $ajax_action = isset($_REQUEST['action']) ? (string) $_REQUEST['action'] : '';
                 $defer_sync = (strpos($ajax_action, 'wps_ic_') !== 0 && strpos($ajax_action, 'wpc_') !== 0);
             } else {
-                // v7.10.642 — the update path: a version bump changes the env fingerprint,
-                // and the FIRST admin pageview after updating paid this blocking POST
-                // inline (receipt: cURL 28 after 8002ms, 0 bytes, on staging right after
+                // v7.10.642 — the update path: the FIRST admin pageview after updating
+                // paid this blocking POST inline (receipt: cURL 28 after 8002ms, 0 bytes, on staging right after
                 // install). Inline is for explicit WPC interactions only — identified by
                 // our nonce riding the request; a plain pageview reschedules (+5s cron),
                 // so the sync still happens, just never on a pageview's dime.
@@ -360,6 +362,12 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
         if ($apikey === '' || $orch_url === '') {
             return ['ok' => false, 'http_code' => 0, 'reason' => 'plugin_misconfigured'];
         }
+        // Rule: nothing configures the zone until a fresh credits answer registers this address
+        // (receipt config-sync-refused). A copy's first admin load sent this sync an hour before
+        // the cached account check noticed the address (ticket 12238).
+        if (!wpc_site_address_confirmed($zoneless ? 'config-sync-zoneless' : 'config-sync')) {
+            return ['ok' => false, 'http_code' => 0, 'reason' => 'site_address_refused'];
+        }
 
 
         $img_cfg = wpc_v2_local_image_config();
@@ -372,7 +380,6 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             if (!is_array($z) || empty($z['zone_id'])) continue;
             $entry = [
                 'zone_id'         => (string) $z['zone_id'],
-                'site_url'        => $del_cfg['site_url'],
                 'lazy_enabled'    => !empty($z['lazy_enabled']),
                 'local_quality'   => $img_cfg['local_quality'],
                 'local_max_width' => $img_cfg['local_max_width'],
@@ -404,7 +411,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             }
             $clean[] = $entry;
         }
-        if (empty($clean)) {
+        if (empty($clean) && !$zoneless) {
             return ['ok' => false, 'http_code' => 0, 'reason' => 'no_valid_zones'];
         }
         if (count($clean) > 100) {
@@ -424,13 +431,15 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
         if (defined('WPC_PLUGIN_VERSION')) {
             $body_payload['plugin_version'] = (string) WPC_PLUGIN_VERSION;
             $body_payload['plan_version'] = class_exists('wps_ic_plan') ? wps_ic_plan::version() : '';
-            $body_payload['policy_version'] = function_exists('wpc_policy_version') ? (int) wpc_policy_version() : 0;
-            $body_payload['policy_version_seen'] = $body_payload['policy_version'];
-            if (function_exists('wpc_policy_serve') && function_exists('wpc_policy_land')) {
-                $body_payload['policy_effective'] = ['serve' => (string) wpc_policy_serve(), 'land' => (string) wpc_policy_land()];
+            $body_payload['crit_state'] = function_exists('wpc_crit_state') ? wpc_crit_state() : '';
+            if (function_exists('wpc_policy_echo_fields')) {
+                $body_payload = array_merge($body_payload, wpc_policy_echo_fields());
             }
         }
         $body_payload['php_version'] = PHP_VERSION;
+        if (function_exists('wpc_device_mix_echo')) {
+            $body_payload['device_mix'] = wpc_device_mix_echo();
+        }
         if (function_exists('get_bloginfo')) {
             $body_payload['wp_version'] = (string) get_bloginfo('version');
         }
@@ -440,6 +449,11 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
         }
         if ($wake_url !== '') {
             $body_payload['wake_url'] = $wake_url;
+        }
+        $body_payload['rest_base']      = function_exists('rest_url') ? (string) rest_url() : '';
+        $body_payload['rest_form_seen'] = (string) get_option('wpc_v2_rest_form_seen', '');
+        if (function_exists('wpc_cdn_drives_images')) {
+            $body_payload['cdn'] = wpc_cdn_drives_images() ? 'on' : 'off';
         }
 
         // 'cdn_unhealthy_selfcheck' as a PROBE TRIGGER: verify fetch paths, flip the zone's
@@ -485,6 +499,9 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             ],
             'body' => $body_raw,
         ]);
+        if ($zoneless) {
+            update_option('wpc_v2_zoneless_sync_at', time(), false);
+        }
         if (is_wp_error($resp)) {
             error_log('[WPC ConfigSync] http_error: ' . $resp->get_error_message());
             if (function_exists('wpc_mc_trip') && preg_match('/timed? ?out|cURL error (?:28|7|6)|could not resolve/i', (string) $resp->get_error_message())) {
@@ -503,6 +520,13 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
                 is_array($b202) && isset($b202['status_url']) ? (string) $b202['status_url'] : '?'
             ));
         }
+        if (($code < 200 || $code >= 300) && $zoneless) {
+            delete_option('wpc_v2_config_sync_pending');
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('config-sync-zoneless', '', '', ['status' => $code, 'ok' => 0]);
+            }
+            return ['ok' => false, 'http_code' => $code, 'reason' => 'zoneless_refused'];
+        }
         if ($code < 200 || $code >= 300) {
             error_log(sprintf(
                 '[WPC ConfigSync] http_%d resp=%s',
@@ -514,37 +538,22 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
 
         $rbody = json_decode((string) wp_remote_retrieve_body($resp), true);
 
-
-        if (function_exists('update_option')) {
-            $zc = null;
-            if (is_array($rbody) && !empty($rbody['zones']) && is_array($rbody['zones'])) {
-                foreach ($rbody['zones'] as $rz) {
-                    if (is_array($rz) && !empty($rz['zone_id_corrected']) && is_array($rz['zone_id_corrected'])
-                        && isset($rz['zone_id_corrected']['to'])) { $zc = $rz['zone_id_corrected']; break; }
-                }
-            }
-            if ($zc === null && is_array($rbody) && !empty($rbody['zone_id_corrected'])
-                && is_array($rbody['zone_id_corrected']) && isset($rbody['zone_id_corrected']['to'])) {
-                $zc = $rbody['zone_id_corrected'];
-            }
-            if (is_array($zc)) {
-                $zc_to  = preg_replace('/[^0-9]/', '', (string) $zc['to']);
-                $zc_now = function_exists('wpc_v2_get_zone_id') ? (string) wpc_v2_get_zone_id() : '';
-                if ($zc_to !== '' && $zc_to !== $zc_now) {
-                    $zc_from = isset($zc['from']) ? (string) $zc['from'] : $zc_now;
-                    update_option('wpc_v2_zone_id', $zc_to, false);
-                    if (function_exists('error_log')) error_log('[WPC ConfigSync] orch zone_id_corrected: adopted ' . $zc_to . ' (was ' . $zc_from . ') — clone-drift auto-heal');
-                }
-            }
-        }
-
         if (is_array($rbody) && !empty($rbody['failed']) && is_array($rbody['failed'])) {
             $reasons = [];
             $db_deferred = false;
+            $address_refused = null;
             foreach ($rbody['failed'] as $f) {
                 $reason = is_array($f) ? (string) ($f['reason'] ?? $f['error'] ?? $f['code'] ?? '') : (string) $f;
                 if ($reason !== '') $reasons[] = $reason;
                 if (stripos($reason, 'db_error') === 0) $db_deferred = true;
+                if ($reason === 'site_url_mismatch' && $address_refused === null) {
+                    $address_refused = (is_array($f) && is_string($f['site_url_registered'] ?? null)) ? (string) $f['site_url_registered'] : '';
+                }
+            }
+            // The orchestrator refused the entry because the zone's registered address is not
+            // this site's: the same disconnect as a mismatching credits answer.
+            if ($address_refused !== null && class_exists('wps_ic')) {
+                wps_ic::disconnect_for_site_address_change($address_refused, function_exists('site_url') ? (string) site_url() : '');
             }
             error_log(sprintf(
                 '[WPC ConfigSync] http_%d but failed=[%s] — NOT caching mirror (%s).',
@@ -560,6 +569,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
         }
 
 
+        $zones_said = is_array($rbody) && !empty($rbody['zones']) && is_array($rbody['zones']);
         $nav_by_zone = [];
         if (is_array($rbody) && !empty($rbody['zones']) && is_array($rbody['zones'])) {
             foreach ($rbody['zones'] as $rz) {
@@ -645,9 +655,6 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             if ($cname_witness === true && !$was_verified) {
                 update_option('wpc_cf_cname_verified', 1, false);
                 delete_option('wpc_cf_verify_challenged2114');
-                if (function_exists('site_url')) {
-                    update_option('wpc_v2_provisioned_site_url', (string) site_url(), false);
-                }
                 $emitted_host_flipped = true;
             } elseif ($cname_witness === false && $was_verified && !wpc_cf_cname_gate_legacy()) {
                 update_option('wpc_cf_cname_verified', '0', false);
@@ -683,14 +690,13 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             } elseif (count($clean) === 1 && count($nav_by_zone) === 1) {
                 $nav_written = reset($nav_by_zone) ? '1' : '0';
                 update_option($nav_key, $nav_written, false);
-            } elseif (function_exists('delete_option')) {
+            } elseif ($zones_said && function_exists('delete_option')) {
                 delete_option($nav_key);
             }
 
 
             if ($nav_written === '1') {
                 if (function_exists('delete_option')) delete_option('wpc_v2_selfheal_attempts');
-                if (function_exists('site_url'))      update_option('wpc_v2_provisioned_site_url', (string) site_url(), false);
 
 
                 if ((string) $nav_old !== '1'
@@ -711,7 +717,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
                 $cdn_new = reset($cdn_disabled_by_zone) ? '1' : '0';
                 if ((string) $cdn_old !== $cdn_new) { $cdn_disabled_changed = true; }
                 update_option($cdn_key, $cdn_new, false);
-            } elseif (function_exists('delete_option')) {
+            } elseif ($zones_said && function_exists('delete_option')) {
                 if ($cdn_old !== null && $cdn_old !== false) { $cdn_disabled_changed = true; }
                 delete_option($cdn_key);
             }
@@ -722,7 +728,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
                 update_option($sh_key, $src_hints_by_zone[$zid] ? '1' : '0', false);
             } elseif (count($clean) === 1 && count($src_hints_by_zone) === 1) {
                 update_option($sh_key, reset($src_hints_by_zone) ? '1' : '0', false);
-            } elseif (function_exists('delete_option')) {
+            } elseif ($zones_said && function_exists('delete_option')) {
                 delete_option($sh_key);
             }
         
@@ -771,6 +777,9 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
         if (function_exists('wpc_policy_ingest')) {
             wpc_policy_ingest($rbody);
         }
+        if (function_exists('wpc_v2_landed_ingest')) {
+            wpc_v2_landed_ingest($rbody);
+        }
         // Ops visibility: log per-zone cdn_disabled values when the field is present.
         if (!empty($cdn_disabled_by_zone)) {
             error_log('[WPC cdn_disabled] /v2/config echoed ' . count($cdn_disabled_by_zone)
@@ -793,13 +802,15 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
 
         // Mirror the config we just pushed so the settings-save trigger can detect "already
         // in sync" and skip redundant POSTs. Site-global, one option.
-        update_option(
-            'wpc_v2_synced_image_config',
-            $img_cfg['local_quality'] . '|' . $img_cfg['local_max_width']
-                . '|' . $del_cfg['delivery_mode'] . '|' . $del_cfg['host_lock_mode'] . '|' . $del_cfg['host_lock_allow']
-                . ($del_cfg['redirect_target'] === 'origin' ? '|origin' : ''),
-            false
-        );
+        if (!$zoneless) {
+            update_option(
+                'wpc_v2_synced_image_config',
+                $img_cfg['local_quality'] . '|' . $img_cfg['local_max_width']
+                    . '|' . $del_cfg['delivery_mode'] . '|' . $del_cfg['host_lock_mode'] . '|' . $del_cfg['host_lock_allow']
+                    . ($del_cfg['redirect_target'] === 'origin' ? '|origin' : ''),
+                false
+            );
+        }
 
         // Sync succeeded (2xx, no failed[]) — clear any pending-retry flag from a prior deferral.
         if (function_exists('delete_option')) {
@@ -811,7 +822,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
 
         // The receipt that this sync carried a host into agencySites.cname; the provisioning
         // flag is cleared only against it (wpc_cf_cname_sync_owed).
-        if ($del_cfg['cname'] !== '') {
+        if (!$zoneless && $del_cfg['cname'] !== '') {
             $previous_sync = get_option('wpc_cf_cname_synced');
             $witness_asks  = (is_array($previous_sync) && (string) ($previous_sync['cname'] ?? '') === $del_cfg['cname']
                 && array_key_exists('witness', $previous_sync) && $previous_sync['witness'] === null)
@@ -833,8 +844,8 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             }
         }
 
-        if (function_exists('wpc_v2_env_fingerprint')) {
-            update_option('wpc_v2_provisioned_fingerprint', wpc_v2_env_fingerprint(), false);
+        if ($zoneless && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('config-sync-zoneless', '', '', ['status' => $code, 'ok' => 1]);
         }
 
         return wpc_v2_log_config_sync_result(['ok' => true, 'http_code' => $code], $sync_start_t);
@@ -985,6 +996,48 @@ if (!function_exists('wpc_v2_provision_now_handler')) {
     add_action('wp_ajax_wpc_v2_provision_now', 'wpc_v2_provision_now_handler');
     add_action('wp_ajax_nopriv_wpc_v2_provision_now', 'wpc_v2_provision_now_handler');
 }
+if (!function_exists('wpc_v2_sync_zone_identity')) {
+    function wpc_v2_sync_zone_identity()
+    {
+        $zone_id = function_exists('wpc_v2_get_zone_id') ? (string) wpc_v2_get_zone_id() : '';
+        if ($zone_id !== '' && ctype_digit($zone_id)) {
+            return $zone_id;
+        }
+        $cname = trim((string) get_option('ic_custom_cname'));
+        if ($cname === '') {
+            $cname = trim((string) get_option('ic_cdn_zone_name'));
+        }
+        if ($cname === '' && function_exists('wpc_cf_cname_emit_host')) {
+            $cname = wpc_cf_cname_emit_host();
+        }
+        return $cname;
+    }
+}
+
+if (!function_exists('wpc_v2_sync_is_zoneless')) {
+    function wpc_v2_sync_is_zoneless()
+    {
+        return wpc_v2_sync_zone_identity() === '' && (!function_exists('wpc_v2_get_zone_id') || (string) wpc_v2_get_zone_id() === '');
+    }
+}
+
+if (!function_exists('wpc_v2_config_sync_site')) {
+    function wpc_v2_config_sync_site()
+    {
+        $zid = wpc_v2_sync_zone_identity();
+        if ($zid === '' && function_exists('wpc_v2_get_zone_id')) {
+            $zid = (string) wpc_v2_get_zone_id();
+        }
+        if ($zid !== '') {
+            return wpc_v2_config_sync_lazy_enabled($zid, function_exists('wpc_v2_get_lazy_enabled') ? wpc_v2_get_lazy_enabled() : false);
+        }
+        if (!function_exists('wpc_v2_get_apikey') || (string) wpc_v2_get_apikey() === '') {
+            return ['ok' => false, 'http_code' => 0, 'reason' => 'not_connected'];
+        }
+        return wpc_v2_config_sync_zones([], true);
+    }
+}
+
 if (!function_exists('wpc_v2_run_deferred_config_sync')) {
     function wpc_v2_run_deferred_config_sync()
     {
@@ -1000,21 +1053,16 @@ if (!function_exists('wpc_v2_run_deferred_config_sync')) {
             set_transient('wpc_v2_deferred_sync_lock', 1, 60);
         }
 
-        $zone_id     = (string) wpc_v2_get_zone_id();
-        $has_numeric = ($zone_id !== '' && ctype_digit($zone_id));
-
-        // Fire on apikey, not "numeric Bunny PZ only": a CF-fronted custom CNAME may have no
-
-
-        $cname = trim((string) get_option('ic_custom_cname'));
-        if ($cname === '') {
-            $cname = trim((string) get_option('ic_cdn_zone_name'));
-        }
-        if ($cname === '' && function_exists('wpc_cf_cname_emit_host')) {
-            $cname = wpc_cf_cname_emit_host();
-        }
-        $zid = $has_numeric ? $zone_id : $cname;
+        $zid = wpc_v2_sync_zone_identity();
         if ($zid === '') {
+            if (wpc_v2_sync_is_zoneless() && function_exists('wpc_v2_get_apikey') && (string) wpc_v2_get_apikey() !== '') {
+                $zoneless_before = (int) get_option('wpc_v2_config_synced_at', 0);
+                wpc_v2_config_sync_zones([], true);
+                if ((int) get_option('wpc_v2_config_synced_at', 0) > $zoneless_before) {
+                    delete_option('wpc_v2_force_provision');
+                    delete_option('wpc_v2_force_provision_fails');
+                }
+            }
             return;
         }
 
@@ -1065,70 +1113,6 @@ if (!function_exists('wpc_v2_zone_unprovisioned')) {
     }
 }
 
-if (!function_exists('wpc_v2_provision_host_changed')) {
-
-
-    function wpc_v2_provision_host_changed()
-    {
-        if (!function_exists('site_url') || !function_exists('get_option')) return false;
-        $confirmed = (string) get_option('wpc_v2_provisioned_site_url', '');
-        if ($confirmed === '') return false;
-        // Scheme-stable compare: site_url() returns http/https by request context, so a raw compare
-        // false-fires "host changed" between an http cron stamp and an https render.
-        return preg_replace('#^https?://#i', '', $confirmed) !== preg_replace('#^https?://#i', '', (string) site_url());
-    }
-}
-
-if (!function_exists('wpc_v2_env_fingerprint')) {
-
-
-    function wpc_v2_env_fingerprint()
-    {
-        global $wpdb;
-
-
-        $home = function_exists('get_option') ? (string) get_option('home') : '';
-        if ($home === '' && function_exists('home_url')) $home = (string) home_url();
-        $url = preg_replace('#^https?://#i', '', $home);
-        $db  = defined('DB_NAME') ? (string) DB_NAME : '';
-        $pfx = (isset($wpdb) && isset($wpdb->prefix)) ? (string) $wpdb->prefix : '';
-        return sha1($url . '|' . $db . '|' . $pfx);
-    }
-}
-if (!function_exists('wpc_v2_provision_env_changed')) {
-
-
-    function wpc_v2_provision_env_changed()
-    {
-        if (!function_exists('get_option')) return false;
-        return (string) get_option('wpc_v2_provisioned_fingerprint', '') !== wpc_v2_env_fingerprint();
-    }
-}
-if (!function_exists('wpc_v2_provision_reset_for_env')) {
-
-
-    function wpc_v2_provision_reset_for_env()
-    {
-        if (!function_exists('get_option')) return;
-        if (function_exists('wpc_v2_get_zone_id') && function_exists('delete_option')) {
-            $zid = (string) wpc_v2_get_zone_id();
-            if ($zid !== '') delete_option('wpc_v2_orch_nav_' . sanitize_key($zid));
-        }
-        if (function_exists('delete_option')) {
-            delete_option('wpc_v2_provisioned_site_url');
-            delete_option('wpc_v2_selfheal_attempts');
-        }
-
-
-        if (function_exists('update_option')) update_option('wpc_cf_cname_verified', '0', false);
-        if (function_exists('delete_transient')) {
-            delete_transient('wpc_v2_selfheal_backoff');
-            delete_transient('wpc_v2_config_force_backoff');
-        }
-        if (function_exists('update_option')) update_option('wpc_v2_force_provision', 1, false);
-    }
-}
-
 if (!function_exists('wpc_v2_provision_ensure_bg')) {
 
 
@@ -1141,8 +1125,7 @@ if (!function_exists('wpc_v2_provision_ensure_bg')) {
 
         $force  = (bool) get_option('wpc_v2_force_provision');
         $unprov = wpc_v2_zone_unprovisioned();
-        $moved  = wpc_v2_provision_host_changed();
-        if (!$force && !$unprov && !$moved) return false;
+        if (!$force && !$unprov) return false;
 
         $attempts = (int) get_option('wpc_v2_selfheal_attempts', 0);
         if ($attempts >= 12) return false;
@@ -1151,22 +1134,16 @@ if (!function_exists('wpc_v2_provision_ensure_bg')) {
         if (function_exists('get_transient') && get_transient('wpc_v2_selfheal_backoff')) return false;
         if (function_exists('set_transient')) set_transient('wpc_v2_selfheal_backoff', 1, 120);
 
-        if ($moved) {
-            // Host migration/clone: clear the stale confirmed-site stamp so wpc_v2_run_deferred_config_sync
-
-
-            if (function_exists('delete_option')) delete_option('wpc_v2_provisioned_site_url');
-        }
         update_option('wpc_v2_force_provision', 1, false);
         update_option('wpc_v2_selfheal_attempts', $attempts + 1, false);
-        error_log(sprintf('[WPC v2 selfheal] ensure_bg reason=%s force=%d unprov=%d moved=%d attempt=%d',
-            (string) $reason, $force ? 1 : 0, $unprov ? 1 : 0, $moved ? 1 : 0, $attempts + 1));
-        // Rule: a zone that is unprovisioned, moved or owed a sync gets /v2/config re-sent, at
+        error_log(sprintf('[WPC v2 selfheal] ensure_bg reason=%s force=%d unprov=%d attempt=%d',
+            (string) $reason, $force ? 1 : 0, $unprov ? 1 : 0, $attempts + 1));
+        // Rule: a zone that is unprovisioned or owed a sync gets /v2/config re-sent, at
         // most twelve times. Each arm is logged; `last:1` marks the twelfth, after which the
         // heal stops asking and only a force-provision click or an upgrade resets it.
         if (function_exists('wpc_belt_receipt')) {
             wpc_belt_receipt('provision-ensure', ['reason' => (string) $reason, 'force' => $force ? 1 : 0,
-                'unprov' => $unprov ? 1 : 0, 'moved' => $moved ? 1 : 0, 'attempt' => $attempts + 1,
+                'unprov' => $unprov ? 1 : 0, 'attempt' => $attempts + 1,
                 'last' => ($attempts + 1) >= 12 ? 1 : 0], false, '');
         }
 
@@ -1215,7 +1192,6 @@ if (!function_exists('wpc_v2_cf_cname_reverify')) {
         $api = new WPC_CloudflareAPI(isset($cf['token']) ? $cf['token'] : '');
         if ($api && $api->verifyCfCnameLive($cfc, 1, 3)) {
             update_option('wpc_cf_cname_verified', 1, false); // PROMOTE — emit-gate now serves the CF cname
-            if (function_exists('site_url')) update_option('wpc_v2_provisioned_site_url', (string) site_url(), false);
             // Under the legacy switch a local probe, not the orchestrator's witness, promotes the
             // emit gate and purges every page: the one exit here that changes what pages emit.
             if (function_exists('wpc_belt_receipt')) {
@@ -1232,37 +1208,6 @@ if (!function_exists('wpc_v2_cf_cname_reverify')) {
         }
         return false;
     }
-}
-
-
-if (function_exists('add_action')) {
-    add_action('wp_ajax_wpc_v2_force_provision_now', function () {
-        if (!function_exists('current_user_can') || !current_user_can('manage_options')
-            || !function_exists('check_ajax_referer') || !check_ajax_referer('wpc_v2_force_provision_now', '_n', false)) {
-            wp_send_json_error('forbidden');
-        }
-        // Reset the bounded self-heal gates (a copied/exhausted counter must not block delivery), arm
-        // force, then run the sync synchronously IN THIS BACKGROUND AJAX (the 8s non-cron cap applies).
-        if (function_exists('delete_option'))    { delete_option('wpc_v2_selfheal_attempts'); }
-        if (function_exists('delete_transient')) { delete_transient('wpc_v2_selfheal_backoff'); delete_transient('wpc_v2_config_force_backoff'); }
-        if (function_exists('update_option'))    { update_option('wpc_v2_force_provision', 1, false); }
-        if (function_exists('wpc_v2_run_deferred_config_sync')) { wpc_v2_run_deferred_config_sync(); }
-        if (function_exists('wpc_v2_cf_cname_reverify')) { wpc_v2_cf_cname_reverify(false); }
-        wp_send_json_success([
-            'env_changed' => function_exists('wpc_v2_provision_env_changed') ? wpc_v2_provision_env_changed() : null,
-            'synced_at'   => (int) get_option('wpc_v2_config_synced_at', 0),
-            'force'       => (bool) get_option('wpc_v2_force_provision', false),
-        ]);
-    });
-    add_action('admin_footer', function () {
-        if (!function_exists('current_user_can') || !current_user_can('manage_options')) return;
-        if (!function_exists('wpc_v2_provision_env_changed') || !wpc_v2_provision_env_changed()) return;
-        if (!(bool) get_option('wpc_v2_force_provision', false)) return;
-        if (!function_exists('wp_create_nonce') || !function_exists('admin_url')) return;
-        $nonce = wp_create_nonce('wpc_v2_force_provision_now');
-        $ajax  = admin_url('admin-ajax.php');
-        echo "\n<script>(function(){try{var f=new FormData();f.append('action','wpc_v2_force_provision_now');f.append('_n'," . wp_json_encode($nonce) . ");fetch(" . wp_json_encode($ajax) . ",{method:'POST',body:f,credentials:'same-origin',keepalive:true});}catch(e){}})();</script>\n";
-    });
 }
 
 
@@ -1462,32 +1407,6 @@ if (!function_exists('wpc_v2_zone_cdn_suppressed')) {
         if ($account_cdn_off) return true;
 
 
-        // Riding the master-kill covers CF + Bunny + transform + fonts on front end + admin in one line.
-        // Cached per request (the fingerprint flips only on a 2xx, in a separate request).
-        static $env = null;
-        if ($env === null) {
-            $env = (function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed());
-        }
-        // v7.20.11 — the fingerprint is a DECLARATION of "this zone serves this site"; the
-        // origin-proof is a MEASUREMENT of it (an uploads file unique to this origin fetched
-        // through the zone, byte-compared to local disk). During an orchestrator outage the
-        // declaration cannot re-stamp (BunnyDB namespace loss, 2x in four days) but the
-        // measurement still can — and a fresh measured proof outranks unreachable
-        // bookkeeping. env_changed ALONE no longer suppresses while the proof is live;
-        // every other trip (account, cname, foreign, disabled) still wins below.
-        if ($env) {
-            $proved = function_exists('wpc_v2_zone_origin_proved') && wpc_v2_zone_origin_proved();
-            // The env fingerprint differs from the one the orchestrator stamped: the CDN is off
-            // unless a fresh origin proof overrides it. Asked on every request while the state
-            // lasts, so each verdict is sampled once an hour for the site.
-            if (function_exists('wpc_belt_receipt')) {
-                wpc_belt_receipt($proved ? 'cdn-suppress-overridden' : 'cdn-suppressed',
-                    ['why' => 'env-changed', 'proof' => $proved ? 1 : 0], true, '');
-            }
-            if (!$proved) {
-                return true;
-            }
-        }
         // A CF-direct zone (customer's CDN is their own cdn.* Cloudflare cname) whose cname is not yet
 
 
@@ -1508,81 +1427,6 @@ if (!function_exists('wpc_v2_zone_cdn_suppressed')) {
         if ($foreign) return true;
         return (function_exists('wpc_v2_zone_cdn_disabled') && wpc_v2_zone_cdn_disabled())
             || (function_exists('wpc_v2_zone_auto_disabled') && wpc_v2_zone_auto_disabled());
-    }
-}
-
-if (!function_exists('wpc_v2_zone_origin_proved')) {
-    /** True while a fresh measured serve-proof exists for the CURRENT zone (12h validity). */
-    function wpc_v2_zone_origin_proved()
-    {
-        if (!function_exists('get_option') || !apply_filters('wpc_zone_origin_proof', true)) {
-            return false;
-        }
-        $p = get_option('wpc_v2_zone_origin_proof', []);
-        if (!is_array($p) || empty($p['ok']) || empty($p['at']) || empty($p['zone'])) {
-            return false;
-        }
-        if (time() - (int) $p['at'] > 12 * 3600) {
-            return false;
-        }
-        $zone = (string) get_option('ic_cdn_zone_name', '');
-        return $zone !== '' && strtolower(trim($zone)) === strtolower((string) $p['zone']);
-    }
-}
-
-if (!function_exists('wpc_v2_zone_origin_probe_run')) {
-    /**
-     * Measure "this zone serves THIS site's bytes": write a one-time text file with a random
-     * token into uploads, fetch it through the zone's plain path, compare, delete it. Bounded:
-     * one fetch, 5s timeout, 1h throttle, admin/cron contexts only (callers gate). Mints a
-     * durable 12h proof on match; a 200 with other bytes clears it.
-     */
-    function wpc_v2_zone_origin_probe_run()
-    {
-        if (!function_exists('get_option') || !function_exists('wp_remote_get')
-            || !apply_filters('wpc_zone_origin_proof', true)) {
-            return false;
-        }
-        if (function_exists('get_transient') && get_transient('wpc_v2_origin_probe_bk')) {
-            return wpc_v2_zone_origin_proved();
-        }
-        if (function_exists('set_transient')) {
-            set_transient('wpc_v2_origin_probe_bk', 1, 3600);
-        }
-        $zone = strtolower(trim((string) get_option('ic_cdn_zone_name', '')));
-        if ($zone === '' || !function_exists('wp_upload_dir')) {
-            return false;
-        }
-        $uploads = wp_upload_dir(null, false);
-        if (!is_array($uploads) || empty($uploads['basedir']) || empty($uploads['baseurl'])
-            || !@is_dir($uploads['basedir']) || !@is_writable($uploads['basedir'])) {
-            return false;
-        }
-        $token = function_exists('random_bytes') ? bin2hex(random_bytes(16)) : md5(uniqid('', true) . mt_rand());
-        $name = 'wpc-origin-proof-' . substr($token, 0, 12) . '.txt';
-        $path = rtrim((string) $uploads['basedir'], '/\\') . '/' . $name;
-        $urlPath = (string) parse_url(rtrim((string) $uploads['baseurl'], '/') . '/' . $name, PHP_URL_PATH);
-        if ($urlPath === '' || @file_put_contents($path, $token) !== strlen($token)) {
-            @unlink($path);
-            return false;
-        }
-        $resp = wp_remote_get('https://' . $zone . $urlPath, ['timeout' => 5, 'redirection' => 0]);
-        @unlink($path);
-        $ok = false;
-        $definitive_failure = false;
-        if (!is_wp_error($resp) && (int) wp_remote_retrieve_response_code($resp) === 200) {
-            $ok = ((string) wp_remote_retrieve_body($resp) === $token);
-            $definitive_failure = !$ok;
-        }
-        if ($ok) {
-            update_option('wpc_v2_zone_origin_proof', ['ok' => 1, 'at' => time(), 'zone' => $zone, 'asset' => $name], false);
-        } elseif ($definitive_failure) {
-            update_option('wpc_v2_zone_origin_proof', [], false);
-        }
-        if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log('zone-origin-probe', '', '', ['ok' => $ok ? 1 : 0, 'def' => $definitive_failure ? 1 : 0, 'asset' => $name]);
-        }
-        return $ok;
     }
 }
 
@@ -1614,15 +1458,40 @@ if (!function_exists('wpc_v2_cdn_canary_url')) {
 
 if (!function_exists('wpc_v2_auto_disable_purge')) {
     /**
-     * Purges every HTML layer (local copies, foreign page caches, Varnish, Cloudflare) when the plugin
-     * stops or resumes emitting zone URLs. Stopping purges hard: a soft purge keeps serving the stored
-     * copy while it rewarms, and that copy links the URLs the zone just failed on. Resuming passes
-     * null (soft): the stored copies link the origin, which still works while they rewarm.
+     * Purges when the plugin stops or resumes emitting zone URLs. Stopping purges hard and reaches
+     * every HTML layer (local copies, Varnish, the host caches that listen on wps_ic_purge_all_cache,
+     * Cloudflare), whatever purge ran moments before (neither the fold into an earlier purge of
+     * everything nor the foreign-cache throttle applies to it): a soft purge keeps serving the
+     * stored copy while it rewarms, and that copy links the URLs the zone just failed on. An account
+     * unsuspend purges hard the same way. Resuming zone URLs passes
+     * null (soft): the stored copies link the origin, which still works while they rewarm, so only
+     * the plugin's own copies are marked stale (removed, in the window after an update before a hard
+     * purge has recorded the version: wpc_purge_is_soft); Varnish, the host caches that listen on
+     * wps_ic_purge_all_cache and Cloudflare are not asked.
      */
     function wpc_v2_auto_disable_purge($mode = 'hard')
     {
-        if (function_exists('wpc_r2_purge_html_layers')) {
-            wpc_r2_purge_html_layers($mode);
+        if ($mode === null) {
+            if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+                wps_ic_cache::removeHtmlCacheFiles('all', '', '', null, false);
+            }
+        } elseif (function_exists('wpc_r2_purge_html_layers')) {
+            $hard = $mode === 'hard';
+            $everyLayer = function () {
+                return 0;
+            };
+            if ($hard) {
+                add_filter('wpc_purge_all_coalesce_window', $everyLayer, PHP_INT_MAX);
+                add_filter('wpc_foreign_purge_window_s', $everyLayer, PHP_INT_MAX);
+            }
+            try {
+                wpc_r2_purge_html_layers($mode);
+            } finally {
+                if ($hard) {
+                    remove_filter('wpc_purge_all_coalesce_window', $everyLayer, PHP_INT_MAX);
+                    remove_filter('wpc_foreign_purge_window_s', $everyLayer, PHP_INT_MAX);
+                }
+            }
         } elseif (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
             wps_ic_cache::removeHtmlCacheFiles('all', '', '', $mode);
         } elseif (function_exists('do_action')) {
@@ -2406,6 +2275,16 @@ if (!function_exists('wpc_v2_maybe_sync_image_config')) {
 if (defined('WPS_IC_SETTINGS')) {
     add_action('update_option_' . WPS_IC_SETTINGS, 'wpc_v2_maybe_sync_image_config', 20, 2);
 }
+if (!function_exists('wpc_v2_auto_mode_sync')) {
+    /** Auto Mode decides whether the service's default set reaches this site, so a change of it is owed to the service until a sync lands. */
+    function wpc_v2_auto_mode_sync()
+    {
+        update_option('wpc_v2_config_sync_pending', 1, false);
+        wpc_v2_schedule_config_sync();
+    }
+}
+add_action('add_option_wpc_auto_mode', 'wpc_v2_auto_mode_sync', 20, 0);
+add_action('update_option_wpc_auto_mode', 'wpc_v2_auto_mode_sync', 20, 0);
 
 if (!function_exists('wpc_smart_delivery_serves_images')) {
     /**
@@ -2460,12 +2339,12 @@ if (defined('WPS_IC_SETTINGS')) {
 
 
 if (!function_exists('wpc_v2_resolve_zone_id')) {
-    function wpc_v2_resolve_zone_id($force = false)
+    function wpc_v2_resolve_zone_id()
     {
         // Already provisioned with a NUMERIC Bunny PZ id → nothing to do. A non-numeric value
 
 
-        if (!$force && function_exists('wpc_v2_get_zone_id')) {
+        if (function_exists('wpc_v2_get_zone_id')) {
             $existing = wpc_v2_get_zone_id();
             if ($existing !== '' && ctype_digit((string) $existing)) {
 
@@ -2483,7 +2362,7 @@ if (!function_exists('wpc_v2_resolve_zone_id')) {
         if ($apikey === '' || $orch_url === '') return '';
 
 
-        if (!$force && function_exists('get_transient') && get_transient('wpc_v2_zone_resolve_backoff')) {
+        if (function_exists('get_transient') && get_transient('wpc_v2_zone_resolve_backoff')) {
             return '';
         }
         $backoff = function () {
@@ -2491,6 +2370,14 @@ if (!function_exists('wpc_v2_resolve_zone_id')) {
                 set_transient('wpc_v2_zone_resolve_backoff', 1, defined('HOUR_IN_SECONDS') ? 6 * HOUR_IN_SECONDS : 21600);
             }
         };
+
+        // Same rule as the config sync: the zone is asked for only once a fresh credits answer
+        // registers this address. A refusal backs off like a failed resolve, so an unanswered
+        // check is not repeated on every admin page; a connect clears the back-off.
+        if (!wpc_site_address_confirmed('zone-resolve')) {
+            $backoff();
+            return '';
+        }
 
         $body_raw = wp_json_encode(['apikey' => $apikey]);
         if ($body_raw === false) { $backoff(); return ''; }
@@ -2667,7 +2554,7 @@ add_action('wpc_v2_postupdate_purge', function () {
                 foreach ((array) $wpc_hooks as $wpc_h => $wpc_events) {
                     // run_precache_cron_job: recurring event whose handler registration was
                     // removed (cache_warmup add_hooks is a stub) — fires forever into void
-                    $wpc_drop_all = in_array($wpc_h, ['wpc_lcp_repull', 'wpc_combine_fonts_fetch', 'wpc_autopurge_check', 'run_precache_cron_job'], true);
+                    $wpc_drop_all = in_array($wpc_h, ['wpc_lcp_repull', 'wpc_combine_fonts_fetch', 'wpc_autopurge_check', 'run_precache_cron_job', 'wpc_v2_provheal_cron'], true);
                     $wpc_is_warm  = ($wpc_h === 'wpc_url_warm');
                     if (!$wpc_drop_all && !$wpc_is_warm) {
                         continue;
@@ -2716,16 +2603,6 @@ add_action('admin_init', function () {
     }
 
 
-    if (function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed()
-        && !(function_exists('get_transient') && get_transient('wpc_v2_zone_reresolve_bk'))) {
-        if (function_exists('set_transient')) set_transient('wpc_v2_zone_reresolve_bk', 1, 600);
-        $healed = wpc_v2_resolve_zone_id(true);
-        if ($healed !== '' && $healed !== $z && function_exists('error_log')) {
-            error_log('[WPC ConfigSync] clone-drift heal: re-resolved stale zone_id ' . $z . ' → ' . $healed . ' (apikey owns the live zone)');
-        }
-    }
-
-
     if (function_exists('wpc_cdn_zone_is_foreign') && wpc_cdn_zone_is_foreign()) {
         wpc_v2_resolve_zone_id();
     }
@@ -2746,7 +2623,9 @@ add_action('admin_init', function () {
 }, 21);
 
 
-add_action('admin_init', function () {
+if (!function_exists('wpc_v2_config_heartbeat')) {
+function wpc_v2_config_heartbeat()
+{
     if (!function_exists('wpc_v2_config_sync_lazy_enabled') || !function_exists('wpc_v2_get_zone_id')) return;
 
     // Let the deferred-retry hook (priority 21) own the post-db_error case — don't double-POST.
@@ -2762,19 +2641,20 @@ add_action('admin_init', function () {
     $has_numeric = ($zone_id !== '' && ctype_digit($zone_id));
     $hb_cname    = trim((string) get_option('ic_custom_cname'));
     if ($hb_cname === '') $hb_cname = trim((string) get_option('ic_cdn_zone_name'));
-    if (!$has_numeric && $hb_cname === '') return;
-
-
-    if (function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed()
-        && function_exists('wpc_v2_provision_reset_for_env')) {
-        wpc_v2_provision_reset_for_env();
+    $zoneless = false;
+    if (!$has_numeric && $hb_cname === '') {
+        if (!function_exists('wpc_v2_sync_is_zoneless') || !wpc_v2_sync_is_zoneless()) return;
+        $zoneless = true;
     }
 
 
-    $force = (bool) get_option('wpc_v2_force_provision', false);
+    $force = $zoneless ? false : (bool) get_option('wpc_v2_force_provision', false);
 
     $ttl  = defined('DAY_IN_SECONDS') ? DAY_IN_SECONDS : 86400;
     $last = (int) get_option('wpc_v2_config_synced_at', 0);
+    if ($zoneless) {
+        $last = max($last, (int) get_option('wpc_v2_zoneless_sync_at', 0));
+    }
 
 
     if (!$force && $last > 0 && (time() - $last) < $ttl) return;
@@ -2796,22 +2676,17 @@ add_action('admin_init', function () {
 
 
     wpc_v2_schedule_config_sync();
-}, 22);
+}
+}
+add_action('admin_init', 'wpc_v2_config_heartbeat', 22);
 
 
 add_action('admin_init', function () {
-
-
-    if (function_exists('wpc_v2_provision_host_changed') && wpc_v2_provision_host_changed()
-        && function_exists('delete_option')) {
-        delete_option('wpc_cf_cname_verified');
-    }
     // Rule: outside WPC_CF_CNAME_GATE_LEGACY the emit gate answers from the orchestrator's
     // witness alone, so this probe has nothing to promote. It ran anyway: a 3 s request every
     // 2 minutes for an admin while the cname was unverified, whose only results were a receipt
     // and the challenge witness (Connect, Refresh and the Cloudflare save still write that one).
     // wpc_v2_cf_cname_reverify() stopped probing outside the switch in 7.24.43; this is its copy.
-    // The host-change demotion above is not the probe and still runs in both modes.
     if (!wpc_cf_cname_gate_legacy()) return;
     if (get_option('wpc_cf_cname_verified')) return;
     $cfc = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME)) : '';
@@ -2833,8 +2708,6 @@ add_action('admin_init', function () {
     if ($wpc_cf_api && $wpc_cf_api->verifyCfCnameLive($cfc, 1, 3)) {
         update_option('wpc_cf_cname_verified', 1, false); // PROMOTE — emit-gate now serves the CF cname
         update_option('wpc_v2_force_provision', 1, false);
-        // Stamp the host baseline so a later clone/migration is detectable (CF-clone self-heal above).
-        if (function_exists('site_url')) update_option('wpc_v2_provisioned_site_url', (string) site_url(), false);
         if (function_exists('wpc_v2_schedule_config_sync')) {
             wpc_v2_schedule_config_sync();
         }
@@ -2868,75 +2741,6 @@ add_action('admin_init', function () {
         if (class_exists('WPC_Delivery_Resolver')) { WPC_Delivery_Resolver::resolve(true); }
     });
 }, 24);
-
-
-// Provisioning self-heal: a site that fails one verify must never stay suppressed forever.
-// Admin/cron context only (never a visitor request), post-response, single-flight, backed off.
-if (!function_exists('wpc_v2_provheal_due')) {
-    function wpc_v2_provheal_due()
-    {
-        $steps = [60, 180, 600, 3600, 21600, 86400];
-        $n     = (int) get_option('wpc_v2_provheal_tries', 0);
-        $last  = (int) get_option('wpc_v2_provheal_last', 0);
-        return (time() - $last) >= $steps[min(max($n, 0), count($steps) - 1)];
-    }
-}
-
-if (!function_exists('wpc_v2_provheal_run')) {
-    function wpc_v2_provheal_run($why = 'auto')
-    {
-        if (!function_exists('wpc_v2_verify_and_unsuppress')) return false;
-        if (!function_exists('wpc_v2_provision_env_changed') || !wpc_v2_provision_env_changed()) return false;
-        if (!function_exists('wpc_v2_get_zone_id') || (string) wpc_v2_get_zone_id() === '') return false;
-        if (function_exists('wpc_v2_get_apikey') && (string) wpc_v2_get_apikey() === '') return false;
-        if (!wpc_v2_provheal_due()) return false;
-        // Yield to visitors, and never let two workers probe at once (GET_LOCK(name,0) — never waits).
-        if (function_exists('wpc_under_pressure') && wpc_under_pressure()) return false;
-        if (function_exists('wpc_worker_lock') && !wpc_worker_lock('prov_selfheal', 0)) return false;
-
-        update_option('wpc_v2_provheal_last', time(), false);
-        $ok = false;
-        try {
-            $r  = wpc_v2_verify_and_unsuppress($why);
-            $ok = is_array($r) && !empty($r['stamped']);
-            if (!$ok) {
-                update_option('wpc_v2_provheal_tries', (int) get_option('wpc_v2_provheal_tries', 0) + 1, false);
-                error_log('[WPC provheal] ' . $why . ' not passed ('
-                    . (is_array($r) ? (string) ($r['reason'] ?? '?') : '?') . ') — backing off');
-            } else {
-                error_log('[WPC provheal] ' . $why . ' PASSED — fingerprint stamped, CDN un-suppressed');
-            }
-            // The env fingerprint changed (host move, clone) and this heal re-verified it: each
-            // attempt is logged with its verdict; the back-off (1 min to 1 day) bounds the lines.
-            if (function_exists('wpc_belt_receipt')) {
-                wpc_belt_receipt('provheal', ['via' => (string) $why, 'ok' => $ok ? 1 : 0,
-                    'reason' => $ok ? '' : (is_array($r) ? substr((string) ($r['reason'] ?? '?'), 0, 60) : '?'),
-                    'tries' => (int) get_option('wpc_v2_provheal_tries', 0)], false, '');
-            }
-        } catch (\Throwable $e) {
-            error_log('[WPC provheal] error: ' . $e->getMessage());
-        }
-        if (function_exists('wpc_worker_unlock')) { wpc_worker_unlock('prov_selfheal'); }
-        return $ok;
-    }
-}
-
-add_action('wpc_v2_provheal_cron', function () { wpc_v2_provheal_run('cron'); });
-
-add_action('admin_init', function () {
-    if (defined('DOING_AJAX') && DOING_AJAX) return;
-    if (defined('REST_REQUEST') && REST_REQUEST) return;
-    if (function_exists('wp_next_scheduled') && function_exists('wp_schedule_event')
-        && !wp_next_scheduled('wpc_v2_provheal_cron')) {
-        wp_schedule_event(time() + 600, 'hourly', 'wpc_v2_provheal_cron');
-    }
-    if (!function_exists('wpc_v2_provision_env_changed') || !wpc_v2_provision_env_changed()) return;
-    if (!wpc_v2_provheal_due()) return;
-    add_action('shutdown', function () {
-        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { wpc_finish_request(); }
-        wpc_v2_provheal_run('admin');
-    }, 99);
-}, 25);
 
 
 add_action('admin_init', function () {

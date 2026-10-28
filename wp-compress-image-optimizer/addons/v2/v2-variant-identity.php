@@ -300,12 +300,15 @@ if (!function_exists('wpc_v2_variant_identity')) {
             }
             $im->readImageBlob($bytes);
             $im->setFirstIterator();
-            $frame = $im->getImage();
+            if ((int) $im->getNumberImages() > 1) {
+                $frame = $im->getImage();
+                $im->clear();
+                $im = $frame;
+            }
             $grids = [];
             foreach ([255, 0, 128] as $bg) {
-                $flat = clone $frame;
-                $flat->setImageBackgroundColor(new ImagickPixel('rgb(' . $bg . ',' . $bg . ',' . $bg . ')'));
-                $flat = $flat->mergeImageLayers(Imagick::LAYERMETHOD_FLATTEN);
+                $im->setImageBackgroundColor(new ImagickPixel('rgb(' . $bg . ',' . $bg . ',' . $bg . ')'));
+                $flat = $im->mergeImageLayers(Imagick::LAYERMETHOD_FLATTEN);
                 $flat->resizeImage(16, 16, Imagick::FILTER_BOX, 1);
                 $px = $flat->exportImagePixels(0, 0, 16, 16, 'RGB', Imagick::PIXEL_CHAR);
                 $flat->clear();
@@ -318,7 +321,6 @@ if (!function_exists('wpc_v2_variant_identity')) {
                 }
                 $grids[$bg] = $grid;
             }
-            $frame->clear();
             return ['ok' => true, 'w' => $w, 'h' => $h, 'g' => $grids];
         } catch (\Throwable $e) {
             return ['ok' => false, 'reason' => 'undecodable'];
@@ -875,9 +877,53 @@ if (!function_exists('wpc_v2_variant_identity')) {
             'g' => [255 => array_slice($all, 0, 256), 0 => array_slice($all, 256, 256), 128 => array_slice($all, 512, 256)]];
     }
 
+    /** The most fingerprints the store keeps (about 1 KB each); the oldest write goes first. */
+    function wpc_v2_variant_identity_fp_cap()
+    {
+        return 24;
+    }
+
+    /** The print kept for a source in the one option, or null when none (or older than seven days). */
+    function wpc_v2_variant_identity_fp_get($path)
+    {
+        if (!function_exists('get_option')) {
+            return null;
+        }
+        $store = get_option('wpc_variant_identity_fp', []);
+        $key = wpc_v2_variant_identity_fp_key($path);
+        if (!is_array($store) || !isset($store[$key]) || !is_array($store[$key]) || (int) ($store[$key]['t'] ?? 0) < time() - 7 * 86400) {
+            return null;
+        }
+        return wpc_v2_variant_identity_fp_unpack($store[$key]);
+    }
+
+    /** Keeps a source's print in the one option (autoload off): at most wpc_v2_variant_identity_fp_cap() entries, none older than seven days. */
+    function wpc_v2_variant_identity_fp_put($path, array $print)
+    {
+        if (!function_exists('get_option') || !function_exists('update_option')) {
+            return;
+        }
+        $store = get_option('wpc_variant_identity_fp', []);
+        $store = is_array($store) ? $store : [];
+        $now = time();
+        foreach ($store as $k => $row) {
+            if (!is_array($row) || (int) ($row['t'] ?? 0) < $now - 7 * 86400) {
+                unset($store[$k]);
+            }
+        }
+        $key = wpc_v2_variant_identity_fp_key($path);
+        unset($store[$key]);
+        $store[$key] = wpc_v2_variant_identity_fp_pack($print) + ['t' => $now];
+        while (count($store) > wpc_v2_variant_identity_fp_cap()) {
+            reset($store);
+            unset($store[key($store)]);
+        }
+        update_option('wpc_variant_identity_fp', $store, false);
+    }
+
     /**
-     * The fingerprint of a local file. Memoised for the request and, for a large source, kept in a
-     * transient under wpc_v2_variant_identity_fp_key(): a 24 MP original decodes once, not on every
+     * The fingerprint of a local file. Memoised for the request and, for a large source, kept in the
+     * bounded option wpc_variant_identity_fp: a 24 MP original decodes once, not on every
      * signed write and again in the sweep. The memory guard stays in wpc_v2_variant_identity_print().
      * The sweep passes $persist false: it visits each attachment once, and on a library of 100k a row
      * per large source would leave that many wp_options rows behind (it still reads a kept one).
@@ -894,13 +940,13 @@ if (!function_exists('wpc_v2_variant_identity')) {
         if ($size <= 0 || $size > 40 * 1048576) {
             return ['ok' => false, 'reason' => 'source-large'];
         }
-        $print = function_exists('get_transient') ? wpc_v2_variant_identity_fp_unpack(get_transient(wpc_v2_variant_identity_fp_key($path))) : null;
+        $print = wpc_v2_variant_identity_fp_get($path);
         if ($print === null) {
             $bytes = @file_get_contents($path);
             $print = ($bytes === false || $bytes === '') ? ['ok' => false, 'reason' => 'undecodable'] : wpc_v2_variant_identity_print($bytes);
             unset($bytes);
-            if ($persist && !empty($print['ok']) && $print['w'] * $print['h'] >= wpc_v2_variant_identity_persist_pixels() && function_exists('set_transient')) {
-                set_transient(wpc_v2_variant_identity_fp_key($path), wpc_v2_variant_identity_fp_pack($print), 7 * 86400);
+            if ($persist && !empty($print['ok']) && $print['w'] * $print['h'] >= wpc_v2_variant_identity_persist_pixels()) {
+                wpc_v2_variant_identity_fp_put($path, $print);
             }
         }
         if (count($memo) >= 6) {
@@ -1232,6 +1278,20 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
     }
 
     /**
+     * The original a double-extension twin belongs to: `<name>.<ext>.webp` or `.avif` (WebP Express, EWWW and
+     * other converters name the twin after the whole file name) with `<name>.<ext>` on disk, ext a jpg, jpeg, png
+     * or gif in any case. '' for every other name. Such a file is its original's, never a stray.
+     */
+    function wpc_v2_variant_identity_double_ext_owner($path)
+    {
+        $path = (string) $path;
+        if (!preg_match('/^(.+\.(?:jpe?g|png|gif))\.(?:webp|avif)$/i', $path, $m)) {
+            return '';
+        }
+        return @is_file($m[1]) ? $m[1] : '';
+    }
+
+    /**
      * Whether a file is one WordPress holds for an attachment of its own: the path is some
      * attachment's `_wp_attached_file`, or it is a size or the -scaled copy of one that is (a WebP or
      * AVIF upload beside a PNG of the same name). A file that is never unlinked.
@@ -1246,6 +1306,9 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
         $base = !empty($up['basedir']) ? rtrim(str_replace('\\', '/', (string) $up['basedir']), '/') . '/' : '';
         $norm = str_replace('\\', '/', (string) $path);
         if ($base === '' || strpos($norm, $base) !== 0) {
+            return true;
+        }
+        if (wpc_v2_variant_identity_double_ext_owner($norm) !== '') {
             return true;
         }
         $rel = substr($norm, strlen($base));
@@ -1278,23 +1341,35 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
      */
     function wpc_v2_variant_identity_sweep_attachment($attachment_id, &$decoded, $spent = null, array $resume = [])
     {
-        $result = ['checked' => 0, 'deleted' => [], 'files' => [], 'reported' => 0, 'unverified' => 0, 'protected' => 0, 'hist' => []];
         if (function_exists('get_post_mime_type') && !in_array((string) get_post_mime_type($attachment_id), wpc_v2_variant_identity_sweep_mimes(), true)) {
-            return $result;
+            return ['checked' => 0, 'deleted' => [], 'files' => [], 'reported' => 0, 'unverified' => 0, 'protected' => 0, 'hist' => []];
         }
+        return wpc_v2_variant_identity_sweep_files((int) $attachment_id, wpc_v2_variant_identity_sweep_candidates($attachment_id), $decoded, $spent, $resume);
+    }
+
+    /**
+     * The per-file loop both passes of the sweep share: the attachment pass hands it one attachment's siblings
+     * ($owner_id the attachment), the walk of the uploads tree one directory's candidates ($owner_id 0: files no
+     * attachment owns). Same verdict, threshold, alias rule, removal and answer as wpc_v2_variant_identity_sweep_attachment
+     * describes; the set entries and the service's copy are forgotten only for an attachment (a file no attachment owns
+     * has neither).
+     */
+    function wpc_v2_variant_identity_sweep_files($owner_id, array $candidates, &$decoded, $spent = null, array $resume = [])
+    {
+        $attachment_id = (int) $owner_id;
+        $result = ['checked' => 0, 'deleted' => [], 'files' => [], 'reported' => 0, 'unverified' => 0, 'protected' => 0, 'hist' => []];
         $threshold = wpc_v2_variant_identity_sweep_threshold();
         $removed_hashes = isset($resume['removed']) && is_array($resume['removed']) ? array_fill_keys(array_map('strval', $resume['removed']), true) : [];
         $rest = isset($resume['rest']) && is_array($resume['rest']) ? array_values($resume['rest']) : [];
         $after = isset($resume['after']) ? (string) $resume['after'] : '';
         $last = $after;
-        $candidates = wpc_v2_variant_identity_sweep_candidates($attachment_id);
         sort($candidates, SORT_STRING);
         foreach ($candidates as $path) {
             if ($after !== '' && strcmp($path, $after) <= 0) {
                 continue;
             }
             if (is_callable($spent) && $decoded > 0 && $spent()) {
-                if (!empty($result['deleted'])) {
+                if (!empty($result['deleted']) && $attachment_id > 0) {
                     wpc_v2_variant_identity_sweep_forget($attachment_id, $result['deleted']);
                 }
                 $result['resume'] = ['after' => $last, 'removed' => array_keys($removed_hashes), 'rest' => $rest];
@@ -1354,15 +1429,218 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
                 }
             }
         }
-        if (!empty($result['deleted'])) {
+        if (!empty($result['deleted']) && $attachment_id > 0) {
             wpc_v2_variant_identity_sweep_forget($attachment_id, $result['deleted']);
         }
         return $result;
     }
 
     /**
-     * Removes one wrong sibling and queues the zone purge for it. Answers true when the file is
-     * gone, false when it is not ours to remove (some attachment's own file) or the unlink failed.
+     * Where the sweep keeps what it takes out of uploads: <uploads>/wpc-variant-quarantine/, with each file at its
+     * path under uploads ('' when uploads cannot be resolved: nothing is moved). Not under wp-content/cache/wp-cio:
+     * a hard purge of the page cache deletes everything there but css, js and the log, and on the rig purge site
+     * (2026-10-23) the first quarantined file was gone after the plugin install's hard purge. The walk of the
+     * uploads tree skips it (wpc-*).
+     */
+    function wpc_v2_variant_identity_quarantine_dir()
+    {
+        $up = function_exists('wp_get_upload_dir') ? wp_get_upload_dir() : [];
+        return !empty($up['basedir']) ? rtrim(str_replace('\\', '/', (string) $up['basedir']), '/') . '/wpc-variant-quarantine' : '';
+    }
+
+    /** The two files the quarantine's root keeps beside what it holds: the deny file and the empty index. */
+    function wpc_v2_variant_identity_quarantine_guard_names()
+    {
+        return ['.htaccess', 'index.html'];
+    }
+
+    /**
+     * The deny file (Apache 2.2 and 2.4) and the empty index of the quarantine's root, written when either is
+     * missing and never over one that is there.
+     */
+    function wpc_v2_variant_identity_quarantine_guard($root)
+    {
+        $root = rtrim((string) $root, '/\\');
+        if ($root === '' || !@is_dir($root)) {
+            return;
+        }
+        $put = function ($path, $body) {
+            if (function_exists('wpc_fs_put')) {
+                wpc_fs_put($path, $body);
+            } else {
+                @file_put_contents($path, $body);
+            }
+        };
+        if (!@is_file($root . '/.htaccess')) {
+            $put($root . '/.htaccess', "Order Deny,Allow\nDeny from all\n<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n");
+        }
+        if (!@is_file($root . '/index.html')) {
+            $put($root . '/index.html', '');
+        }
+    }
+
+    /** Days a quarantined file is kept before a sweep run prunes it. */
+    function wpc_v2_variant_identity_quarantine_days()
+    {
+        return 30;
+    }
+
+    /**
+     * Moves $path (a file under uploads) into the quarantine at its path under uploads and stamps it with the
+     * time of the move (a rename keeps the variant's own time, and a variant a year old would be pruned by the
+     * next run). A rename first; where it fails (another filesystem, Windows over an existing name) a copy and an
+     * unlink; where both fail the file stays where it was. A name already in the quarantine is kept and the new
+     * one gets the time as a suffix. Answers true only when the file left uploads and its bytes are in the
+     * quarantine.
+     * Rule: a removal never destroys a file (Denis, 2026-10-23, ticket 12192: "download and save any images you
+     * delete just in case"): a wrong verdict, or a picture the customer wants back, is recoverable for 30 days.
+     */
+    function wpc_v2_variant_identity_quarantine_move($path)
+    {
+        if (!function_exists('wp_get_upload_dir') || wpc_v2_variant_identity_quarantine_dir() === '') {
+            return false;
+        }
+        $up = wp_get_upload_dir();
+        $base = !empty($up['basedir']) ? rtrim(str_replace('\\', '/', (string) $up['basedir']), '/') . '/' : '';
+        $norm = str_replace('\\', '/', (string) $path);
+        if ($base === '' || strpos($norm, $base) !== 0) {
+            return false;
+        }
+        $target = wpc_v2_variant_identity_quarantine_dir() . '/' . substr($norm, strlen($base));
+        if (!@is_dir(dirname($target)) && !@mkdir(dirname($target), 0755, true) && !@is_dir(dirname($target))) {
+            return false;
+        }
+        wpc_v2_variant_identity_quarantine_guard(wpc_v2_variant_identity_quarantine_dir());
+        if (@file_exists($target)) {
+            $target .= '.' . time();
+        }
+        $moved = @rename($path, $target);
+        if (!$moved && @copy($path, $target)) {
+            $moved = @unlink($path);
+            if (!$moved) {
+                @unlink($target);
+            }
+        }
+        if (!$moved) {
+            return false;
+        }
+        @touch($target);
+        return true;
+    }
+
+    /**
+     * Unlinks quarantined files older than wpc_v2_variant_identity_quarantine_days(), at most $cap a run, and
+     * answers how many. Receipt `variant-identity-quarantine-pruned {pruned}` when it unlinked any. Asked by every
+     * sweep run and, once the sweep is done, by the daily event wpc_v2_variant_identity_quarantine_tick queues. The
+     * root's deny file and index are never pruned and are written again when missing.
+     */
+    function wpc_v2_variant_identity_quarantine_prune($cap = 200)
+    {
+        $root = wpc_v2_variant_identity_quarantine_dir();
+        if ($root === '' || !@is_dir($root) || !class_exists('RecursiveDirectoryIterator')) {
+            return 0;
+        }
+        wpc_v2_variant_identity_quarantine_guard($root);
+        $before = time() - wpc_v2_variant_identity_quarantine_days() * 86400;
+        $pruned = 0;
+        try {
+            $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+            foreach ($files as $file) {
+                if ($pruned >= (int) $cap) {
+                    break;
+                }
+                if (wpc_v2_variant_identity_quarantine_is_guard($root, $file->getPathname())) {
+                    continue;
+                }
+                if ($file->isFile() && !$file->isLink() && (int) $file->getMTime() < $before && @unlink($file->getPathname())) {
+                    $pruned++;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        if ($pruned > 0 && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('variant-identity-quarantine-pruned', '', '', ['pruned' => $pruned]);
+        }
+        return $pruned;
+    }
+
+    /** True for the deny file and the index at the quarantine's root (not for a file of the same name below it). */
+    function wpc_v2_variant_identity_quarantine_is_guard($root, $path)
+    {
+        $root = rtrim(str_replace('\\', '/', (string) $root), '/');
+        $path = str_replace('\\', '/', (string) $path);
+        foreach (wpc_v2_variant_identity_quarantine_guard_names() as $name) {
+            if ($path === $root . '/' . $name) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** True while the quarantine holds a file other than its own deny file and index. */
+    function wpc_v2_variant_identity_quarantine_has_files()
+    {
+        $root = wpc_v2_variant_identity_quarantine_dir();
+        if ($root === '' || !@is_dir($root) || !class_exists('RecursiveDirectoryIterator')) {
+            return false;
+        }
+        try {
+            $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+            foreach ($files as $file) {
+                if ($file->isFile() && !wpc_v2_variant_identity_quarantine_is_guard($root, $file->getPathname())) {
+                    return true;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        return false;
+    }
+
+    /** The WP-cron hook of the finished sweep's quarantine prune. */
+    function wpc_v2_variant_identity_quarantine_hook()
+    {
+        return 'wpc_variant_identity_quarantine';
+    }
+
+    /**
+     * The prune of a finished sweep (sweep runs prune while one is running, and none is queued once it is done).
+     * Runs when the state's `qdue` has passed: prunes, then queues itself a day on (five minutes on when the cap
+     * left old files) while the quarantine still holds a file, and marks the state `qclear` when it holds none,
+     * which ends the series; a re-armed sweep starts a state without it. Asked by the quarantine hook, by the arm
+     * (which queues the first one for a done sweep that has neither `qdue` nor `qclear`) and by a sweep event that
+     * fires after the sweep is done.
+     */
+    function wpc_v2_variant_identity_quarantine_tick()
+    {
+        if (!function_exists('get_option')) {
+            return;
+        }
+        $state = get_option('wpc_variant_identity_sweep', []);
+        if (!is_array($state) || empty($state['done']) || (int) ($state['qdue'] ?? 0) > time()) {
+            return;
+        }
+        $pruned = wpc_v2_variant_identity_quarantine_prune();
+        $state = get_option('wpc_variant_identity_sweep', []);
+        if (!is_array($state) || empty($state['done'])) {
+            return;
+        }
+        if (wpc_v2_variant_identity_quarantine_has_files()) {
+            $state['qdue'] = time() + ($pruned >= 200 ? 300 : 86400);
+            unset($state['qclear']);
+            if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled') && !wp_next_scheduled(wpc_v2_variant_identity_quarantine_hook())) {
+                wp_schedule_single_event((int) $state['qdue'], wpc_v2_variant_identity_quarantine_hook());
+            }
+        } else {
+            unset($state['qdue']);
+            $state['qclear'] = 1;
+        }
+        wpc_v2_variant_identity_sweep_save($state);
+    }
+
+    /**
+     * Takes one wrong sibling out of uploads into the quarantine (wpc_v2_variant_identity_quarantine_move) and
+     * queues the zone purge for it. Answers true when the file left uploads, false when it is not ours to remove
+     * (some attachment's own file) or it could not be moved (it then stays where it was).
      */
     function wpc_v2_variant_identity_sweep_remove($attachment_id, $path, array $identity, $size)
     {
@@ -1372,7 +1650,7 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
             }
             return false;
         }
-        if (!@unlink($path)) {
+        if (!wpc_v2_variant_identity_quarantine_move($path)) {
             return false;
         }
         if (function_exists('wpc_add_twin_bytes')) {
@@ -1387,6 +1665,7 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
             'distance' => $identity['distance'],
             'ext'      => strtolower((string) pathinfo($path, PATHINFO_EXTENSION)),
             'reason'   => (string) $identity['reason'],
+            'quarantined' => 1,
         ], basename($path));
         return true;
     }
@@ -1456,18 +1735,224 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
         }
     }
 
+    /** Adds one answer of wpc_v2_variant_identity_sweep_files() to the sweep's counters and the purge cadence. */
+    function wpc_v2_variant_identity_sweep_tally(array &$state, array $one)
+    {
+        foreach (['checked', 'reported', 'unverified', 'protected'] as $key) {
+            $state[$key] = (int) ($state[$key] ?? 0) + $one[$key];
+        }
+        $state['deleted'] = (int) ($state['deleted'] ?? 0) + count($one['deleted']);
+        $hist = isset($state['hist']) && is_array($state['hist']) ? $state['hist'] : [];
+        foreach ($one['hist'] as $bucket => $n) {
+            $hist[$bucket] = (isset($hist[$bucket]) ? (int) $hist[$bucket] : 0) + $n;
+        }
+        $state['hist'] = $hist;
+        if (!empty($one['deleted'])) {
+            wpc_v2_variant_identity_purge_note(count($one['deleted']));
+        }
+    }
+
+    /** Depth of the walk below uploads: 2026/10 is two directories deep, sites/2/2026/10 four. */
+    function wpc_v2_variant_identity_sweep_walk_depth()
+    {
+        return 4;
+    }
+
     /**
-     * One cron run of the library sweep: attachments after the stored cursor, in id order, until the
-     * time budget or the decode cap is spent. The budget is asked before each file is read (one read
-     * a run always happens), so a run stops inside an attachment when that is where it is spent: the
+     * The directories under $base . $rel the walk enters, in name order: plain directories (no link), never one
+     * of the plugin's own stores (wpc-*, cache, rig-zips) or a hidden one, and nothing below the walk's depth.
+     */
+    function wpc_v2_variant_identity_sweep_subdirs($base, $rel)
+    {
+        if ($rel !== '' && substr_count($rel, '/') + 1 >= wpc_v2_variant_identity_sweep_walk_depth()) {
+            return [];
+        }
+        $out = [];
+        foreach ((array) @scandir($base . $rel) as $name) {
+            $name = (string) $name;
+            if ($name === '' || $name[0] === '.' || strpos($name, 'wpc-') === 0 || in_array($name, ['cache', 'rig-zips'], true)) {
+                continue;
+            }
+            $path = $base . ($rel === '' ? '' : $rel . '/') . $name;
+            if (@is_dir($path) && !@is_link($path)) {
+                $out[] = $name;
+            }
+        }
+        sort($out, SORT_STRING);
+        return $out;
+    }
+
+    /** The directory the walk enters after $rel (depth first, name order), or null at the end of the tree. */
+    function wpc_v2_variant_identity_sweep_next_dir($base, $rel)
+    {
+        $children = wpc_v2_variant_identity_sweep_subdirs($base, $rel);
+        if (!empty($children)) {
+            return ($rel === '' ? '' : $rel . '/') . $children[0];
+        }
+        while ($rel !== '') {
+            $slash = strrpos($rel, '/');
+            $parent = $slash === false ? '' : substr($rel, 0, $slash);
+            $name = $slash === false ? $rel : substr($rel, $slash + 1);
+            foreach (wpc_v2_variant_identity_sweep_subdirs($base, $parent) as $sibling) {
+                if (strcmp($sibling, $name) > 0) {
+                    return ($parent === '' ? '' : $parent . '/') . $sibling;
+                }
+            }
+            $rel = $parent;
+        }
+        return null;
+    }
+
+    /** A file's stem without its size (-WxH) and -scaled: the name every file of one image shares. */
+    function wpc_v2_variant_identity_bare_stem($name)
+    {
+        $name = (string) $name;
+        $dot = strrpos($name, '.');
+        $stem = $dot === false ? $name : substr($name, 0, $dot);
+        return (string) preg_replace('/(-\d+x\d+)?(-scaled)?$/', '', $stem);
+    }
+
+    /**
+     * The bare stems of the attachments whose file is in the directory $rel under uploads: one query for the
+     * directory (every `_wp_attached_file` under its path), never one per file. A next-gen file of such a stem is
+     * the attachment pass's to check (or an upload of its own), not the walk's. Null when the database cannot be
+     * asked: the walk then leaves the directory alone, as the removal leaves a file it cannot place
+     * (wpc_v2_variant_identity_sweep_referenced).
+     */
+    function wpc_v2_variant_identity_sweep_owned_stems($rel)
+    {
+        global $wpdb;
+        if (!isset($wpdb) || !is_object($wpdb) || !method_exists($wpdb, 'get_col') || !method_exists($wpdb, 'prepare') || !method_exists($wpdb, 'esc_like')) {
+            return null;
+        }
+        $rel = trim(str_replace('\\', '/', (string) $rel), '/');
+        if ($rel === '') {
+            $query = $wpdb->prepare("SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value NOT LIKE %s", '%/%');
+        } else {
+            $query = $wpdb->prepare("SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value LIKE %s AND meta_value NOT LIKE %s", $wpdb->esc_like($rel . '/') . '%', $wpdb->esc_like($rel . '/') . '%/%');
+        }
+        $rows = (array) $wpdb->get_col($query);
+        if (empty($rows) && !empty($wpdb->last_error)) {
+            return null;
+        }
+        $stems = [];
+        foreach ($rows as $row) {
+            $row = str_replace('\\', '/', (string) $row);
+            $dir = strrpos($row, '/') === false ? '' : substr($row, 0, strrpos($row, '/'));
+            if ($dir === $rel) {
+                $stems[wpc_v2_variant_identity_bare_stem(basename($row))] = true;
+            }
+        }
+        return $stems;
+    }
+
+    /**
+     * The second pass of the sweep: a walk of the uploads tree, directory by directory (depth first, name order),
+     * for the AVIF/WebP files no attachment owns that have a source beside them (wpc_v2_variant_identity_source):
+     * those are checked with the attachment pass's own loop (wpc_v2_variant_identity_sweep_files, owner 0). A file
+     * with no source is never read (a WebP original copied in alone). The cursor is ($state['walk']: dir, file);
+     * a run that spends its file cap inside a directory stores its place there (the part option, as the attachment
+     * pass does) and the next run goes on at the next file. The time budget is asked between directories, the file
+     * cap before each read. Answers the run's summary; $state['done'] is set when the walk passes the last directory.
+     *
+     * Observed failure (warriortreeservicessc.com, ticket 12192, 2026-10-23): the gallery (2023/12/1.png to 80.png,
+     * every size) was copied in from a template site as files, with no attachment row, so the attachment pass never
+     * saw its 160 AVIF/WebP siblings; 40 of them were pictures of the deleted same-name .jpg.
+     */
+    function wpc_v2_variant_identity_sweep_walk(array &$state, &$decoded, $spent, $time_spent)
+    {
+        $summary = ['walked' => 0, 'deleted' => 0, 'files' => [], 'stopped_in' => '', 'done' => 0];
+        $up = function_exists('wp_get_upload_dir') ? wp_get_upload_dir() : [];
+        $base = !empty($up['basedir']) ? rtrim(str_replace('\\', '/', (string) $up['basedir']), '/') . '/' : '';
+        if ($base === '' || !@is_dir($base)) {
+            $state['done'] = 1;
+            $summary['done'] = 1;
+            return $summary;
+        }
+        $walk = isset($state['walk']) && is_array($state['walk']) ? $state['walk'] : ['dir' => '', 'file' => ''];
+        $dir = (string) ($walk['dir'] ?? '');
+        $after_name = (string) ($walk['file'] ?? '');
+        $part = get_option('wpc_variant_identity_sweep_part', []);
+        $part = (is_array($part) && isset($part['walk']) && (string) $part['walk'] === $dir) ? $part : [];
+        while ($dir !== null) {
+            if ($time_spent()) {
+                $summary['stopped_in'] = $dir;
+                break;
+            }
+            $names = [];
+            foreach ((array) @scandir($base . $dir) as $name) {
+                $name = (string) $name;
+                $ext = strtolower((string) pathinfo($name, PATHINFO_EXTENSION));
+                if (($ext === 'avif' || $ext === 'webp') && ($after_name === '' || strcmp($name, $after_name) > 0)) {
+                    $path = $base . ($dir === '' ? '' : $dir . '/') . $name;
+                    if (@is_file($path) && !@is_link($path)) {
+                        $names[] = $name;
+                    }
+                }
+            }
+            sort($names, SORT_STRING);
+            $candidates = [];
+            $owned = empty($names) ? [] : wpc_v2_variant_identity_sweep_owned_stems($dir);
+            if (is_array($owned)) {
+                foreach ($names as $name) {
+                    $path = $base . ($dir === '' ? '' : $dir . '/') . $name;
+                    if (!isset($owned[wpc_v2_variant_identity_bare_stem($name)]) && wpc_v2_variant_identity_double_ext_owner($path) === '' && wpc_v2_variant_identity_source($path) !== null) {
+                        $candidates[] = $path;
+                    }
+                }
+            }
+            $one = wpc_v2_variant_identity_sweep_files(0, $candidates, $decoded, $spent, $part);
+            wpc_v2_variant_identity_sweep_tally($state, $one);
+            $summary['deleted'] += count($one['deleted']);
+            $summary['files'] = array_merge($summary['files'], $one['files']);
+            $state['files_deleted'] = (int) ($state['files_deleted'] ?? 0) + count($one['deleted']);
+            if (isset($one['resume'])) {
+                $stop_name = $one['resume']['after'] === '' ? $after_name : basename((string) $one['resume']['after']);
+                $passed = 0;
+                foreach ($names as $name) {
+                    $passed += ($stop_name !== '' && strcmp($name, $stop_name) <= 0) ? 1 : 0;
+                }
+                $summary['walked'] += $passed;
+                $state['files_walked'] = (int) ($state['files_walked'] ?? 0) + $passed;
+                $state['walk'] = ['dir' => $dir, 'file' => $stop_name];
+                wpc_v2_variant_identity_sweep_part_save(['walk' => $dir] + $one['resume']);
+                $summary['stopped_in'] = $dir;
+                return $summary;
+            }
+            if (!empty($part)) {
+                wpc_v2_variant_identity_sweep_part_save(null);
+                $part = [];
+            }
+            $summary['walked'] += count($names);
+            $state['files_walked'] = (int) ($state['files_walked'] ?? 0) + count($names);
+            $dir = wpc_v2_variant_identity_sweep_next_dir($base, $dir);
+            $after_name = '';
+            $state['walk'] = ['dir' => (string) $dir, 'file' => ''];
+            if ($one['checked'] > 0) {
+                wpc_v2_variant_identity_sweep_save($state);
+            }
+        }
+        if ($dir === null) {
+            $state['done'] = 1;
+            $summary['done'] = 1;
+        }
+        return $summary;
+    }
+
+    /**
+     * One cron run of the library sweep, in two passes. The attachment pass: attachments after the stored cursor,
+     * in id order, until the time budget or the decode cap is spent. The budget is asked before each file is read
+     * (one read a run always happens), so a run stops inside an attachment when that is where it is spent: the
      * cursor stays before that attachment and its place inside it is stored
-     * (wpc_v2_variant_identity_sweep_part_save) for the next run to go on from. The next run is queued
-     * before any work (WordPress has taken this event off the schedule), so a run that dies mid-loop
-     * leaves its successor, and the cursor is stored after each attachment that did work (and every
-     * 25 others), so the successor resumes there. A run that finds the server under pressure
-     * (wpc_under_pressure) reads nothing and leaves the queued run to try again
-     * (`variant-identity-sweep-deferred`, at most once an hour). The run that passes the last attachment marks
-     * the sweep done and unschedules it.
+     * (wpc_v2_variant_identity_sweep_part_save) for the next run to go on from. When it passes the last attachment
+     * ($state['attachments_done']) the same run goes on with the walk of the uploads tree
+     * (wpc_v2_variant_identity_sweep_walk) for what no attachment owns. The next run is queued before any work
+     * (WordPress has taken this event off the schedule), so a run that dies mid-loop leaves its successor, and the
+     * cursor is stored after each attachment that did work (and every 25 others), so the successor resumes there.
+     * A run that finds the server under pressure (wpc_under_pressure) reads nothing and leaves the queued run to try
+     * again (`variant-identity-sweep-deferred`, at most once an hour). Each pass a run works in writes one
+     * `variant-identity-sweep` summary with its `pass` (attachments|files); `done` there says that pass reached its
+     * end. The run whose walk passes the last directory marks the sweep done and unschedules it.
      */
     function wpc_v2_variant_identity_sweep_run()
     {
@@ -1477,6 +1962,7 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
             if (function_exists('wp_clear_scheduled_hook')) {
                 wp_clear_scheduled_hook(wpc_v2_variant_identity_sweep_hook());
             }
+            wpc_v2_variant_identity_quarantine_tick();
             return;
         }
         if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled') && !wp_next_scheduled(wpc_v2_variant_identity_sweep_hook())) {
@@ -1489,6 +1975,7 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
             }
             return;
         }
+        wpc_v2_variant_identity_quarantine_prune();
         wpc_v2_variant_identity_purge_flush();
         $budget = (float) (function_exists('apply_filters') ? apply_filters('wpc_variant_identity_sweep_seconds', 5.0) : 5.0);
         $decode_cap = (int) (function_exists('apply_filters') ? apply_filters('wpc_variant_identity_sweep_files', 60) : 60);
@@ -1497,97 +1984,116 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
         $spent = function () use (&$decoded, $started, $budget, $decode_cap) {
             return (microtime(true) - $started) >= $budget || $decoded >= $decode_cap;
         };
-        $part = get_option('wpc_variant_identity_sweep_part', []);
-        $part = is_array($part) ? $part : [];
-        $cursor = (int) ($state['cursor'] ?? 0);
-        $ids = [];
-        if (isset($wpdb) && is_object($wpdb) && method_exists($wpdb, 'get_col')) {
-            $mimes = wpc_v2_variant_identity_sweep_mimes();
-            $ids = (array) $wpdb->get_col($wpdb->prepare(
-                "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type IN (" . implode(',', array_fill(0, count($mimes), '%s')) . ") AND ID > %d ORDER BY ID ASC LIMIT %d",
-                ...array_merge($mimes, [$cursor, 300])
-            ));
-        }
-        if (empty($ids) && isset($wpdb) && is_object($wpdb) && !empty($wpdb->last_error)) {
-            return;
-        }
-        if (!empty($part) && (empty($ids) || (int) ($part['id'] ?? 0) !== (int) $ids[0])) {
-            wpc_v2_variant_identity_sweep_part_save(null);
-            $part = [];
-        }
+        $time_spent = function () use ($started, $budget) {
+            return (microtime(true) - $started) >= $budget;
+        };
         $state['runs'] = (int) ($state['runs'] ?? 0) + 1;
         $state['t'] = time();
-        $run = ['attachments' => 0, 'deleted' => 0, 'files' => [], 'stopped_in' => 0];
-        $processed_all = true;
-        $since_stored = 0;
-        foreach ($ids as $id) {
-            $id = (int) $id;
-            if ($run['attachments'] > 0 && $spent()) {
-                $processed_all = false;
-                break;
+        $deleted_this_run = 0;
+        $cursor = (int) ($state['cursor'] ?? 0);
+        if (empty($state['attachments_done'])) {
+            $part = get_option('wpc_variant_identity_sweep_part', []);
+            $part = is_array($part) ? $part : [];
+            $ids = [];
+            if (isset($wpdb) && is_object($wpdb) && method_exists($wpdb, 'get_col')) {
+                $mimes = wpc_v2_variant_identity_sweep_mimes();
+                $ids = (array) $wpdb->get_col($wpdb->prepare(
+                    "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type IN (" . implode(',', array_fill(0, count($mimes), '%s')) . ") AND ID > %d ORDER BY ID ASC LIMIT %d",
+                    ...array_merge($mimes, [$cursor, 300])
+                ));
             }
-            $one = wpc_v2_variant_identity_sweep_attachment($id, $decoded, $spent, (int) ($part['id'] ?? 0) === $id ? $part : []);
-            $run['deleted'] += count($one['deleted']);
-            $run['files'] = array_merge($run['files'], $one['files']);
-            foreach (['checked', 'reported', 'unverified', 'protected'] as $key) {
-                $state[$key] = (int) ($state[$key] ?? 0) + $one[$key];
+            if (empty($ids) && isset($wpdb) && is_object($wpdb) && !empty($wpdb->last_error)) {
+                return;
             }
-            $state['deleted'] = (int) ($state['deleted'] ?? 0) + count($one['deleted']);
-            $hist = isset($state['hist']) && is_array($state['hist']) ? $state['hist'] : [];
-            foreach ($one['hist'] as $bucket => $n) {
-                $hist[$bucket] = (isset($hist[$bucket]) ? (int) $hist[$bucket] : 0) + $n;
-            }
-            $state['hist'] = $hist;
-            if (!empty($one['deleted'])) {
-                wpc_v2_variant_identity_purge_note(count($one['deleted']));
-            }
-            if (isset($one['resume'])) {
-                wpc_v2_variant_identity_sweep_part_save(['id' => $id] + $one['resume']);
-                $run['stopped_in'] = $id;
-                $processed_all = false;
-                break;
-            }
-            if (!empty($part)) {
+            if (!empty($part) && (empty($ids) || (int) ($part['id'] ?? 0) !== (int) $ids[0])) {
                 wpc_v2_variant_identity_sweep_part_save(null);
                 $part = [];
             }
-            $run['attachments']++;
-            $state['attachments'] = (int) ($state['attachments'] ?? 0) + 1;
-            $state['cursor'] = $id;
-            $cursor = $id;
-            $since_stored++;
-            if ($one['checked'] > 0 || $since_stored >= 25) {
-                wpc_v2_variant_identity_sweep_save($state);
-                $since_stored = 0;
+            $run = ['attachments' => 0, 'deleted' => 0, 'files' => [], 'stopped_in' => 0];
+            $processed_all = true;
+            $since_stored = 0;
+            foreach ($ids as $id) {
+                $id = (int) $id;
+                if ($run['attachments'] > 0 && $spent()) {
+                    $processed_all = false;
+                    break;
+                }
+                $one = wpc_v2_variant_identity_sweep_attachment($id, $decoded, $spent, (int) ($part['id'] ?? 0) === $id ? $part : []);
+                $run['deleted'] += count($one['deleted']);
+                $run['files'] = array_merge($run['files'], $one['files']);
+                wpc_v2_variant_identity_sweep_tally($state, $one);
+                if (isset($one['resume'])) {
+                    wpc_v2_variant_identity_sweep_part_save(['id' => $id] + $one['resume']);
+                    $run['stopped_in'] = $id;
+                    $processed_all = false;
+                    break;
+                }
+                if (!empty($part)) {
+                    wpc_v2_variant_identity_sweep_part_save(null);
+                    $part = [];
+                }
+                $run['attachments']++;
+                $state['attachments'] = (int) ($state['attachments'] ?? 0) + 1;
+                $state['cursor'] = $id;
+                $cursor = $id;
+                $since_stored++;
+                if ($one['checked'] > 0 || $since_stored >= 25) {
+                    wpc_v2_variant_identity_sweep_save($state);
+                    $since_stored = 0;
+                }
+            }
+            $reached_end = $processed_all && count($ids) < 300;
+            if ($reached_end) {
+                $state['attachments_done'] = 1;
+            }
+            wpc_v2_variant_identity_sweep_save($state);
+            $deleted_this_run += $run['deleted'];
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('variant-identity-sweep', '', '', [
+                    'pass' => 'attachments', 'cursor' => $cursor, 'attachments' => $run['attachments'], 'deleted' => $run['deleted'], 'done' => $reached_end ? 1 : 0,
+                    'files' => implode(',', array_slice($run['files'], 0, 10)), 'more' => max(0, count($run['files']) - 10),
+                    'read' => $decoded, 'stopped_in' => $run['stopped_in'],
+                ]);
             }
         }
-        $reached_end = $processed_all && count($ids) < 300;
-        if ($reached_end) {
-            $state['done'] = 1;
-            if (function_exists('wp_clear_scheduled_hook')) {
+        if (!empty($state['attachments_done'])) {
+            $read_before = $decoded;
+            $walk = wpc_v2_variant_identity_sweep_walk($state, $decoded, $spent, $time_spent);
+            if (!empty($state['done']) && function_exists('wp_clear_scheduled_hook')) {
                 wp_clear_scheduled_hook(wpc_v2_variant_identity_sweep_hook());
             }
+            wpc_v2_variant_identity_sweep_save($state);
+            $deleted_this_run += $walk['deleted'];
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('variant-identity-sweep', '', '', [
+                    'pass' => 'files', 'dir' => (string) ($state['walk']['dir'] ?? ''), 'walked' => $walk['walked'], 'deleted' => $walk['deleted'], 'done' => $walk['done'],
+                    'files' => implode(',', array_slice($walk['files'], 0, 10)), 'more' => max(0, count($walk['files']) - 10),
+                    'read' => $decoded - $read_before, 'stopped_in' => $walk['stopped_in'],
+                ]);
+            }
         }
-        wpc_v2_variant_identity_sweep_save($state);
-        if ($run['deleted'] > 0) {
-            wpc_v2_variant_identity_count('swept', '', [], $run['deleted']);
+        if ($deleted_this_run > 0) {
+            wpc_v2_variant_identity_count('swept', '', [], $deleted_this_run);
             wpc_v2_variant_identity_purge_flush();
-        }
-        if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log('variant-identity-sweep', '', '', [
-                'cursor' => $cursor, 'attachments' => $run['attachments'], 'deleted' => $run['deleted'], 'done' => $reached_end ? 1 : 0,
-                'files' => implode(',', array_slice($run['files'], 0, 10)), 'more' => max(0, count($run['files']) - 10),
-                'read' => $decoded, 'stopped_in' => $run['stopped_in'],
-            ]);
         }
     }
 
     /**
+     * What the sweep looks for, as a number: raised only when a release teaches it to look at something the earlier
+     * sweep did not (the walk of the uploads tree was the second), never for a release that leaves it alone. A state
+     * without `v` was written by the sweep of 7.26.20, which is version 1.
+     */
+    if (!defined('WPC_V2_VARIANT_IDENTITY_SWEEP_VERSION')) {
+        define('WPC_V2_VARIANT_IDENTITY_SWEEP_VERSION', 1);
+    }
+
+    /**
      * Arms the sweep once per site: the first request after the update that carries it finds no
-     * state, stores the cursor at 0 and queues the first run. The purge cadence starts at this
-     * moment (the update's own hard purge has just run), so the first sweep purge comes an hour
-     * after it and never stacks on it. A finished sweep leaves its state
-     * (done) and is never armed again. A sweep that is not done, has nothing scheduled and has not
+     * state, stores the cursor at 0 and queues the first run. The purge cadence starts open (last 0), so the
+     * first removal purges the stored pages at once and the hourly cap starts from that purge. A finished sweep
+     * leaves its state (done) and is never armed again here (wpc_v2_variant_identity_sweep_rearm does it when
+     * the sweep version rises), and gets the daily quarantine prune queued
+     * (wpc_v2_variant_identity_quarantine_tick). A sweep that is not done, has nothing scheduled and has not
      * run for an hour (a run that died took its event with it) is queued again.
      */
     function wpc_v2_variant_identity_sweep_arm()
@@ -1601,18 +2107,57 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
                 && time() - (int) (isset($state['t']) ? $state['t'] : (isset($state['armed']) ? $state['armed'] : 0)) > 3600) {
                 wp_schedule_single_event(time() + 60, wpc_v2_variant_identity_sweep_hook());
             }
+            if (!empty($state['done']) && empty($state['qclear']) && !wp_next_scheduled(wpc_v2_variant_identity_quarantine_hook())) {
+                wp_schedule_single_event(max(time() + 60, (int) ($state['qdue'] ?? 0)), wpc_v2_variant_identity_quarantine_hook());
+            }
             return;
         }
-        wpc_v2_variant_identity_sweep_save(['cursor' => 0, 'armed' => time(), 'done' => 0]);
-        wpc_v2_variant_identity_purge_save(['last' => time(), 'pending' => 0]);
+        wpc_v2_variant_identity_sweep_save(['cursor' => 0, 'armed' => time(), 'done' => 0, 'v' => WPC_V2_VARIANT_IDENTITY_SWEEP_VERSION]);
+        wpc_v2_variant_identity_purge_save(['last' => 0, 'pending' => 0]);
         if (!wp_next_scheduled(wpc_v2_variant_identity_sweep_hook())) {
             wp_schedule_single_event(time() + 120, wpc_v2_variant_identity_sweep_hook());
         }
     }
 
-    if (function_exists('add_action') && !defined('SHORTINIT')) {
+    /**
+     * Arms the sweep again when its version has risen (WPC_V2_VARIANT_IDENTITY_SWEEP_VERSION against the `v` its
+     * state carries); asked by the plugin's upgrade pass (wps_ic::checkPluginVersion, the one place a version change
+     * is noticed), on every version change, and a no-op unless the sweep's own logic changed. A sweep that finished
+     * or is still running at the current version is left as it is, cursors and counts included. A state without `v`
+     * is version 1. A site with no sweep yet is armed by its first request (wpc_v2_variant_identity_sweep_arm).
+     * The purge cadence opens (last 0) with the files still waiting for a purge kept.
+     * Receipt `variant-identity-sweep-armed {why: plugin-update}`.
+     */
+    function wpc_v2_variant_identity_sweep_rearm()
+    {
+        if (!function_exists('get_option') || !function_exists('wp_schedule_single_event') || !function_exists('wp_next_scheduled')) {
+            return;
+        }
+        $state = get_option('wpc_variant_identity_sweep', null);
+        if (!is_array($state) || (int) (isset($state['v']) ? $state['v'] : 1) >= WPC_V2_VARIANT_IDENTITY_SWEEP_VERSION) {
+            return;
+        }
+        $purge = get_option('wpc_variant_identity_purge', []);
+        wpc_v2_variant_identity_sweep_save(['cursor' => 0, 'armed' => time(), 'done' => 0, 'v' => WPC_V2_VARIANT_IDENTITY_SWEEP_VERSION]);
+        wpc_v2_variant_identity_sweep_part_save(null);
+        wpc_v2_variant_identity_purge_save(['last' => 0, 'pending' => is_array($purge) ? (int) ($purge['pending'] ?? 0) : 0]);
+        if (!wp_next_scheduled(wpc_v2_variant_identity_sweep_hook())) {
+            wp_schedule_single_event(time() + 120, wpc_v2_variant_identity_sweep_hook());
+        }
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('variant-identity-sweep-armed', '', '', ['why' => 'plugin-update']);
+        }
+    }
+
+    // Rule: the hooks are left out only on the direct-entry lane (api/v2/_shared.php defines SHORTINIT true before it
+    // loads WordPress). WordPress core defines SHORTINIT on every request (false unless a script set it first,
+    // wp-includes/default-constants.php), so the earlier `!defined('SHORTINIT')` was false everywhere and none of the
+    // three was ever registered: the sweep shipped in 7.25.02 and never ran on any site (warriortreeservicessc.com,
+    // ticket 12192: healthcheck `sweep: []`, no sweep receipt in four days across the update).
+    if (function_exists('add_action') && !(defined('SHORTINIT') && SHORTINIT)) {
         add_action(wpc_v2_variant_identity_sweep_hook(), 'wpc_v2_variant_identity_sweep_run');
         add_action(wpc_v2_variant_identity_purge_hook(), 'wpc_v2_variant_identity_purge_flush');
+        add_action(wpc_v2_variant_identity_quarantine_hook(), 'wpc_v2_variant_identity_quarantine_tick');
         add_action('init', 'wpc_v2_variant_identity_sweep_arm', 20);
     }
 }

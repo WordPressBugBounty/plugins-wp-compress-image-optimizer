@@ -26,15 +26,7 @@ class wps_ic_combine_css
         self::$site_url = site_url();
         $this->settings = get_option(WPS_IC_SETTINGS);
 
-        $cf = get_option(WPS_IC_CF);
-        $cfCname = get_option(WPS_IC_CF_CNAME);
-        $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok())) ? $cfCname : get_option('ic_custom_cname');
-        if (!empty($custom_cname) && function_exists('wpc_cdn_cname_is_reachable') && !wpc_cdn_cname_is_reachable($custom_cname)) { $custom_cname = ''; }
-        if (empty($custom_cname) || !$custom_cname) {
-            $this->zone_name = get_option('ic_cdn_zone_name');
-        } else {
-            $this->zone_name = $custom_cname;
-        }
+        $this->zone_name = wpc_cdn_host();
     }
 
     public function pathWalker($path, $find)
@@ -391,7 +383,7 @@ class wps_ic_combine_css
         if (function_exists('wpc_font_display_effective')) {
             $textFontDisplay = wpc_font_display_effective($textFontDisplay);
         }
-        $iconFontDisplay = !empty($settings['icon-font-display']) ? $settings['icon-font-display'] : 'block';
+        $iconFontDisplay = function_exists('wpc_icon_font_display_effective') ? wpc_icon_font_display_effective($settings['icon-font-display'] ?? '') : 'block';
 
         return preg_replace_callback('/@font-face\s*{[^}]+}/sim', function ($fontface) use ($textFontDisplay, $textFontDisplayRaw, $iconFontDisplay) {
             // v7.21.134 — 'off' means DON'T TOUCH: this writer emitted the literal
@@ -421,6 +413,14 @@ class wps_ic_combine_css
 
             if ($urlFound) {
                 $format = strpos($woffUrl, '.woff2') !== false ? 'woff2' : 'woff';
+                $faceBody = (string) preg_replace('/^@font-face\s*\{|\}\s*$/i', '', $fontface[0]);
+                foreach (['/font-family\s*:\s*[^;]+;/si', '/font-style\s*:\s*[^;]+;/si', '/font-weight\s*:\s*[^;]+;/si'] as $ownDeclaration) {
+                    $faceBody = (string) preg_replace($ownDeclaration, '', $faceBody, 1);
+                }
+                $faceBody = (string) preg_replace('/(?<![-\w])font-display\s*:[^;}]*(?:;|$)/i', '', $faceBody);
+                $faceBody = (string) preg_replace('/(?<![-\w])src\s*:\s*(?:[^;()]|\([^)]*\))*(?:;|$)/i', '', $faceBody);
+                $faceBody = trim($faceBody, "; \t\r\n");
+                $otherDescriptors = $faceBody === '' ? '' : $faceBody . ';';
 
                 // An icon font takes the icon setting (block by default), never the text policy.
                 // The icon test is the shared one: this copy's own list had no 'etmodules', so
@@ -432,19 +432,23 @@ class wps_ic_combine_css
                 // ticket 12053, 2026-09-28).
                 $fontDisplayValue = $textFontDisplay;
                 $familyRaw = isset($matchesFontFamily[1]) ? strtolower(trim($matchesFontFamily[1])) : '';
+                $declaredDisplay = preg_match('/font-display\s*:\s*([a-z-]+)/i', $fontface[0], $declaredMatch) ? strtolower($declaredMatch[1]) : '';
                 if (wpc_css_is_icon_font($familyRaw)) {
                     $fontDisplayValue = $iconFontDisplay;
+                } elseif (function_exists('wpc_font_display_site_kept') && wpc_font_display_site_kept($textFontDisplayRaw)) {
+                    $fontDisplayValue = $declaredDisplay;
                 } elseif ($familyRaw !== '' && function_exists('wpc_font_display_effective')) {
                     // .485 PER-FAMILY: 'optional' is only safe for a family with a metric-matched
                     // fallback. Astra has none and is fetched over the network, so optional there
                     // means the glyph may never paint.
-                    $familyDisplay = wpc_font_display_effective($textFontDisplayRaw, trim($familyRaw, " \t\"'"));
+                    $familyDisplay = function_exists('wpc_font_display_on_page') ? wpc_font_display_on_page($textFontDisplayRaw, trim($familyRaw, " \t\"'"), $declaredDisplay) : wpc_font_display_effective($textFontDisplayRaw, trim($familyRaw, " \t\"'"));
                     if (in_array($familyDisplay, ['swap', 'block', 'auto', 'optional', 'fallback'], true)) {
                         $fontDisplayValue = $familyDisplay;
                     }
                 }
 
-                return "@font-face{{$fontFamily}{$fontStyle}{$fontWeight}font-display:{$fontDisplayValue};src:url(\"$woffUrl\") format(\"$format\");}";
+                $fontDisplayDeclaration = $fontDisplayValue === '' ? '' : "font-display:{$fontDisplayValue};";
+                return "@font-face{{$fontFamily}{$fontStyle}{$fontWeight}{$otherDescriptors}{$fontDisplayDeclaration}src:url(\"$woffUrl\") format(\"$format\");}";
             } else {
                 return $fontface[0];
             }

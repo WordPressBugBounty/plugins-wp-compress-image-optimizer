@@ -7,7 +7,6 @@ class wps_ic_excludes extends wps_ic
     private static $defaultCombineJSExcludes;
     private static $defaultCombineCSSExcludes;
     private static $defaultCriticalCSSExcludes;
-    private static $defaultLazyExcludes;
     private static $defaultWebpExcludes;
     private static $defaultAdaptiveExcludes;
     private static $excludesDelayJSOption;
@@ -16,7 +15,6 @@ class wps_ic_excludes extends wps_ic
     private static $excludesCombineJSOption;
     private static $excludesCombineCSSOption;
     private static $excludesToFooterOption;
-    private static $excludesLazyOption;
     private static $excludesWebpOption;
     private static $excludesAdaptiveOption;
     private static $pageExcludesFiles;
@@ -57,7 +55,6 @@ class wps_ic_excludes extends wps_ic
             self::$excludesCombineCSSOption = !empty(self::$excludesOption['css_combine']) ? self::$excludesOption['css_combine'] : [];
             self::$excludesCriticalCSSOption = !empty(self::$excludesOption['critical_css']) ? self::$excludesOption['critical_css'] : [];
             self::$excludesToFooterOption = !empty(self::$excludesOption['exclude-scripts-to-footer']) ? self::$excludesOption['exclude-scripts-to-footer'] : [];
-            self::$excludesLazyOption = !empty(self::$excludesOption['lazy']) ? self::$excludesOption['lazy'] : [];
             self::$excludesAdaptiveOption = !empty(self::$excludesOption['adaptive']) ? self::$excludesOption['adaptive'] : [];
             self::$excludesWebpOption = !empty(self::$excludesOption['webp']) ? self::$excludesOption['webp'] : [];
             self::$userLastLoadScript = !empty(self::$excludesOption['lastLoadScript']) ? self::$excludesOption['lastLoadScript'] : [];
@@ -68,12 +65,9 @@ class wps_ic_excludes extends wps_ic
             self::$excludesCombineCSSOption = [];
             self::$excludesCriticalCSSOption = [];
             self::$excludesToFooterOption = [];
-            self::$excludesLazyOption = [];
             self::$excludesAdaptiveOption = [];
             self::$excludesWebpOption = [];
         }
-
-        self::$defaultLazyExcludes = ['show-on-hover'];
 
         self::$defaultAdaptiveExcludes = [
 
@@ -314,32 +308,6 @@ class wps_ic_excludes extends wps_ic
     }
 
 
-    public function isLazyExcluded($image_src, $class)
-    {
-
-        if ($this->strInArray($image_src, self::$excludesLazyOption)) {
-
-            return true;
-        }
-
-
-        if ($this->strInArray($class, self::$defaultLazyExcludes)) {
-
-            return true;
-        }
-
-
-        if (!empty(self::$excludesLazyOption)) {
-            foreach (self::$excludesLazyOption as $exclude) {
-                if (strpos($exclude, '#') === 0 && strpos($class, str_replace('#', '', $exclude)) !== false) {
-
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     public function excludedFromDelay($tag)
     {
         if ($this->strInArray($tag, $this->delayJSExcludes())) {
@@ -422,7 +390,8 @@ class wps_ic_excludes extends wps_ic
         self::$defaultDelayJSExcludesV3 = array_merge(
             isset(self::$excludesDelayJSOptionV3) && is_array(self::$excludesDelayJSOptionV3) ? self::$excludesDelayJSOptionV3 : [],
             isset(self::$pageExcludesFiles['delay_js_v3']) && is_array(self::$pageExcludesFiles['delay_js_v3']) ? self::$pageExcludesFiles['delay_js_v3'] : [],
-            isset(self::$pageExcludesFiles['delay_js_v2']) && is_array(self::$pageExcludesFiles['delay_js_v2']) ? self::$pageExcludesFiles['delay_js_v2'] : []
+            isset(self::$pageExcludesFiles['delay_js_v2']) && is_array(self::$pageExcludesFiles['delay_js_v2']) ? self::$pageExcludesFiles['delay_js_v2'] : [],
+            function_exists('wpc_menu_early_patterns') ? wpc_menu_early_patterns() : []
         );
         return self::$defaultDelayJSExcludesV3;
     }

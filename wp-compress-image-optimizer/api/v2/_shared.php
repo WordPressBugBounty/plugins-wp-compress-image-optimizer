@@ -52,8 +52,14 @@ if (!defined('WP_CONTENT_URL') && function_exists('get_option')) {
 
 // The signature, size, fetch-host and image checks are the REST callbacks' own (v2-inbound.php).
 require_once __DIR__ . '/../../addons/v2/v2-inbound.php';
+if (@is_file(__DIR__ . '/../../addons/v2/v2-service.php') && @is_readable(__DIR__ . '/../../addons/v2/v2-service.php')) {
+    require_once __DIR__ . '/../../addons/v2/v2-service.php';
+}
 // The one writer of variant bytes (containment, extension allowlist, the larger-than-disk refusal).
 require_once __DIR__ . '/../../addons/v2/v2-store.php';
+if (@is_file(__DIR__ . '/../../addons/v2/v2-sized-spool.php') && @is_readable(__DIR__ . '/../../addons/v2/v2-sized-spool.php')) {
+    require_once __DIR__ . '/../../addons/v2/v2-sized-spool.php';
+}
 
 
 function wpc_v2_read_apikey() {
@@ -147,30 +153,26 @@ function wpc_v2_journal_ensure_dir() {
     if ($dir === '') return false;
     // Lightweight check: if dir exists + we wrote .htaccess in a prior request,
     // we're done. Re-check every 5 min via transient to recover from manual deletes.
-    if (get_transient('wpc_v2_journal_dir_ok')) {
+    if (get_transient('wpc_v2_journal_dir_ok') && is_dir($dir) && is_writable($dir)) {
         return true;
     }
-    if (!is_dir($dir)) {
-        if (!@mkdir($dir, 0755, true) && !is_dir($dir)) {
-            return false;
-        }
-    }
-    // .htaccess deny — defense in depth (uploads dir already restrictive, but
-    // explicit is better than implicit).
-    $htaccess = $dir . '/.htaccess';
-    if (!is_file($htaccess)) {
-        wpc_fs_put($htaccess, "Order Deny,Allow\nDeny from all\n<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n");
-    }
-
-    $index = $dir . '/index.html';
-    if (!is_file($index)) {
-        wpc_fs_put($index, '');
+    if (!function_exists('wpc_v2_journal_root') || wpc_v2_journal_root(true) === '') {
+        return false;
     }
     if (!is_writable($dir)) {
         return false;
     }
     set_transient('wpc_v2_journal_dir_ok', 1, 5 * MINUTE_IN_SECONDS);
     return true;
+}
+
+
+function wpc_v2_direct_require_journal_room($imageID, $jobId) {
+    if (!function_exists('wpc_v2_journal_has_room') || wpc_v2_journal_has_room()) {
+        return;
+    }
+    error_log(sprintf('[wpc_v2_direct journal_full] imageID=%d job=%s cap=%d', (int) $imageID, (string) $jobId !== '' ? substr((string) $jobId, 0, 8) : '-', wpc_v2_journal_max_files()));
+    wpc_v2_direct_respond(503, ['error' => 'journal_full', 'retry_after' => 30]);
 }
 
 
@@ -228,11 +230,14 @@ function wpc_v2_journal_count() {
 
 
 function wpc_v2_journal_fire_loopback() {
+    if (!function_exists('wpc_v2_journal_fire_due') || !wpc_v2_journal_fire_due()) return;
     $apikey = wpc_v2_read_apikey();
     if ($apikey === '') return;
     $ts = time();
     $sig = hash_hmac('sha256', 'wpc_v2_drain.' . $ts, $apikey);
-    $url = admin_url('admin-ajax.php?action=wpc_v2_journal_drain');
+    $url = function_exists('admin_url')
+        ? admin_url('admin-ajax.php?action=wpc_v2_journal_drain')
+        : rtrim((string) get_option('siteurl'), '/') . '/wp-admin/admin-ajax.php?action=wpc_v2_journal_drain';
 
 
     if (function_exists('wp_remote_post')) {
@@ -266,14 +271,20 @@ function wpc_v2_direct_callbacks_blocked($imageID) {
 
 
     if (function_exists('get_transient')) {
-        return get_transient('wpc_v2_callbacks_blocked_' . (int) $imageID) !== false;
+        if (get_transient('wpc_v2_callbacks_blocked_' . (int) $imageID) !== false) {
+            return true;
+        }
+    } else {
+        global $wpdb;
+        $val = $wpdb->get_var($wpdb->prepare(
+            "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
+            '_transient_wpc_v2_callbacks_blocked_' . (int) $imageID
+        ));
+        if ($val !== null) {
+            return true;
+        }
     }
-    global $wpdb;
-    $val = $wpdb->get_var($wpdb->prepare(
-        "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
-        '_transient_wpc_v2_callbacks_blocked_' . (int) $imageID
-    ));
-    return $val !== null;
+    return wpc_v2_landing_refused((int) $imageID);
 }
 
 
@@ -283,7 +294,7 @@ function wpc_v2_direct_callbacks_blocked($imageID) {
  * file): the caller journals a no-improvement entry with that reason (the store cannot record it
  * under SHORTINIT) and writes nothing. `$claim` is wpc_v2_variant_claim() of the delivery.
  */
-function wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $size_label = '', $format = '', $src = 'direct_entry', $claim = []) {
+function wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $size_label = '', $format = '', $src = 'direct_entry', $claim = [], $job = '') {
     if (!function_exists('get_attached_file')) {
 
 
@@ -298,10 +309,13 @@ function wpc_v2_direct_persist_bytes($imageID, $filename, $raw, $size_label = ''
 
     // Idempotency fast-path: same bytes already on disk → no-op.
     if (file_exists($dest) && filesize($dest) === strlen($raw) && hash_file('sha256', $dest) === hash('sha256', $raw)) {
+        if (function_exists('wpc_v2_landed_receipt')) {
+            wpc_v2_landed_receipt((int) $imageID, (string) $size_label, (string) $format, $dest, (string) $src, (string) $job);
+        }
         return ['ok' => true, 'idempotent' => true, 'path' => $dest, 'bytes_size' => strlen($raw), 'error' => null];
     }
 
-    $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => (int) $imageID, 'size' => (string) $size_label, 'fmt' => (string) $format, 'src' => (string) $src, 'claim' => is_array($claim) ? $claim : []]]);
+    $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => (int) $imageID, 'size' => (string) $size_label, 'fmt' => (string) $format, 'src' => (string) $src, 'job' => (string) $job, 'claim' => is_array($claim) ? $claim : []]]);
     if (!empty($put['settled'])) {
         return ['ok' => false, 'refused' => (string) $put['error'], 'error' => (string) $put['error'], 'path' => null, 'bytes_size' => 0, 'idempotent' => false];
     }
@@ -330,8 +344,8 @@ function wpc_v2_direct_derive_filename($imageID, $size_label, $format) {
         return $dot === false ? '' : substr($base, 0, $dot) . '.' . $ext;
     }
     if ($size_label === 'original') {
-        $orig = function_exists('wp_get_original_image_path') ? wp_get_original_image_path((int) $imageID) : $abs_parent;
-        if (!$orig) $orig = $abs_parent;
+        $orig_meta = wp_get_attachment_metadata((int) $imageID);
+        $orig = (is_array($orig_meta) && !empty($orig_meta['original_image'])) ? dirname($abs_parent) . '/' . $orig_meta['original_image'] : $abs_parent;
         $base = basename($orig);
         $dot  = strrpos($base, '.');
         return $dot === false ? '' : substr($base, 0, $dot) . '.' . $ext;

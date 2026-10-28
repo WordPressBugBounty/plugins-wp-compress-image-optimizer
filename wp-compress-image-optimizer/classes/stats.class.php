@@ -302,7 +302,7 @@ class wps_ic_stats
                 $url = 'https://apiv3.wpcompress.com/api/site/stats?action=chart';
                 $call = wp_remote_get($url, [
                     'timeout' => 30,
-                    'sslverify' => false,
+                    'sslverify' => wpc_service_sslverify($url),
                     'user-agent' => WPS_IC_API_USERAGENT,
                     'headers' => [
                         'apikey' => self::$api_key,
@@ -399,7 +399,7 @@ class wps_ic_stats
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
         $call = wp_remote_get($url, [
             'timeout' => 30,
-            'sslverify' => false,
+            'sslverify' => wpc_service_sslverify($url),
             'user-agent' => WPS_IC_API_USERAGENT,
             'headers' => [
                 'apikey' => self::$api_key,
@@ -411,9 +411,9 @@ class wps_ic_stats
             $body = json_decode($body);
             return $body;
         } else if (wp_remote_retrieve_response_code($call) == 401) {
-		        $cache = new wps_ic_cache_integrations();
-						$cache->remove_key('settings-stats-401');
-		        return false;
+            // Recorded, never acted on: one 401 emptied the key here (see checkKey, ticket 12217).
+            wpc_key_rejected_receipt('settings-stats', $call);
+            return false;
         }
 
 	    return false;

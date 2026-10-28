@@ -41,6 +41,18 @@ class wps_ic_image_library
         return self::scan()['population'];
     }
 
+    /** @return int[] the population without the images a person restored: the images no visit and no run has optimized and no one asked to keep original */
+    public static function unviewed_ids()
+    {
+        $population = self::population();
+        if (!$population) {
+            return [];
+        }
+        global $wpdb;
+        $restored = array_map('intval', (array) $wpdb->get_col("SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = 'ic_status' AND meta_value = 'restored'"));
+        return array_values(array_diff($population, $restored));
+    }
+
     /** @return array{population:int, compressed:int, missing:int} */
     public static function counts()
     {

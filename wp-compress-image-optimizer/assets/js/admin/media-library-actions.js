@@ -1043,7 +1043,7 @@ jQuery(document).ready(function ($) {
         e.preventDefault();
         var link = $(this);
         if (link.hasClass('wpc-action-pending')) return;
-        if (!window.confirm('Remove the locally generated AVIF/WebP variant files for this image? They regenerate on demand.')) return;
+        if (!window.confirm(link.attr('data-confirm') || 'Remove the locally generated AVIF/WebP variant files for this image?')) return;
         link.addClass('wpc-action-pending').text('Purging…');
         $.ajax({
             url: ajaxurl,

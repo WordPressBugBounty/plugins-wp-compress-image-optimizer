@@ -90,9 +90,9 @@ if (empty($mu_settings['autoconnect'])) {
 
 							echo '</td>
 							        <td class="wpc-ic-mu-list-actions"><span class="' . $site_status_tag . '"></span></td>
-                      <td class="wpc-ic-mu-list-title">' . $current_blog_details->blogname . '</td>
+                      <td class="wpc-ic-mu-list-title">' . esc_html($current_blog_details->blogname) . '</td>
                       <td class="wpc-ic-mu-list-url">
-                      <a href="' . get_admin_url($site->blog_id) . 'wp-admin/options-general.php?page=wpcompress&showAdvanced=true" class="wpc-ic-mu-ignore ' . $connected_class . '" data-site-id="' . $site->blog_id . '" target="_blank">' . $current_blog_details->siteurl . '</a>
+                      <a href="' . get_admin_url($site->blog_id) . 'wp-admin/options-general.php?page=wpcompress&showAdvanced=true" class="wpc-ic-mu-ignore ' . $connected_class . '" data-site-id="' . $site->blog_id . '" target="_blank">' . esc_html($current_blog_details->siteurl) . '</a>
                       </td>
                       <td class="wps-ic-mu-list-change-status">';
 
@@ -150,7 +150,7 @@ if (empty($mu_settings['autoconnect'])) {
                 <img src="<?php echo WPS_IC_URI; ?>assets/mu/images/disconnect.svg" class="disconnect-logo"/>
                 <h3>Are you sure you wish to disconnect?</h3>
                 <p style="font-size:14px;">You may reconnect at any time. If you are in live mode, image optimization and delivery will stop immediately. If you've locally optimized images, images will remain in their current state after deactivation.</p>
-                <p style="color:#57A3E5;"><?php echo $current_blog_details->siteurl; ?></p>
+                <p style="color:#57A3E5;"><?php echo esc_html($current_blog_details->siteurl); ?></p>
             </div>
 
             <div class="cdn-popup-bottom-border">&nbsp;</div>

@@ -5,14 +5,12 @@ class wps_ic_logger
 	public $folder;
 	public $folderSanitized;
 	public $logFile;
-	public $userIP;
 	public $userAgent;
 	public $full_url;
 
 	public function __construct($folder = '')
 	{
-		// Get user IP and user agent
-		$this->userIP = $this->get_client_ip();
+		// Get user agent
 		$this->userAgent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : 'Unknown';
 		$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
 		$this->full_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
@@ -55,30 +53,12 @@ class wps_ic_logger
 	}
 
 	/**
-	 * Get the client IP address
-	 * @return string
-	 */
-	public function get_client_ip() {
-		$ip = 'Unknown';
-
-		if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
-			$ip = $_SERVER['HTTP_CLIENT_IP'];
-		} elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-			$ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
-		} elseif (!empty($_SERVER['REMOTE_ADDR'])) {
-			$ip = $_SERVER['REMOTE_ADDR'];
-		}
-
-		return $ip;
-	}
-
-	/**
 	 * Log request information at initialization
 	 */
 	private function log_request_info() {
 		$time = date('Y-m-d H:i:s') . sprintf('.%03d', round(microtime(true) * 1000) % 1000);
 
-		$logEntry = $time . " | INIT | IP: " . $this->userIP . " | UA: " . $this->userAgent . PHP_EOL;
+		$logEntry = $time . " | INIT | UA: " . $this->userAgent . PHP_EOL;
 		$logEntry .= 'URL: ' . $this->full_url . PHP_EOL;
 
 		// Add PHP backtrace below the full URL

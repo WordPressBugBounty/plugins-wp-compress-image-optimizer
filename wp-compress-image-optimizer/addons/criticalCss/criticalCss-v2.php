@@ -28,6 +28,7 @@ class wps_criticalCss
     public $urlKey;
     public $serverRequest;
     public $url_key_class;
+    public $lastPointer = [];
     /**
      * Normalize a URL to use the public-facing hostname from home_url().
      * On reverse proxy / Kinsta sites, HTTP_HOST and get_permalink() return the
@@ -148,13 +149,7 @@ class wps_criticalCss
 			$url = self::$url;
 		} else {
 			if ($id === 'home' || $id == 0) {
-				$homePage = get_option('page_on_front');
-
-				if (!$homePage) {
-					$url = home_url();
-				} else {
-					$url = get_permalink($homePage);
-				}
+				$url = wpc_home_page_url();
 			} else {
 				$url = get_permalink($id);
 			}
@@ -174,14 +169,7 @@ class wps_criticalCss
         // The branch below resolves the front page for 'home' / falsy / 0, so the method must
         // not be guarded on a non-empty $postID: 0 is its own default argument.
         if ($postID === 'home' || !$postID || $postID == 0) {
-            $homePage = get_option('page_on_front');
-            $blogPage = get_option('page_for_posts');
-
-            if (!$homePage) {
-                $url = home_url();
-            } else {
-                $url = get_permalink($homePage);
-            }
+            $url = wpc_home_page_url();
         } else {
             $url = get_permalink($postID);
         }
@@ -219,11 +207,42 @@ class wps_criticalCss
             return [WPS_IC_CRITICAL, $this->urlKey, 'file' => WPS_IC_CRITICAL . $this->urlKey . '/critical_desktop.css', 'exists' => file_exists(WPS_IC_CRITICAL . $this->urlKey . '/critical_desktop.css')];
         }
 
+        $state = self::inlineState((string) $this->urlKey, $returnDir, true);
 
+        return $state['blocker'] === '' ? $state['paths'] : false;
+    }
+
+    /**
+     * Why the crit of $urlKey would not be inlined on a render now: '' when nothing blocks it, else
+     * 'crit-off' (Critical CSS is off for the page), 'bypass-window' (inside a hard purge's window),
+     * 'epoch-floor' (below the generator epoch the service advertised), 'desktop-not-css' or
+     * 'mobile-not-css' (the stored file is an HTML document), 'desktop-missing' or 'mobile-missing'.
+     * Writes no receipt and no file.
+     */
+    public static function inlineBlocker($urlKey)
+    {
+        $urlKey = ltrim((string) $urlKey, '/');
+        if ($urlKey === '' || !defined('WPS_IC_CRITICAL')) {
+            return '';
+        }
+        if (function_exists('wpc_crit_generation_off') && wpc_crit_generation_off($urlKey)) {
+            return 'crit-off';
+        }
+        $state = self::inlineState($urlKey, false, false);
+
+        return $state['blocker'];
+    }
+
+    /**
+     * The one answer to "is this page's crit usable": ['blocker' => '' or the code inlineBlocker
+     * names, 'paths' => the desktop and mobile locations criticalExists returns].
+     */
+    private static function inlineState($urlKey, $returnDir, $log)
+    {
         // v7.10.391 zero-dark purge: stale artifacts inside a hard-purge bypass window
         // resolve as absent — every lane degrades to the ordinary critless render.
-        if (function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($this->urlKey)) {
-            return false;
+        if (function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($urlKey)) {
+            return ['blocker' => 'bypass-window', 'paths' => []];
         }
 
         // v7.10.524 — GENERATOR EPOCH GATE. Artifacts were keyed on the template hash alone,
@@ -233,32 +252,32 @@ class wps_criticalCss
         // Fails OPEN: floor 0 (the shipped default) or an unreadable stamp changes nothing.
         $epochMin = (int) get_option('wpc_crit_epoch_min', 0);
         if ($epochMin > 0 && defined('WPS_IC_CRITICAL')) {
-            $epochFile = WPS_IC_CRITICAL . $this->urlKey . '/crit_epoch.txt';
+            $epochFile = WPS_IC_CRITICAL . $urlKey . '/crit_epoch.txt';
             $artifactEpoch = @is_file($epochFile) ? (int) trim((string) @file_get_contents($epochFile)) : 0;
             if ($artifactEpoch < $epochMin) {
-                if (function_exists('wpc_cache_first_log')) {
-                    wpc_cache_first_log('crit-epoch-stale', (string) $this->urlKey, '', [
+                if ($log && function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('crit-epoch-stale', (string) $urlKey, '', [
                         'have' => $artifactEpoch, 'min' => $epochMin,
                     ]);
                 }
-                return false;
+                return ['blocker' => 'epoch-floor', 'paths' => []];
             }
         }
 
         $return = [];
 
-        $desktopFilePath = WPS_IC_CRITICAL . $this->urlKey . '/critical_desktop.css';
-        $mobileFilePath = WPS_IC_CRITICAL . $this->urlKey . '/critical_mobile.css';
+        $desktopFilePath = WPS_IC_CRITICAL . $urlKey . '/critical_desktop.css';
+        $mobileFilePath = WPS_IC_CRITICAL . $urlKey . '/critical_mobile.css';
 
-        $desktopFileUrl = WPS_IC_CRITICAL_URL . $this->urlKey . '/critical_desktop.css';
-        $mobileFileUrl = WPS_IC_CRITICAL_URL . $this->urlKey . '/critical_mobile.css';
+        $desktopFileUrl = WPS_IC_CRITICAL_URL . $urlKey . '/critical_desktop.css';
+        $mobileFileUrl = WPS_IC_CRITICAL_URL . $urlKey . '/critical_mobile.css';
 
         if (file_exists($desktopFilePath) && filesize($desktopFilePath) > 0) {
             $content = file_get_contents($desktopFilePath);
             $isHtml = preg_match('/<body\b[^>]*>/', $content);
 
             if ($isHtml) {
-                return false;
+                return ['blocker' => 'desktop-not-css', 'paths' => []];
             }
 
 
@@ -282,7 +301,7 @@ class wps_criticalCss
             $isHtml = preg_match('/<body\b[^>]*>/', $content);
 
             if ($isHtml) {
-                return false;
+                return ['blocker' => 'mobile-not-css', 'paths' => []];
             }
 
 $return['mobile_path'] = $mobileFilePath;
@@ -294,10 +313,10 @@ $return['mobile_path'] = $mobileFilePath;
         }
 
         if (empty($return['desktop']) || empty($return['mobile'])) {
-            return false;
+            return ['blocker' => empty($return['desktop']) ? 'desktop-missing' : 'mobile-missing', 'paths' => []];
         }
 
-        return $return;
+        return ['blocker' => '', 'paths' => $return];
     }
 
     public function initCritical($postID, $url, $url_key, $type, $timeout = 120)
@@ -322,25 +341,19 @@ $return['mobile_path'] = $mobileFilePath;
         // Normalize URL + recompute key so ALL downstream code uses the public domain
         $url = $this->normalizeUrl($url);
         $url_key = $this->url_key_class->setup($url);
+        if ((string) $url_key === '') {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('gen-dispatch-refused', '', (string) $url, ['why' => 'no-key', 'path' => 'initCritical']);
+            }
+            return false;
+        }
 
         // A generation nobody will consume is pure waste: every dispatch lane funnels
         // through here, so the consume-side switch gates the gen side at the choke point
         if (apply_filters('wpc_gen_requires_consume', true) && empty($_GET['forceCritical'])
             && !(function_exists('wp_doing_ajax') && wp_doing_ajax()
                 && function_exists('current_user_can') && current_user_can('manage_options'))) {
-            $wpc_settings = get_option(WPS_IC_SETTINGS);
-            $wpc_crit_enabled = is_array($wpc_settings) && !empty($wpc_settings['critical']['css'])
-                && $wpc_settings['critical']['css'] == '1';
-            if (!$wpc_crit_enabled) {
-                $wpc_excludes = get_option('wpc-excludes');
-                $wpc_page_id = ($postID === 'home' || empty($postID)) ? 'home' : $postID;
-                if (is_array($wpc_excludes)
-                    && isset($wpc_excludes['page_excludes'][$wpc_page_id]['critical_css'])
-                    && $wpc_excludes['page_excludes'][$wpc_page_id]['critical_css'] == '1') {
-                    $wpc_crit_enabled = true;
-                }
-            }
-            if (!$wpc_crit_enabled) {
+            if (!function_exists('wpc_crit_generation_off') || wpc_crit_generation_off((string) $url_key, (string) $url)) {
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('gen-skip-consume-off', (string) $url_key, (string) $url, []);
                 }
@@ -400,7 +413,7 @@ $return['mobile_path'] = $mobileFilePath;
                     @unlink($wpc_uf);
                 } else {
                     $wpc_disk_uuid = preg_replace('/[^A-Za-z0-9-]/', '', trim((string) @file_get_contents($wpc_uf)));
-                    if ($wpc_disk_uuid !== '') {
+                    if ($wpc_disk_uuid !== '' && !(function_exists('wpc_crit_purge_stale_home') && wpc_crit_purge_stale_home((string) $url_key))) {
                         $pendingUuid = $wpc_disk_uuid;
                     }
                 }
@@ -413,7 +426,7 @@ $return['mobile_path'] = $mobileFilePath;
         // Background lanes (cron/ajax/warm) poll freely; they hold one budgeted worker.
         $wpc_background_lane = (function_exists('wp_doing_ajax') && wp_doing_ajax())
             || (defined('DOING_CRON') && DOING_CRON)
-            || !empty($_SERVER['HTTP_X_WPC_CACHE_WARM']);
+            || wpc_warm_request();
         if ($pendingUuid && !$wpc_background_lane) {
             // Visitor renders carry ZERO artifact HTTP; background lanes own the poll.
             // Site-wide kick budget: post-update every URL is pending — per-URL gates alone
@@ -437,6 +450,9 @@ $return['mobile_path'] = $mobileFilePath;
             if (!is_wp_error($response)) {
                 if (wp_remote_retrieve_response_code($response) === 200) {
                     $data = json_decode(wp_remote_retrieve_body($response), true);
+                    if (function_exists('wpc_crit_status_foreign') && wpc_crit_status_foreign($data, (string) $url_key, 'status-poll')) {
+                        $data = null;
+                    }
 
                     if (!empty($data['status']) && $data['status'] === 'success') {
                         $criticalCSS = new wps_criticalCss();
@@ -459,8 +475,14 @@ $return['mobile_path'] = $mobileFilePath;
 
                             'used_css_url' => !empty($data['used_css_url']) ? $data['used_css_url'] : '',
                             'tpl_key'      => !empty($data['tpl_key']) ? $data['tpl_key'] : '',
+                            'corpus_id'    => !empty($data['corpus_id']) ? $data['corpus_id'] : '',
                         ], 'meta', $url);
 
+                        if (is_array($saveResult) && ($saveResult['critical-css'] ?? '') === 'purge-stale-kept') {
+                            delete_transient($uuid_key);
+                            delete_transient('wpc_critical_key_' . $url_key);
+                            return false;
+                        }
 
                         if (function_exists('wpc_consume_fonts_artifact')) {
                             $wpc_poll_fonts = (!empty($data['fonts']) && is_array($data['fonts'])) ? $data['fonts'] : [];
@@ -669,17 +691,29 @@ $return['mobile_path'] = $mobileFilePath;
                 'apikey'  => $apikey,
             ];
 
-            $wpc_v3set = get_option(WPS_IC_SETTINGS);
+            $wpc_v3set = function_exists('wpc_levered_settings') ? wpc_levered_settings(get_option(WPS_IC_SETTINGS)) : get_option(WPS_IC_SETTINGS);
             if (is_array($wpc_v3set) && !empty($wpc_v3set['delay-js-v2']) && $wpc_v3set['delay-js-v2'] == '1'
                 && (!isset($wpc_v3set['delay-js-v3']) || $wpc_v3set['delay-js-v3'] != '0')
                 && apply_filters('wpc_delay_manifest_capability', true)) {
                 // Read by the service at server.js:15727 (req.body.capabilities); a key not listed here has no reader.
                 $args['capabilities'] = ['delay_manifest' => 1, 'consolidated_callback' => 1, 'delay_inline' => 1, 'lcp_inline' => 1];
             }
+            if (function_exists('wpc_hero_rendition_capability')) {
+                wpc_hero_rendition_capability($args);
+            }
+            if (function_exists('wpc_hero_lqip_capability')) {
+                wpc_hero_lqip_capability($args);
+            }
+            if (function_exists('wpc_signed_artifacts_capability')) {
+                wpc_signed_artifacts_capability($args);
+            }
 
             $wpc_ucss_armed = false;
             if (function_exists('wpc_used_css_apply_demand')) {
                 $wpc_ucss_armed = wpc_used_css_apply_demand($args, $url_key);
+            }
+            if (function_exists('wpc_atf_faces_apply_capability')) {
+                wpc_atf_faces_apply_capability($args);
             }
 
             if (empty($args['tpl_key']) && function_exists('wpc_dispatch_tpl_key')
@@ -743,26 +777,75 @@ $return['mobile_path'] = $mobileFilePath;
     /**
      * The corpus every dispatch carries, so the service never fetches the origin: the page's saved
      * copy as html (wpc_saved_page_read), the handset copy as html_mobile when it differs, and css,
-     * the sheets that page links read from disk, complete or absent. The body carries no html when
-     * the page has no saved copy, and the dispatch door then holds it ('no-page'). Receipt:
-     * push-corpus.
+     * the sheets that page links read from disk, complete or absent, and saved_at, the epoch of the
+     * oldest copy sent, each copy's epoch the one read with it. A copy that is stale
+     * (wpc_saved_page_stale: the post it renders was edited after it was written, or it links a
+     * generated sheet that is gone) is not sent, and the stale copies are dropped in one call to
+     * wpc_saved_page_drop. The body carries no html when the page has no saved copy or its desktop
+     * copy was dropped, and the dispatch door then holds it ('no-page'). Receipt: push-corpus.
      */
     private function wpc_push_corpus(array $args, $urlKey)
     {
         $urlKey = ltrim((string) $urlKey, '/');
-        $html = function_exists('wpc_saved_page_read') ? wpc_saved_page_read($urlKey) : '';
+        $htmlAt = 0;
+        $mobileAt = 0;
+        $html = function_exists('wpc_saved_page_read') ? wpc_saved_page_read($urlKey, false, $htmlAt) : '';
+        $mobile = function_exists('wpc_saved_page_read') ? wpc_saved_page_read($urlKey, true, $mobileAt) : '';
         $cap = (int) apply_filters('wpc_push_corpus_cap', 8388608);
         $receipt = ['src' => 'saved', 'html_b' => strlen($html), 'html_m_b' => 0, 'css_b' => 0];
+        $miss = $html === '' ? 'no-page' : '';
+        if (function_exists('wpc_saved_page_stale') && function_exists('wpc_saved_page_source_mtime')
+            && ($html !== '' || $mobile !== '')) {
+            $sourceMtime = wpc_saved_page_source_mtime(isset($args['url']) ? (string) $args['url'] : '');
+            $drops = [];
+            foreach (['desktop' => [$html, $htmlAt], 'mobile' => [$mobile, $mobileAt]] as $device => $copy) {
+                if ($copy[0] === '') {
+                    continue;
+                }
+                $stale = wpc_saved_page_stale($urlKey, $device === 'mobile', $copy[0], $sourceMtime, $copy[1]);
+                if ($stale['gone'] !== '' && !isset($receipt['gone_first'])) {
+                    $receipt['gone_first'] = $stale['gone'];
+                }
+                if ($stale['kept']) {
+                    $receipt['gone_kept'] = 1;
+                }
+                if ($stale['why'] === '') {
+                    continue;
+                }
+                $drops[$device] = $stale['why'];
+                if ($device === 'desktop') {
+                    $html = '';
+                    $miss = $stale['why'];
+                } else {
+                    $mobile = '';
+                }
+                if (!isset($receipt['dropped'])) {
+                    $receipt['dropped'] = $stale['why'];
+                }
+            }
+            if ($drops !== [] && function_exists('wpc_saved_page_drop')) {
+                wpc_saved_page_drop($urlKey, $drops, count($drops) === 2 ? null : isset($drops['mobile']));
+            }
+        }
         if ($html === '' || strlen($html) > $cap) {
             if (function_exists('wpc_cache_first_log')) {
-                wpc_cache_first_log('push-corpus', $urlKey, '', ['src' => '', 'html_b' => 0, 'miss' => $html === '' ? 'no-page' : 'cap']);
+                wpc_cache_first_log('push-corpus', $urlKey, '', ['src' => '', 'html_b' => 0, 'miss' => $html === '' ? $miss : 'cap']
+                    + array_intersect_key($receipt, ['gone_first' => 1, 'gone_kept' => 1, 'dropped' => 1]));
             }
             return $args;
         }
         $args['html'] = $html;
         $used = strlen($html);
+        $corpusId = '';
         if (function_exists('wpc_crit_corpus_record')) {
-            wpc_crit_corpus_record($urlKey, $html, 'desktop');
+            $stampParts = function_exists('wpc_crit_corpus_stamp_parts') ? wpc_crit_corpus_stamp_parts(wpc_crit_corpus_record($urlKey, $html, 'desktop')) : [];
+            $corpusId = $stampParts !== [] ? (string) $stampParts['id'] : '';
+        }
+        if ($corpusId === '' && function_exists('wpc_crit_corpus_id')) {
+            $corpusId = wpc_crit_corpus_id($html);
+        }
+        if ($corpusId !== '') {
+            $args['corpus_id'] = $corpusId;
         }
         if (apply_filters('wpc_push_css_corpus', true) && class_exists('wps_ic_crit_corpus')) {
             $css = '';
@@ -788,13 +871,22 @@ $return['mobile_path'] = $mobileFilePath;
                 $used += strlen($css);
             }
         }
-        $mobile = wpc_saved_page_read($urlKey, true);
+        $savedAt = $htmlAt;
         if ($mobile !== '' && $mobile !== $html && $used + strlen($mobile) <= $cap) {
             $args['html_mobile'] = $mobile;
+            $mobileId = function_exists('wpc_crit_corpus_id') ? wpc_crit_corpus_id($mobile) : '';
+            if ($mobileId !== '' && $mobileId !== $corpusId) {
+                $args['corpus_id_mobile'] = $mobileId;
+            }
+            $savedAt = min($savedAt, $mobileAt);
+        }
+        if ($savedAt > 0) {
+            $args['saved_at'] = $savedAt;
         }
         if (function_exists('wpc_cache_first_log')) {
             $receipt['html_m_b'] = isset($args['html_mobile']) ? strlen($args['html_mobile']) : 0;
             $receipt['css_b'] = isset($args['css']) ? strlen((string) $args['css']) : 0;
+            $receipt['saved_at'] = $savedAt;
             wpc_cache_first_log('push-corpus', $urlKey, '', $receipt);
         }
         return $args;
@@ -806,7 +898,7 @@ $return['mobile_path'] = $mobileFilePath;
         $humanAdminAjax = function_exists('wp_doing_ajax') && wp_doing_ajax()
             && function_exists('is_user_logged_in') && is_user_logged_in()
             && function_exists('current_user_can') && current_user_can('manage_options');
-        $backgroundRequest = !empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])
+        $backgroundRequest = wpc_warm_request()
             || (function_exists('wp_doing_cron') && wp_doing_cron());
         return (float) apply_filters('wpc_push_html_timeout', $humanAdminAjax ? 5 : ($backgroundRequest ? 15 : 1.5));
     }
@@ -911,7 +1003,8 @@ $return['mobile_path'] = $mobileFilePath;
             // stops every later poll and leaves the card on "Analyzing performance..." for good
             // (centralmotelgi.com.au, 2026-10-07). The run is lost: drop its uuid so the next
             // first-run cycle dispatches a fresh one, and store nothing.
-            $psiStatus = isset($data['status']) ? (string) $data['status'] : 'complete';
+            $statusGiven = isset($data['status']);
+            $psiStatus = $statusGiven ? (string) $data['status'] : 'complete';
             if ((int) wp_remote_retrieve_response_code($results) === 404 || isset($data['error'])
                 || in_array($psiStatus, ['failed', 'error'], true)) {
                 $this->forgetPsiUuid($uuid);
@@ -921,39 +1014,36 @@ $return['mobile_path'] = $mobileFilePath;
 
             if ($psiStatus !== 'complete') {
                 $jobStatus['benchmark-pending'] = $psiStatus;
-                if ($attempt === 0 && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
-                    && !wp_next_scheduled('wpc_psi_poll', [$urlKey, $uuid])) {
-                    wp_schedule_single_event(time() + 45, 'wpc_psi_poll', [$urlKey, $uuid]);
-                }
+                $this->armPsiPoll($urlKey, $uuid, $attempt);
                 $jobStatus['benchmark-pending-rescheduled'] = true;
                 break;
             }
 
             // Parse Desktop
-            $parsedData['desktop']['before']['performanceScore'] = $data['desktop']['beforeScore'];
-            $parsedData['desktop']['after']['performanceScore'] = $data['desktop']['afterScore'];
+            $parsedData['desktop']['before']['performanceScore'] = $data['desktop']['beforeScore'] ?? null;
+            $parsedData['desktop']['after']['performanceScore'] = $data['desktop']['afterScore'] ?? null;
 
-            $parsedData['desktop']['before']['pageSize'] = $data['desktop']['beforePageSize'];
-            $parsedData['desktop']['after']['pageSize'] = $data['desktop']['afterPageSize'];
+            $parsedData['desktop']['before']['pageSize'] = $data['desktop']['beforePageSize'] ?? null;
+            $parsedData['desktop']['after']['pageSize'] = $data['desktop']['afterPageSize'] ?? null;
 
-            $parsedData['desktop']['before']['requests'] = $data['desktop']['beforeRequests'];
-            $parsedData['desktop']['after']['requests'] = $data['desktop']['afterRequests'];
+            $parsedData['desktop']['before']['requests'] = $data['desktop']['beforeRequests'] ?? null;
+            $parsedData['desktop']['after']['requests'] = $data['desktop']['afterRequests'] ?? null;
 
-            $parsedData['desktop']['before']['ttfb'] = $data['desktop']['beforeTTFB'];
-            $parsedData['desktop']['after']['ttfb'] = $data['desktop']['afterTTFB'];
+            $parsedData['desktop']['before']['ttfb'] = $data['desktop']['beforeTTFB'] ?? null;
+            $parsedData['desktop']['after']['ttfb'] = $data['desktop']['afterTTFB'] ?? null;
 
             // Parse Mobile
-            $parsedData['mobile']['before']['performanceScore'] = $data['mobile']['beforeScore'];
-            $parsedData['mobile']['after']['performanceScore'] = $data['mobile']['afterScore'];
+            $parsedData['mobile']['before']['performanceScore'] = $data['mobile']['beforeScore'] ?? null;
+            $parsedData['mobile']['after']['performanceScore'] = $data['mobile']['afterScore'] ?? null;
 
-            $parsedData['mobile']['before']['pageSize'] = $data['mobile']['beforePageSize'];
-            $parsedData['mobile']['after']['pageSize'] = $data['mobile']['afterPageSize'];
+            $parsedData['mobile']['before']['pageSize'] = $data['mobile']['beforePageSize'] ?? null;
+            $parsedData['mobile']['after']['pageSize'] = $data['mobile']['afterPageSize'] ?? null;
 
-            $parsedData['mobile']['before']['requests'] = $data['mobile']['beforeRequests'];
-            $parsedData['mobile']['after']['requests'] = $data['mobile']['afterRequests'];
+            $parsedData['mobile']['before']['requests'] = $data['mobile']['beforeRequests'] ?? null;
+            $parsedData['mobile']['after']['requests'] = $data['mobile']['afterRequests'] ?? null;
 
-            $parsedData['mobile']['before']['ttfb'] = $data['mobile']['beforeTTFB'];
-            $parsedData['mobile']['after']['ttfb'] = $data['mobile']['afterTTFB'];
+            $parsedData['mobile']['before']['ttfb'] = $data['mobile']['beforeTTFB'] ?? null;
+            $parsedData['mobile']['after']['ttfb'] = $data['mobile']['afterTTFB'] ?? null;
 
             $this->debugPageSpeed(print_r($parsedData,true));
 
@@ -963,6 +1053,12 @@ $return['mobile_path'] = $mobileFilePath;
                 && is_numeric($parsedData['desktop']['after']['performanceScore'])
                 && is_numeric($parsedData['mobile']['before']['performanceScore'])
                 && is_numeric($parsedData['mobile']['after']['performanceScore']);
+            if (!$scoresPresent && !$statusGiven) {
+                $jobStatus['benchmark-pending'] = 'no-status';
+                $this->armPsiPoll($urlKey, $uuid, $attempt);
+                $jobStatus['benchmark-pending-rescheduled'] = true;
+                break;
+            }
             if (!$scoresPresent) {
                 $this->forgetPsiUuid($uuid);
                 $jobStatus['benchmark-lost'] = 'no-scores';
@@ -981,11 +1077,20 @@ $return['mobile_path'] = $mobileFilePath;
         return $jobStatus;
     }
 
+    private function armPsiPoll($urlKey, $uuid, $attempt)
+    {
+        if ($attempt === 0 && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+            && !wp_next_scheduled('wpc_psi_poll', [$urlKey, $uuid])) {
+            wp_schedule_single_event(time() + 45, 'wpc_psi_poll', [$urlKey, $uuid]);
+        }
+    }
+
     /** Drop the stashed PageSpeed uuid when it names the run that was just found lost. */
     private function forgetPsiUuid($uuid)
     {
         if ((string) get_transient('wpc_psi_uuid') === (string) $uuid) {
             delete_transient('wpc_psi_uuid');
+            delete_transient('wpc_psi_dispatched_at');
         }
     }
 
@@ -1004,100 +1109,6 @@ $return['mobile_path'] = $mobileFilePath;
             $log .= '[' . $time . '] - ' . $message . "\r\n";
             wpc_fs_put($log_file, $log);
         }
-    }
-
-    public function saveLCP($urlKey, $LCP = array())
-    {
-        $jobStatus = [];
-        $critical_path = WPS_IC_CRITICAL . $urlKey . '/';
-        $cache = new wps_ic_cache_integrations();
-
-        if (is_array($LCP)) {
-            $json = $LCP;
-        } else {
-            $json = json_decode($LCP, true);
-        }
-
-        if (!function_exists('download_url')) {
-            require_once(ABSPATH . 'wp-admin/includes/file.php');
-        }
-
-
-        if (function_exists('wpc_cache_first_log')) {
-            wpc_cache_first_log('land-rx', (string) $urlKey, (string) $pageUrl, ['type' => (string) $type]);
-        }
-
-        $desktop = wp_remote_get($json['url']['desktop'], ['headers' => ['user-agent' => WPS_IC_API_USERAGENT]]);
-        $mobile = wp_remote_get($json['url']['mobile'], ['headers' => ['user-agent' => WPS_IC_API_USERAGENT]]);
-
-        // If fetching remote files is ERROR stop process
-        if (is_wp_error($desktop)) {
-            // No Desktop LCP
-            $preloadsLcp = get_option('wps_ic_preloads');
-            $preloadsLcp['lcp'] = '';
-            update_option('wps_ic_preloads', $preloadsLcp);
-            $jobStatus['lcp-mobile-fail'] = true;
-        } else {
-            $body = wp_remote_retrieve_body($desktop);
-            $data = json_decode($body, true);
-            $lcp = isset($data['lcp']) ? $data['lcp'] : [];
-            $preloadsLcp = get_option('wps_ic_preloads');
-            $preloadsLcp['lcp'] = $lcp;
-            update_option('wps_ic_preloads', $preloadsLcp);
-            $jobStatus['lcp-desktop-success'] = true;
-        }
-
-        // If fetching remote files is ERROR stop process
-        if (is_wp_error($mobile)) {
-            // No Mobile LCP
-            $preloadsLcp = get_option('wps_ic_preloadsMobile');
-            $preloadsLcp['lcp'] = '';
-            update_option('wps_ic_preloadsMobile', $preloadsLcp);
-            $jobStatus['lcp-mobile-fail'] = true;
-        } else {
-            $body = wp_remote_retrieve_body($mobile);
-            $data = json_decode($body, true);
-            $lcp = isset($data['lcp']) ? $data['lcp'] : [];
-            $preloadsLcp = get_option('wps_ic_preloadsMobile');
-            $preloadsLcp['lcp'] = $lcp;
-            update_option('wps_ic_preloadsMobile', $preloadsLcp);
-            $jobStatus['lcp-mobile-success'] = true;
-        }
-
-
-        $wpc_lcp_url = '';
-        if (!empty($json['lcp_url'])) {
-            $wpc_lcp_url = (string) $json['lcp_url'];
-        } elseif (!empty($json['url']['lcp'])) {
-            $wpc_lcp_url = (string) $json['url']['lcp'];
-        } elseif (!empty($json['uuid']) && !empty($json['url']['desktop'])) {
-            $wpc_lcp_url = dirname((string) $json['url']['desktop']) . '/' . (string) $json['uuid'] . '.lcp.json';
-        }
-        if ($wpc_lcp_url !== '') {
-            $wpc_lcp_resp = wp_remote_get($wpc_lcp_url, ['headers' => ['user-agent' => WPS_IC_API_USERAGENT], 'timeout' => 5]);
-            if (!is_wp_error($wpc_lcp_resp) && (int) wp_remote_retrieve_response_code($wpc_lcp_resp) === 200) {
-                $wpc_lcp_body = wp_remote_retrieve_body($wpc_lcp_resp);
-                if (is_string($wpc_lcp_body) && $wpc_lcp_body !== '' && json_decode($wpc_lcp_body) !== null) {
-                    if (!is_dir($critical_path)) { wp_mkdir_p($critical_path); }
-                    if (function_exists('wpc_write_lcp_preserving_facts')) {
-                        wpc_write_lcp_preserving_facts($critical_path, $wpc_lcp_body);
-                    } else {
-                        wpc_fs_put($critical_path . 'lcp.json', $wpc_lcp_body);
-                    }
-                    $jobStatus['lcp-hint-saved'] = true;
-
-
-                    if (function_exists('wpc_cache_first_enabled') && wpc_cache_first_enabled()
-                        && method_exists('wps_ic_cache_integrations', 'purgeUrlHtml')) {
-                        function_exists('wpc_land_purge_coalesced') ? wpc_land_purge_coalesced($urlKey, '', 'lcp-land') : wps_ic_cache_integrations::purgeUrlHtml($urlKey, '', ['context' => 'lcp-land']);
-                    } elseif (class_exists('wps_ic_cache_integrations')) {
-                        wps_ic_cache_integrations::purgeAll($urlKey, false, true, false);
-                    }
-                }
-            }
-        }
-
-        return $jobStatus;
     }
 
     public function criticalExistsAjax($url = '')
@@ -1149,7 +1160,7 @@ $return['mobile_path'] = $mobileFilePath;
         $args = ['url' => $url];
 
         $interactive = function_exists('wp_doing_ajax') && wp_doing_ajax()
-            && empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])
+            && !wpc_warm_request()
             && function_exists('current_user_can') && current_user_can('manage_options');
         // v7.10.524 — SAME DEAD HOST, SECOND CALLER. .515 bounded and breakered the assets
         // call in criticalCss.php (v1) and I called it done; the CDN team pointed out v2 is
@@ -1265,7 +1276,7 @@ $return['mobile_path'] = $mobileFilePath;
         // renders, so an answer that has not come in 5 s is a render under way.
         $wpc_interactive = !empty($GLOBALS['wpc_critical_generate_forced'])
             && function_exists('wp_doing_ajax') && wp_doing_ajax()
-            && empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])
+            && !wpc_warm_request()
             && function_exists('current_user_can') && current_user_can('manage_options');
         $wpc_dtimeout = (int) apply_filters('wpc_gen_dispatch_timeout', $wpc_interactive ? 45 : 5);
 
@@ -1283,17 +1294,29 @@ $return['mobile_path'] = $mobileFilePath;
                 $args['sync'] = 1;
             }
 
-            $delay_settings = get_option(WPS_IC_SETTINGS);
+            $delay_settings = function_exists('wpc_levered_settings') ? wpc_levered_settings(get_option(WPS_IC_SETTINGS)) : get_option(WPS_IC_SETTINGS);
             if (is_array($delay_settings) && !empty($delay_settings['delay-js-v2']) && $delay_settings['delay-js-v2'] == '1'
                 && (!isset($delay_settings['delay-js-v3']) || $delay_settings['delay-js-v3'] != '0')
                 && apply_filters('wpc_delay_manifest_capability', true)) {
                 // Read by the service at server.js:15727 (req.body.capabilities); a key not listed here has no reader.
                 $args['capabilities'] = ['delay_manifest' => 1, 'consolidated_callback' => 1, 'delay_inline' => 1, 'lcp_inline' => 1];
             }
+            if (function_exists('wpc_hero_rendition_capability')) {
+                wpc_hero_rendition_capability($args);
+            }
+            if (function_exists('wpc_hero_lqip_capability')) {
+                wpc_hero_lqip_capability($args);
+            }
+            if (function_exists('wpc_signed_artifacts_capability')) {
+                wpc_signed_artifacts_capability($args);
+            }
 
             $wpc_ucss_armed = false;
             if (function_exists('wpc_used_css_apply_demand') && !empty($this->urlKey)) {
                 $wpc_ucss_armed = wpc_used_css_apply_demand($args, $this->urlKey);
+            }
+            if (function_exists('wpc_atf_faces_apply_capability')) {
+                wpc_atf_faces_apply_capability($args);
             }
             // tpl_key rides every dispatch we have one for, so the service's observation cache
             // covers delay/fonts-only sites, not just used-css ones.
@@ -1326,7 +1349,7 @@ $return['mobile_path'] = $mobileFilePath;
             return [
                 'args'      => $args,
                 'form'      => true,
-                'transport' => ['timeout' => $wpc_dtimeout, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT],
+                'transport' => ['timeout' => $wpc_dtimeout, 'sslverify' => wpc_service_sslverify(self::$API_URL), 'user-agent' => WPS_IC_API_USERAGENT],
                 'receipt'   => [
                     'caps'     => isset($args['capabilities']) && is_array($args['capabilities']) ? implode(',', array_keys($args['capabilities'])) : '',
                     'used_css' => $wpc_ucss_armed ? 1 : 0,
@@ -1397,15 +1420,18 @@ $return['mobile_path'] = $mobileFilePath;
             && preg_match('#([0-9a-f]{4})/([0-9a-f-]{16,})-(?:desktop|mobile)\.css#i', $body, $wpc_pm)) {
             $wpc_up  = $wpc_pm[1];
             $wpc_uid = $wpc_pm[2];
-            $wpc_base = 'https://critical-css-mc.b-cdn.net/' . $wpc_up . '/' . $wpc_uid;
+            $wpc_base = (function_exists('wpc_crit_artifact_base') ? wpc_crit_artifact_base() : 'https://critical-css-mc.b-cdn.net/') . $wpc_up . '/' . $wpc_uid;
             $wpc_sync_epoch = (string) wp_remote_retrieve_header($call, 'x-wpc-epoch');
             $this->saveCriticalCss($this->urlKey, [
                 'url'   => ['desktop' => $wpc_base . '-desktop.css', 'mobile' => $wpc_base . '-mobile.css'],
                 'uuid'  => $wpc_uid,
                 'via'   => 'sync',
                 'epoch' => $wpc_sync_epoch !== '' ? $wpc_sync_epoch : null,
+                'corpus_id' => is_array($dispatchAck) && !empty($dispatchAck['corpus_id']) ? $dispatchAck['corpus_id'] : '',
             ], 'meta', urldecode((string) $this->serverRequest));
-        } elseif (strlen($body) > 128 && ($body[0] !== '{' || (is_array($dispatchAck) && !empty($dispatchAck['url'])))) {
+        } elseif (strlen($body) > 128 && empty($wpc_dispatch['answer']['refused'])
+            && !(is_array($dispatchAck) && !empty($dispatchAck['error_type']))
+            && ($body[0] !== '{' || (is_array($dispatchAck) && !empty($dispatchAck['url'])))) {
             $this->saveCriticalCss($this->urlKey, $body);
         }
 
@@ -1435,6 +1461,7 @@ $return['mobile_path'] = $mobileFilePath;
     // path. Building it by hand here asked for a pointer object no inner page ever had.
     public function fetchLatestPointerUuid($urlKey)
     {
+        $this->lastPointer = [];
         if (!function_exists('get_option') || !defined('WPS_IC_OPTIONS')) {
             return '';
         }
@@ -1474,6 +1501,12 @@ $return['mobile_path'] = $mobileFilePath;
         if (!is_array($j)) {
             return '';
         }
+        if (function_exists('wpc_crit_latest_key_foreign') && wpc_crit_latest_key_foreign($j, $u)) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('crit-latest-key-mismatch', (string) $urlKey, (string) $u, ['via' => 'pointer']);
+            }
+            return '';
+        }
         // v7.10.524 — capture the service's generator epoch floor. Two dials by the crit
         // team's design, and theirs is better than the single integer I proposed: CRIT_EPOCH
         // stamps every artifact, CRIT_EPOCH_MIN invalidates, and the floor ships at 0 so it is
@@ -1496,6 +1529,10 @@ $return['mobile_path'] = $mobileFilePath;
         // exactly: v, url_key, crit_uuid, obs_uuid, lcp_uuid, has_used_css, ready, bundle_url,
         // bundle_gen, bundle_complete, crit_epoch, crit_epoch_min, at. near_expiry, expired and
         // artifacts{} ride /v2/latest, never this object, and are handled in wpc_lcp_repull_handler.
+        $this->lastPointer = [
+            'obs' => preg_replace('/[^a-f0-9-]/i', '', (string) ($j['obs_uuid'] ?? '')),
+            'sha' => (isset($j['rest_sha256']) && is_array($j['rest_sha256'])) ? $j['rest_sha256'] : [],
+        ];
         return preg_replace('/[^a-f0-9-]/i', '', (string) ($j['crit_uuid'] ?? ''));
     }
 
@@ -1515,6 +1552,9 @@ $return['mobile_path'] = $mobileFilePath;
         // stale.txt = serve-stale copy on disk; a replacement pull must overwrite it.
         if (@is_file($cd . 'stale.txt')) {
             $force = true;
+            if (function_exists('wpc_crit_purge_stale_home') && wpc_crit_purge_stale_home((string) $urlKey)) {
+                return false;
+            }
         }
         if (!$force && @filesize($cd . 'critical_desktop.css') > 64 && @filesize($cd . 'critical_mobile.css') > 64) {
             return true; // already landed
@@ -1607,7 +1647,7 @@ $return['mobile_path'] = $mobileFilePath;
             return false;
         }
         $askedUuid = $uuid;
-        $base = 'https://critical-css-mc.b-cdn.net/' . substr($uuid, 0, 4) . '/' . $uuid;
+        $base = (function_exists('wpc_crit_artifact_href') ? wpc_crit_artifact_href($uuid, '') : 'https://critical-css-mc.b-cdn.net/' . substr($uuid, 0, 4) . '/' . $uuid);
         // HEAD first — cheap existence probe while the gen may still be grinding.
         // ?t= cache-bust throughout (joint spec v2 S3): Bunny edge may negative-cache a
         // premature 404, and a repeat-probing collector would otherwise never see the 200.
@@ -1621,7 +1661,7 @@ $return['mobile_path'] = $mobileFilePath;
             if ($pointerUuidAfterMiss === '' || $pointerUuidAfterMiss === $uuid) {
                 return false;
             }
-            $base = 'https://critical-css-mc.b-cdn.net/' . substr($pointerUuidAfterMiss, 0, 4) . '/' . $pointerUuidAfterMiss;
+            $base = (function_exists('wpc_crit_artifact_href') ? wpc_crit_artifact_href($pointerUuidAfterMiss, '') : 'https://critical-css-mc.b-cdn.net/' . substr($pointerUuidAfterMiss, 0, 4) . '/' . $pointerUuidAfterMiss);
             $head = wp_remote_head($base . '-mobile.css' . $cacheBust, ['timeout' => 3, 'user-agent' => WPS_IC_API_USERAGENT]);
             if (is_wp_error($head) || (int) wp_remote_retrieve_response_code($head) !== 200) {
                 return false;
@@ -1705,7 +1745,7 @@ $return['mobile_path'] = $mobileFilePath;
         $statusAnswer = wp_remote_get(wpc_crit_service_read_url('/status', ['uuid' => $uuid], $urlKey), ['timeout' => 3]);
         $statusJson = (!is_wp_error($statusAnswer) && (int) wp_remote_retrieve_response_code($statusAnswer) === 200)
             ? json_decode((string) wp_remote_retrieve_body($statusAnswer), true) : null;
-        if (!is_array($statusJson)) {
+        if (!is_array($statusJson) || (function_exists('wpc_crit_status_foreign') && wpc_crit_status_foreign($statusJson, (string) $urlKey, 'status-removed'))) {
             return null;
         }
         $superseded = ($statusJson['error_type'] ?? '') === 'epoch_superseded' || ($statusJson['status'] ?? '') === 'epoch_superseded';
@@ -1759,9 +1799,30 @@ $return['mobile_path'] = $mobileFilePath;
         return $this->serviceRemovedGeneration((string) $urlKey, $landedUuid, 'landed', $channel, $critDir) === true;
     }
 
+    /** Whether a land argument names the two stylesheets of a generation: url.desktop and url.mobile, both http(s) addresses. */
+    private static function landShapeOk($json)
+    {
+        if (function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('off_land_shape') === 1) {
+            return true;
+        }
+        return is_array($json) && isset($json['url']) && is_array($json['url'])
+            && isset($json['url']['desktop'], $json['url']['mobile'])
+            && is_string($json['url']['desktop']) && is_string($json['url']['mobile'])
+            && preg_match('#^https?://#i', $json['url']['desktop']) === 1 && preg_match('#^https?://#i', $json['url']['mobile']) === 1;
+    }
+
     public function saveCriticalCss($urlKey, $CSS, $type = 'meta', $pageUrl = '')
     {
+        if (!self::landShapeOk(is_array($CSS) ? $CSS : json_decode((string) $CSS, true))) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('land-refused-shape', (string) $urlKey, (string) $pageUrl, ['len' => is_string($CSS) ? strlen($CSS) : -1]);
+            }
+            return ['critical-failed' => ['shape' => true]];
+        }
 
+        if (function_exists('wpc_crit_purge_stale_home') && wpc_crit_purge_stale_home((string) $urlKey)) {
+            return ['critical-css' => 'purge-stale-kept', 'purged' => 0];
+        }
 
         if (function_exists('delete_option') && !empty($urlKey)) {
             delete_option('wpc_gen_sf_' . $urlKey);
@@ -1957,7 +2018,7 @@ $return['mobile_path'] = $mobileFilePath;
         if (!empty($json['url']['desktop']) && is_string($json['url']['desktop'])) {
             $wpc_combined_url = str_replace('-desktop.css', '-combined.css', (string) $json['url']['desktop']);
             if ($wpc_combined_url !== (string) $json['url']['desktop']) {
-                $wpc_combined_response = wp_remote_get($wpc_combined_url . (strpos($wpc_combined_url, '?') === false ? '?' : '&') . 't=' . time(),
+                $wpc_combined_response = wp_remote_get($wpc_combined_url . ((function_exists('wpc_crit_artifact_signed') && wpc_crit_artifact_signed($wpc_combined_url)) ? '' : (strpos($wpc_combined_url, '?') === false ? '?' : '&') . 't=' . time()),
                     ['headers' => ['user-agent' => WPS_IC_API_USERAGENT], 'timeout' => 6]);
                 if (!is_wp_error($wpc_combined_response) && (int) wp_remote_retrieve_response_code($wpc_combined_response) === 200) {
                     $wpc_combined_css = (string) wp_remote_retrieve_body($wpc_combined_response);
@@ -2058,6 +2119,7 @@ $return['mobile_path'] = $mobileFilePath;
                     }
                 }
                 wpc_crit_meta_write($critical_path . 'crit_epoch.txt', (string) $wpc_crit_epoch);
+                @unlink($critical_path . 'inline_why.txt');
                 if ($wpc_uid_fresh !== '') {
                     wpc_crit_meta_write($critical_path . 'land_uuid.txt', preg_replace('/[^A-Za-z0-9-]/', '', $wpc_uid_fresh));
                 }
@@ -2082,6 +2144,7 @@ $return['mobile_path'] = $mobileFilePath;
                     if (!$landChangedServed) {
                         $landLayers['why'] = 'unchanged';
                     }
+                    $landLayers += wpc_crit_corpus_echo($critical_path, isset($json['corpus_id']) ? $json['corpus_id'] : '', (string) $wpc_uid_fresh, $corpusPairing['by'] !== '');
                     wpc_cache_first_log('land-saved', (string) $urlKey, (string) $pageUrl, $landLayers);
                 }
                 // The evidence for deleting the init watchdog: a land nothing but its kick asked for.
@@ -2150,17 +2213,27 @@ $return['mobile_path'] = $mobileFilePath;
                 if (!empty($json['used_css_url']) && is_string($json['used_css_url'])
                     && !empty($json['tpl_key']) && function_exists('wpc_used_css_key_valid')
                     && wpc_used_css_key_valid((string) $json['tpl_key'])) {
-                    wpc_crit_meta_write($critical_path . 'used_css_url.txt', trim($json['used_css_url']));
-                    wpc_crit_meta_write($critical_path . 'used_tpl.txt', (string) $json['tpl_key']);
+                    $wpc_obs_tpl = (!empty($json['obs_tpl_key']) && is_string($json['obs_tpl_key']) && wpc_used_css_key_valid(trim($json['obs_tpl_key'])))
+                        ? trim($json['obs_tpl_key']) : '';
+                    $wpc_obs_foreign = $wpc_obs_tpl !== '' && $wpc_obs_tpl !== (string) $json['tpl_key'];
+                    $wpc_ucss_settings = get_option(WPS_IC_SETTINGS);
+                    $wpc_ucss_enabled  = is_array($wpc_ucss_settings) && !empty($wpc_ucss_settings['used-css']) && $wpc_ucss_settings['used-css'] == '1';
+                    $wpc_ucss_lands    = $wpc_ucss_enabled && function_exists('wpc_used_css_land_generation') && function_exists('wpc_used_css_fetch') && function_exists('wpc_used_css_path');
+                    $wpc_obs_new_to_page = !function_exists('wpc_used_css_url_obs')
+                        || wpc_used_css_url_obs(trim($json['used_css_url'])) !== wpc_used_css_url_obs(trim((string) @file_get_contents($critical_path . 'used_css_url.txt')));
+                    if (!$wpc_obs_foreign) {
+                        if (!$wpc_ucss_lands) { wpc_crit_meta_write($critical_path . 'used_css_url.txt', trim($json['used_css_url'])); }
+                        wpc_crit_meta_write($critical_path . 'used_tpl.txt', (string) $json['tpl_key']);
+                    }
 
 
                     if (function_exists('wpc_r2_on_artifact_land')) { wpc_r2_on_artifact_land(); }
 
 
-                    if (function_exists('wpc_autopurge_on_land')) { wpc_autopurge_on_land($critical_path); }
+                    if (!$wpc_obs_foreign && function_exists('wpc_autopurge_on_land')) { wpc_autopurge_on_land($critical_path); }
 
 
-                    if (!empty($json['used_css_sheets']) && is_array($json['used_css_sheets']) && function_exists('wpc_used_css_store_sheets')) {
+                    if (!$wpc_obs_foreign && !empty($json['used_css_sheets']) && is_array($json['used_css_sheets']) && function_exists('wpc_used_css_store_sheets')) {
                         wpc_used_css_store_sheets((string) $json['tpl_key'], $json['used_css_sheets']);
                     }
                     if (!empty($json['used_css_sheets_url']) && is_string($json['used_css_sheets_url'])) {
@@ -2179,29 +2252,36 @@ $return['mobile_path'] = $mobileFilePath;
 
                     foreach (['mobile', 'desktop'] as $wpc_device) {
                         $wpc_used_css_key = 'used_css_' . $wpc_device . '_url';
-                        if (!empty($json[$wpc_used_css_key]) && is_string($json[$wpc_used_css_key])) {
+                        if (!$wpc_ucss_lands && !$wpc_obs_foreign && !empty($json[$wpc_used_css_key]) && is_string($json[$wpc_used_css_key])) {
                             wpc_crit_meta_write($critical_path . $wpc_used_css_key . '.txt', trim($json[$wpc_used_css_key]));
                         }
                     }
 
 
-                    $wpc_ucss_settings = get_option(WPS_IC_SETTINGS);
-                    $wpc_ucss_enabled  = is_array($wpc_ucss_settings) && !empty($wpc_ucss_settings['used-css']) && $wpc_ucss_settings['used-css'] == '1';
-                    if ($wpc_ucss_enabled && function_exists('wpc_used_css_fetch')
-                        && wpc_used_css_fetch(trim($json['used_css_url']), (string) $json['tpl_key'])) {
-
-
-                        $wpc_settings_for_purge = get_option(WPS_IC_SETTINGS);
-                        if (is_array($wpc_settings_for_purge) && !empty($wpc_settings_for_purge['used-css']) && $wpc_settings_for_purge['used-css'] == '1'
-                            && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
-                            // Hit-rate law (.325): used.css is tpl-keyed — purge that template's
-                            // pages only; the site-wide wipe is the bounded fallback.
-                            if (!function_exists('wpc_used_css_scoped_purge')
-                                || !wpc_used_css_scoped_purge((string) $json['tpl_key'])) {
-                                try { wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft'); } catch (\Throwable $e) {}
-                            }
+                    $wpc_ucss_land = null;
+                    if ($wpc_ucss_lands) {
+                        $wpc_ucss_lanes = ['union' => trim($json['used_css_url'])];
+                        foreach (['mobile', 'desktop'] as $wpc_device) {
+                            $wpc_used_css_key = 'used_css_' . $wpc_device . '_url';
+                            $wpc_ucss_lanes[$wpc_device] = (!empty($json[$wpc_used_css_key]) && is_string($json[$wpc_used_css_key])) ? trim($json[$wpc_used_css_key]) : '';
                         }
-                    } elseif (function_exists('wpc_used_css_fetch')
+                        $wpc_ucss_land_opts = ['key' => (string) $urlKey, 'via' => 'callback', 'fresh' => $wpc_obs_new_to_page];
+                        if ($wpc_obs_tpl !== '') { $wpc_ucss_land_opts['obs_tpl_key'] = $wpc_obs_tpl; }
+                        $wpc_ucss_land = wpc_used_css_land_generation($critical_path, (string) $json['tpl_key'], $wpc_ucss_lanes, $wpc_ucss_land_opts);
+                    }
+                    if (is_array($wpc_ucss_land) && !empty($wpc_ucss_land['failed']) && empty($wpc_ucss_land['foreign']) && function_exists('wpc_used_css_url_obs')) {
+                        $wpc_fresh_obs = wpc_used_css_url_obs(trim($json['used_css_url']));
+                        if ($wpc_fresh_obs !== '') {
+                            $wpc_fresh_store = [];
+                            foreach (['union' => '', 'mobile' => 'mobile', 'desktop' => 'desktop'] as $wpc_fresh_lane => $wpc_fresh_device) {
+                                $wpc_fresh_held = function_exists('wpc_used_css_obs_recall') ? wpc_used_css_obs_recall((string) $json['tpl_key'], $wpc_fresh_device) : ['obs' => ''];
+                                $wpc_fresh_store[$wpc_fresh_lane] = (string) $wpc_fresh_held['obs'];
+                            }
+                            wpc_crit_meta_write($critical_path . 'repull_force.txt', $wpc_fresh_obs . '|' . md5((string) json_encode([])) . "\n" . json_encode([]) . "\n" . json_encode(['store' => $wpc_fresh_store, 'urls' => array_filter($wpc_ucss_lanes), 'tpl' => (string) $json['tpl_key']]));
+                        }
+                    }
+                    if (($wpc_ucss_land === null || !empty($wpc_ucss_land['failed']))
+                        && function_exists('wpc_used_css_fetch')
                         && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
                         && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, 1])) {
 
@@ -2222,6 +2302,9 @@ $return['mobile_path'] = $mobileFilePath;
                     $wpc_sr  = wp_remote_get($wpc_su, ['timeout' => 5]);
                     if (!is_wp_error($wpc_sr) && (int) wp_remote_retrieve_response_code($wpc_sr) === 200) {
                         $wpc_sd = json_decode((string) wp_remote_retrieve_body($wpc_sr), true);
+                        if (function_exists('wpc_crit_status_foreign') && wpc_crit_status_foreign($wpc_sd, (string) $urlKey, 'status-rescue')) {
+                            $wpc_sd = null;
+                        }
                         if (is_array($wpc_sd)) {
                             if ($wpc_lcp_url_stash === '' && !empty($wpc_sd['lcp_url'])) {
                                 wpc_crit_meta_write($critical_path . 'lcp_url.txt', trim((string) $wpc_sd['lcp_url']));
@@ -2270,14 +2353,16 @@ $return['mobile_path'] = $mobileFilePath;
 }
 
 // PSI results poll — bounded event chain replacing the in-request sleep(30) loop
-add_action('wpc_psi_poll', function ($urlKey, $uuid) {
-    $wpc_pn = (int) get_transient('wpc_psi_poll_n_' . md5((string) $uuid));
-    if ($wpc_pn >= 4 || !class_exists('wps_criticalCss')) {
-        return;
+if (!function_exists('has_action') || !has_action('wpc_psi_poll')) {
+    add_action('wpc_psi_poll', function ($urlKey, $uuid) {
+        if (function_exists('wpc_psi_poll_run')) {
+            wpc_psi_poll_run($urlKey, $uuid);
+        }
+    }, 10, 2);
+}
+
+add_action('wpc_psi_dispatch_due', function () {
+    if (function_exists('wpc_psi_dispatch_due')) {
+        wpc_psi_dispatch_due();
     }
-    set_transient('wpc_psi_poll_n_' . md5((string) $uuid), $wpc_pn + 1, HOUR_IN_SECONDS);
-    try {
-        (new wps_criticalCss())->saveBenchmark((string) $urlKey, (string) $uuid);
-    } catch (\Throwable $e) {
-    }
-}, 10, 2);
+});

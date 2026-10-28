@@ -14,25 +14,17 @@ function wpc_v2_rest_journal_enabled() {
 }
 
 
+require_once __DIR__ . '/v2-service.php';
+
 function wpc_v2_journal_dir() {
     static $cached = null;
     if ($cached !== null) {
         return $cached;
     }
-    $up = wp_get_upload_dir();
-    if (empty($up['basedir'])) {
+    $dir = wpc_v2_journal_root(true);
+    if ($dir === '') {
         $cached = '';
         return $cached;
-    }
-    $dir = rtrim($up['basedir'], '/\\') . '/wpci-journal';
-    if (!is_dir($dir)) {
-        if (!wp_mkdir_p($dir)) {
-            $cached = '';
-            return $cached;
-        }
-        // Files contain no secrets but no reason to serve them either.
-        wpc_fs_put($dir . '/.htaccess', "Deny from all\n");
-        wpc_fs_put($dir . '/index.html', '');
     }
     if (!is_writable($dir)) {
         $cached = '';
@@ -56,6 +48,11 @@ function wpc_v2_journal_write_batch($imageID, $jobId, array $entries, $flush_rea
             '[WPC JournalWrite] FAIL reason=no_journal_dir imageID=%d entries=%d',
             (int) $imageID, count($entries)
         ));
+        return false;
+    }
+
+    if (function_exists('wpc_v2_journal_has_room') && !wpc_v2_journal_has_room()) {
+        error_log(sprintf('[WPC JournalWrite] FAIL reason=journal_full imageID=%d entries=%d cap=%d', (int) $imageID, count($entries), wpc_v2_journal_max_files()));
         return false;
     }
 
@@ -145,19 +142,10 @@ function wpc_v2_journal_drop_image($imageID) {
 
 
 function wpc_v2_journal_fire_loopback_fast() {
-    $throttle_ms = defined('WPC_V2_JOURNAL_FIRE_THROTTLE_MS')
-        ? max(50, (int) WPC_V2_JOURNAL_FIRE_THROTTLE_MS)
-        : 250;
-    $now_ms       = (int) (microtime(true) * 1000);
-    $last_fire_ms = (int) get_option('wpc_v2_journal_fire_last_ms', 0);
-
-    if (($now_ms - $last_fire_ms) < $throttle_ms) {
-
-
-        set_transient('wpc_v2_journal_pending_fire', $now_ms, 60);
+    if (!function_exists('wpc_v2_journal_fire_due') || !wpc_v2_journal_fire_due()) {
         return false;
     }
-    update_option('wpc_v2_journal_fire_last_ms', $now_ms, false);
+    $now_ms = (int) (microtime(true) * 1000);
 
     // Canonical helper (see v2-capabilities.php).
     $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';

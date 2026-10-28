@@ -72,6 +72,9 @@ if (!function_exists('wpc_vitals_emit')) {
             if (!wpc_vitals_enabled() || (function_exists('is_admin') && is_admin())) {
                 return;
             }
+            if (function_exists('wpc_lever_test_active') && wpc_lever_test_active()) {
+                return;
+            }
             // v7.10.906 — logged-in views are the site owner and editors, never "your visitors":
             // the auth cookie bypasses the page cache, several optimizations stand down for
             // logged-in requests, and DevTools sessions disable caching entirely — so every
@@ -129,8 +132,12 @@ if (!function_exists('wpc_vitals_emit')) {
             if (function_exists('admin_url') && strpos($endpoint, 'admin-ajax.php') === false) {
                 $ajax_fallback = ',a:' . wp_json_encode(admin_url('admin-ajax.php') . '?action=wpc_v');
             }
-            echo "\n<script>window.wpcVitals={u:" . wp_json_encode($endpoint) . $ajax_fallback . ",t:" . wp_json_encode($token) . ",s:" . (int) $cfg['sample'] . ",m:" . (int) time() . $bypass_flag . "};</script>"
-                . "<script>" . $js . "</script>\n";
+            $wpc_vitals_cfg = "\n<script>window.wpcVitals={u:" . wp_json_encode($endpoint) . $ajax_fallback . ",t:" . wp_json_encode($token) . ",s:" . (int) $cfg['sample'] . ",m:" . (int) time() . $bypass_flag . "};</script>";
+            if (function_exists('wpc_body_js_on') && wpc_body_js_on()) {
+                echo $wpc_vitals_cfg . wpc_body_js_tag() . "\n";
+            } else {
+                echo $wpc_vitals_cfg . "<script>" . $js . "</script>\n";
+            }
         } catch (\Throwable $e) {
         }
     }
@@ -212,27 +219,91 @@ if (!function_exists('wpc_vitals_channel')) {
         }, 30);
     }
 }
-if (!function_exists('wpc_vitals_ajax_ingest')) {
-    function wpc_vitals_ajax_ingest()
+if (!function_exists('wpc_vitals_disabled')) {
+    /** Whether v.php answers 410 now: the switch is off (the option, the constant, the filter) or the config file it reads says disabled. */
+    function wpc_vitals_disabled()
     {
-        // v7.10.926 — a beacon carrying fb=1 arrived here because a real browser watched the
-        // direct v.php POST fail. That observation outranks the loopback probe's verdict:
-        // flip the server channel so freshly-minted HTML embeds admin-ajax directly, and
-        // purge the copies still carrying the dead endpoint.
-        $raw_body = (string) @file_get_contents('php://input');
-        if ((strpos($raw_body, 'fb=1') !== false || (isset($_POST['fb']) && $_POST['fb'] === '1'))
-            && function_exists('get_transient') && get_transient('wpc_vitals_ch916') !== 'ajax') {
-            set_transient('wpc_vitals_ch916', 'ajax', 12 * 3600);
-            if (function_exists('update_option')) {
-                update_option('wpc_vitals_fb_at03', time(), false);
-            }
-            if (function_exists('get_option') && get_option('wpc_vitals_ch_last') !== 'ajax') {
-                update_option('wpc_vitals_ch_last', 'ajax', false);
-                if (function_exists('wpc_cache_first_log')) {
-                    wpc_cache_first_log('vitals-channel', '', '', ['to' => 'ajax', 'by' => 'browser']);
-                }
+        if (!wpc_vitals_enabled()) {
+            return true;
+        }
+        $dir = wpc_vitals_stats_dir();
+        if ($dir === '') {
+            return false;
+        }
+        $disk = json_decode((string) @file_get_contents($dir . 'config.json'), true);
+        return is_array($disk) && empty($disk['enabled']);
+    }
+}
+if (!function_exists('wpc_vitals_early_off_sync')) {
+    /** Makes the autoloaded switch the admin-ajax early answer reads (wpc_vitals_early_ready) say what policy.off_vitals_early says. */
+    function wpc_vitals_early_off_sync($on)
+    {
+        $have = get_option('wpc_vitals_early_off', '') === '1';
+        if ($on && !$have) {
+            update_option('wpc_vitals_early_off', '1', true);
+        } elseif (!$on && $have) {
+            delete_option('wpc_vitals_early_off');
+        }
+    }
+}
+if (!function_exists('wpc_vitals_ajax_ingest')) {
+    /** Whether a report carries the token this site's pages embed (the one v.php checks): in $post, or in the first 1024 bytes of a form or text/plain body. */
+    function wpc_vitals_report_token_valid($raw_body, array $post)
+    {
+        $salt = get_option('wpc_vitals_salt');
+        if (!is_string($salt) || strlen($salt) < 24) {
+            return false;
+        }
+        $sent = '';
+        if (isset($post['t']) && is_string($post['t'])) {
+            $sent = $post['t'];
+        } else {
+            parse_str(substr((string) $raw_body, 0, 1024), $parsed);
+            if (isset($parsed['t']) && is_string($parsed['t'])) {
+                $sent = $parsed['t'];
             }
         }
+        return $sent !== '' && hash_equals(sha1($salt), $sent);
+    }
+
+    /**
+     * A beacon carrying fb=1 and this site's token arrived here because a real browser watched the
+     * direct v.php POST fail. That observation outranks the loopback probe's verdict: the server channel
+     * flips to admin-ajax so freshly minted HTML embeds it. A report without the token flips nothing
+     * (v.php drops it the same way), and a site whose vitals are switched off is not a failed channel:
+     * v.php answers 410 there by design, and nothing flips.
+     */
+    function wpc_vitals_channel_flip_from_browser()
+    {
+        $raw_body = (string) @file_get_contents('php://input');
+        if (strpos($raw_body, 'fb=1') === false && !(isset($_POST['fb']) && $_POST['fb'] === '1')) {
+            return false;
+        }
+        if (!wpc_vitals_report_token_valid($raw_body, $_POST)) {
+            return false;
+        }
+        if (wpc_vitals_disabled()) {
+            return false;
+        }
+        if (!function_exists('get_transient') || get_transient('wpc_vitals_ch916') === 'ajax') {
+            return false;
+        }
+        set_transient('wpc_vitals_ch916', 'ajax', 12 * 3600);
+        if (function_exists('update_option')) {
+            update_option('wpc_vitals_fb_at03', time(), false);
+        }
+        if (function_exists('get_option') && get_option('wpc_vitals_ch_last') !== 'ajax') {
+            update_option('wpc_vitals_ch_last', 'ajax', false);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('vitals-channel', '', '', ['to' => 'ajax', 'by' => 'browser']);
+            }
+        }
+        return true;
+    }
+
+    function wpc_vitals_ajax_ingest()
+    {
+        wpc_vitals_channel_flip_from_browser();
         include __DIR__ . '/v.php';
         exit;
     }
@@ -519,10 +590,115 @@ if (!function_exists('wpc_vitals_rollup')) {
                     wpc_cache_first_log('vitals-sample-changed', '', '', ['sample' => $new, 'yv' => $yv]);
                 }
             }
+            wpc_vitals_push();
         } catch (\Throwable $e) {
         }
     }
     add_action('wpc_vitals_rollup', 'wpc_vitals_rollup');
+
+    function wpc_vitals_push_lane($lane)
+    {
+        $out = [];
+        foreach (['cls', 'lcp', 'inp'] as $metric) {
+            $buckets = is_array($lane) && isset($lane[$metric]) && is_array($lane[$metric]) ? $lane[$metric] : [];
+            $len = 30;
+            foreach ($buckets as $b => $c) {
+                if ((int) $b + 1 > $len) { $len = (int) $b + 1; }
+            }
+            $list = array_fill(0, $len, 0);
+            foreach ($buckets as $b => $c) {
+                if ((int) $b >= 0) { $list[(int) $b] = (int) $c; }
+            }
+            $out[$metric] = $list;
+        }
+        return $out;
+    }
+
+    function wpc_vitals_push($now = null)
+    {
+        try {
+            $now = $now === null ? time() : (int) $now;
+            if (!apply_filters('wpc_vitals_push', true) || !apply_filters('wpc_rum_beacon', true) || !wpc_vitals_enabled()) {
+                return 'off';
+            }
+            $rate = (int) apply_filters('wpc_rum_sample_rate', function_exists('wpc_stored_rum_sample_rate') ? wpc_stored_rum_sample_rate() : 50);
+            if ($rate < 1) {
+                return 'off';
+            }
+            if (!function_exists('wpc_rum_census_endpoint') || !function_exists('wpc_rum_census_post')) {
+                return 'off';
+            }
+            if (!function_exists('wpc_policy_cohort') || wpc_policy_cohort('vitals_push') !== 1) {
+                return 'cohort';
+            }
+            $options = (array) get_option(defined('WPS_IC_OPTIONS') ? WPS_IC_OPTIONS : 'wps_ic');
+            if (empty($options['api_key']) || !is_string($options['api_key'])) {
+                return 'apikey';
+            }
+            $state = get_option('wpc_vitals_push', []);
+            $state = is_array($state) ? $state : [];
+            if (isset($state['on']) && $state['on'] === gmdate('Y-m-d', $now)) {
+                return 'day';
+            }
+            $last = '20261012';
+            if (isset($state['sent']) && is_string($state['sent']) && preg_match('/^\d{8}$/', $state['sent']) && $state['sent'] > $last) {
+                $last = $state['sent'];
+            }
+            $daily = get_option('wpc_vitals_daily', []);
+            $today = gmdate('Ymd', $now);
+            $days = [];
+            foreach ((is_array($daily) ? $daily : []) as $k => $agg) {
+                $k = (string) $k;
+                if (preg_match('/^\d{8}$/', $k) && $k < $today && $k > $last && is_array($agg)) {
+                    $days[] = $k;
+                }
+            }
+            if ($days === []) {
+                return 'none';
+            }
+            sort($days);
+            $days = array_slice(array_slice($days, -60), 0, 7);
+            $endpoint = wpc_rum_census_endpoint();
+            if (!is_string($endpoint) || strpos($endpoint, 'http') !== 0) {
+                return 'endpoint';
+            }
+            $state['on'] = gmdate('Y-m-d', $now);
+            update_option('wpc_vitals_push', $state, false);
+            $verdict = 'none';
+            foreach ($days as $day) {
+                $agg = $daily[$day];
+                $m = wpc_vitals_push_lane(isset($agg['m']) ? $agg['m'] : []);
+                $d = wpc_vitals_push_lane(isset($agg['d']) ? $agg['d'] : []);
+                $total = 0;
+                foreach ([$m, $d] as $lane) {
+                    foreach ($lane as $list) { $total += array_sum($list); }
+                }
+                if ($total > 0) {
+                    $body = (string) wp_json_encode([
+                        'v' => 2,
+                        'kind' => 'vitals',
+                        'apikey' => $options['api_key'],
+                        'day' => $day,
+                        'sample' => max(1, (int) (isset($agg['s']) ? $agg['s'] : get_option('wpc_vitals_sample', 1))),
+                        'm' => $m,
+                        'd' => $d,
+                    ]);
+                    $res = wpc_rum_census_post($endpoint, $body, ['Content-Type' => 'application/json'], true);
+                    $code = is_wp_error($res) ? 0 : (int) wp_remote_retrieve_response_code($res);
+                    if ($code < 200 || $code > 299) {
+                        if (function_exists('wpc_rum_count_drop')) { wpc_rum_count_drop('vitals-post'); }
+                        return 'failed';
+                    }
+                    $verdict = 'sent';
+                }
+                $state['sent'] = $day;
+                update_option('wpc_vitals_push', $state, false);
+            }
+            return $verdict;
+        } catch (\Throwable $e) {
+            return 'error';
+        }
+    }
 
     add_action('admin_init', function () {
         if (wpc_vitals_enabled() && function_exists('wp_next_scheduled') && !wp_next_scheduled('wpc_vitals_rollup')) {
@@ -933,5 +1109,114 @@ if (!function_exists('wpc_vitals_base_p75')) {
             if (count($out['pts']) >= 200) { break; }
         }
         wp_send_json_success($out);
+    }
+}
+
+
+// ─── the plugin's body scripts as one external file (policy.body_js_ext) ──────────────────────────
+// Late-faces flip, font runtime intercept, vitals collector and RUM census beacon: one deferred file
+// (wpc-body-<hash>.js under uploads/wpc-assets), and per page one JSON block for each (wpc-cfg-lf, -rt,
+// -rum; the vitals config stays window.wpcVitals) and one tag. The embed gate and the quiet wire's restore stay inline.
+if (!function_exists('wpc_body_js_cfg')) {
+    /** One section's page values, as an inert JSON block the file reads by id. */
+    function wpc_body_js_cfg($section, array $data)
+    {
+        $json = wp_json_encode($data, JSON_HEX_TAG | JSON_HEX_AMP);
+        return '<script type="application/json" id="wpc-cfg-' . preg_replace('/[^a-z]/', '', strtolower((string) $section)) . '">' . (is_string($json) ? $json : '{}') . '</script>';
+    }
+
+    /** The file's source: each section the plugin has the code for. The vitals collector stays at the top level (it names its library and sender on window). */
+    function wpc_body_js_source()
+    {
+        static $memos = [];
+        $afterHero = function_exists('wpc_faces_after_lcp_on') && wpc_faces_after_lcp_on();
+        if (isset($memos[(int) $afterHero])) {
+            return $memos[(int) $afterHero];
+        }
+        $parts = [];
+        if (function_exists('wpc_late_faces_flip_js')) {
+            $flip = wpc_late_faces_flip_js(null, true, false, $afterHero);
+            if (is_string($flip) && $flip !== '') {
+                $parts[] = 'try{var cl=cfg("lf");if(cl){(function(ag,hh){' . $flip . '})(cl.ag,cl.h)}}catch(x){}';
+            }
+        }
+        if (class_exists('wps_ic_fonts') && method_exists('wps_ic_fonts', 'font_rt_code')) {
+            $parts[] = 'try{var ct=cfg("rt");if(ct){(function(M,A){try{' . wps_ic_fonts::font_rt_code() . '}catch(e){}})(ct.M,ct.A)}}catch(x){}';
+        }
+        if (class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_rum_beacon_code')) {
+            $rum = str_replace(["'__AX__?action=wpc_rum_census'", "'__DU__'", "'__GU__'", "'__PV__'", "'__ZH__'", '__RATE__', '__CA__'],
+                ["cr.ax+'?action=wpc_rum_census'", 'cr.du', 'cr.gu', 'cr.pv', 'cr.zh', 'cr.r', 'cr.ca'], wps_cdn_rewrite::wpc_rum_beacon_code());
+            if (!preg_match('/__[A-Z]{2,6}__/', $rum)) {
+                $parts[] = 'try{var cr=cfg("rum");if(cr){(function(addEventListener){' . $rum . '})(wl)}}catch(x){}';
+            }
+        }
+        if (function_exists('wpc_policy_cohort') && wpc_policy_cohort('doc_trim') === 1 && class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_device_check_file_code')) {
+            $dev = wps_cdn_rewrite::wpc_device_check_file_code();
+            if (is_string($dev) && $dev !== '' && !preg_match('/__[A-Z]{2,6}__/', $dev)) {
+                $parts[] = 'try{var cd=cfg("dev");if(cd){' . $dev . '}}catch(x){}';
+            }
+        }
+        $collector = defined('WPS_IC_DIR') ? (string) @file_get_contents(WPS_IC_DIR . 'assets/js/vitals-collector.min.js') : '';
+        $collector = ($collector !== '' && stripos($collector, '</script') === false) ? 'if(window.wpcVitals){' . $collector . '}' : '';
+        $memos[(int) $afterHero] = $parts === [] && $collector === '' ? '' : ($parts === [] ? '' : '(function(){function cfg(n){var e=document.getElementById("wpc-cfg-"+n);if(!e)return null;try{return JSON.parse(e.textContent)}catch(x){return null}}'
+            . 'function wl(t,f,o){if(t==="load"&&document.readyState==="complete"){setTimeout(f,0);return}if(o&&o.once&&window.wpcAfterHeroGesture===1&&/^(?:pointerdown|keydown|touchstart|wheel|scroll|mousemove)$/.test(t)){f();return}window.addEventListener.apply(window,arguments)}'
+            . implode('', $parts) . '})();') . $collector;
+        return $memos[(int) $afterHero];
+    }
+
+    /** The file this render names: ['name', 'url'], written when it is not there yet; null when it cannot be had. */
+    function wpc_body_js_file()
+    {
+        $source = wpc_body_js_source();
+        if ($source === '' || !function_exists('wp_upload_dir')) {
+            return null;
+        }
+        try {
+            $upload = wp_upload_dir(null, false);
+            if (!empty($upload['error']) || empty($upload['basedir']) || empty($upload['baseurl'])) {
+                return null;
+            }
+            $name = 'wpc-body-' . substr(md5($source), 0, 12) . '.js';
+            $dir = rtrim($upload['basedir'], '/') . '/wpc-assets/';
+            $path = $dir . $name;
+            if (!@is_file($path)) {
+                if (!is_dir($dir)) {
+                    @mkdir($dir, 0755, true);
+                }
+                $tmp = $path . '.' . substr(md5(uniqid('', true)), 0, 8) . '.tmp';
+                if (!is_dir($dir) || @file_put_contents($tmp, $source, LOCK_EX) === false || !@rename($tmp, $path)) {
+                    @unlink($tmp);
+                    return null;
+                }
+                if (!@file_exists($dir . '.htaccess') && function_exists('wpc_fs_put')) {
+                    wpc_fs_put($dir . '.htaccess',
+                        "<IfModule mod_headers.c>\n<FilesMatch \"\\.(js|css)$\">\nHeader set Cache-Control \"public, max-age=31536000, immutable\"\n</FilesMatch>\n</IfModule>\n<IfModule mod_expires.c>\nExpiresActive On\nExpiresByType application/javascript \"access plus 1 year\"\n</IfModule>\n");
+                }
+                if (function_exists('wpc_processed_copy_gc_schedule')) {
+                    wpc_processed_copy_gc_schedule(time() + (int) apply_filters('wpc_body_js_keep_days', 35) * 86400 + 600);
+                }
+            } elseif (time() - (int) @filemtime($path) > 86400) {
+                @touch($path);
+            }
+            return ['name' => $name, 'url' => rtrim($upload['baseurl'], '/') . '/wpc-assets/' . $name];
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /** Whether this render takes the body scripts from the file: the cohort switch is on and the file can be had. */
+    function wpc_body_js_on()
+    {
+        return function_exists('wpc_policy_cohort') && wpc_policy_cohort('body_js_ext') && wpc_body_js_file() !== null;
+    }
+
+    /** The file's tag; on a load error it releases #wpc-late-faces. */
+    function wpc_body_js_tag()
+    {
+        $file = wpc_body_js_file();
+        if ($file === null) {
+            return '';
+        }
+        return '<script id="wpc-body-js" defer data-nodefer="1" src="' . esc_url($file['url']) . '" onerror="var l=document.getElementById(\'wpc-late-faces\');if(l){l.setAttribute(\'type\',\'text/css\');l.media=\'all\'}"></script>';
     }
 }

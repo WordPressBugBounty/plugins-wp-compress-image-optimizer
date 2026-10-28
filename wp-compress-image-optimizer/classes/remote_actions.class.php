@@ -63,7 +63,7 @@ class wps_ic_remote_actions extends wps_ic {
           // Generate thumbnails
 
 
-          $thumbnails = wp_remote_get(site_url('?secret_key=' . $wps_ic::$api_key . '&thumbnails=true&attachment_ID=' . $attachment_id), ['timeout' => 2, 'blocking' => false, 'sslverify' => false]);
+          $thumbnails = wp_remote_get(site_url('?secret_key=' . $wps_ic::$api_key . '&thumbnails=true&attachment_ID=' . $attachment_id), ['timeout' => 2, 'blocking' => false, 'sslverify' => wpc_service_sslverify(site_url())]);
 
           // Delete compress data
           delete_post_meta($attachment_id, 'wps_ic_reset');

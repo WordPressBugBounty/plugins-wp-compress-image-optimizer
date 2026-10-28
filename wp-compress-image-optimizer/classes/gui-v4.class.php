@@ -65,6 +65,11 @@ class wpc_gui_v4 extends wps_ic
         return !empty($data);
     }
 
+    private static function stored_text($value)
+    {
+        return is_scalar($value) ? (string) $value : '';
+    }
+
     public function __construct($options = [])
     {
         self::$user_credits = parent::getAccountStatusMemory();
@@ -172,8 +177,9 @@ class wpc_gui_v4 extends wps_ic
             $html .= '</div>';
         } else {
 
+            $wpc_sd_activity = function_exists('wpc_get_optimization_mode') && wpc_get_optimization_mode() === 'lazy_cdn';
             $html .= '<div class="form-check">';
-            $html .= '<a class="btn btn-gradient text-white fw-400 btn-radius btn-flex" href="' . admin_url('options-general.php?page=' . parent::$slug . '&view=bulk') . '">';
+            $html .= '<a class="btn btn-gradient text-white fw-400 btn-radius btn-flex" href="' . admin_url('options-general.php?page=' . parent::$slug . '&view=bulk') . ($wpc_sd_activity ? '#wpc-sd-activity' : '') . '">';
             if (!$bulkProcess || empty($bulkProcess)) {
                 $html .= '<span><img src="' . WPS_IC_ASSETS . '/v4/images/menu-icons/image-optimization.svg"/></span>';
                 $html .= '<span style="display: none;" class="wpc-optimizer-running">';
@@ -188,7 +194,7 @@ class wpc_gui_v4 extends wps_ic
                 $html .= '</span>';
             }
 
-            $html .= 'Optimize Media Library';
+            $html .= $wpc_sd_activity ? 'See optimized images' : ((function_exists('wpc_sd_state') && wpc_sd_state() === 'paused') ? 'Smart Delivery page' : 'Optimize Media Library');
             $html .= '</a>';
 
         }
@@ -598,10 +604,14 @@ class wpc_gui_v4 extends wps_ic
         $wpc_cdn_connected = (isset(self::$options['live-cdn']) && self::$options['live-cdn'] == '1');
 
 
-        $wpc_purge_cdn_btn = ($option === 'cdn-delivery-options' && $wpc_cdn_connected)
-            ? '<a href="#" class="wpc-purge-cdn-ghost wpc-purge-cdn-cache" title="' . esc_attr__('Purge the CDN cache', WPS_IC_TEXTDOMAIN) . '">'
-              . '<i class="icon-arrows-ccw" aria-hidden="true"></i>' . esc_html__('Purge CDN', WPS_IC_TEXTDOMAIN) . '</a>'
-            : '';
+        $wpc_purge_cdn_btn = '';
+        if ($option === 'cdn-delivery-options' && $wpc_cdn_connected && !(defined('WPS_IC_AGENCY') && WPS_IC_AGENCY)) {
+            $wpc_cdn_confirm = wpc_cdn_clear_confirm();
+            $wpc_cdn_state = wpc_clear_state('cdn');
+            $wpc_purge_cdn_btn = '<a href="#" class="wpc-purge-cdn-ghost wpc-purge-cdn-cache" title="' . esc_attr($wpc_cdn_state['wait'] > 0 ? $wpc_cdn_state['label'] : ($wpc_cdn_state['label'] !== '' ? __('Images, CSS and JS are fetched again.', WPS_IC_TEXTDOMAIN) . ' · ' . $wpc_cdn_state['label'] : __('Images, CSS and JS are fetched again.', WPS_IC_TEXTDOMAIN))) . '"'
+              . ' data-confirm-title="' . esc_attr($wpc_cdn_confirm['title']) . '" data-confirm-body="' . esc_attr($wpc_cdn_confirm['body']) . '" data-confirm-cancel="' . esc_attr($wpc_cdn_confirm['cancel']) . '" data-confirm-ok="' . esc_attr($wpc_cdn_confirm['ok']) . '">'
+              . '<i class="icon-arrows-ccw" aria-hidden="true"></i>' . esc_html__('Purge CDN', WPS_IC_TEXTDOMAIN) . '</a>';
+        }
 
         if (!empty($option) && !$locked) {
             $html .= '<div class="form-check">';
@@ -719,9 +729,9 @@ class wpc_gui_v4 extends wps_ic
             $html .= '</div>';
         }
 
-        if (!empty($purgeAction)) {
+        if (!empty($purgeAction) && !(defined('WPS_IC_AGENCY') && WPS_IC_AGENCY)) {
             $html .= '<div class="form-check">';
-            $html .= '<a href="#" class="wpc-purge-action ' . $purgeAction . '">Purge Cache</a>';
+            $html .= '<a href="#" class="wpc-purge-action ' . $purgeAction . '" title="' . esc_attr__('Purges every saved page on this site, your host\'s cache and Cloudflare\'s copy of the site, then rewarms the homepage and top pages now. The CDN and critical CSS are not purged.', WPS_IC_TEXTDOMAIN) . '">' . esc_html__('Purge page cache', WPS_IC_TEXTDOMAIN) . '</a>';
             $html .= '</div>';
         }
 
@@ -812,7 +822,7 @@ class wpc_gui_v4 extends wps_ic
 
 
         $html .= '<div class="wpc-input-holder">';
-        $html .= '<textarea name="' . $optionName . '">' . $optionValue . '</textarea>';
+        $html .= '<textarea name="' . $optionName . '">' . esc_textarea(self::stored_text($optionValue)) . '</textarea>';
         $html .= '</div>';
 
         $html .= '</div>';
@@ -905,7 +915,7 @@ class wpc_gui_v4 extends wps_ic
             $html .= '<div class="wpc-box-check">';
             $html .= '<div class="wpc-input-holder">';
             $html .= '<span>' . $labelTitle . '</span>';
-            $html .= '<input type="text" name="' . $optionName . '" value="' . $optionValue . '" placeholder="' . $value . '" />';
+            $html .= '<input type="text" name="' . $optionName . '" value="' . esc_attr(self::stored_text($optionValue)) . '" placeholder="' . $value . '" />';
             $html .= '<span>' . $labelValue . '</span>';
             $html .= '</div>';
             $html .= '</div>';
@@ -1860,8 +1870,14 @@ class wpc_gui_v4 extends wps_ic
         }
 
         $currentSetting = $option;
-        if (empty($option)){
+        if ($optionName === 'options[font-display]' && is_string($option) && !array_key_exists($option, $values) && array_key_exists(strtolower($option), $values)) {
+            $currentSetting = strtolower($option);
+        }
+        $storedOutsideKeys = null;
+        if (empty($currentSetting) || !(is_string($currentSetting) || is_int($currentSetting))) {
             $currentSetting = array_key_first($values);
+        } elseif (!array_key_exists($currentSetting, $values)) {
+            $storedOutsideKeys = (string) $currentSetting;
         }
 
         $titleHtml = '<h4>' . $title . '</h4>';
@@ -1890,13 +1906,13 @@ class wpc_gui_v4 extends wps_ic
         $html .= '<div class="wpc-box-check">';
 
         // Clean parenthesized text from button label
-        $buttonLabel = $values[$currentSetting];
-        if (preg_match('/^(.+?)\s*\(.+?\)\s*$/', $buttonLabel, $bm)) {
+        $buttonLabel = $storedOutsideKeys !== null ? $storedOutsideKeys : $values[$currentSetting];
+        if ($storedOutsideKeys === null && preg_match('/^(.+?)\s*\(.+?\)\s*$/', $buttonLabel, $bm)) {
             $buttonLabel = trim($bm[1]);
         }
 
         // Generate dropdown HTML with unique classes
-        $html .= '<input type="hidden" class="wpc-dropdown-setting" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $currentSetting . '" />
+        $html .= '<input type="hidden" class="wpc-dropdown-setting" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . esc_attr($currentSetting) . '" />
 <div class="wpc-cf-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
   <button class="wpc-cf-select-button" type="button">
     <span class="selected-text">' . esc_html($buttonLabel) . '</span>
@@ -1907,7 +1923,7 @@ class wpc_gui_v4 extends wps_ic
 
         foreach ($values as $k => $v) {
             $s = '';
-            if ($k == $currentSetting) {
+            if ((string) $k === (string) $currentSetting) {
                 $s = 'wpc-cf-active';
             }
             // Extract parenthesized text as badge
@@ -1923,6 +1939,10 @@ class wpc_gui_v4 extends wps_ic
                 $badge = '<span class="wpc-recommended-badge">' . esc_html__('Recommended', WPS_IC_TEXTDOMAIN) . '</span>';
             }
             $html .= '<a class="wpc-cf-select-item ' . $s . '" data-preset-title="' . esc_attr($label) . '" data-value="' . $k . '">' . esc_html($label) . $badge . '</a>';
+        }
+
+        if ($storedOutsideKeys !== null) {
+            $html .= '<a class="wpc-cf-select-item wpc-cf-active" data-preset-title="' . esc_attr($storedOutsideKeys) . '" data-value="' . esc_attr($storedOutsideKeys) . '">' . esc_html($storedOutsideKeys) . '<span class="wpc-info-badge">' . esc_html__('Current', WPS_IC_TEXTDOMAIN) . '</span></a>';
         }
 
         $html .= '</div></div>';
@@ -1950,7 +1970,11 @@ class wpc_gui_v4 extends wps_ic
         // Get current value
         $cf_preset_config = $cfOptions['settings']['edge-cache'] ?? 'off';
 
-        if (empty($cf_preset_config)) {
+        if (is_int($cf_preset_config)) {
+            $cf_preset_config = (string) $cf_preset_config;
+        }
+        $cf_stored_outside = wps_ic_cf_rules::edge_value_kept($cf_preset_config) ? $cf_preset_config : null;
+        if ($cf_stored_outside === null && (!is_string($cf_preset_config) || !in_array($cf_preset_config, wps_ic_cf_rules::EDGE_MODES, true))) {
             $cf_preset_config = 'off';
         }
 
@@ -1975,10 +1999,10 @@ class wpc_gui_v4 extends wps_ic
         $html .= '<div class="wpc-box-check">';
 
         // Generate dropdown HTML with unique classes
-        $html .= '<input type="hidden" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $cf_preset_config . '" />
+        $html .= '<input type="hidden" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . esc_attr($cf_stored_outside !== null ? $cf_stored_outside : $cf_preset_config) . '" />
 <div class="wpc-cf-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
   <button class="wpc-cf-select-button" type="button">
-    <span class="selected-text">' . $cf_preset[$cf_preset_config] . '</span>
+    <span class="selected-text">' . ($cf_stored_outside !== null ? esc_html($cf_stored_outside) : ($cf_preset[$cf_preset_config] ?? $cf_preset['off'])) . '</span>
     <svg class="wpc-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
   </button>';
 
@@ -1990,6 +2014,10 @@ class wpc_gui_v4 extends wps_ic
                 $s = 'wpc-cf-active';
             }
             $html .= '<a class="wpc-cf-select-item ' . $s . '" data-preset-title="' . $v . '" data-value="' . $k . '">' . $v . '</a>';
+        }
+
+        if ($cf_stored_outside !== null) {
+            $html .= '<a class="wpc-cf-select-item wpc-cf-active" data-preset-title="' . esc_attr($cf_stored_outside) . '" data-value="' . esc_attr($cf_stored_outside) . '">' . esc_html($cf_stored_outside) . ' (' . esc_html__('Current', WPS_IC_TEXTDOMAIN) . ')</a>';
         }
 
         $html .= '</div></div>';
@@ -2079,6 +2107,7 @@ class wpc_gui_v4 extends wps_ic
     {
         // Dropdown options
         $font_display_options = [
+            'smart' => 'Automatic (Recommended)',
             'off' => 'Off',
             'auto' => 'Auto (Browser Default)',
             'block' => 'Block (FOIT)',
@@ -2097,6 +2126,16 @@ class wpc_gui_v4 extends wps_ic
 
         if (empty($current_value)) {
             $current_value = 'off';
+        }
+
+        if (is_string($current_value) && !isset($font_display_options[$current_value]) && isset($font_display_options[strtolower($current_value)])) {
+            $current_value = strtolower($current_value);
+        }
+        $storedOutsideKeys = null;
+        if (is_string($current_value) && !isset($font_display_options[$current_value])) {
+            $storedOutsideKeys = $current_value;
+        } elseif (!is_string($current_value) || !isset($font_display_options[$current_value])) {
+            $current_value = 'swap';
         }
 
         $cssClass = '';
@@ -2120,10 +2159,10 @@ class wpc_gui_v4 extends wps_ic
         $html .= '<div class="wpc-box-check">';
 
         // Generate dropdown HTML
-        $html .= '<input type="hidden" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $current_value . '" />
+        $html .= '<input type="hidden" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . esc_attr($current_value) . '" />
 <div class="wpc-font-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
   <button class="wpc-font-select-button" type="button">
-    ' . $font_display_options[$current_value] . '
+    ' . ($storedOutsideKeys !== null ? esc_html($storedOutsideKeys) : $font_display_options[$current_value]) . '
   </button>';
 
         $html .= '<div class="wpc-font-select-menu">';
@@ -2134,6 +2173,10 @@ class wpc_gui_v4 extends wps_ic
                 $activeClass = 'wpc-font-active';
             }
             $html .= '<a class="wpc-font-select-item ' . $activeClass . '" data-preset-title="' . $label . '" data-value="' . $value . '">' . $label . '</a>';
+        }
+
+        if ($storedOutsideKeys !== null) {
+            $html .= '<a class="wpc-font-select-item wpc-font-active" data-preset-title="' . esc_attr($storedOutsideKeys) . '" data-value="' . esc_attr($storedOutsideKeys) . '">' . esc_html($storedOutsideKeys) . ' (' . esc_html__('Current', WPS_IC_TEXTDOMAIN) . ')</a>';
         }
 
         $html .= '</div></div>';

@@ -855,11 +855,13 @@
         var strips = document.querySelectorAll('.wpc-bulk-ledger-strip');
         if (strips.length && led) {
             var parts = [];
+            var stripOnView = Number((d.refused || led.refused || {}).encode_on_view) || 0;
+            var stripSkipped = (Number(led.skipped) || 0) - stripOnView;
             if (led.inflight) parts.push(led.inflight + ' optimizing');
             parts.push((led.verified || 0) + ' done');
             if (led.queued) parts.push(led.queued + ' queued');
             if (led.parked) parts.push(led.parked + ' parked');
-            if (led.skipped) parts.push(led.skipped + ' skipped');
+            if (stripSkipped > 0) parts.push(stripSkipped + ' skipped');
             var txt = parts.join(' \u00b7 ');
             if (d.halt && d.halt.store_broken) txt += ' \u00b7 paused: database writes not persisting (see admin notice)';
             else if (d.halt && d.halt.stop) txt += ' \u00b7 stopping\u2026';
@@ -1351,14 +1353,16 @@
         function imgs(n) { return n + (n === 1 ? ' image' : ' images'); }
         var refusedMap = d.refused || led.refused || {};
         var refused = 0;
-        for (var k in refusedMap) { if (Object.prototype.hasOwnProperty.call(refusedMap, k)) refused += Number(refusedMap[k]) || 0; }
-        var skipped = Number(led.skipped) || 0;
+        var onView = Number(refusedMap.encode_on_view) || 0;
+        for (var k in refusedMap) { if (k !== 'encode_on_view' && Object.prototype.hasOwnProperty.call(refusedMap, k)) refused += Number(refusedMap[k]) || 0; }
+        var skipped = Math.max(0, (Number(led.skipped) || 0) - onView);
         var parked  = Number(led.parked) || 0;
         var dedup   = Number(led.deduplicated) || 0;
         var lines = [];
         if (refused) lines.push(imgs(refused) + (refused === 1 ? ' was' : ' were') + ' not optimized this time. Run Bulk Optimize again later to retry ' + (refused === 1 ? 'it.' : 'them.'));
         if (skipped) lines.push(imgs(skipped) + (skipped === 1 ? ' was' : ' were') + ' skipped because ' + (skipped === 1 ? 'it is' : 'they are') + ' waiting before another try or still being optimized. Run Bulk Optimize again later to include ' + (skipped === 1 ? 'it.' : 'them.'));
         if (parked)  lines.push(imgs(parked) + ' failed several times and ' + (parked === 1 ? 'is' : 'are') + ' paused for 7 days. Optimize ' + (parked === 1 ? 'it' : 'them') + ' one by one from the Media Library to see why.');
+        if (onView)  lines.push(imgs(onView) + ' will be optimized the first time a page shows ' + (onView === 1 ? 'it.' : 'them.'));
         if (dedup)   lines.push(imgs(dedup) + (dedup === 1 ? ' was' : ' were') + ' optimized recently; ' + (dedup === 1 ? 'its' : 'their') + ' optimized files are being fetched again.');
         return { lines: lines, unfinished: refused + skipped + parked };
     }

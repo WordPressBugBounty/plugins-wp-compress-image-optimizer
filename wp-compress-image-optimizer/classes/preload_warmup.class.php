@@ -125,7 +125,7 @@ class wps_ic_preload_warmup
 
     public function preloadPage($url)
     {
-        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => 'preloadPage', 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'single_url' => $url], 'timeout' => 10]);
+        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => wpc_service_sslverify(self::$apiUrl), 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => 'preloadPage', 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'single_url' => $url], 'timeout' => 10]);
     }
 
     // Filter function to modify search to only search post titles
@@ -189,9 +189,9 @@ class wps_ic_preload_warmup
                 $preloaded = '1';
 
 
-                if ((isset($page_excludes['critical_css']) && $page_excludes['critical_css'] == '0')) {
-                    // Excluded from Smart Optimizations
-                } else if (!empty($settings['critical']['css']) && $settings['critical']['css'] == '1') {
+                if (function_exists('wpc_crit_generation_off') && wpc_crit_generation_off($urlKey, $url)) {
+                    // Critical CSS is off for this page
+                } else {
                     if (!file_exists($critPath)) {
                         $critGenerated = '0';
                         //$preloaded = '0';
@@ -427,9 +427,9 @@ class wps_ic_preload_warmup
                 $preloaded = '1';
 
 
-                if ((isset($page_excludes['critical_css']) && $page_excludes['critical_css'] == '0')) {
-                    // Excluded from Smart Optimizations
-                } else if (!empty($settings['critical']['css']) && $settings['critical']['css'] == '1') {
+                if (function_exists('wpc_crit_generation_off') && wpc_crit_generation_off($urlKey, $url)) {
+                    // Critical CSS is off for this page
+                } else {
                     if (!file_exists($critPath)) {
                         $critGenerated = '0';
                         //$preloaded = '0';
@@ -495,13 +495,14 @@ class wps_ic_preload_warmup
         header('Pragma: no-cache');
         header('Content-Type: application/json');
 
-        if (!empty($_GET['apikey'])) {
-            $apikey = sanitize_text_field($_GET['apikey']);
+        if (!empty(wpc_get_string('apikey'))) {
+            $apikey = sanitize_text_field(wpc_get_string('apikey'));
         } else {
             echo json_encode('no-apikey');
+            die();
         }
 
-        if (!empty($apikey) && get_option(WPS_IC_OPTIONS)['api_key'] == $apikey) {
+        if (wpc_site_key_matches($apikey)) {
 
             $pages = $this->getPagesToOptimize();
 
@@ -607,9 +608,7 @@ class wps_ic_preload_warmup
                 $preloaded = '1';
 
 
-                $criticalActive = !(isset($page_excludes['critical_css']) && $page_excludes['critical_css'] == '0') &&
-                    ((isset($settings['critical']['css']) && $settings['critical']['css'] == '1') ||
-                        (isset($page_excludes['critical_css']) && $page_excludes['critical_css'] == '1'));
+                $criticalActive = !(function_exists('wpc_crit_generation_off') && wpc_crit_generation_off($urlKey, $url));
 
                 if ($criticalActive && !file_exists($critPath)) {
                     $critGenerated = '0';
@@ -650,30 +649,28 @@ class wps_ic_preload_warmup
         header('Pragma: no-cache');
         header('Content-Type: application/json');
 
-        if (!empty($_GET['apikey'])) {
-            $apikey = sanitize_text_field($_GET['apikey']);
+        if (!empty(wpc_get_string('apikey'))) {
+            $apikey = sanitize_text_field(wpc_get_string('apikey'));
         } else {
             echo json_encode('no-apikey');
             die();
         }
 
-        if (!empty($_GET['id'])) {
-            $id = sanitize_text_field($_GET['id']);
+        if (!empty(wpc_get_string('id'))) {
+            $id = sanitize_text_field(wpc_get_string('id'));
         } else {
             echo json_encode('no-id');
             die();
         }
 
-        if (!empty($_GET['desktopCritUrl'])) {
-            $desktopCritUrl = esc_url($_GET['desktopCritUrl']);
+        if (!empty(wpc_get_string('desktopCritUrl'))) {
+            $desktopCritUrl = esc_url(wpc_get_string('desktopCritUrl'));
         } else {
             echo json_encode('no-url');
             die();
         }
 
-        $options = get_option(WPS_IC_OPTIONS);
-        $enteredApiKey = $options['api_key'];
-        if (!empty($enteredApiKey) && $enteredApiKey == $apikey) {
+        if (wpc_site_key_matches($apikey)) {
 
             if ($id == 'home') {
                 $url = home_url();
@@ -699,30 +696,28 @@ class wps_ic_preload_warmup
         header('Pragma: no-cache');
         header('Content-Type: application/json');
 
-        if (!empty($_GET['apikey'])) {
-            $apikey = sanitize_text_field($_GET['apikey']);
+        if (!empty(wpc_get_string('apikey'))) {
+            $apikey = sanitize_text_field(wpc_get_string('apikey'));
         } else {
             echo json_encode('no-apikey');
             die();
         }
 
-        if (!empty($_GET['id'])) {
-            $id = sanitize_text_field($_GET['id']);
+        if (!empty(wpc_get_string('id'))) {
+            $id = sanitize_text_field(wpc_get_string('id'));
         } else {
             echo json_encode('no-id');
             die();
         }
 
-        if (!empty($_GET['mobileCritUrl'])) {
-            $desktopCritUrl = esc_url($_GET['mobileCritUrl']);
+        if (!empty(wpc_get_string('mobileCritUrl'))) {
+            $desktopCritUrl = esc_url(wpc_get_string('mobileCritUrl'));
         } else {
             echo json_encode('no-url');
             die();
         }
 
-        $options = get_option(WPS_IC_OPTIONS);
-        $enteredApiKey = $options['api_key'];
-        if (!empty($enteredApiKey) && $enteredApiKey == $apikey) {
+        if (wpc_site_key_matches($apikey)) {
 
             if ($id == 'home') {
                 $url = home_url();
@@ -748,24 +743,25 @@ class wps_ic_preload_warmup
         header('Pragma: no-cache');
         header('Content-Type: application/json');
 
-        if (!empty($_GET['apikey'])) {
-            $apikey = sanitize_text_field($_GET['apikey']);
+        if (!empty(wpc_get_string('apikey'))) {
+            $apikey = sanitize_text_field(wpc_get_string('apikey'));
         } else {
             echo json_encode('no-apikey');
             die();
         }
 
-        if (!empty($_GET['id'])) {
-            $id = sanitize_text_field($_GET['id']);
+        if (!empty(wpc_get_string('id'))) {
+            $id = sanitize_text_field(wpc_get_string('id'));
         } else {
             echo json_encode('no-id');
             die();
         }
 
 
-        $options = get_option(WPS_IC_OPTIONS);
-        $enteredApiKey = $options['api_key'];
-        if (!empty($enteredApiKey) && $enteredApiKey == $apikey) {
+        if (wpc_site_key_matches($apikey)) {
+
+            $oldPageStatus = null;
+            $localCacheResponse = null;
 
             //Check for cache or crit errors/blocking
             $oldStatus = get_transient('wpc-page-optimizations-status');
@@ -855,9 +851,9 @@ class wps_ic_preload_warmup
             $preloaded = '1';
 
 
-            if (isset($page_excludes['critical_css']) && $page_excludes['critical_css'] == '0') {
-                // Exclude from Smart Optimizations
-            } else if (!empty($settings['critical']['css']) && $settings['critical']['css'] == '1') {
+            if (function_exists('wpc_crit_generation_off') && wpc_crit_generation_off($urlKey, $url)) {
+                // Critical CSS is off for this page
+            } else {
                 if (!file_exists($critPath)) {
                     $critGenerated = '0';
                     $preloaded = '0';
@@ -918,7 +914,7 @@ class wps_ic_preload_warmup
                     $url_key_class = new wps_ic_url_key();
                     $urlKey = $url_key_class->setup($url);
                     if (self::responseIsPublicCopy($get)) {
-                        $this->saveCacheLocal($urlKey, $body);
+                        $this->saveCacheLocal($urlKey, $body, $url);
                     }
                 }
             } else if (wp_remote_retrieve_response_code($get) >= 300 && wp_remote_retrieve_response_code($get) < 400) {
@@ -942,7 +938,7 @@ class wps_ic_preload_warmup
                             $url_key_class = new wps_ic_url_key();
                             $urlKey = $url_key_class->setup($url);
                             if (self::responseIsPublicCopy($get)) {
-                                $this->saveCacheLocal($urlKey, $body);
+                                $this->saveCacheLocal($urlKey, $body, $url);
                             }
                         }
                     } else {
@@ -955,34 +951,23 @@ class wps_ic_preload_warmup
         return 'did local cache';
     }
 
-    public function saveCacheLocal($urlKey, $body)
+    public function saveCacheLocal($urlKey, $body, $url = null)
     {
+        if (function_exists('wpc_page_cache_blocked') && wpc_page_cache_blocked()) {
+            return 'blocked';
+        }
+        if ((string) $urlKey === '') {
+            return 'refused';
+        }
         if (!file_exists(WPS_IC_CACHE)) {
             mkdir(rtrim(WPS_IC_CACHE, '/'));
         }
 
         $cachePath = WPS_IC_CACHE . $urlKey . '/';
 
-        if (defined('DONOTCACHEPAGE') && DONOTCACHEPAGE) {
-            global $post;
-            if (!empty($post->ID)) {
-                $this->addError($post->ID, 'DONOTCACHEPAGE');
-            }
-            return 'donotcache';
-        }
-
-		    if (empty($this->options['cache']['ignore-server-control']) ||  $this->options['cache']['ignore-server-control'] == '0') {
-			    // Same rule as the store verdict (wpc_store_verdict): only a request `no-store`
-			    // refuses the copy; `no-cache` (a hard reload) is stored (dbmwebdesign.de, 2026-09-28).
-			    $cacheControl = strtolower( isset( $_SERVER['HTTP_CACHE_CONTROL'] ) ? (string) $_SERVER['HTTP_CACHE_CONTROL'] : '' );
-			    if ( strpos( $cacheControl, 'no-store' ) !== false ) {
-				    return 'donotcache';
-			    }
-		    }
-
         $excludes = get_option('wpc-excludes');
         if (!empty($excludes) && !empty($excludes['cache']) && class_exists('wps_ic_url_key')) {
-            if (wps_ic_url_key::excludedBy($excludes['cache'], wps_ic_url_key::requestHostPath()) !== false) {
+            if (wps_ic_url_key::requestCacheExcludedBy($excludes['cache'], $url) !== false) {
                 return 'excluded';
             }
         }
@@ -1037,9 +1022,21 @@ class wps_ic_preload_warmup
 
     public function saveGzCacheLocal($cachePath, $body)
     {
-
+        if (function_exists('wpc_page_cache_blocked') && wpc_page_cache_blocked()) {
+            return;
+        }
+        if (function_exists('wpc_p2_marker_file') && function_exists('wpc_p2_settle')) {
+            $holdKey = basename(rtrim((string) $cachePath, '/'));
+            if (is_file(wpc_p2_marker_file($holdKey)) && wpc_p2_settle($holdKey, false, false) === 'pending') {
+                return;
+            }
+        }
 
         $final = $cachePath . 'index.html' . '_gzip';
+        $names = function_exists('wpc_copy_names') ? wpc_copy_names($cachePath, '', '') : null;
+        if ($names !== null && @is_file($names['br'])) {
+            @unlink($names['br']);
+        }
         $tmp   = $final . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
         $fp = @fopen($tmp, 'w+');
         if ($fp === false) {
@@ -1049,6 +1046,19 @@ class wps_ic_preload_warmup
         fclose($fp);
         if (!@rename($tmp, $final)) {
             @unlink($tmp);
+        } else {
+            if ($names !== null && function_exists('wpc_fs_put')) {
+                wpc_fs_put($names['md5'], md5($body));
+            }
+            if (function_exists('wpc_copy_links_record')) {
+                wpc_copy_links_record($cachePath . 'links.txt', $body);
+            }
+            if (function_exists('wpc_served_head_record') && $names !== null) {
+                wpc_served_head_record($names['head'], $body, '', $final);
+            }
+            if (function_exists('wpc_copy_settle')) {
+                wpc_copy_settle($cachePath, '', '');
+            }
         }
     }
 
@@ -1071,31 +1081,29 @@ class wps_ic_preload_warmup
         header('Pragma: no-cache');
         header('Content-Type: application/json');
 
-        if (!empty($_GET['apikey'])) {
-            $apikey = sanitize_text_field($_GET['apikey']);
+        if (!empty(wpc_get_string('apikey'))) {
+            $apikey = sanitize_text_field(wpc_get_string('apikey'));
         } else {
             echo json_encode('no-apikey');
             die();
         }
 
-        if (!empty($_GET['id'])) {
-            $id = sanitize_text_field($_GET['id']);
+        if (!empty(wpc_get_string('id'))) {
+            $id = sanitize_text_field(wpc_get_string('id'));
         } else {
             echo json_encode('no-id');
             die();
         }
 
-        if (!empty($_GET['errorCode'])) {
-            $errorCode = sanitize_text_field($_GET['errorCode']);
+        if (!empty(wpc_get_string('errorCode'))) {
+            $errorCode = sanitize_text_field(wpc_get_string('errorCode'));
         } else {
             echo json_encode('no-error');
             die();
         }
 
 
-        $options = get_option(WPS_IC_OPTIONS);
-        $enteredApiKey = $options['api_key'];
-        if (!empty($enteredApiKey) && $enteredApiKey == $apikey) {
+        if (wpc_site_key_matches($apikey)) {
 
             $this->addError($id, $errorCode, 'skip');
 
@@ -1136,7 +1144,7 @@ class wps_ic_preload_warmup
         $warmup = new wps_ic_preload_warmup();
         if ($dash) {
             $warmup->writeLog('Starting warmup.');
-            $call = wp_remote_post(self::$standaloneWarmup, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'id' => $id, 'critical' => 'true', 'test' => 'true'], 'timeout' => 120]);
+            $call = wp_remote_post(self::$standaloneWarmup, ['method' => 'POST', 'sslverify' => wpc_service_sslverify(self::$standaloneWarmup), 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'id' => $id, 'critical' => 'true', 'test' => 'true'], 'timeout' => 120]);
         } else {
 
             $errors = get_option('wpc-warmup-errors', []);
@@ -1146,7 +1154,7 @@ class wps_ic_preload_warmup
                 unset($errors[$id]);
                 update_option('wpc-warmup-errors', $errors);
             }
-            $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 30]);
+            $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => wpc_service_sslverify(self::$apiUrl), 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 30]);
 
         }
 
@@ -1196,7 +1204,7 @@ class wps_ic_preload_warmup
 
     public function resetTest($id, $retest = false, $return = true)
     {
-        $call = wp_remote_post(self::$apiUrl, ['timeout' => 5, 'blocking' => true, 'body' => ['id' => 'home', 'url' => home_url(), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'resetTest'], 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        $call = wp_remote_post(self::$apiUrl, ['timeout' => 5, 'blocking' => true, 'body' => ['id' => 'home', 'url' => home_url(), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'resetTest'], 'sslverify' => wpc_service_sslverify(self::$apiUrl), 'user-agent' => WPS_IC_API_USERAGENT]);
     }
 
     public function doTestRemote($id, $retest = false, $return = true)
@@ -1221,7 +1229,7 @@ class wps_ic_preload_warmup
             }
         }
 
-        $call = wp_remote_post(self::$apiUrl, ['timeout' => 5, 'blocking' => true, 'body' => ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTestRemote'], 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        $call = wp_remote_post(self::$apiUrl, ['timeout' => 5, 'blocking' => true, 'body' => ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTestRemote'], 'sslverify' => wpc_service_sslverify(self::$apiUrl), 'user-agent' => WPS_IC_API_USERAGENT]);
 
         wp_send_json_success('waiting');
     }
@@ -1249,7 +1257,7 @@ class wps_ic_preload_warmup
             update_option(WPS_IC_TESTS, $results);
         }
 
-        $call = wp_remote_post(self::$apiUrl, ['timeout' => (int) apply_filters('wpc_dotest_timeout', 20), 'blocking' => true, 'body' => ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTest'], 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        $call = wp_remote_post(self::$apiUrl, ['timeout' => (int) apply_filters('wpc_dotest_timeout', 20), 'blocking' => true, 'body' => ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTest'], 'sslverify' => wpc_service_sslverify(self::$apiUrl), 'user-agent' => WPS_IC_API_USERAGENT]);
 
         delete_transient('wpc_test_' . $id);
 
@@ -1302,7 +1310,7 @@ class wps_ic_preload_warmup
             update_option(WPS_IC_TESTS, $results);
         }
 
-        $call = wp_remote_post(self::$apiUrl, ['timeout' => (int) apply_filters('wpc_dotestlcp_timeout', 20), 'blocking' => true, 'body' => ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTestLCP'], 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        $call = wp_remote_post(self::$apiUrl, ['timeout' => (int) apply_filters('wpc_dotestlcp_timeout', 20), 'blocking' => true, 'body' => ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTestLCP'], 'sslverify' => wpc_service_sslverify(self::$apiUrl), 'user-agent' => WPS_IC_API_USERAGENT]);
 
         delete_transient('wpc_test_' . $id);
         if (wp_remote_retrieve_response_code($call) == 200) {
@@ -1411,9 +1419,16 @@ class wps_ic_preload_warmup
 
     }
 
+    /** True when the site holds an api key, the condition that attaches the cron preload. */
+    public static function cronPreloadArmed()
+    {
+        $options = get_option(WPS_IC_OPTIONS);
+        return is_array($options) && !empty($options['api_key']);
+    }
+
     public function setupCronPreload()
     {
-        if (!empty(get_option(WPS_IC_OPTIONS)['api_key'])) {
+        if (self::cronPreloadArmed()) {
             add_action('init', [$this, 'scheduleCronWarmup']);
             add_action('runCronPreload', [$this, 'startOptimizationsCron']);
         }
@@ -1443,7 +1458,7 @@ class wps_ic_preload_warmup
                 'timeout'   => 5,
                 'blocking'  => false,
                 'sslverify' => false,
-                'headers'   => ['X-WPC-Cache-Warm' => '1'],
+                'headers'   => ['X-WPC-Cache-Warm' => wpc_warm_header_for(home_url('/'))],
             ]);
         }
         if (function_exists('wpc_warm_home_dispatch_queue')) {
@@ -1475,17 +1490,15 @@ class wps_ic_preload_warmup
         header('Cache-Control: post-check=0, pre-check=0', false);
         header('Pragma: no-cache');
 
-        if (!empty($_GET['apikey'])) {
-            $apikey = sanitize_text_field($_GET['apikey']);
+        if (!empty(wpc_get_string('apikey'))) {
+            $apikey = sanitize_text_field(wpc_get_string('apikey'));
         } else {
             echo json_encode('no-apikey');
             die();
         }
 
-        $options = get_option(WPS_IC_OPTIONS);
-        $enteredApiKey = $options['api_key'];
 
-        if (!empty($apikey) && $enteredApiKey == $apikey) {
+        if (wpc_site_key_matches($apikey)) {
             if (file_exists($this->logFilePath)) {
                 $logContents = file_get_contents($this->logFilePath);
                 echo $logContents;

@@ -159,7 +159,13 @@ class wps_ic_plan
                 $settings['wpc_optimization_mode'] = 'legacy';
             }
         }
-        update_option(WPS_IC_SETTINGS, $settings);
+        if (function_exists('wpc_settings_written_as')) {
+            wpc_settings_written_as('plan', function () use ($settings) {
+                update_option(WPS_IC_SETTINGS, $settings);
+            });
+        } else {
+            update_option(WPS_IC_SETTINGS, $settings);
+        }
         if (defined('WPS_IC_PRESET') && ($gained || $version !== $prev_version)) {
             update_option(WPS_IC_PRESET, $preset_name);
         }

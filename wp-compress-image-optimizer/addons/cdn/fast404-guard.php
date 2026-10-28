@@ -42,6 +42,57 @@ if (!function_exists('wpc_fast404_guard_rules')) {
     }
 }
 
+if (!function_exists('wpc_fast404_bundle_rules')) {
+    /**
+     * The combined parked-CSS bundles (critical/combined/cmb-<md5>.css) are written only by a page
+     * render, never on request, so a request for a name that is not on disk is a stale link and
+     * can be answered by the server. Observed failure (ticket 12239, lifetimeglassmirror.com,
+     * 2026-10-12 12:10 UTC): LiteSpeed kept serving pages that linked bundles our hard purge had
+     * deleted, and every one of those links booted WordPress for 4-5 s (slow-render receipts) and
+     * was logged by Hide My WP as a probe. RewriteEngine On in this directory means the root
+     * rules of WordPress do not reach it: a name on disk is served as a file, a missing one is a
+     * server 404. Apache and LiteSpeed only (OpenLiteSpeed reads .htaccess at restart).
+     */
+    function wpc_fast404_bundle_rules()
+    {
+        return [
+            '<IfModule mod_rewrite.c>',
+            'RewriteEngine On',
+            'RewriteCond %{REQUEST_FILENAME} !-f',
+            'RewriteRule \.css$ - [R=404,L]',
+            '</IfModule>',
+        ];
+    }
+}
+
+if (!function_exists('wpc_fast404_bundle_rules_write')) {
+    /**
+     * Writes the block into critical/combined/.htaccess under the fast-404 marker. Returns true
+     * when written, false when the directory is missing or not writable, null when there is
+     * nothing to do (guard off, another server class, or the block is already there).
+     */
+    function wpc_fast404_bundle_rules_write()
+    {
+        if (!function_exists('wpc_fast404_guard_active') || !wpc_fast404_guard_active()) { return null; }
+        if (!defined('WPS_IC_CRITICAL')) { return null; }
+        $dir = rtrim(WPS_IC_CRITICAL, '/\\') . '/combined';
+        if (!@is_dir($dir)) { return false; }
+        $file = $dir . '/.htaccess';
+        if (@is_file($file) && strpos((string) @file_get_contents($file), '# BEGIN WPC Fast 404') !== false) { return null; }
+        if (@file_exists($file) ? !@is_writable($file) : !@is_writable($dir)) { return false; }
+        if (!function_exists('insert_with_markers')) {
+            $misc_file = ABSPATH . 'wp-admin/includes/misc.php';
+            if (@is_readable($misc_file)) { require_once $misc_file; }
+        }
+        if (!function_exists('insert_with_markers')) { return false; }
+        $written = (bool) insert_with_markers($file, 'WPC Fast 404', wpc_fast404_bundle_rules());
+        if ($written && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('fast404-bundle-rule', '', '', []);
+        }
+        return $written;
+    }
+}
+
 if (!function_exists('wpc_fast404_guard_write_block')) {
     function wpc_fast404_guard_write_block($remove = false)
     {
@@ -80,6 +131,10 @@ if (!function_exists('wpc_fast404_guard_tick')) {
     function wpc_fast404_guard_tick($force = false)
     {
         try {
+            // The bundle directory's own rule, independent of the uploads block below: it is
+            // written once and survives until a hard purge removes the directory, after which
+            // the render that recreates the directory writes it again.
+            if (function_exists('wpc_fast404_bundle_rules_write')) { wpc_fast404_bundle_rules_write(); }
             if (!wpc_fast404_guard_active()) { return null; }
             if (!$force && get_transient('wpc_fast404_tick')) { return null; }
             set_transient('wpc_fast404_tick', 1, 6 * HOUR_IN_SECONDS);

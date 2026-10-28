@@ -5,6 +5,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+require_once __DIR__ . '/v2-inbound.php';
+
 if (!class_exists('WPS_LocalV2')) {
 
 class WPS_LocalV2
@@ -16,10 +18,25 @@ class WPS_LocalV2
     // The most source bytes ever sent inline, whatever the service declares. Rule: the decoded
     // source must stay within the service's max_inline_bytes and its base64 within the 32 MB
     // body the /optimize-v2 route parses (20 MB raw is ~26.7 MB encoded). See inline_cap().
-    const INLINE_BYTES_CEILING   = 20971520;
+    const INLINE_BYTES_CEILING   = WPC_V2_INLINE_BYTES_CEILING;
 
 
     const SOURCE_URL_FETCH_MAX   = 9961472;
+
+    /** Dispatch reason (wps_ic_image_optimize::GATES) => the `trigger` the request reports. */
+    const TRIGGER_BY_REASON = [
+        'upload'        => 'upload',
+        'bulk'          => 'bulk',
+        'ml-button'     => 'prewarm',
+        'hero'          => 'prewarm',
+        'edit'          => 'edit',
+        'lazy'          => 'format_fill',
+        'sized-trigger' => 'format_fill',
+        'cli'           => 'cli',
+    ];
+
+    /** The resubmit_reason values of a first send; any other value names a re-send. */
+    const FIRST_SEND_REASONS = ['', 'new', 'user_recompress', 'missing_variant', 'format_fill'];
 
     /** @var string */
     private $apikey;
@@ -260,6 +277,39 @@ class WPS_LocalV2
 
 
     /**
+     * What the `trigger` field of a /optimize-v2 request says started it: upload, bulk, prewarm,
+     * edit, format_fill, resubmit or cli. A re-send (a retry, the watchdog's heal, a retry with the
+     * source URL) is `resubmit` whoever first asked; a reason this map does not know is `cli` where
+     * the request runs under the CLI or cron and `resubmit` elsewhere. Reporting only: nothing in
+     * the service ranks by it.
+     */
+    public static function trigger_for($dispatch_reason, $resubmit_reason = '', $origin = 'web')
+    {
+        if (!in_array((string) $resubmit_reason, self::FIRST_SEND_REASONS, true)) {
+            return 'resubmit';
+        }
+        $dispatch_reason = (string) $dispatch_reason;
+        if (isset(self::TRIGGER_BY_REASON[$dispatch_reason])) {
+            return self::TRIGGER_BY_REASON[$dispatch_reason];
+        }
+        return (string) $origin === 'cli' ? 'cli' : 'resubmit';
+    }
+
+    /**
+     * The public URL of a source file under the uploads directory (its baseurl and the path
+     * below its basedir), or '' for a file outside it. Resolved through wpc_v2_uploads_relative(),
+     * so an uploads directory that is a symlink and a multisite site's own uploads base name the
+     * same URL the visitors use.
+     */
+    public static function source_public_url($source_path)
+    {
+        $rel = function_exists('wpc_v2_uploads_relative') ? wpc_v2_uploads_relative($source_path) : '';
+        $up = wp_get_upload_dir();
+        $base_url = isset($up['baseurl']) ? rtrim((string) $up['baseurl'], '/') : '';
+        return ($rel === '' || $base_url === '') ? '' : $base_url . '/' . $rel;
+    }
+
+    /**
      * The inline source cap: the service's declared max_inline_bytes (cached capabilities),
      * never above INLINE_BYTES_CEILING; the ceiling when nothing is cached. A larger source goes
      * by URL. Observed failure: a 26 MB hardcode let a source through whose base64 exceeded the
@@ -442,12 +492,12 @@ class WPS_LocalV2
             return ['ok' => false, 'error' => 'source_dims_unknown', 'imageID' => $imageID];
         }
 
-        // Source transport: up to 5 MB inline only; up to the inline cap (inline_cap()) inline
-        // plus the URL; above the cap the URL only.
-        $tier1_max = (int) apply_filters('wpc_v2_source_inline_max_bytes',  5 * 1024 * 1024);
+        // Source transport: up to the inline cap (inline_cap()) inline plus the URL; above the cap
+        // the URL only.
         $tier2_max = (int) apply_filters('wpc_v2_source_both_max_bytes', self::inline_cap());
 
         $source = ['width' => $w, 'height' => $h, 'bytesB64Available' => true];
+        $public_url = self::source_public_url($source_path);
 
         if ($bytes_on_disk > 0 && empty($options['force_url_source']) && $bytes_on_disk <= $tier2_max) {
             // Tier 1 or Tier 2 — attempt inline read.
@@ -456,14 +506,9 @@ class WPS_LocalV2
                 $source['bytesB64'] = base64_encode($raw);
                 $source['sha256']   = hash('sha256', $raw);
                 unset($raw);
-
-
-                if ($bytes_on_disk > $tier1_max) {
-                    $upload_dir = wp_get_upload_dir();
-                    $rel        = ltrim(str_replace($upload_dir['basedir'], '', $source_path), '/');
-                    $source['url'] = $upload_dir['baseurl'] . '/' . $rel;
+                if ($public_url !== '') {
+                    $source['url'] = $public_url;
                 }
-                // Tier 1: bytesB64 only — URL omitted to save POST body bytes.
             }
             // If file_get_contents failed (rare — disk read error mid-flight),
             // fall through to URL-only path below as last resort.
@@ -474,10 +519,8 @@ class WPS_LocalV2
             if (!empty($options['source_url'])) {
                 $source['url']    = (string) $options['source_url'];
                 $source['sha256'] = '';
-            } elseif (!isset($source['url'])) {
-                $upload_dir = wp_get_upload_dir();
-                $rel        = ltrim(str_replace($upload_dir['basedir'], '', $source_path), '/');
-                $source['url'] = $upload_dir['baseurl'] . '/' . $rel;
+            } elseif (!isset($source['url']) && $public_url !== '') {
+                $source['url'] = $public_url;
             }
         }
 
@@ -568,10 +611,18 @@ class WPS_LocalV2
                                 : 'web',
             'resubmit_reason' => isset($options['resubmit_reason']) && $options['resubmit_reason'] !== ''
                                 ? (string) $options['resubmit_reason'] : 'new',
+            'trigger'         => self::trigger_for(
+                isset($options['dispatch_reason']) ? (string) $options['dispatch_reason'] : '',
+                isset($options['resubmit_reason']) ? (string) $options['resubmit_reason'] : '',
+                function_exists('wpc_v2_get_request_origin') ? wpc_v2_get_request_origin() : 'web'
+            ),
             'attempt'         => isset($options['attempt']) ? max(1, (int) $options['attempt']) : 1,
         ];
         if (!empty($options['run_id']) && is_string($options['run_id'])) {
             $body['run_id'] = preg_replace('/[^A-Za-z0-9_-]/', '', $options['run_id']);
+        }
+        if (!empty($options['priority']) && is_string($options['priority'])) {
+            $body['priority'] = substr((string) preg_replace('/[^a-z_]/', '', strtolower($options['priority'])), 0, 16);
         }
 
 
@@ -696,7 +747,7 @@ class WPS_LocalV2
             // (the attached file for `scaled`, the original for `original`) and records it as no
             // improvement; that is an intentional skip, not a failure.
             $dest = $dest_dir . '/' . $filename;
-            $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $parent_size_label, 'fmt' => $fmt, 'src' => 'phase_a', 'claim' => wpc_v2_variant_claim($entry)]]);
+            $put = wpc_v2_store_bytes($raw, $dest, ['variant' => ['id' => $imageID, 'size' => $parent_size_label, 'fmt' => $fmt, 'src' => 'phase_a', 'job' => (string) $jobId, 'claim' => wpc_v2_variant_claim($entry)]]);
             if (!empty($put['settled'])) {
                 if (empty($put['recorded'])) {
                     $this->record_no_improvement_variant($imageID, $parent_size_label, $fmt, (string) $put['error'], $entry);

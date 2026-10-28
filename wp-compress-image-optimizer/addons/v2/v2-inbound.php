@@ -21,6 +21,10 @@
  * log is loaded.
  */
 
+if (!defined('WPC_V2_INLINE_BYTES_CEILING')) {
+    define('WPC_V2_INLINE_BYTES_CEILING', 20971520);
+}
+
 if (!function_exists('wpc_v2_inbound_verify')) {
     /**
      * Answers ['ok' => true, 'via' => cb_secret|apikey_legacy, 'json' => decoded body or null] or
@@ -110,6 +114,19 @@ if (!function_exists('wpc_v2_inbound_verify')) {
         return (bool) preg_match('/(^|\.)zapwp\.(com|net)$/', $host);
     }
 
+    function wpc_v2_pull_host_guard_on()
+    {
+        return (bool) apply_filters('wpc_v2_pull_host_guard', !(defined('WPC_V2_PULL_HOST_GUARD_OFF') && WPC_V2_PULL_HOST_GUARD_OFF));
+    }
+
+    function wpc_v2_pull_fetch_allowed($url)
+    {
+        if (!wpc_v2_pull_host_guard_on()) {
+            return true;
+        }
+        return wpc_v2_inbound_fetch_host_ok($url);
+    }
+
     /**
      * The exact hosts a fetchUrl may name besides the zapwp domains: the service's variants host
      * (wpc_v2_variants_host()), the orchestrator and this site. Exact hosts, not *.b-cdn.net,
@@ -167,6 +184,73 @@ if (!function_exists('wpc_v2_inbound_verify')) {
         return $cap > 0 ? $cap : 4194304;
     }
 
+    /** The cap on bytes a pull lane reads from a fetchUrl: the service's declared max_inline_bytes, never the callback-body cap. */
+    function wpc_v2_pull_max_bytes()
+    {
+        $caps = function_exists('get_site_transient') && defined('WPC_V2_CAPS_CACHE_KEY') ? get_site_transient(WPC_V2_CAPS_CACHE_KEY) : false;
+        $cap = is_array($caps) && !empty($caps['max_inline_bytes']) ? (int) $caps['max_inline_bytes'] : 0;
+        $cap = $cap > 0 ? min($cap, WPC_V2_INLINE_BYTES_CEILING) : WPC_V2_INLINE_BYTES_CEILING;
+        $filtered = function_exists('apply_filters') ? (int) apply_filters('wpc_v2_pull_max_bytes', $cap) : $cap;
+        return $filtered > 0 ? $filtered : $cap;
+    }
+
+    function wpc_v2_pull_fetch_https_allowed($url)
+    {
+        if (!wpc_v2_pull_host_guard_on()) {
+            return true;
+        }
+        $scheme = parse_url((string) $url, PHP_URL_SCHEME);
+        return is_string($scheme) && strtolower($scheme) === 'https' && wpc_v2_inbound_fetch_host_ok($url);
+    }
+
+    function wpc_v2_pull_remote_get($url, array $args = [])
+    {
+        if (!wpc_v2_pull_host_guard_on()) {
+            return wp_remote_get($url, $args);
+        }
+        $cap = wpc_v2_pull_max_bytes();
+        $args['redirection'] = 0;
+        $args['limit_response_size'] = $cap + 1;
+        $hops = 0;
+        while (true) {
+            if (!wpc_v2_inbound_fetch_host_ok($url)) {
+                return new WP_Error('wpc_pull_foreign_host', 'fetch host is not allowlisted');
+            }
+            $resp = wp_remote_get($url, $args);
+            if (is_wp_error($resp)) {
+                return $resp;
+            }
+            $code = (int) wp_remote_retrieve_response_code($resp);
+            if ($code >= 300 && $code < 400) {
+                $loc = wp_remote_retrieve_header($resp, 'location');
+                $loc = is_array($loc) ? (string) reset($loc) : (string) $loc;
+                if ($loc === '' || ++$hops > 2) {
+                    return new WP_Error('wpc_pull_redirect', 'redirect refused');
+                }
+                $url = $loc;
+                continue;
+            }
+            if (strlen((string) wp_remote_retrieve_body($resp)) > $cap) {
+                return new WP_Error('wpc_pull_too_large', 'body over the pull cap');
+            }
+            return $resp;
+        }
+    }
+
+    function wpc_v2_pull_read_url($url, $timeout = 15)
+    {
+        $ctx = stream_context_create(['http' => ['timeout' => (int) $timeout, 'follow_location' => 0, 'max_redirects' => 0]]);
+        if (!wpc_v2_pull_host_guard_on()) {
+            return @file_get_contents($url, false, $ctx);
+        }
+        if (!wpc_v2_pull_fetch_https_allowed($url)) {
+            return false;
+        }
+        $cap = wpc_v2_pull_max_bytes();
+        $raw = @file_get_contents($url, false, $ctx, 0, $cap + 1);
+        return is_string($raw) && strlen($raw) <= $cap ? $raw : false;
+    }
+
     function wpc_v2_inbound_refuse($route, $status, $reason, $detail = '', array $extra = [])
     {
         if (function_exists('wpc_cache_first_log')) {
@@ -174,6 +258,35 @@ if (!function_exists('wpc_v2_inbound_verify')) {
         }
         error_log('[WPC V2Inbound] refused route=' . $route . ' reason=' . $reason . ($detail !== '' ? ' detail=' . substr((string) $detail, 0, 80) : ''));
         return ['ok' => false, 'status' => (int) $status, 'reason' => (string) $reason, 'detail' => (string) $detail];
+    }
+}
+
+if (!function_exists('wpc_v2_note_rest_form')) {
+    /**
+     * Remembers the URL form of the latest signed orchestrator request that reached a wpc/v2 REST
+     * route: 'query' when the route came in the rest_route argument, 'pretty' when it came under
+     * the REST prefix. The option is written only when the value changes and only from a request
+     * whose signature has verified; the /v2/config body reports it as rest_form_seen.
+     */
+    function wpc_v2_note_rest_form()
+    {
+        if (!defined('REST_REQUEST') || !REST_REQUEST || !function_exists('get_option') || !function_exists('update_option')) {
+            return;
+        }
+        $form  = '';
+        $route = isset($_GET['rest_route']) && is_string($_GET['rest_route']) ? ltrim($_GET['rest_route'], '/') : '';
+        if ($route !== '') {
+            $form = strpos($route, 'wpc/v2/') === 0 ? 'query' : '';
+        } else {
+            $uri    = isset($_SERVER['REQUEST_URI']) && is_string($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
+            $path   = (string) parse_url($uri, PHP_URL_PATH);
+            $prefix = function_exists('rest_get_url_prefix') ? (string) rest_get_url_prefix() : 'wp-json';
+            $form   = strpos($path, '/' . $prefix . '/wpc/v2/') !== false ? 'pretty' : '';
+        }
+        if ($form === '' || (string) get_option('wpc_v2_rest_form_seen', '') === $form) {
+            return;
+        }
+        update_option('wpc_v2_rest_form_seen', $form, false);
     }
 }
 
@@ -225,6 +338,7 @@ if (!function_exists('wpc_v2_verify_hmac')) {
             if ($is_write_scope && function_exists('wpc_v2_note_callback_secret_use')) {
                 wpc_v2_note_callback_secret_use();
             }
+            wpc_v2_note_rest_form();
             return ['ok' => true, 'via' => 'cb_secret'];
         }
 
@@ -248,6 +362,7 @@ if (!function_exists('wpc_v2_verify_hmac')) {
             return ['ok' => false, 'reason' => 'sig_mismatch'];
         }
 
+        wpc_v2_note_rest_form();
         return ['ok' => true, 'via' => 'apikey_legacy'];
     }
 }
