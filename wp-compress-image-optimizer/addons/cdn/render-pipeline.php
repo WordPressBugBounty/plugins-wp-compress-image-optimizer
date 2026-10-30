@@ -1534,15 +1534,16 @@ final class wps_ic_image_preload_set
     // background.
     const RANK_LCP_DERIVED = 3;
     const RANK_HERO_HINT = 4;        // lcp.json hints.lcp_preload (wpc-lcp-hero-preload)
-    const RANK_WIRE_FALLBACK = 5;    // wire.json inline verdict that could not inline (wpc-lcp-bg-preload700)
+    const RANK_WIRE_FALLBACK = 5;    // wire.json inline verdict that could not inline (wpc-lcp-bg-preload-wire)
     const RANK_ATF_UNLAZY = 6;       // the widest above-the-fold image un-lazied (wpc-atf-unlazy-preload)
+    const RANK_SLIDER_FIRST_SLIDE = 6; // the first slide of a first-screen slider (wpc-slider-first-preload)
     const RANK_HEADER_LOGO = 7;      // the first header image (wpc-header-logo-preload)
     const RANK_MODERN_DELIVERY = 8;  // Modern Delivery's LCP candidate
     const RANK_CRIT_BACKGROUND = 9;  // the first background url() in the crit (wpc-crit-bg-preload)
     const RANK_LCP_GUESS = 10;       // the one fetchpriority=high <img>, no measurement (wpc-lcp-img-preload)
 
     /** The writers whose preload keeps fetchpriority=high only when it is the measured LCP, or the page's one high when nothing is measured (capBackgroundHigh). */
-    const CAPPED_ORIGINS = ['atf-bg', 'header-logo', 'hero-hint', 'crit-bg', 'modern-delivery'];
+    const CAPPED_ORIGINS = ['atf-bg', 'header-logo', 'hero-hint', 'crit-bg', 'modern-delivery', 'slider-first'];
 
     const KIND_IMAGE = 'img';
     const KIND_BACKGROUND = 'bg';
@@ -1583,7 +1584,11 @@ final class wps_ic_image_preload_set
      * browser paints), 'supersedes' (slots whose candidate stands down on every device this one
      * wins: a measured hero keeps the above-the-fold background guess from adding a second
      * high-priority preload), 'exact' (the candidate is dropped when its href, after resolution, is
-     * not a URL the document carries: a preload names what the document paints or nothing).
+     * not a URL the document carries: a preload names what the document paints or nothing),
+     * 'paint_exact' (a background candidate that names only a URL the document paints: ['painted' => the
+     * address the service's browser fetched, 'forms' => the page's own spellings of the registered
+     * address]; the candidate takes the first of them the document paints, else the document's own
+     * rendition of it when the document paints that, else it is dropped, whatever else the page carries).
      * Returns false when there is nothing to preload.
      */
     public function add($id, $href, $device, $origin, $rank, array $extras = [])
@@ -1603,6 +1608,14 @@ final class wps_ic_image_preload_set
         if ($this->vetoes($key)) {
             $this->dropped($this->vetoed[$key]);
             return false;
+        }
+        $scoped = $this->vetoOnScope($key, in_array($device, ['mobile', 'desktop'], true) ? $device : 'both');
+        if ($scoped === '') {
+            $this->dropped($this->vetoOnWhy($key, in_array($device, ['mobile', 'desktop'], true) ? $device : 'mobile'));
+            return false;
+        }
+        if ($scoped !== 'both') {
+            $device = $scoped;
         }
         $slot = isset($extras['slot']) ? (string) $extras['slot'] : self::SLOT_LCP;
         if ($slot === self::SLOT_CUSTOM) {
@@ -1632,6 +1645,7 @@ final class wps_ic_image_preload_set
             'paints'        => (isset($extras['paints']) && is_array($extras['paints'])) ? array_values(array_filter(array_map('strval', $extras['paints']), 'strlen')) : [],
             'supersedes'    => (isset($extras['supersedes']) && is_array($extras['supersedes'])) ? array_values(array_map('strval', $extras['supersedes'])) : [],
             'exact'         => !empty($extras['exact']),
+            'paint_exact'   => (isset($extras['paint_exact']) && is_array($extras['paint_exact'])) ? $extras['paint_exact'] : [],
         ];
         $this->registeredCount++;
         return true;
@@ -1706,6 +1720,55 @@ final class wps_ic_image_preload_set
     public function vetoes($key)
     {
         return $key !== '' && isset($this->vetoed[strtolower((string) $key)]);
+    }
+
+    private $vetoedOn = [];
+
+    public function vetoOn($key, $why, $device)
+    {
+        if ($device !== 'mobile' && $device !== 'desktop') {
+            return $this->veto($key, $why);
+        }
+        $key = strtolower((string) $key);
+        if ($key === '') {
+            return 0;
+        }
+        $this->vetoedOn[$key][$device] = (string) $why;
+        $gone = 0;
+        foreach ($this->candidates as $seq => $candidate) {
+            if ($candidate['key'] !== $key) {
+                continue;
+            }
+            $kept = $this->vetoOnScope($key, $candidate['device']);
+            if ($kept === '') {
+                unset($this->candidates[$seq]);
+                $this->dropped($why);
+                $gone++;
+            } elseif ($kept !== $candidate['device']) {
+                $this->candidates[$seq]['device'] = $kept;
+            }
+        }
+        return $gone;
+    }
+
+    private function vetoOnWhy($key, $device)
+    {
+        $key = strtolower((string) $key);
+        return ($key !== '' && isset($this->vetoedOn[$key][$device])) ? $this->vetoedOn[$key][$device] : '';
+    }
+
+    private function vetoOnScope($key, $device)
+    {
+        $key = strtolower((string) $key);
+        if ($key === '' || !isset($this->vetoedOn[$key])) {
+            return $device;
+        }
+        if ($device === 'mobile' || $device === 'desktop') {
+            return isset($this->vetoedOn[$key][$device]) ? '' : $device;
+        }
+        $m = isset($this->vetoedOn[$key]['mobile']);
+        $d = isset($this->vetoedOn[$key]['desktop']);
+        return ($m && $d) ? '' : ($m ? 'desktop' : ($d ? 'mobile' : $device));
     }
 
     /** Withdraw every candidate naming this picture: a writer made the file unnecessary (it
@@ -1995,7 +2058,7 @@ final class wps_ic_image_preload_set
         // The page's own image preloads first: they are resolved in place and own their slot.
         $pageCounts = ['seen' => 0, 'rewritten' => 0, 'dropped' => 0];
         $pageCandidates = [];
-        $html = $this->adoptPageTags($html, $renderDevice, $images, $pageCandidates, $pageCounts);
+        $html = $this->adoptPageTags($html, $renderDevice, $images, $pageCandidates, $pageCounts, $combined);
 
         // A device whose LCP the service identified (a measured or derived LCP candidate, or the
         // service's own hero hint, registered for it) keeps fetchpriority=high for the LCP alone,
@@ -2021,6 +2084,10 @@ final class wps_ic_image_preload_set
                 $this->dropped($this->vetoed[$candidate['key']]);
                 continue;
             }
+            if ($this->vetoOnScope($candidate['key'], $candidate['device']) === '') {
+                $this->dropped($this->vetoOnWhy($candidate['key'], $candidate['device'] === 'both' ? 'mobile' : $candidate['device']));
+                continue;
+            }
             if (!$combined && $candidate['device'] !== 'both' && $candidate['device'] !== $renderDevice) {
                 $this->dropped('other-device');
                 continue;
@@ -2036,6 +2103,10 @@ final class wps_ic_image_preload_set
                 $candidate = $this->heroOwned($candidate, $renderDevice, $combined, $html);
             }
             $resolved = $this->resolve($candidate, $html, $images, $documentUrls, $renderDevice, $devices);
+            if ($resolved !== null && self::carriesFilesystemPath($resolved)) {
+                $this->dropped('fs-path');
+                $resolved = null;
+            }
             if ($resolved !== null) {
                 $usable[$seq] = $resolved;
             }
@@ -2203,6 +2274,59 @@ final class wps_ic_image_preload_set
         }
     }
 
+    /**
+     * Marks the one preload tag of the lcp slot the set wrote for the device this copy serves with data-wpc-lh, "zone" when the picture is on $zoneHost
+     * and "1" otherwise, so a stored copy says which tag the Link header repeats. Only a tag still in the document under the id the set gave it, still
+     * a high-priority image preload, is marked; a combined render, a candidate written as arms and a document with no such tag stay as they are.
+     */
+    public function markLinkHeader($html, $device, $combined, $zoneHost = '')
+    {
+        if (!is_string($html)) {
+            return $html;
+        }
+        if (stripos($html, 'data-wpc-lh') !== false) {
+            $foreign = 0;
+            $html = preg_replace_callback('/<link\b(?:[^>"\']|"[^"]*"|\'[^\']*\')*>/i', function ($tagMatch) use (&$foreign) {
+                $stripped = preg_replace('/\sdata-wpc-lh(?:\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>"\']+))?(?=[\s\/>])/i', '', $tagMatch[0]);
+                if ($stripped !== $tagMatch[0]) {
+                    $foreign++;
+                }
+                return $stripped;
+            }, $html);
+            if ($foreign > 0 && function_exists('wpc_belt_receipt')) {
+                wpc_belt_receipt('lh-foreign-mark-stripped', ['n' => $foreign, 'device' => (string) $device], true);
+            }
+        }
+        if ($combined || !isset($this->written[$device])) {
+            return $html;
+        }
+        $candidate = $this->written[$device];
+        if (!empty($candidate['arms']) || (string) $candidate['id'] === '') {
+            return $html;
+        }
+        $pattern = '/<link\b(?:[^>"\']|"[^"]*"|\'[^\']*\')*\sid\s*=\s*["\']' . preg_quote((string) $candidate['id'], '/') . '["\'](?:[^>"\']|"[^"]*"|\'[^\']*\')*>/i';
+        if (!preg_match($pattern, $html, $found, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $tag = $found[0][0];
+        if (stripos($tag, 'data-wpc-lh') !== false || !preg_match('/\srel\s*=\s*["\']?preload\b/i', $tag) || !preg_match('/\sas\s*=\s*["\']?image\b/i', $tag)
+            || !preg_match('/\sfetchpriority\s*=\s*["\']?high\b/i', $tag)) {
+            return $html;
+        }
+        $address = '';
+        if (preg_match('/\shref\s*=\s*(["\'])(.*?)\1/i', $tag, $hrefMatch)) {
+            $address = trim($hrefMatch[2]);
+        }
+        if ($address === '' && preg_match('/\simagesrcset\s*=\s*(["\'])(.*?)\1/i', $tag, $srcsetMatch)) {
+            $address = (string) preg_split('/[\s,]+/', trim($srcsetMatch[2]))[0];
+        }
+        $host = strtolower((string) parse_url(html_entity_decode($address, ENT_QUOTES), PHP_URL_HOST));
+        $mark = ($zoneHost !== '' && $host === strtolower($zoneHost)) ? 'zone' : '1';
+        $end = strlen($tag) - (substr($tag, -2) === '/>' ? 2 : 1);
+        $marked = substr($tag, 0, $end) . ' data-wpc-lh="' . $mark . '"' . substr($tag, $end);
+        return substr($html, 0, (int) $found[0][1]) . $marked . substr($html, (int) $found[0][1] + strlen($tag));
+    }
+
     /** Receipt counts, for the debug views and scratch checks. */
     public function counts()
     {
@@ -2267,7 +2391,7 @@ final class wps_ic_image_preload_set
     }
 
     /** Ids this set writes. A buffer tag carrying one is not the page's own. */
-    const OWN_ID_PATTERN = '/\bid\s*=\s*["\']wpc-(?:lcp-img-preload(?:-\d+)?|lcp-hero-preload|lcp-bg-preload[^"\']*|atf-bg-preload|atf-unlazy-preload|header-logo-preload|crit-bg-preload)["\']/i';
+    const OWN_ID_PATTERN = '/\bid\s*=\s*["\']wpc-(?:lcp-img-preload|lcp-hero-preload|lcp-bg-preload[^"\']*|atf-bg-preload|atf-unlazy-preload|header-logo-preload|crit-bg-preload)(?:-\d+)?["\']/i';
 
     /**
      * Every <link rel="preload" as="image"> the page itself wrote (none of our ids) is taken in
@@ -2280,7 +2404,7 @@ final class wps_ic_image_preload_set
      * fetchpriority=high. A tag for the other device (by its media) is left byte-identical.
      * Fills $pageCandidates with [key, device] of every page tag kept.
      */
-    private function adoptPageTags($html, $renderDevice, array $images, array &$pageCandidates, array &$pageCounts)
+    private function adoptPageTags($html, $renderDevice, array $images, array &$pageCandidates, array &$pageCounts, $combined = false)
     {
         if (stripos($html, 'preload') === false
             || !preg_match_all('/<link\b[^>]*>/i', $html, $links, PREG_OFFSET_CAPTURE)) {
@@ -2316,6 +2440,12 @@ final class wps_ic_image_preload_set
             $minWidth = strpos($media, 'min-width') !== false;
             $device = ($maxWidth && !$minWidth) ? 'mobile' : (($minWidth && !$maxWidth) ? 'desktop' : 'both');
             if ($device !== 'both' && $device !== $renderDevice) {
+                if ($combined && $this->vetoOnScope($key, $device) === '') {
+                    $pageCounts['dropped']++;
+                    $this->dropped($this->vetoOnWhy($key, $device));
+                    $replacements[] = [$link[1], strlen($tag), ''];
+                    continue;
+                }
                 $pageCandidates[] = ['key' => $key, 'device' => $device];
                 continue;
             }
@@ -2325,7 +2455,33 @@ final class wps_ic_image_preload_set
                 $replacements[] = [$link[1], strlen($tag), ''];
                 continue;
             }
+            $scoped = $this->vetoOnScope($key, $device);
+            if ($scoped === '') {
+                $pageCounts['dropped']++;
+                $this->dropped($this->vetoOnWhy($key, $device === 'both' ? 'mobile' : $device));
+                $replacements[] = [$link[1], strlen($tag), ''];
+                continue;
+            }
             $new = $tag;
+            if ($scoped !== $device) {
+                $box = ($scoped === 'mobile') ? self::MEDIA_MOBILE : self::MEDIA_DESKTOP;
+                $medialess = ($media === '' || trim($media) === 'all');
+                if (!$medialess && !preg_match('/^(?:(?:all|screen)\s+and\s+)?(\([^(),]*\))$/', trim($media), $feature)) {
+                    $pageCounts['dropped']++;
+                    $this->dropped($this->vetoOnWhy($key, $scoped === 'mobile' ? 'desktop' : 'mobile'));
+                    $replacements[] = [$link[1], strlen($tag), ''];
+                    continue;
+                }
+                if ($media === '') {
+                    $new = (string) preg_replace('/^<link\b/i', '<link media="' . $box . '"', $tag, 1);
+                } else {
+                    $value = $medialess ? $box : $box . ' and ' . $feature[1];
+                    $new = (string) preg_replace_callback('/\bmedia\s*=\s*(["\']).*?\1/i', function () use ($value) {
+                        return 'media="' . $value . '"';
+                    }, $tag, 1);
+                }
+                $device = $scoped;
+            }
             if ($key !== '' && isset($images[$key])) {
                 $img = $images[$key];
                 if ($img['lazy'] && (!function_exists('apply_filters') || apply_filters('wpc_preload_img_drop_lazy', true))) {
@@ -2335,7 +2491,7 @@ final class wps_ic_image_preload_set
                     continue;
                 }
                 if (!$img['lazy']) {
-                    $new = self::mirrorTag($tag, $href !== '', $img);
+                    $new = self::mirrorTag($new, $href !== '', $img);
                 }
             } elseif ($href !== '' && !self::appearsAsUrl($rest, $href)) {
                 if ($restUrls === null) {
@@ -2343,7 +2499,7 @@ final class wps_ic_image_preload_set
                 }
                 $resolved = self::renditionInDocument($href, $restUrls);
                 if ($resolved !== $href) {
-                    $new = str_replace($hrefMatch[0], 'href=' . $hrefMatch[1] . $resolved . $hrefMatch[1], $tag);
+                    $new = str_replace($hrefMatch[0], 'href=' . $hrefMatch[1] . $resolved . $hrefMatch[1], $new);
                 }
             }
             $pageCandidates[] = ['key' => $key, 'device' => $device];
@@ -2363,6 +2519,15 @@ final class wps_ic_image_preload_set
      *  element's attribute bytes are carried verbatim: they already survived one escaping pass. */
     private static function mirrorTag($tag, $hasHref, array $img)
     {
+        if (is_array($img['source']) && count($img['source']) === 1 && $img['source'][0]['href'] === '') {
+            $source = $img['source'][0];
+            $new = (string) preg_replace('/\s*(?<![-\w])(?:href|imagesrcset|imagesizes|type)\s*=\s*(["\']).*?\1/i', '', $tag);
+            $add = ' imagesrcset="' . $source['imagesrcset'] . '"' . ($source['imagesizes'] !== '' ? ' imagesizes="' . $source['imagesizes'] . '"' : '')
+                . ($source['type'] !== '' ? ' type="' . $source['type'] . '"' : '');
+            return (string) preg_replace_callback('#\s*/?>$#', function ($end) use ($add) {
+                return $add . $end[0];
+            }, $new, 1);
+        }
         $new = $tag;
         if ($hasHref) {
             $new = (string) preg_replace_callback('/\bhref\s*=\s*(["\'])(.*?)\1/i', function () use ($img) {
@@ -2460,6 +2625,17 @@ final class wps_ic_image_preload_set
                 }
                 return $candidate;
             }
+            if (is_array($img['source'])) {
+                $arms = $img['source'];
+                $candidate['href'] = $arms[0]['href'];
+                $candidate['imagesrcset'] = $arms[0]['imagesrcset'];
+                $candidate['imagesizes'] = $arms[0]['imagesizes'];
+                $candidate['type'] = $arms[0]['type'];
+                if (count($arms) > 1 || self::boxesMedia($arms[0]['boxes']) !== '') {
+                    $candidate['arms'] = $arms;
+                }
+                return $candidate;
+            }
             $candidate['href'] = $img['src'];
             $candidate['imagesrcset'] = $img['srcset'];
             $candidate['imagesizes'] = $img['srcset'] !== '' ? $img['sizes'] : '';
@@ -2476,6 +2652,9 @@ final class wps_ic_image_preload_set
                 $candidate['type'] = '';
                 return $candidate;
             }
+        }
+        if ($candidate['kind'] === self::KIND_BACKGROUND && !empty($candidate['paint_exact'])) {
+            return $this->paintedExact($candidate, $html, $renderDevice, $devices);
         }
         $followed = $this->followed($candidate, $html, $devices === [] ? [$renderDevice] : $devices);
         if ($followed !== null) {
@@ -2536,6 +2715,61 @@ final class wps_ic_image_preload_set
             $candidate['imagesrcset'] = $resolvedSrcset;
         }
         return $candidate;
+    }
+
+    /**
+     * A background candidate that names only what the document paints: the address the service's browser fetched, the address the service's
+     * browser painted its hero at, a spelling the page itself gives the registered address, the document's own rendition of it; the first the
+     * document paints. Null (dropped) when it paints none of them.
+     */
+    private function paintedExact(array $candidate, $html, $renderDevice, array $devices)
+    {
+        $spec = $candidate['paint_exact'];
+        $take = function ($address) use ($candidate) {
+            $candidate['href'] = function_exists('esc_url') ? (string) esc_url($address) : htmlspecialchars($address, ENT_QUOTES);
+            $candidate['imagesrcset'] = '';
+            $candidate['imagesizes'] = '';
+            $candidate['type'] = '';
+            return $candidate;
+        };
+        $painted = isset($spec['painted']) && is_string($spec['painted']) ? $spec['painted'] : '';
+        if ($painted !== '' && self::paintsUrl($html, $painted)) {
+            return $take($painted);
+        }
+        $followed = $this->followed($candidate, $html, $devices === [] ? [$renderDevice] : $devices);
+        if ($followed !== null) {
+            return $followed;
+        }
+        $forms = isset($spec['forms']) && is_array($spec['forms']) ? $spec['forms'] : [];
+        foreach ($forms as $form) {
+            if (is_string($form) && $form !== '' && self::paintsUrl($html, $form)) {
+                return $take($form);
+            }
+        }
+        if ($candidate['href'] !== '') {
+            $armed = self::imageSetArm($html, $candidate['href']);
+            if ($armed === false) {
+                $this->dropped('imageset-mismatch');
+                return null;
+            }
+            if ($armed !== '' && self::paintsUrl($html, $armed)) {
+                $armedCandidate = $take($armed);
+                $armedCandidate['type'] = 'image/avif';
+                return $armedCandidate;
+            }
+            $documentUrls = self::documentUrls($html, true);
+            $rendition = self::renditionInDocument(html_entity_decode($candidate['href'], ENT_QUOTES), $documentUrls, true);
+            if (self::paintsUrl($html, $rendition)) {
+                $renditionCandidate = $take($rendition);
+                $resolvedMime = self::mimeOfFormat(self::formatOf($rendition));
+                if ($resolvedMime !== '' && self::formatOf($rendition) !== self::formatOf($candidate['href'])) {
+                    $renditionCandidate['type'] = $resolvedMime;
+                }
+                return $renditionCandidate;
+            }
+        }
+        $this->dropped('not-painted');
+        return null;
     }
 
     /** The candidate with the address the service painted its hero at when it is one to follow and the document paints exactly that address, else null. */
@@ -2617,9 +2851,19 @@ final class wps_ic_image_preload_set
             return '';
         }
         $pin = '';
+        $cfNamed = class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_cf_bg_named_on') && wps_cdn_rewrite::wpc_cf_bg_named_on();
         foreach ($blocks as $block) {
             if (preg_match_all('/url\(\s*(["\']?)([^"\')\s]+)\1\s*\)/i', $block[2], $found)) {
                 $urls = array_values(array_unique($found[2]));
+                if ($cfNamed && count($urls) > 1) {
+                    $images = [];
+                    foreach ($urls as $url) {
+                        $images[self::imageKey($url) . '|' . self::renditionName($url)] = true;
+                    }
+                    if (count($images) === 1) {
+                        $urls = [$urls[0]];
+                    }
+                }
                 if (count($urls) === 1 && self::imageKey($urls[0]) === $key) {
                     $pin = html_entity_decode($urls[0], ENT_QUOTES);
                 }
@@ -2636,10 +2880,23 @@ final class wps_ic_image_preload_set
     private static function documentImages($html)
     {
         $images = [];
-        if (stripos($html, '<img') === false || !preg_match_all('#<img\b[^>]*>#i', $html, $tags)) {
+        if (stripos($html, '<img') === false || !preg_match_all('#<img\b[^>]*>#i', $html, $tags, PREG_OFFSET_CAPTURE)) {
             return $images;
         }
-        foreach ($tags[0] as $tag) {
+        $marks = [];
+        if (stripos($html, '<picture') !== false && preg_match_all('#<(/?)picture\b[^>]*>#i', $html, $found, PREG_OFFSET_CAPTURE)) {
+            foreach ($found[0] as $n => $mark) {
+                $marks[] = [$mark[1] + strlen($mark[0]), $found[1][$n][0] === ''];
+            }
+        }
+        $next = 0;
+        $pictureFrom = -1;
+        foreach ($tags[0] as $hit) {
+            list($tag, $at) = $hit;
+            while ($next < count($marks) && $marks[$next][0] <= $at) {
+                $pictureFrom = $marks[$next][1] ? $marks[$next][0] : -1;
+                $next++;
+            }
             if (!preg_match('/(?<![-\w])src\s*=\s*["\']([^"\']+)["\']/i', $tag, $srcMatch)) {
                 continue;
             }
@@ -2665,13 +2922,210 @@ final class wps_ic_image_preload_set
                 'srcset' => preg_match('/(?<![-\w])srcset\s*=\s*["\']([^"\']+)["\']/i', $tag, $srcset) ? trim($srcset[1]) : '',
                 'sizes'  => preg_match('/(?<![-\w])sizes\s*=\s*["\']([^"\']+)["\']/i', $tag, $sizes) ? trim($sizes[1]) : '',
             ];
+            $images[$key]['source'] = $pictureFrom < 0 ? null : self::pictureArms(substr($html, $pictureFrom, $at - $pictureFrom), $images[$key]);
         }
         return $images;
     }
 
+    private static function pictureArms($head, array $img)
+    {
+        if (stripos($head, '<source') === false || !preg_match_all('#<source\b[^>]*>#i', $head, $sources)) {
+            return null;
+        }
+        $rest = [self::mediaBox('')];
+        $arms = [];
+        $seen = false;
+        foreach ($sources[0] as $source) {
+            $srcset = preg_match('/(?<![-\w])srcset\s*=\s*["\']([^"\']+)["\']/i', $source, $match) ? trim($match[1]) : '';
+            if ($srcset === '') {
+                continue;
+            }
+            $seen = true;
+            $typed = (bool) preg_match('/(?<![-\w])type\s*=\s*["\']([^"\']*)["\']/i', $source, $match);
+            $type = $typed ? strtolower(trim($match[1])) : '';
+            $box = self::mediaBox(preg_match('/(?<![-\w])media\s*=\s*["\']([^"\']*)["\']/i', $source, $match) ? $match[1] : '');
+            if (($typed && $type !== 'image/avif' && $type !== 'image/webp') || stripos($srcset, 'data:') === 0 || $box === null) {
+                return false;
+            }
+            $region = [];
+            $left = [];
+            foreach ($rest as $open) {
+                $cut = self::boxAnd($open, $box);
+                if ($cut !== null) {
+                    $region[] = $cut;
+                }
+                foreach (self::boxMinus($open, $box) as $piece) {
+                    $left[] = $piece;
+                }
+            }
+            if (count($left) > 8) {
+                return false;
+            }
+            $rest = $left;
+            if ($region !== []) {
+                $arms[] = [
+                    'href'        => '',
+                    'imagesrcset' => $srcset,
+                    'imagesizes'  => preg_match('/(?<![-\w])sizes\s*=\s*["\']([^"\']+)["\']/i', $source, $match) ? trim($match[1]) : '',
+                    'type'        => $type,
+                    'boxes'       => $region,
+                ];
+            }
+            if ($rest === []) {
+                break;
+            }
+        }
+        if (!$seen) {
+            return null;
+        }
+        if ($rest !== []) {
+            $arms[] = [
+                'href'        => $img['src'],
+                'imagesrcset' => $img['srcset'],
+                'imagesizes'  => $img['srcset'] !== '' ? $img['sizes'] : '',
+                'type'        => '',
+                'boxes'       => $rest,
+            ];
+        }
+        return $arms;
+    }
+
+    private static function mediaBox($media)
+    {
+        $box = ['w' => [-INF, false, INF, false], 'r' => [-INF, false, INF, false]];
+        $media = strtolower(trim((string) $media));
+        if ($media === '') {
+            return $box;
+        }
+        foreach (preg_split('/\s+and\s+/', $media) as $feature) {
+            if (!preg_match('/^\(\s*(min|max)-(width|resolution)\s*:\s*(\d*\.?\d+)(px|dppx|x)\s*\)$/', trim($feature), $f)
+                || ($f[2] === 'width') !== ($f[4] === 'px')) {
+                return null;
+            }
+            $axis = $f[2] === 'width' ? 'w' : 'r';
+            $bound = ($f[1] === 'min') ? [(float) $f[3], true, INF, false] : [-INF, false, (float) $f[3], true];
+            $box[$axis] = self::ivAnd($box[$axis], $bound);
+        }
+        return self::ivEmpty($box['w']) || self::ivEmpty($box['r']) ? ['w' => [1, false, 0, false], 'r' => $box['r']] : $box;
+    }
+
+    private static function ivAnd(array $a, array $b)
+    {
+        $lo = ($a[0] > $b[0] || ($a[0] == $b[0] && !$a[1])) ? [$a[0], $a[1]] : [$b[0], $b[1]];
+        $hi = ($a[2] < $b[2] || ($a[2] == $b[2] && !$a[3])) ? [$a[2], $a[3]] : [$b[2], $b[3]];
+        return [$lo[0], $lo[1], $hi[0], $hi[1]];
+    }
+
+    private static function ivEmpty(array $iv)
+    {
+        return $iv[0] > $iv[2] || ($iv[0] == $iv[2] && !($iv[1] && $iv[3]));
+    }
+
+    private static function boxAnd(array $a, array $b)
+    {
+        $box = ['w' => self::ivAnd($a['w'], $b['w']), 'r' => self::ivAnd($a['r'], $b['r'])];
+        return self::ivEmpty($box['w']) || self::ivEmpty($box['r']) ? null : $box;
+    }
+
+    private static function boxMinus(array $a, array $b)
+    {
+        if (self::boxAnd($a, $b) === null) {
+            return [$a];
+        }
+        $out = [];
+        $w = $a['w'];
+        foreach (['w', 'r'] as $axis) {
+            $iv = $a[$axis];
+            foreach ([[-INF, false, $b[$axis][0], !$b[$axis][1]], [$b[$axis][2], !$b[$axis][3], INF, false]] as $side) {
+                $piece = self::ivAnd($iv, $side);
+                if (!self::ivEmpty($piece)) {
+                    $out[] = $axis === 'w' ? ['w' => $piece, 'r' => $a['r']] : ['w' => $w, 'r' => $piece];
+                }
+            }
+            if ($axis === 'w') {
+                $w = self::ivAnd($a['w'], $b['w']);
+            }
+        }
+        return $out;
+    }
+
+    private static function boxesMedia(array $boxes)
+    {
+        $queries = [];
+        foreach ($boxes as $box) {
+            $parts = [];
+            foreach (['w' => ['width', 'px'], 'r' => ['resolution', 'dppx']] as $axis => $name) {
+                list($lo, $loIn, $hi, $hiIn) = $box[$axis];
+                $lo = ($lo !== -INF && !$loIn) ? $lo + 0.01 : $lo;
+                $hi = ($hi !== INF && !$hiIn) ? $hi - 0.01 : $hi;
+                if ($lo > $hi + 1e-9 || $hi < 0) {
+                    continue 2;
+                }
+                if ($lo !== -INF) {
+                    $parts[] = '(min-' . $name[0] . ': ' . rtrim(rtrim(sprintf('%.4F', $lo), '0'), '.') . $name[1] . ')';
+                }
+                if ($hi !== INF) {
+                    $parts[] = '(max-' . $name[0] . ': ' . rtrim(rtrim(sprintf('%.4F', $hi), '0'), '.') . $name[1] . ')';
+                }
+            }
+            if ($parts === []) {
+                return '';
+            }
+            $queries[] = implode(' and ', $parts);
+        }
+        return $queries === [] ? null : implode(', ', $queries);
+    }
+
+    private static function carriesFilesystemPath(array $candidate)
+    {
+        $addresses = [$candidate['href'], $candidate['imagesrcset']];
+        foreach ($candidate['arms'] as $arm) {
+            $addresses[] = isset($arm['imagesrcset']) ? (string) $arm['imagesrcset'] : '';
+            $addresses[] = isset($arm['href']) ? (string) $arm['href'] : '';
+        }
+        foreach ($addresses as $address) {
+            if ($address !== '' && self::namesFilesystemPath($address)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static function namesFilesystemPath($address)
+    {
+        static $roots = null;
+        if ($roots === null) {
+            $roots = [];
+            foreach ([defined('ABSPATH') ? ABSPATH : '', defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR : '',
+                         isset($_SERVER['DOCUMENT_ROOT']) ? (string) $_SERVER['DOCUMENT_ROOT'] : ''] as $root) {
+                $root = rtrim(str_replace('\\', '/', (string) $root), '/');
+                if (substr_count($root, '/') >= 2 || preg_match('#^[a-z]:/.#i', $root)) {
+                    $roots[] = $root . '/';
+                }
+            }
+        }
+        foreach (preg_split('/\s*,\s*/', html_entity_decode((string) $address, ENT_QUOTES)) as $part) {
+            $part = (string) preg_replace('/\s+\d+(?:\.\d+)?[wx]$/', '', trim($part));
+            if ($part === '') {
+                continue;
+            }
+            if (preg_match('#^[a-z]:[\\\\/]#i', $part) || stripos($part, 'file:') === 0) {
+                return true;
+            }
+            $path = preg_match('#^(?:https?:)?//#i', $part) ? (string) parse_url($part, PHP_URL_PATH) : $part;
+            $path = rawurldecode(str_replace('\\', '/', $path));
+            foreach ($roots as $root) {
+                if (stripos($path, $root) === 0 || stripos($path, '/' . ltrim($root, '/')) === 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** ['css' => every url() inside a <style> block, 'markup' => every absolute URL in a src,
      *  srcset, href or data-*src attribute], each in document order. */
-    private static function documentUrls($html)
+    private static function documentUrls($html, $inlineStyles = false)
     {
         $urls = ['css' => [], 'markup' => []];
         if (preg_match_all('/<style\b[^>]*>(.*?)<\/style>/is', $html, $styles)) {
@@ -2679,6 +3133,19 @@ final class wps_ic_image_preload_set
                 if (preg_match_all('/url\(\s*(["\']?)([^"\')\s]+)\1\s*\)/i', $css, $found)) {
                     foreach ($found[2] as $url) {
                         $urls['css'][] = $url;
+                    }
+                }
+            }
+        }
+        if ($inlineStyles && preg_match_all('/\sstyle\s*=\s*(["\'])(.*?)\1/is', $html, $inline)) {
+            foreach ($inline[2] as $style) {
+                if (preg_match_all('/background(?:-image)?\s*:[^;]*/i', html_entity_decode($style, ENT_QUOTES), $declarations)) {
+                    foreach ($declarations[0] as $declaration) {
+                        if (preg_match_all('/url\(\s*(["\']?)([^"\')\s]+)\1\s*\)/i', $declaration, $found)) {
+                            foreach ($found[2] as $url) {
+                                $urls['css'][] = $url;
+                            }
+                        }
                     }
                 }
             }
@@ -2960,12 +3427,30 @@ final class wps_ic_image_preload_set
                 $candidate['imagesrcset'], $candidate['imagesizes'], $media, $candidate['type']);
         }
         $out = '';
-        foreach ($candidate['arms'] as $n => $arm) {
-            $out .= "\n" . self::tag($candidate['fetchpriority'], $candidate['id'] . ($n > 0 ? '-' . ($n + 1) : ''), '',
+        $n = 0;
+        $deviceBox = self::mediaBox($media);
+        foreach ($candidate['arms'] as $arm) {
+            $armMedia = isset($arm['media']) ? (string) $arm['media'] : '';
+            if (isset($arm['boxes'])) {
+                $within = [];
+                foreach ($arm['boxes'] as $box) {
+                    $cut = self::boxAnd($box, $deviceBox);
+                    if ($cut !== null) {
+                        $within[] = $cut;
+                    }
+                }
+                $armMedia = self::boxesMedia($within);
+                if ($armMedia === null) {
+                    continue;
+                }
+            }
+            $out .= "\n" . self::tag($candidate['fetchpriority'], $candidate['id'] . ($n > 0 && $candidate['id'] !== '' ? '-' . ($n + 1) : ''),
+                isset($arm['href']) ? (string) $arm['href'] : '',
                 isset($arm['imagesrcset']) ? (string) $arm['imagesrcset'] : '',
                 isset($arm['imagesizes']) ? (string) $arm['imagesizes'] : '',
-                isset($arm['media']) ? (string) $arm['media'] : '',
+                $armMedia,
                 isset($arm['type']) ? (string) $arm['type'] : '');
+            $n++;
         }
         return $out;
     }

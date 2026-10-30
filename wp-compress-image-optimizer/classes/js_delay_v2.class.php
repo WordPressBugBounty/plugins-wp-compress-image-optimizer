@@ -291,186 +291,254 @@ class wps_ic_js_delay_v2
     protected function elementor_integration($html)
     {
         $elementor_result = $this->process_elementor_animations($html);
-        if ($elementor_result) {
-            $elementor_script = $elementor_result['script'];
-            $html = $elementor_result['html'];
-        } else {
+        if (!$elementor_result) {
             return $html;
         }
 
-        if ($elementor_script) {
-            $html = str_replace('</head>', $elementor_script . '</head>', $html);
+        $head_end = strpos($elementor_result['html'], '</head>');
+        if ($head_end === false) {
+            return $html;
         }
 
-        return $html;
+        return substr($elementor_result['html'], 0, $head_end) . $elementor_result['script'] . substr($elementor_result['html'], $head_end);
+    }
+
+    protected function wpc_ela_plan($tag)
+    {
+        if (strpos($tag, 'data-wpc-ela') !== false
+            || !preg_match('/\sclass\s*=\s*(?:"([^"]*)"|\'([^\']*)\')/i', $tag, $class_match)) {
+            return null;
+        }
+        $classes = preg_split('/\s+/', trim($class_match[1] !== '' ? $class_match[1] : (isset($class_match[2]) ? $class_match[2] : '')));
+        if (!in_array('elementor-invisible', $classes, true)
+            || !preg_match('/\sdata-settings\s*=\s*(?:"([^"]*)"|\'([^\']*)\')/i', $tag, $settings_match)) {
+            return null;
+        }
+
+        $settings = json_decode(html_entity_decode($settings_match[1] !== '' ? $settings_match[1] : (isset($settings_match[2]) ? $settings_match[2] : ''), ENT_QUOTES, 'UTF-8'), true);
+        if (!is_array($settings)) {
+            return null;
+        }
+
+        $names = array();
+        foreach (array('', '_tablet', '_mobile') as $suffix) {
+            $name = '';
+            foreach (array('animation', '_animation') as $base) {
+                if (isset($settings[$base . $suffix]) && is_string($settings[$base . $suffix]) && $settings[$base . $suffix] !== '') {
+                    $name = $settings[$base . $suffix];
+                    break;
+                }
+            }
+            if ($name !== '' && !preg_match('/^[A-Za-z][A-Za-z0-9]{0,40}$/', $name)) {
+                return null;
+            }
+            $names[] = $name;
+        }
+        if ($names[0] === '' && $names[1] === '' && $names[2] === '') {
+            return null;
+        }
+
+        $delay = 0;
+        foreach (array('_animation_delay', 'animation_delay') as $key) {
+            if (isset($settings[$key]) && (is_int($settings[$key]) || is_float($settings[$key]) || (is_string($settings[$key]) && is_numeric($settings[$key]))) && (int) $settings[$key] > 0) {
+                $delay = min(20000, (int) $settings[$key]);
+                break;
+            }
+        }
+
+        $speed = '';
+        if (in_array('animated-slow', $classes, true)) {
+            $speed = 'slow';
+        } elseif (in_array('animated-fast', $classes, true)) {
+            $speed = 'fast';
+        } elseif (isset($settings['animation_duration']) && is_string($settings['animation_duration']) && in_array($settings['animation_duration'], array('slow', 'fast'), true)) {
+            $speed = $settings['animation_duration'];
+        }
+
+        return array('names' => $names, 'delay' => $delay, 'speed' => $speed);
+    }
+
+    protected function wpc_ela_file($relative)
+    {
+        $root = defined('ELEMENTOR_PATH') ? (string) ELEMENTOR_PATH : (defined('WP_PLUGIN_DIR') ? rtrim((string) WP_PLUGIN_DIR, '/\\') . '/elementor/' : '');
+        if ($root === '') {
+            return '';
+        }
+        $file = rtrim($root, '/\\') . '/' . $relative;
+        if (!is_file($file) || filesize($file) > 262144) {
+            return '';
+        }
+        $content = @file_get_contents($file);
+
+        return is_string($content) ? $content : '';
+    }
+
+    protected function wpc_ela_duration_rules()
+    {
+        $rules = '';
+        $frontend = $this->wpc_ela_file('assets/css/frontend.min.css');
+        if ($frontend !== '') {
+            $reduced_rule = preg_match('/@media\s*\(prefers-reduced-motion:\s*reduce\)\{(?:[^{}]*\{[^{}]*\})*?[^{}]*\.animated\{[^{}]*animation:\s*none/', $frontend)
+                ? '@media (prefers-reduced-motion:reduce){.animated{animation:none!important}}' : '';
+            $top_level = preg_replace('/@[a-z-]+[^{};]*(\{(?:[^{}]++|(?1))*\})/i', '', $frontend);
+            if (is_string($top_level) && preg_match_all('/(?<![\w.-])\.animated(?:\.animated-(?:slow|fast)|\.infinite|\.reverse)?\{[^{}]*\}/', $top_level, $found)) {
+                $rules = implode('', $found[0]);
+            }
+            $rules .= $reduced_rule;
+        }
+        if (strpos($rules, '.animated-slow') === false || strpos($rules, '.animated-fast') === false) {
+            $rules = '.animated{animation-duration:1.25s}.animated.animated-slow{animation-duration:2s}.animated.animated-fast{animation-duration:.75s}.animated.infinite{animation-iteration-count:infinite}.animated.reverse{animation-direction:reverse;animation-fill-mode:forwards}@media (prefers-reduced-motion:reduce){.animated{animation:none!important}}';
+        }
+
+        return $rules;
+    }
+
+    protected function wpc_ela_breakpoints()
+    {
+        $mobile = 767;
+        $tablet = 1024;
+        if (class_exists('\Elementor\Plugin') && isset(\Elementor\Plugin::$instance) && is_object(\Elementor\Plugin::$instance)
+            && isset(\Elementor\Plugin::$instance->breakpoints) && is_object(\Elementor\Plugin::$instance->breakpoints)
+            && method_exists(\Elementor\Plugin::$instance->breakpoints, 'get_breakpoints_config')) {
+            $config = \Elementor\Plugin::$instance->breakpoints->get_breakpoints_config();
+            if (is_array($config)) {
+                if (isset($config['mobile']['value']) && (int) $config['mobile']['value'] > 0) {
+                    $mobile = (int) $config['mobile']['value'];
+                }
+                if (isset($config['tablet']['value']) && (int) $config['tablet']['value'] > $mobile) {
+                    $tablet = (int) $config['tablet']['value'];
+                }
+            }
+        }
+
+        return array($mobile, $tablet);
     }
 
     protected function process_elementor_animations($html)
     {
-        // Check if there are hidden elements
-        if (!preg_match_all('/<div[^>]*\belementor-invisible\b[^>]*>/i', $html, $matches)) {
+        if (!is_string($html) || stripos($html, 'elementor-invisible') === false || strpos($html, '</head>') === false) {
+            return null;
+        }
+        if (class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_csp_blocks_inline_scripts')
+            && wps_cdn_rewrite::wpc_csp_blocks_inline_scripts($html)) {
             return null;
         }
 
-        $animations = array();
+        $parts = preg_split('#(<script\b.*?</script>|<style\b.*?</style>|<template\b.*?</template>|<!--.*?-->)#si', $html, -1, PREG_SPLIT_DELIM_CAPTURE);
+        if (!is_array($parts)) {
+            return null;
+        }
+
+        $tag_pattern = '/<[a-z][a-z0-9]*\b[^>]*(?<![\w-])elementor-invisible(?![\w-])[^>]*>/i';
+        $plans = array();
+        $wanted = array();
+        foreach ($parts as $index => $part) {
+            if ($index % 2 === 1 || stripos($part, 'elementor-invisible') === false
+                || !preg_match_all($tag_pattern, $part, $tags)) {
+                continue;
+            }
+            foreach ($tags[0] as $tag) {
+                $plan = $this->wpc_ela_plan($tag);
+                if ($plan === null) {
+                    continue;
+                }
+                $plans[$tag] = $plan;
+                foreach ($plan['names'] as $name) {
+                    if ($name !== '' && $name !== 'none') {
+                        $wanted[$name] = true;
+                    }
+                }
+            }
+        }
+        if (empty($plans)) {
+            return null;
+        }
+
+        $sheets = array();
         $modified_html = $html;
-        $matches[0] = array_slice($matches[0], 0, 5);
-
-        foreach ($matches[0] as $match) {
-            if (preg_match('/data-settings=["\']([^"\']*)["\']/', $match, $settings_match)) {
-                $data_settings = html_entity_decode($settings_match[1], ENT_QUOTES, 'UTF-8');
-
-                $settings = json_decode($data_settings, true);
-                if ($settings && isset($settings['animation'])) {
-                    $animation = $settings['animation'];
-                    $animations[$animation] = true;
-
-                    $new_match = $match;
-
-                    // Add wpc-lazyload class
-                    if (strpos($new_match, 'wpc-lazyload') === false) {
-                        if (preg_match('/class=["\']([^"\']*)["\']/', $new_match, $class_match)) {
-                            $existing_classes = $class_match[1];
-                            $new_classes = $existing_classes . ' wpc-lazyload';
-                            $new_match = str_replace($class_match[0], 'class="' . $new_classes . '"', $new_match);
-                        } else {
-                            $new_match = str_replace('>', ' class="wpc-lazyload">', $new_match);
-                        }
-                    }
-
-                    // Add wpc-elementor-animation attribute
-                    $animation_attr = ' wpc-elementor-animation="animated ' . esc_attr($animation) . '"';
-
-                    if (substr($new_match, -1) === '>') {
-                        $new_match = substr($new_match, 0, -1) . $animation_attr . '>';
-                    }
-
-                    $modified_html = str_replace($match, $new_match, $modified_html);
+        $sheet_reader = null;
+        $url_key = null;
+        foreach (array_keys($wanted) as $name) {
+            $content = $this->wpc_ela_file('assets/lib/animations/styles/' . $name . '.min.css');
+            $original_link = '';
+            if ($content === '' && preg_match('/<link[^>]*href=["\']([^"\']*' . preg_quote($name, '/') . '\.min\.css[^"\']*)["\'][^>]*>/i', $modified_html, $css_match)) {
+                $original_link = $css_match[0];
+                if ($sheet_reader === null) {
+                    $sheet_reader = new wps_ic_crit_corpus();
+                    $sheet_reader->remote_deadline = microtime(true) + 4.0;
+                    $url_key = new wps_ic_url_key();
                 }
+                $content = $url_key->is_external($css_match[1]) ? $sheet_reader->getRemoteContent($css_match[1]) : $sheet_reader->getLocalContent($css_match[1]);
+                $content = is_string($content) ? $content : '';
+            }
+            if ($content === '' || stripos($content, 'keyframes') === false || stripos($content, '</style') !== false) {
+                continue;
+            }
+            $sheets[$name] = $content;
+            if ($original_link !== '') {
+                $modified_html = str_replace($original_link, '', $modified_html);
             }
         }
 
-        if (empty($animations)) {
+        $owned = 0;
+        $parts = preg_split('#(<script\b.*?</script>|<style\b.*?</style>|<template\b.*?</template>|<!--.*?-->)#si', $modified_html, -1, PREG_SPLIT_DELIM_CAPTURE);
+        if (!is_array($parts)) {
+            return null;
+        }
+        foreach ($parts as $index => $part) {
+            if ($index % 2 === 1 || stripos($part, 'elementor-invisible') === false) {
+                continue;
+            }
+            $parts[$index] = preg_replace_callback($tag_pattern, function ($found) use ($plans, $sheets, &$owned) {
+                $tag = $found[0];
+                if (!isset($plans[$tag])) {
+                    return $tag;
+                }
+                foreach ($plans[$tag]['names'] as $name) {
+                    if ($name !== '' && $name !== 'none' && !isset($sheets[$name])) {
+                        return $tag;
+                    }
+                }
+                $owned++;
+                $value = implode('|', array($plans[$tag]['names'][0], $plans[$tag]['names'][1], $plans[$tag]['names'][2], $plans[$tag]['delay'] > 0 ? $plans[$tag]['delay'] : '', $plans[$tag]['speed']));
+
+                return preg_replace('/^<([a-z][a-z0-9]*)/i', '<${1} data-wpc-ela="' . $value . '"', $tag, 1);
+            }, $part);
+            if (!is_string($parts[$index])) {
+                return null;
+            }
+        }
+        if ($owned === 0) {
             return null;
         }
 
-        $sheetReader = new wps_ic_crit_corpus();
-        $url_key = new wps_ic_url_key();
+        $breakpoints = $this->wpc_ela_breakpoints();
+        $style = '<style id="wpc-ela-css">' . $this->wpc_ela_duration_rules() . implode('', $sheets) . '</style>';
 
-        foreach (array_keys($animations) as $animation_name) {
-            $css_pattern = '/<link[^>]*href=["\']([^"\']*' . preg_quote($animation_name, '/') . '\.min\.css[^"\']*)["\'][^>]*>/i';
-
-            if (preg_match($css_pattern, $modified_html, $css_match)) {
-                $original_link = $css_match[0];
-                $src = $css_match[1];
-
-                if ($url_key->is_external($src)) {
-                    $content = $sheetReader->getRemoteContent($src);
-                } else {
-                    $content = $sheetReader->getLocalContent($src);
-                }
-
-                if (!empty($content)) {
-                    $inline_style = '<style type="text/css">' . $content . '</style>';
-                    $modified_html = str_replace($original_link, $inline_style, $modified_html);
-                }
-            }
-        }
-
-
-        $animation_script = $this->generate_animation_script();
-
-        return array('script' => $animation_script, 'html' => $modified_html);
+        return array('script' => $style . $this->generate_animation_script($breakpoints[0], $breakpoints[1]), 'html' => implode('', $parts));
     }
 
-    /**
-     * Generate JavaScript for handling Elementor animations
-     *
-     * @return string JavaScript code
-     */
-    protected function generate_animation_script()
+    protected function generate_animation_script($mobile_max = 767, $tablet_max = 1024)
     {
-        return '<script>
-(function() {
-    // Flag to track if our handler is active
-    let isHandlerActive = true;
-
-    // Listen for a custom event that signals all scripts are loaded
-    window.addEventListener("wpc-scripts-loaded", function() {
-        // Disable our handler when all scripts are loaded
-        isHandlerActive = false;
-        console.log("[WPC Elementor] Disabling custom animation handler - all scripts loaded");
-    });
-
-    // Elementor animation handler with visibility check
-    function handleElementorAnimations() {
-        // Exit if handler is no longer active
-        if (!isHandlerActive) return;
-
-        const elements = document.querySelectorAll(".wpc-lazyload[wpc-elementor-animation]");
-
-        // Process each element with wpc-elementor-animation attribute
-        elements.forEach(element => {
-            // Check if element is already processed
-            if (element.classList.contains("wpc-animation-processed")) {
-                return;
-            }
-
-            // Check if element is visible - apply immediately if it is
-            if (isElementInViewport(element)) {
-                applyAnimation(element);
-            }
-        });
-    }
-
-    // Apply animation to an element
-    function applyAnimation(element) {
-        // Remove data-settings attribute to prevent Elementor from triggering the animation again
-        element.removeAttribute("data-settings");
-
-        // Get animation classes from attribute
-        const animationClasses = element.getAttribute("wpc-elementor-animation").split(" ");
-
-        // Remove elementor-invisible class
-        element.classList.remove("elementor-invisible");
-
-        // Add animation classes
-        if (!isFullCssPending()) {
-            animationClasses.forEach(cls => {
-                element.classList.add(cls);
-            });
-        }
-
-        // Mark as processed
-        element.classList.add("wpc-animation-processed");
-    }
-
-    function isFullCssPending() {
-        if (document.documentElement.classList.contains("wpc-css-live")) return false;
-        return !!document.querySelector("link[rel^=\"wpc-\"],style[type^=\"wpc-\"],link[data-wpc-ucss],link[data-wpc-rest]");
-    }
-
-    // Check if element is in viewport
-    function isElementInViewport(el) {
-        const rect = el.getBoundingClientRect();
-        return (
-            rect.top <= (window.innerHeight || document.documentElement.clientHeight) &&
-            rect.left <= (window.innerWidth || document.documentElement.clientWidth) &&
-            rect.bottom >= 0 &&
-            rect.right >= 0
-        );
-    }
-
-
-    // Run on DOMContentLoaded
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", handleElementorAnimations);
-    } else {
-        // If DOMContentLoaded already fired, run immediately
-        handleElementorAnimations();
-    }
-
-})();</script>';
+        return '<script id="wpc-ela" data-nodefer="1">(function(){var d=document,w=window,M=' . (int) $mobile_max . ',T=' . (int) $tablet_max . ',Q=[],io=null,moved=0,K=/^_?animation(?:_(?:tablet|mobile|laptop|widescreen|tablet_extra|mobile_extra|delay))?$/;'
+            . 'function mv(){moved=1}'
+            . '["scroll","wheel","touchmove","keydown","mousedown"].forEach(function(t){w.addEventListener(t,mv,{passive:true,capture:true})});'
+            . 'function dev(){var x=w.innerWidth||d.documentElement.clientWidth||0;return x<=M?2:x<=T?1:0}'
+            . 'function plan(e){var p=(e.getAttribute("data-wpc-ela")||"").split("|");return{n:[p[0]||"",p[1]||"",p[2]||""],y:parseInt(p[3],10)||0,u:p[4]||""}}'
+            . 'function pick(p){var v=dev(),n=p.n;return v===2?(n[2]||n[1]||n[0]):v===1?(n[1]||n[0]):n[0]}'
+            . 'function scrub(e){var s=e.getAttribute("data-settings"),o,k,j=w.jQuery;if(s){try{o=JSON.parse(s);for(k in o){if(K.test(k))delete o[k]}e.setAttribute("data-settings",JSON.stringify(o))}catch(x){e.removeAttribute("data-settings")}}'
+            . 'if(j&&j.data){try{o=j.data(e,"settings");if(o&&typeof o==="object"){for(k in o){if(K.test(k))delete o[k]}}}catch(x){}}}'
+            . 'function run(e,anim){if(e.__wpcEla)return;e.__wpcEla=1;if(!e.classList.contains("elementor-invisible"))return;var p=plan(e),n=anim?pick(p):"",c=e.classList,'
+            . 'go=function(){e.removeAttribute("data-wpc-ela-q");c.remove("elementor-invisible");if(n&&n!=="none"){c.add("animated");c.add(n);if(p.u)c.add("animated-"+p.u)}};'
+            . 'if(anim&&p.y>0&&n&&n!=="none"){e.setAttribute("data-wpc-ela-q","1");setTimeout(go,p.y)}else go()}'
+            . 'function seen(list){var i,en,e,r;for(i=0;i<list.length;i++){en=list[i];e=en.target;if(!en.isIntersecting)continue;io.unobserve(e);r=en.boundingClientRect||e.getBoundingClientRect();run(e,r.width>0&&r.height>0?moved:0)}}'
+            . 'function own(e){if(e.__wpcOwn)return;e.__wpcOwn=1;scrub(e);Q.push(e);if(io)io.observe(e);else run(e,0)}'
+            . 'function added(R){var i,j,k,N,n,L;for(i=0;i<R.length;i++){N=R[i].addedNodes;for(j=0;j<N.length;j++){n=N[j];if(n.nodeType!==1)continue;if(n.hasAttribute("data-wpc-ela"))own(n);L=n.querySelectorAll("[data-wpc-ela]");for(k=0;k<L.length;k++)own(L[k])}}}'
+            . 'function init(){var L=d.querySelectorAll("[data-wpc-ela]"),i;if(!L.length)return;if(w.IntersectionObserver)io=new IntersectionObserver(seen,{threshold:[0,1]});'
+            . 'for(i=0;i<L.length;i++)own(L[i]);'
+            . 'if(!Q.length)return;if(w.MutationObserver)new MutationObserver(added).observe(d.documentElement,{childList:true,subtree:true});'
+            . 'w.addEventListener("load",function(){for(var k=0;k<Q.length;k++)scrub(Q[k])})}'
+            . 'if(d.readyState==="loading")d.addEventListener("DOMContentLoaded",init);else init()})();</script>';
     }
 
     protected function process_script_tag($matches)

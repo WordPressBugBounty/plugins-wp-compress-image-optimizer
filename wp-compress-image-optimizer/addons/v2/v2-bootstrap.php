@@ -48,6 +48,9 @@ if (!function_exists('wpc_v2_selfcheck_required_functions')) {
             'wpc_v2_variant_identity'   => 'v2-variant-identity.php',
             'wpc_v2_get_apikey'            => 'v2-capabilities.php',
             'wpc_v2_journal_root'          => 'v2-service.php',
+            'wpc_url_path_decode'          => 'v2-report-stamp.php',
+            'wpc_b64_decode_strict'        => 'v2-report-stamp.php',
+            'wpc_b64_encode'               => 'v2-report-stamp.php',
         ] as $fn => $file) {
             if (!function_exists($fn)) {
                 $missing[$fn] = $file;

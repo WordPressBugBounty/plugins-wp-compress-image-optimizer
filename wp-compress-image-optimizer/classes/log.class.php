@@ -46,7 +46,8 @@ class wps_ic_log {
             return;
         }
 
-        $this->write(WP_CONTENT_DIR . '/' . $file . '.txt', 'Cache Purged: ' . $message, 'Old Options: ' . print_r($oldOptions,true) . ' - New Options: ' . print_r($newOptions,true));
+        $mask = function_exists('wpc_cflog_mask') ? 'wpc_cflog_mask' : function ($v) { return $v; };
+        $this->write(WPS_IC_LOG . $file . '.txt', 'Cache Purged: ' . $message, 'Old Options: ' . print_r($mask($oldOptions), true) . ' - New Options: ' . print_r($mask($newOptions), true));
     }
 
 

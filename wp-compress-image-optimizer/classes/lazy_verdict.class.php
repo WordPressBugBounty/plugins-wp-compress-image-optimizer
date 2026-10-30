@@ -313,7 +313,46 @@ final class wps_ic_lazy_verdict
      */
     public static function slotCandidate($tag)
     {
-        return !self::alreadyBuilt($tag) && !self::isPlaceholderTag($tag);
+        return !self::alreadyBuilt($tag) && !self::isPlaceholderTag($tag) && !self::namesNoImage($tag);
+    }
+
+    /** An address a browser can fetch: not empty, not a bare fragment, not about: or javascript:. */
+    public static function isImageAddress($address)
+    {
+        $address = trim((string) $address);
+        return $address !== '' && !preg_match('/^(?:#|about:|javascript:)/i', $address);
+    }
+
+    /**
+     * A tag with no file for any builder to start from: none of src, data-src, data-cp-src, data-oi,
+     * the first srcset candidate or data-mk-image-src-set holds an address (isImageAddress). A page
+     * script fills such a tag itself (data-pzsrc, data-agu), so every lane returns it untouched and
+     * uncounted; a builder given it resolved the missing address to the site root.
+     */
+    public static function namesNoImage($tag)
+    {
+        $tag = (string) $tag;
+        foreach (['src', 'data-src', 'data-cp-src', 'data-oi'] as $attribute) {
+            if (self::isImageAddress(self::attributeValue($tag, $attribute))) {
+                return false;
+            }
+        }
+        foreach (explode(',', self::attributeValue($tag, 'srcset')) as $candidate) {
+            $parts = preg_split('/\s+/', trim($candidate));
+            if (self::isImageAddress($parts[0])) {
+                return false;
+            }
+        }
+        $set = json_decode(htmlspecialchars_decode(self::attributeValue($tag, 'data-mk-image-src-set')), true);
+        return !(is_array($set) && isset($set['default']) && is_string($set['default']) && self::isImageAddress($set['default']));
+    }
+
+    private static function attributeValue($tag, $attribute)
+    {
+        if (!preg_match('/\s' . preg_quote($attribute, '/') . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $tag, $match)) {
+            return '';
+        }
+        return isset($match[3]) ? $match[3] : (isset($match[2]) && $match[2] !== '' ? $match[2] : $match[1]);
     }
 
     /** A tag a CDN pass already built (the CDN builder returns it untouched). */
@@ -846,6 +885,11 @@ final class wps_ic_lazy_verdict
             return 'marker';
         }
         return '';
+    }
+
+    public static function carriesMarker($tag)
+    {
+        return (bool) array_intersect(self::classWords(self::classOf($tag)), self::MARKER_CLASS_WORDS);
     }
 
     /**

@@ -277,6 +277,7 @@ if (!function_exists('wpc_land_report')) {
             $bgSource = null;
             $heroSame = null;
             $heroLqip = null;
+            $imgLqip = null;
             if (function_exists('wpc_cflog_tail')) {
                 $tail = wpc_cflog_tail(65536);
                 foreach (explode("\n", $tail) as $ln) {
@@ -289,6 +290,9 @@ if (!function_exists('wpc_land_report')) {
                     }
                     if ($e['event'] === 'hero-lqip' && isset($e['layers']) && is_array($e['layers'])) {
                         $heroLqip = ['state' => substr((string) ($e['layers']['state'] ?? ''), 0, 12), 'why' => substr((string) ($e['layers']['why'] ?? ''), 0, 40), 'at' => (int) ($e['t'] ?? 0)];
+                    }
+                    if ($e['event'] === 'img-lqip' && isset($e['layers']) && is_array($e['layers'])) {
+                        $imgLqip = ['state' => substr((string) ($e['layers']['state'] ?? ''), 0, 12), 'why' => substr((string) ($e['layers']['why'] ?? ''), 0, 40), 'at' => (int) ($e['t'] ?? 0)];
                     }
                     if ($e['event'] === 'hero-same-origin' && isset($e['layers']) && is_array($e['layers'])) {
                         $heroSame = ['state' => substr((string) ($e['layers']['state'] ?? ''), 0, 12), 'why' => substr((string) ($e['layers']['why'] ?? ''), 0, 60), 'at' => (int) ($e['t'] ?? 0)];
@@ -327,6 +331,7 @@ if (!function_exists('wpc_land_report')) {
             if ($bgSource !== null) { $digest['bg_mobile_src'] = $bgSource; }
             if ($heroSame !== null && function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('hero_same_origin') === 1) { $digest['hero_same_origin'] = $heroSame; }
             if ($heroLqip !== null && class_exists('wps_ic_atf_observation') && wps_ic_atf_observation::heroLqipOn()) { $digest['hero_lqip'] = $heroLqip; }
+            if ($imgLqip !== null && class_exists('wps_ic_atf_observation') && wps_ic_atf_observation::imgLqipOn()) { $digest['img_lqip'] = $imgLqip; }
             if (function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('hero_land_first') === 1 && class_exists('wps_ic_hero_land')) {
                 $heroLand = wps_ic_hero_land::report($key);
                 if ($heroLand !== []) { $digest['hero_land'] = $heroLand; }
@@ -1918,8 +1923,12 @@ if (!function_exists('wpc_latest_miss_state')) {
     function wpc_latest_miss_remembered($dir)
     {
         $dir = rtrim((string) $dir, '/') . '/';
-        return @is_readable($dir . 'latest_404.txt')
+        $remembered = @is_readable($dir . 'latest_404.txt')
             && trim((string) @file_get_contents($dir . 'latest_404.txt')) === wpc_latest_miss_state($dir);
+        if ($remembered && function_exists('wpc_crit_leg_miss_expired') && wpc_crit_leg_miss_expired($dir)) {
+            return false;
+        }
+        return $remembered;
     }
 
     function wpc_latest_miss_remember($dir)
@@ -2014,7 +2023,7 @@ if (!function_exists('wpc_crit_key_fold')) {
             }
             $host = $ascii;
         }
-        $path = rawurldecode($path);
+        $path = wpc_url_path_decode($path);
         if (strlen($path) > 1) {
             $path = rtrim($path, '/');
         }
@@ -2499,6 +2508,9 @@ if (!function_exists('wpc_lcp_repull_handler')) {
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('repull-mutex-skip', $urlKey, '', []);
             }
+            if (function_exists('wpc_crit_leg_mutex_skipped')) {
+                wpc_crit_leg_mutex_skipped((string) $urlKey, (int) $attempt);
+            }
             return;
         }
         set_transient('wpc_repull_mutex', 1, 45);
@@ -2635,6 +2647,9 @@ if (!function_exists('wpc_lcp_repull_handler')) {
         $wpc_prescriptions_wanted = !@is_readable($dir . 'prescriptions_url.txt')
             && ($wpc_presc_want_mtime = (int) @filemtime($dir . 'presc_want.txt')) > 0
             && (time() - $wpc_presc_want_mtime) < 3600;
+        if (function_exists('wpc_crit_leg_gate_note')) {
+            wpc_crit_leg_gate_note((string) $urlKey, $dir);
+        }
         if (apply_filters('wpc_v2_latest', true) && defined('WPS_IC_CRITICAL_API_URL')
             && !wpc_latest_miss_remembered($dir)
             && (!@is_readable($dir . 'lcp_url.txt') || !@is_readable($dir . 'fonts_url.txt')
@@ -2644,7 +2659,8 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                 // (wpc_artifact_refresh_on_update). The marker opens this leg for an hour and is
                 // removed by the first 200 that leaves nothing to do, so a service that never answers
                 // cannot pin it open and a deferred replacement still gets the rest of the hour.
-                || (($repullDueAt = (int) @filemtime($dir . 'repull_due.txt')) > 0 && (time() - $repullDueAt) < 3600))
+                || (($repullDueAt = (int) @filemtime($dir . 'repull_due.txt')) > 0 && (time() - $repullDueAt) < 3600)
+                || (function_exists('wpc_crit_leg_owed') && wpc_crit_leg_owed($dir)))
             && !get_transient('wpc_v2l_' . md5((string) $urlKey))) {
             set_transient('wpc_v2l_' . md5((string) $urlKey), 1, 60);
             $latestPageUrl = '';
@@ -2683,6 +2699,9 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                     if (is_array($latestJson) && isset($latestJson['url_key'], $latestJson['crit_uuid'])
                         && is_string($latestJson['url_key']) && is_string($latestJson['crit_uuid'])) {
                         wpc_land_url_key_note((string) $urlKey, $latestJson['url_key'], $latestJson['crit_uuid']);
+                    }
+                    if (function_exists('wpc_crit_leg_latest_answer')) {
+                        wpc_crit_leg_latest_answer((string) $urlKey, $dir, 200, $latestJson);
                     }
                     if (is_array($latestJson) && !empty($latestJson['ready'])
                         && !empty($latestJson['artifacts']) && is_array($latestJson['artifacts'])) {
@@ -2912,6 +2931,9 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                 } elseif ($latestCode === 429) {
                     $latestRetryAfter = (int) wp_remote_retrieve_header($latestAnswer, 'retry-after');
                     set_transient('wpc_v2l_' . md5((string) $urlKey), 1, min(3600, max(60, $latestRetryAfter)));
+                }
+                if ($latestCode !== 200 && function_exists('wpc_crit_leg_latest_answer')) {
+                    wpc_crit_leg_latest_answer((string) $urlKey, $dir, $latestCode, null);
                 }
             }
         }
@@ -4648,6 +4670,19 @@ if (!function_exists('wpc_hero_rendition_capability')) {
             $args['capabilities'] = [];
         }
         $args['capabilities']['hero_rendition'] = 1;
+        return true;
+    }
+
+    function wpc_bg_mobile_edge_rung_capability(&$args)
+    {
+        if (!class_exists('wps_ic_atf_observation') || !method_exists('wps_ic_atf_observation', 'bgMobileEdgeRungOn')
+            || !wps_ic_atf_observation::bgMobileEdgeRungOn()) {
+            return false;
+        }
+        if (!isset($args['capabilities']) || !is_array($args['capabilities'])) {
+            $args['capabilities'] = [];
+        }
+        $args['capabilities']['bg_mobile_edge_rung'] = 1;
         return true;
     }
 }
@@ -6413,7 +6448,7 @@ if (!function_exists('wpc_p2_hold')) {
                 continue;
             }
             $base = substr($name, 0, -strlen('index.html_gzip'));
-            foreach (['index.html', 'index.html_gzip', 'index.html_br', 'index.html_md5', 'stale.html', 'stale.html_gzip', 'stale.html_br'] as $suffix) {
+            foreach (['index.html', 'index.html_gzip', 'index.html_br', 'index.html_md5', 'stale.html', 'stale.html_gzip', 'stale.html_br', 'cohort.txt'] as $suffix) {
                 @unlink($dir . $base . $suffix);
             }
             $retired++;
@@ -7212,6 +7247,21 @@ if (!function_exists('wpc_signed_artifacts_capability')) {
             $args['capabilities'] = [];
         }
         $args['capabilities']['signed_artifacts'] = 1;
+        return true;
+    }
+}
+
+if (!function_exists('wpc_img_lqip_capability')) {
+
+    function wpc_img_lqip_capability(&$args)
+    {
+        if (!class_exists('wps_ic_atf_observation') || !wps_ic_atf_observation::imgLqipOn()) {
+            return false;
+        }
+        if (!isset($args['capabilities']) || !is_array($args['capabilities'])) {
+            $args['capabilities'] = [];
+        }
+        $args['capabilities']['img_lqip'] = 1;
         return true;
     }
 }
@@ -8350,7 +8400,7 @@ if (!function_exists('wpc_delay_report_stamp')) {
      */
     function wpc_delay_path_key($path)
     {
-        $path = rawurldecode((string) $path);
+        $path = wpc_url_path_decode((string) $path);
         $home = '/' . trim((string) apply_filters('wpc_delay_home_path', (string) parse_url(function_exists('home_url') ? (string) home_url() : '', PHP_URL_PATH)), '/');
         if ($home !== '/' && ($path === $home || strpos($path, $home . '/') === 0)) {
             $path = (string) substr($path, strlen($home));
@@ -13159,7 +13209,7 @@ if (!function_exists('wpc_ls_purge_ping')) {
             set_transient('wpc_lsprx_' . md5($path), 1, 10);
             if (function_exists('do_action') && (defined('LSCWP_V') || class_exists('\LiteSpeed\Purge'))
                 && function_exists('home_url')) {
-                do_action('litespeed_purge_url', home_url($path));
+                function_exists('wpc_litespeed_purge_url') ? wpc_litespeed_purge_url(home_url($path)) : do_action('litespeed_purge_url', home_url($path));
             }
             if (!headers_sent()) {
                 header('X-LiteSpeed-Purge: ' . $path, false);
@@ -14783,7 +14833,8 @@ if (!function_exists('wpc_gen_semantic_ok')) {
             // extraction can produce.
             foreach (['crit_desktop', 'crit_mobile'] as $k) {
                 if (isset($bodies[$k]) && is_string($bodies[$k])) {
-                    foreach (['wpc-arm-sentinel', 'bg-authority700', 'wpc-lcp-bg-preload', 'wpc-hero-lqip'] as $mk) {
+                    // bg-authority700 is the wire pin's id on pages stored before it was named bg-authority-wire; both count.
+                    foreach (['wpc-arm-sentinel', 'bg-authority700', 'bg-authority-wire', 'wpc-lcp-bg-preload', 'wpc-hero-lqip'] as $mk) {
                         if (strpos($bodies[$k], $mk) !== false) {
                             $why = 'self-ref-' . $k;
                             return false;
@@ -14851,6 +14902,7 @@ if (!function_exists('wpc_manifest_consume')) {
                 return 0;
             }
             $log = function ($e, $x = []) use ($urlKey) {
+                $GLOBALS['wpc_manifest_fail_why'] = (string) $e . (isset($x['why']) && is_scalar($x['why']) ? ':' . $x['why'] : '') . (isset($x['a']) && is_scalar($x['a']) ? ':' . $x['a'] : '');
                 if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log($e, (string) $urlKey, '', $x); }
             };
             $genId = preg_replace('/[^a-f0-9\-]/', '', strtolower((string) $genId));
@@ -15391,7 +15443,7 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
                         $ur  = preg_replace('/[^0-9A-Fa-fUu+,\- ]/', '', (string) ($fe['unicode_range'] ?? ''));
                         if ($fam === '' || $wt === '') { continue; }
                         $sub .= "@font-face{font-family:'" . $fam . "';font-weight:" . $wt . ';font-style:' . $st
-                            . ';src:url(data:font/woff2;base64,' . base64_encode($w) . ") format('woff2');"
+                            . ';src:url(data:font/woff2;base64,' . wpc_b64_encode($w) . ") format('woff2');"
                             . ($ur !== '' ? 'unicode-range:' . $ur . ';' : '') . 'font-display:block}';
                         $sn++;
                         $inlined_bytes += $candidate[0];
@@ -16795,7 +16847,7 @@ if (!function_exists('wpc_rum_census_receiver')) {
             $field = $_POST['d'];   // base64 carries no quote or backslash, so WP's slashing leaves it as sent
             // 43692 is the base64 length of 32768 bytes, the cap the decoded payload meets below.
             if ($field === '' || strlen($field) > 43692) { wpc_rum_count_drop('size'); exit; }
-            $raw = base64_decode($field, true);
+            $raw = wpc_b64_decode_strict($field);
             if (!is_string($raw)) { wpc_rum_count_drop('shape'); exit; }
         } else {
             $raw = (string) @file_get_contents('php://input', false, null, 0, 33000);
@@ -18808,7 +18860,7 @@ if (!function_exists('wpc_missing_asset_audit')) {
             }
         }
         foreach ($names as $name) {
-            if (!preg_match('/^((?:(?:mobile-webp|mobile|webp)_)?(?:localonly_)?)links\.txt$/', $name, $kept)) {
+            if (!preg_match('/^((?:(?:mobile-webp|mobile|webp)_)?(?:localonly_)?)(?:links|cohort)\.txt$/', $name, $kept)) {
                 continue;
             }
             $stored = false;
@@ -18817,6 +18869,9 @@ if (!function_exists('wpc_missing_asset_audit')) {
             }
             if (!$stored) {
                 @unlink($dir . '/' . $name);
+                continue;
+            }
+            if (substr($name, -10) === 'cohort.txt') {
                 continue;
             }
             $record = wpc_copy_links_read($dir . '/' . $name);
@@ -19503,7 +19558,7 @@ if (!function_exists('wpc_update_window_active')) {
         if ($status > 0 && $status !== 200) {
             return $note('status', ['status' => $status]);
         }
-        if (preg_match('~</html>\s*$~i', $buffer) !== 1) {
+        if (preg_match('~</html>\s*(?:<!--(?:(?!-->).)*+-->\s*)*$~is', $buffer) !== 1) {
             return $note('html-tail', []);
         }
         $head = substr($buffer, 0, 8192);
@@ -21401,8 +21456,9 @@ if (!function_exists('wpc_box_debug_report')) {
                     header('Content-Disposition: attachment; filename="wpc-purge-ledger-'
                         . preg_replace('/[^a-z0-9.-]/i', '-', (string) wp_parse_url(home_url(), PHP_URL_HOST))
                         . '-' . gmdate('Ymd-Hi') . '.jsonl"');
-                    @readfile($wpc_lf);
-                    if (@is_readable($wpc_lf . '.1')) { @readfile($wpc_lf . '.1'); }
+                    $wpc_lf1 = substr($wpc_lf, 0, -4) . '-1.php';
+                    if (@is_readable($wpc_lf1)) { echo wpc_ledger_body($wpc_lf1); }
+                    echo wpc_ledger_body($wpc_lf);
                     exit;
                 }
                 status_header(404);

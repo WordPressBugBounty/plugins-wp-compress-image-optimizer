@@ -4,7 +4,7 @@
  * Plugin URI: https://www.wpcompress.com
  * Author: WP Compress
  * Author URI: https://www.wpcompress.com
- * Version: 7.30.00
+ * Version: 7.30.30
  * Description: Automatically compress and optimize images to shrink image file size, improve  times and boost SEO ranks - all without lifting a finger after setup.
  * Text Domain: wp-compress-image-optimizer
  * Domain Path: /languages
@@ -12,7 +12,7 @@
 
 
 if (!defined('WPC_PLUGIN_VERSION')) {
-    define('WPC_PLUGIN_VERSION', '7.30.00');
+    define('WPC_PLUGIN_VERSION', '7.30.30');
 }
 
 
@@ -255,14 +255,19 @@ if (!function_exists('wpc_plugin_tree_missing_files')) {
             'addons/cache/advancedCache.php',
             'addons/cache/beacon.php',
             'addons/cache/cacheHtml.php',
+            'addons/cache/crit-leg-reopen.php',
             'addons/cache/html-br-land.php',
+            'addons/cache/host-cache-purge.php',
             'addons/cache/link-preset.php',
             'addons/cache/warm.php',
             'addons/cache/wpc-fs.php',
+            'addons/cdn/atf-wire-clear.php',
             'addons/cdn/cdn-rewrite.php',
             'addons/cdn/corp-guard.php',
+            'addons/cdn/css-url-zoneify.php',
             'addons/cdn/delivery-resolver.php',
             'addons/cdn/fast404-guard.php',
+            'addons/cdn/img-lqip.php',
             'addons/cdn/modern-delivery.php',
             'addons/cdn/negotiated-delivery.php',
             'addons/cdn/render-pipeline.php',

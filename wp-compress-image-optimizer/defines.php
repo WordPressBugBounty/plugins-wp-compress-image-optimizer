@@ -92,6 +92,21 @@ define('WPC_CF_VARY_IMAGES_OPTION', 'wpc_cf_vary_images_ok');
 // A key inside WPS_IC_SETTINGS, not an option of its own: the settings page, the v4 save and the
 // agency relay all carry it with the rest of the settings row.
 define('WPC_NEGOTIATED_PUBLIC_SETTING', 'htaccess-negotiated-public');
+
+if (!function_exists('wpc_policy_cohort_stored')) {
+    /**
+     * Whether the stored service policy (WPC_POLICY_OPTION) sets cohort $name to 1, read straight from
+     * the option: no built-in or plugin-default cohorts, no wpc_policy23 filter. The one reader for the
+     * lanes that do not load addons/v2/v2-policy.php (the cron lane), where wpc_policy_cohort() is not
+     * defined. A missing or malformed option answers false.
+     */
+    function wpc_policy_cohort_stored($name)
+    {
+        $policy = function_exists('get_option') ? get_option(defined('WPC_POLICY_OPTION') ? WPC_POLICY_OPTION : 'wpc_policy23', []) : [];
+        return is_array($policy) && isset($policy['cohorts'][$name]) && (int) $policy['cohorts'][$name] === 1;
+    }
+}
+
 if (empty($_GET['min_debug'])) {
   define('WPS_IC_MIN', '.min'); // .min => script.min.js
 } else {
@@ -332,6 +347,24 @@ if (!function_exists('wpc_diag_sleep')) {
         $GLOBALS['wpc_diagnostic_sleep_seconds_used'] = $used_seconds + $sleep_seconds;
         usleep((int) round($sleep_seconds * 1000000));
         return $sleep_seconds;
+    }
+}
+if (!function_exists('wpc_litespeed_purge_url')) {
+    function wpc_litespeed_purge_url($url)
+    {
+        $purge = null;
+        if (class_exists('LiteSpeed\\Purge')) {
+            if (is_callable(['LiteSpeed\\Purge', 'cls'])) {
+                $purge = \LiteSpeed\Purge::cls();
+            } elseif (is_callable(['LiteSpeed\\Purge', 'get_instance'])) {
+                $purge = \LiteSpeed\Purge::get_instance();
+            }
+        }
+        if (is_object($purge) && method_exists($purge, 'purge_url')) {
+            $purge->purge_url($url, false, true);
+            return;
+        }
+        do_action('litespeed_purge_url', $url);
     }
 }
 // ── Object-cache flush gateway (v7.10.510) ────────────────────────────────────
@@ -1540,7 +1573,65 @@ if (!function_exists('wpc_purge_ledger_file')) {
         if (!is_dir($wpc_dir)) {
             @mkdir($wpc_dir, 0755, true);
         }
-        return is_dir($wpc_dir) && is_writable($wpc_dir) ? rtrim($wpc_dir, '/') . '/purge-ledger.jsonl' : '';
+        return is_dir($wpc_dir) && is_writable($wpc_dir) ? wpc_ledger_path(rtrim($wpc_dir, '/') . '/purge-ledger.php') : '';
+    }
+}
+
+if (!function_exists('wpc_ledger_path')) {
+    /** $file, created with WPC_CFLOG_HEADER when it is missing or empty, so HTTP answers nothing for it. */
+    function wpc_ledger_path($file)
+    {
+        if (!@is_file($file) || (int) @filesize($file) === 0) {
+            wpc_fs_put($file, WPC_CFLOG_HEADER);
+        }
+        return $file;
+    }
+}
+
+if (!function_exists('wpc_ledger_body')) {
+    /** The JSONL lines of a ledger file without its header. */
+    function wpc_ledger_body($file)
+    {
+        $body = (string) @file_get_contents($file);
+        return strpos($body, WPC_CFLOG_HEADER) === 0 ? substr($body, strlen(WPC_CFLOG_HEADER)) : $body;
+    }
+}
+
+if (!function_exists('wpc_logs_harden')) {
+    /** Once per release: cache/logs/ answers 403 where .htaccess is read, holds an index.php, and the public .jsonl ledgers of earlier releases are deleted. */
+    function wpc_logs_harden()
+    {
+        try {
+            $ver = defined('WPC_PLUGIN_VERSION') ? (string) WPC_PLUGIN_VERSION : '';
+            if (!defined('WPS_IC_LOG') || !function_exists('get_option') || get_option('wpc_logs_harden') === $ver) {
+                return;
+            }
+            if (defined('WP_CONTENT_DIR') && @is_file(WP_CONTENT_DIR . '/cachePurging.txt')) {
+                @unlink(WP_CONTENT_DIR . '/cachePurging.txt');
+            }
+            $dir = rtrim(WPS_IC_LOG, '/');
+            if (!@is_dir($dir) || !@is_writable($dir)) {
+                return;
+            }
+            foreach (['purge-ledger.jsonl', 'purge-ledger.jsonl.1', 'settings-ledger.jsonl'] as $old) {
+                if (@is_file($dir . '/' . $old)) {
+                    @unlink($dir . '/' . $old);
+                }
+            }
+            $deny = "# BEGIN WP Compress Logs\n<IfModule mod_authz_core.c>\n  Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n  Order allow,deny\n  Deny from all\n</IfModule>\n# END WP Compress Logs\n";
+            $htaccess = $dir . '/.htaccess';
+            if (strpos((string) @file_get_contents($htaccess), '# BEGIN WP Compress Logs') === false) {
+                wpc_fs_put($htaccess, $deny, @is_file($htaccess) ? FILE_APPEND : 0);
+            }
+            if (!@is_file($dir . '/index.php')) {
+                wpc_fs_put($dir . '/index.php', "<?php\n");
+            }
+            update_option('wpc_logs_harden', $ver, true);
+        } catch (\Throwable $e) {
+        }
+    }
+    if (function_exists('add_action')) {
+        add_action('init', 'wpc_logs_harden', 99);
     }
 }
 
@@ -1569,7 +1660,7 @@ if (!function_exists('wpc_purge_ledger_why')) {
                 $wpc_w['hook'] = substr(implode('>', $wpc_hooks), 0, 90);
             }
             if ($wpc_w['ref'] === '' && !empty($_SERVER['REQUEST_URI'])) {
-                $wpc_w['ref'] = substr((string) $_SERVER['REQUEST_URI'], 0, 60);
+                $wpc_w['ref'] = substr((string) preg_replace('/[?#].*$/s', '', (string) $_SERVER['REQUEST_URI']), 0, 60);
             }
             if (!function_exists('debug_backtrace')) {
                 return $wpc_w;
@@ -1634,7 +1725,7 @@ if (!function_exists('wpc_settings_ledger_file')) {
         if (!is_dir($wpc_dir)) {
             @mkdir($wpc_dir, 0755, true);
         }
-        return is_dir($wpc_dir) && is_writable($wpc_dir) ? rtrim($wpc_dir, '/') . '/settings-ledger.jsonl' : '';
+        return is_dir($wpc_dir) && is_writable($wpc_dir) ? wpc_ledger_path(rtrim($wpc_dir, '/') . '/settings-ledger.php') : '';
     }
 }
 
@@ -1716,9 +1807,9 @@ if (!function_exists('wpc_settings_ledger_record')) {
                 // Bounded: truncate rather than grow without limit. Settings writes are admin
                 // actions, not per-render, so this is never hot.
                 if (@filesize($wpc_f) > (int) apply_filters('wpc_settings_ledger_max', 262144)) {
-                    wpc_fs_put($wpc_f, '');
+                    wpc_fs_put($wpc_f, WPC_CFLOG_HEADER);
                 }
-                wpc_fs_put($wpc_f, @json_encode($wpc_row) . "\n", FILE_APPEND | LOCK_EX);
+                wpc_fs_put($wpc_f, @json_encode(wpc_cflog_mask($wpc_row)) . "\n", FILE_APPEND | LOCK_EX);
             }
             if ($wpc_d['gone'] && function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('settings-wholesale-replace', (string) $wpc_row['at'], '', [
@@ -2135,9 +2226,10 @@ if (!function_exists('wpc_purge_record')) {
             if ($wpc_f !== '') {
                 // Rotate BEFORE appending so the file can never exceed the cap mid-write.
                 if (@filesize($wpc_f) > 2097152) {
-                    @rename($wpc_f, $wpc_f . '.1');
+                    @rename($wpc_f, substr($wpc_f, 0, -4) . '-1.php');
+                    wpc_ledger_path($wpc_f);
                 }
-                wpc_fs_put($wpc_f, wp_json_encode($wpc_row) . "\n", FILE_APPEND | LOCK_EX);
+                wpc_fs_put($wpc_f, wp_json_encode(wpc_cflog_mask($wpc_row)) . "\n", FILE_APPEND | LOCK_EX);
                 return;
             }
             if (!function_exists('get_option')) {
@@ -2552,14 +2644,91 @@ if (!function_exists('wpc_encode_on_view_on')) {
     }
 }
 
+if (!function_exists('wpc_cdn_active')) {
+    /**
+     * Whether the CDN serves this site, and the first reason it does not: the one answer the render
+     * (wps_cdn_rewrite::mainInit), the crit dispatch (wps_ic_atf_observation::bgMobileCdnOn) and
+     * wpc_cdn_drives_images() ask. The person's live-cdn setting and lanes are the intent; the account
+     * flag wps_ic_allow_live (written only by wpc_allow_flags_apply), a Cloudflare zone serving the
+     * assets itself (WPS_IC_CF assets 1, cdn 0) and a suppressed zone (wpc_v2_zone_cdn_suppressed)
+     * override it. With no CSS, JS, font or image lane on there is nothing to serve.
+     * The dispatch kept its own copy of these terms and disagreed with the render through seven review
+     * rounds, so no caller derives them again.
+     *
+     * Without $page_excludes it answers for the site. A render passes its page's exclude array: the
+     * page's own CDN exclude then counts (0 forces off, 1 forces every lane on while live-cdn is on), and
+     * so does the crit corpus request (?criticalCombine or its header), which renders from the origin.
+     *
+     * Reads only. Returns ['on' => bool, 'why' => 'on|live-cdn-off|page-exclude|cf-live|allow-live|lanes-off|crit-combine|suppressed',
+     * 'lanes' => the lane values the answer sets for this render (css, js, jpg, png, gif, svg) or [] to keep the person's,
+     * 'suppressed' => bool].
+     */
+    function wpc_cdn_active($page_excludes = null)
+    {
+        $settings = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : false;
+        if (!is_array($settings)) {
+            $settings = [];
+        }
+        $render = is_array($page_excludes);
+        $pageOff = $render && isset($page_excludes['cdn']) && $page_excludes['cdn'] == '0';
+        $pageOn = $render && isset($page_excludes['cdn']) && $page_excludes['cdn'] == '1';
+        $intent = isset($settings['live-cdn']) && $settings['live-cdn'] == '1';
+        $cf = (function_exists('get_option') && defined('WPS_IC_CF')) ? get_option(WPS_IC_CF) : false;
+        $cfLive = is_array($cf) && isset($cf['settings']) && is_array($cf['settings'])
+            && ($cf['settings']['assets'] ?? null) == '1' && ($cf['settings']['cdn'] ?? null) == '0';
+        $accountLive = function_exists('get_option') && get_option('wps_ic_allow_live');
+        $suppressed = function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed();
+
+        $on = $intent;
+        $why = $intent ? 'on' : 'live-cdn-off';
+        $lanes = [];
+        $lanesAll = function ($value) {
+            return ['css' => $value, 'js' => $value, 'jpg' => $value, 'png' => $value, 'gif' => $value, 'svg' => $value];
+        };
+        $off = function ($reason) use (&$on, &$why) {
+            $on = false;
+            if ($why === 'on') {
+                $why = $reason;
+            }
+        };
+
+        if ($pageOff || $cfLive || !$accountLive) {
+            $off($pageOff ? 'page-exclude' : ($cfLive ? 'cf-live' : 'allow-live'));
+            $lanes = $lanesAll(0);
+        } elseif ($pageOn && $intent) {
+            $lanes = $lanesAll(1);
+        }
+
+        $serve = (isset($settings['serve']) && is_array($settings['serve'])) ? $settings['serve'] : [];
+        $laneValues = array_merge(['css' => $settings['css'] ?? null, 'js' => $settings['js'] ?? null, 'jpg' => $serve['jpg'] ?? null,
+            'png' => $serve['png'] ?? null, 'gif' => $serve['gif'] ?? null, 'svg' => $serve['svg'] ?? null], $lanes);
+        $anyLane = !empty($settings['fonts']);
+        foreach ($laneValues as $value) {
+            $anyLane = $anyLane || (!empty($value) && $value != 0);
+        }
+        if (!$anyLane) {
+            $off('lanes-off');
+        }
+
+        if ($render && (!empty($_GET['criticalCombine']) || (function_exists('wpcGetHeader') && !empty(wpcGetHeader('criticalCombine'))))) {
+            $off('crit-combine');
+            $lanes = $lanesAll(0);
+        }
+
+        if ($suppressed) {
+            $off('suppressed');
+        }
+
+        return ['on' => $on, 'why' => $why, 'lanes' => $lanes, 'suppressed' => $suppressed];
+    }
+}
+
 if (!function_exists('wpc_cdn_drives_images')) {
-    /** Whether the CDN serves this site's images now: the CDN switch and the images switch are on and the zone is not suppressed. */
+    /** Whether the CDN serves this site's images now: the CDN is on (wpc_cdn_active) and an image lane is on. */
     function wpc_cdn_drives_images()
     {
-        $settings = get_option(WPS_IC_SETTINGS);
-        $intent = is_array($settings) && !empty($settings['live-cdn']) && (string) $settings['live-cdn'] === '1'
-            && (!class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled($settings));
-        return $intent && !(function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed());
+        return wpc_cdn_active()['on']
+            && (!class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled(get_option(WPS_IC_SETTINGS)));
     }
 }
 
@@ -4270,6 +4439,42 @@ if (!function_exists('wpc_purge_foreign_caches')) {
                 }
                 set_transient($throttle_key, 1, $throttle_window);
             }
+            if ($purge_scope !== 'site') {
+                // A call naming one page purges that page in the layers in front of the copy through
+                // their per-URL owner, wps_ic_cache_integrations::purgeExternalLayers(), and never
+                // fires wps_ic_purge_all_cache: its listeners ignore the URL and empty the whole host
+                // cache (litespeed_purge_all, rocket_clean_domain, the host fan-out). Observed failure:
+                // on a LiteSpeed host with 100+ pages every crit land emptied the whole LSCache, one
+                // page at a time. None of the URL callers has run the owner for the page before it
+                // gets here, so it runs once, here. A url key never holds a slash, a URL always does.
+                $page_key = '';
+                $page_url = '';
+                if (class_exists('wps_ic_url_key')) {
+                    if (strpos((string) $purge_arg, '/') !== false) {
+                        $page_url = wps_ic_url_key::sanitizeSameHostUrl((string) $purge_arg);
+                        $page_key = $page_url !== '' ? (string) (new wps_ic_url_key())->keyFor($page_url) : '';
+                    } else {
+                        $page_key = (string) $purge_arg;
+                        $page_url = wps_ic_url_key::sanitizeSameHostUrl(wps_ic_url_key::getUrlFromKey($page_key));
+                    }
+                }
+                // No same-host address for the page: nothing in front of the copy can be named, and
+                // a whole-site purge is never the fallback.
+                $owner_runs = $page_url !== '' && class_exists('wps_ic_cache_integrations')
+                    && method_exists('wps_ic_cache_integrations', 'purgeExternalLayers');
+                if (function_exists('wpc_purge_record')) {
+                    wpc_purge_record('foreign', 'url', $purge_scope, 1, $owner_runs, (string) $ctx);
+                }
+                if ($owner_runs) {
+                    wps_ic_cache_integrations::purgeExternalLayers($page_url, $page_key, ['context' => (string) $ctx, 'varnish' => true]);
+                }
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('foreign-purge-url', $page_key, $page_url, [
+                        'ctx' => (string) $ctx, 'via' => $owner_runs ? 'purgeExternalLayers' : 'no-url',
+                    ]);
+                }
+                return $owner_runs;
+            }
             if (function_exists('wpc_purge_record')) {
                 wpc_purge_record('foreign', 'purge_all', $purge_scope, 1, true, (string) $ctx);
             }
@@ -5806,7 +6011,7 @@ if (!function_exists('wpc_crit_corpus_drift_report')) {
     }
 }
 // v7.23.25 — ONE ANSWER TO "IS THE BACKGROUND LCP PRELOADED?". Two lanes emit that preload:
-// the pin loop as id="wpc-lcp-bg-preload[-d|700]" and the lcp.json hints lane as its
+// the pin loop as id="wpc-lcp-bg-preload[-d|-wire]" and the lcp.json hints lane as its
 // device-pinned twin id="wpc-lcp-hero-preload" — and the pin loop skips its own tag as a
 // duplicate when the twin is already in the output. Checks that tested only the -bg- id
 // read a correctly preloaded page as missing its preload: the saveCache gate refused to
@@ -8567,6 +8772,9 @@ if (!function_exists('wpc_purge_is_soft')) {
         if (defined('WPC_PLUGIN_VERSION') && function_exists('update_option')
             && (string) get_option('wpc_stale43_ver', '') !== (string) WPC_PLUGIN_VERSION) {
             update_option('wpc_stale43_ver', (string) WPC_PLUGIN_VERSION, false);
+            if (function_exists('wpc_host_cache_purge_url') && function_exists('home_url')) {
+                wpc_host_cache_purge_url(home_url('/'), 'plugin-version');
+            }
         }
     }
 
@@ -8643,6 +8851,9 @@ if (!function_exists('wpc_delivery_config_version_flip')) {
             }
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeEdgeHtmlUrls') && function_exists('home_url')) {
                 wps_ic_cache::purgeEdgeHtmlUrls([home_url('/'), home_url()]);
+            }
+            if (function_exists('wpc_host_cache_purge_url') && function_exists('home_url')) {
+                wpc_host_cache_purge_url(home_url('/'), 'dcv-flip');
             }
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('dcv-flip', $config_signature, '', []);
@@ -9966,5 +10177,55 @@ if (!function_exists('wpc_crit_dispatch_census')) {
             }
         }
         return ['pages' => $pages, 'pending' => $pending];
+    }
+}
+
+if (!function_exists('wpc_memory_to_bytes')) {
+    function wpc_memory_to_bytes($value)
+    {
+        if (function_exists('wp_convert_hr_to_bytes')) {
+            return (int) wp_convert_hr_to_bytes((string) $value);
+        }
+        $value = strtolower(trim((string) $value));
+        $num = (int) $value;
+        switch (substr($value, -1)) {
+            case 'g':
+                $num *= 1024;
+            case 'm':
+                $num *= 1024;
+            case 'k':
+                $num *= 1024;
+        }
+        return $num;
+    }
+}
+
+if (!function_exists('wpc_raise_memory_limit')) {
+    function wpc_raise_memory_limit($target)
+    {
+        if (!function_exists('ini_get') || !function_exists('ini_set')) {
+            return false;
+        }
+        $current = trim((string) @ini_get('memory_limit'));
+        if ($current === '' || $current === '-1') {
+            return false;
+        }
+        $current_bytes = wpc_memory_to_bytes($current);
+        $target_bytes = wpc_memory_to_bytes($target);
+        if ($current_bytes <= 0 || $target_bytes <= $current_bytes) {
+            return false;
+        }
+        return @ini_set('memory_limit', (string) $target) !== false;
+    }
+}
+
+if (!function_exists('wpc_memory_guard_bytes')) {
+    function wpc_memory_guard_bytes($ratio = 0.8)
+    {
+        $limit = function_exists('ini_get') ? wpc_memory_to_bytes((string) @ini_get('memory_limit')) : 0;
+        if ($limit <= 0) {
+            $limit = 536870912;
+        }
+        return (int) ($limit * $ratio);
     }
 }

@@ -13,13 +13,20 @@ if (!function_exists('wpc_v2_natural_url_buffer_cb')) {
         }
         // Shed render (the pipeline never ran): keep the natural-URL guarantee on the raw buffer.
         $out = $html;
+        if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'plain_image_urls')) {
+            $plain = wps_rewriteLogic::plain_image_urls($out);
+            if (is_string($plain) && $plain !== '') {
+                $out = $plain;
+            }
+        }
+        $afterPlain = $out;
         if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on')
             && wps_rewriteLogic::natural_assets_on()) {
-            if (strpos($html, '/a:') !== false) {
-                $n = wps_rewriteLogic::naturalize_asset_urls($html);
+            if (strpos($out, '/a:') !== false) {
+                $n = wps_rewriteLogic::naturalize_asset_urls($out);
                 if (is_string($n)) $out = $n;
             }
-            $naturalized = ($out !== $html);
+            $naturalized = ($out !== $afterPlain);
             // Regime-C: apply the onerror->origin failover even when there is no /a: to strip
             // (the tags may already be natural from an earlier pass). Idempotent via data-wpc-fb.
             $beforeFailover = $out;
@@ -53,7 +60,8 @@ if (!function_exists('wpc_v2_natural_url_buffer_start')) {
 
 
         if (!class_exists('wps_rewriteLogic') || !method_exists('wps_rewriteLogic', 'natural_assets_on')) return;
-        if (!wps_rewriteLogic::natural_assets_on()) return;
+        if (!wps_rewriteLogic::natural_assets_on()
+            && (!method_exists('wps_rewriteLogic', 'plain_image_host') || wps_rewriteLogic::plain_image_host() === '')) return;
         ob_start('wpc_v2_natural_url_buffer_cb');
     }
 }

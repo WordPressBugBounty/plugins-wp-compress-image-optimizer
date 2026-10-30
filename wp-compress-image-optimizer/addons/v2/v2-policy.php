@@ -76,6 +76,12 @@ if (!function_exists('wpc_policy_normalize')) {
                 $out['wpc_levers'] = $levers;
             }
         }
+        if (array_key_exists('wpc_lists', $p)) {
+            $lists = wpc_policy_lists_normalize($p['wpc_lists']);
+            if ($lists !== []) {
+                $out['wpc_lists'] = $lists;
+            }
+        }
         if (isset($p['wpc_trial']) && is_array($p['wpc_trial'])) {
             $of = isset($p['wpc_trial']['of']) && is_numeric($p['wpc_trial']['of']) ? max(0, (int) $p['wpc_trial']['of']) : 0;
             $step = isset($p['wpc_trial']['step']) && is_numeric($p['wpc_trial']['step']) ? max(0, (int) $p['wpc_trial']['step']) : 0;
@@ -94,7 +100,151 @@ if (!function_exists('wpc_policy_normalize')) {
 if (!function_exists('wpc_policy_reserved_keys')) {
     function wpc_policy_reserved_keys()
     {
-        return ['serve', 'land', 'scope', 'formats', 'budget', 'version', 'source', 'received_at', 'cohorts', 'wpc_levers', 'wpc_trial'];
+        return ['serve', 'land', 'scope', 'formats', 'budget', 'version', 'source', 'received_at', 'cohorts', 'wpc_levers', 'wpc_lists', 'wpc_trial'];
+    }
+}
+
+if (!function_exists('wpc_policy_lists_allowed')) {
+    /** The list keys the plugin reads: key => ['kind' => 'path' or 'url', 'cohort' => the switch whose consumer reads it]. */
+    function wpc_policy_lists_allowed()
+    {
+        return [
+            'cdn_dirs'         => ['kind' => 'path', 'cohort' => 'cdn_directories'],
+            'slider_first_url' => ['kind' => 'url', 'cohort' => 'slider_lcp'],
+        ];
+    }
+}
+
+if (!function_exists('wpc_policy_list_hosts')) {
+    /** The hosts a URL entry may name: [the home host without www, the zone hosts as lower case]. */
+    function wpc_policy_list_hosts()
+    {
+        $home = function_exists('home_url') ? strtolower((string) wp_parse_url((string) home_url(), PHP_URL_HOST)) : '';
+        $zones = [];
+        $raws = [function_exists('wpc_cdn_host') ? (string) wpc_cdn_host() : '', function_exists('get_option') ? (string) get_option('ic_cdn_zone_name') : ''];
+        foreach ($raws as $raw) {
+            $host = strtolower(preg_replace('#/.*$#', '', trim($raw)));
+            if ($host !== '' && !in_array($host, $zones, true)) {
+                $zones[] = $host;
+            }
+        }
+        return [preg_replace('/^www\./', '', $home), $zones];
+    }
+}
+
+if (!function_exists('wpc_policy_list_entry_ok')) {
+    /** True when $entry is a valid value for list $key: a path of plain folder segments for 'path' (none a WordPress wp- name or a file name with an extension), an absolute URL on the site's host or the zone's for 'url', https when the site is. */
+    function wpc_policy_list_entry_ok($key, $entry)
+    {
+        $allowed = wpc_policy_lists_allowed();
+        if (!isset($allowed[$key]) || !is_string($entry) || $entry === '' || strlen($entry) > 300) {
+            return false;
+        }
+        if ($allowed[$key]['kind'] === 'path') {
+            if (preg_match('#^/?[A-Za-z0-9._~\-]+(?:/[A-Za-z0-9._~\-]+)*/?\z#', $entry) !== 1) {
+                return false;
+            }
+            foreach (explode('/', trim($entry, '/')) as $segment) {
+                if ($segment[0] === '.' || stripos($segment, 'wp-') === 0 || preg_match('/\.(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{1,10}\z/', $segment) === 1) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (preg_match('/[\s"\'<>\x00-\x1f\x7f]/', $entry) === 1) {
+            return false;
+        }
+        $parts = wp_parse_url($entry);
+        if (!is_array($parts) || !isset($parts['scheme'], $parts['host']) || !in_array(strtolower($parts['scheme']), ['http', 'https'], true)
+            || isset($parts['user']) || isset($parts['pass']) || isset($parts['port'])) {
+            return false;
+        }
+        if (strtolower($parts['scheme']) === 'http' && function_exists('home_url') && strtolower((string) wp_parse_url((string) home_url(), PHP_URL_SCHEME)) === 'https') {
+            return false;
+        }
+        $host = strtolower((string) $parts['host']);
+        list($home, $zones) = wpc_policy_list_hosts();
+        return ($home !== '' && preg_replace('/^www\./', '', $host) === $home) || in_array($host, $zones, true);
+    }
+}
+
+if (!function_exists('wpc_policy_list_clean')) {
+    /** The entries of list $key as the plugin keeps and reads them: valid ones only, a path without its outer slashes, each once, at most 8; paths sorted, URLs in the service's order. */
+    function wpc_policy_list_clean($key, $entries)
+    {
+        $allowed = wpc_policy_lists_allowed();
+        $key = (string) $key;
+        $out = [];
+        if (!isset($allowed[$key]) || !is_array($entries)) {
+            return $out;
+        }
+        foreach ($entries as $entry) {
+            if (count($out) >= 8) {
+                break;
+            }
+            if (!wpc_policy_list_entry_ok($key, $entry)) {
+                continue;
+            }
+            if ($allowed[$key]['kind'] === 'path') {
+                $entry = trim($entry, '/');
+            }
+            if (!in_array($entry, $out, true)) {
+                $out[] = $entry;
+            }
+        }
+        if ($allowed[$key]['kind'] === 'path') {
+            sort($out, SORT_STRING);
+        }
+        return $out;
+    }
+}
+
+if (!function_exists('wpc_policy_lists_normalize')) {
+    /** The lists as the policy keeps them: only allowed keys, each list as wpc_policy_list_clean() gives it, a key with none left absent. */
+    function wpc_policy_lists_normalize($raw)
+    {
+        $out = [];
+        if (!is_array($raw)) {
+            return $out;
+        }
+        foreach (array_keys(wpc_policy_lists_allowed()) as $key) {
+            if (!isset($raw[$key])) {
+                continue;
+            }
+            $kept = wpc_policy_list_clean($key, $raw[$key]);
+            if ($kept !== []) {
+                $out[$key] = $kept;
+            }
+        }
+        return $out;
+    }
+}
+
+if (!function_exists('wpc_policy_list')) {
+    /** The validated entries the service sent for list $key, as wpc_policy_list_clean() gives them; [] when there are none. */
+    function wpc_policy_list($key)
+    {
+        $lists = wpc_policy_get('wpc_lists', null);
+        $key = (string) $key;
+        if (!is_array($lists) || !isset($lists[$key])) {
+            return [];
+        }
+        return wpc_policy_list_clean($key, $lists[$key]);
+    }
+}
+
+if (!function_exists('wpc_policy_lists_counts')) {
+    /** list key => number of entries kept, for the echo and the health body; never the entries. */
+    function wpc_policy_lists_counts()
+    {
+        $counts = [];
+        foreach (array_keys(wpc_policy_lists_allowed()) as $key) {
+            $n = count(wpc_policy_list($key));
+            if ($n > 0) {
+                $counts[$key] = $n;
+            }
+        }
+        return $counts;
     }
 }
 
@@ -214,6 +364,46 @@ if (!function_exists('wpc_policy_builtin_cohorts')) {
     }
 }
 
+if (!function_exists('wpc_policy_plugin_default_cohorts')) {
+    function wpc_policy_plugin_default_cohorts()
+    {
+        if (defined('WPC_BUILTIN_COHORTS_KILL') && WPC_BUILTIN_COHORTS_KILL) {
+            return [];
+        }
+        $names = [];
+        if (function_exists('apply_filters')) {
+            $f = apply_filters('wpc_plugin_default_cohorts', $names);
+            $names = is_array($f) ? array_values(array_filter($f, 'is_string')) : [];
+        }
+        return $names;
+    }
+}
+
+if (!function_exists('wpc_policy_with_default_cohorts')) {
+    function wpc_policy_with_default_cohorts($cohorts)
+    {
+        if (!is_array($cohorts)) {
+            return $cohorts;
+        }
+        foreach (wpc_policy_plugin_default_cohorts() as $dn) {
+            if (!array_key_exists($dn, $cohorts)) {
+                $cohorts[$dn] = 1;
+            }
+        }
+        return $cohorts;
+    }
+}
+
+if (!function_exists('wpc_policy_effective_cohorts')) {
+    function wpc_policy_effective_cohorts($stored, $builtin = [])
+    {
+        if (is_array($stored) && $stored !== []) {
+            return isset($stored['cohorts']) && is_array($stored['cohorts']) ? wpc_policy_with_default_cohorts($stored['cohorts']) : [];
+        }
+        return is_array($builtin) && $builtin !== [] ? wpc_policy_with_default_cohorts($builtin) : [];
+    }
+}
+
 if (!function_exists('wpc_policy_local')) {
     function wpc_policy_local()
     {
@@ -235,7 +425,7 @@ if (!function_exists('wpc_policy')) {
         $p = wpc_policy_defaults();
         $stored = wpc_policy_stored();
         if (is_array($stored)) {
-            foreach (['serve', 'land', 'scope', 'formats', 'budget', 'version', 'cohorts', 'wpc_levers', 'wpc_trial'] as $k) {
+            foreach (['serve', 'land', 'scope', 'formats', 'budget', 'version', 'cohorts', 'wpc_levers', 'wpc_lists', 'wpc_trial'] as $k) {
                 if (array_key_exists($k, $stored)) {
                     $p[$k] = $stored[$k];
                 }
@@ -248,6 +438,9 @@ if (!function_exists('wpc_policy')) {
                 $p['cohorts'] = $builtin;
                 $p['source'] = 'builtin';
             }
+        }
+        if (isset($p['source']) && ($p['source'] === 'orchestrator' || $p['source'] === 'builtin') && isset($p['cohorts']) && is_array($p['cohorts'])) {
+            $p['cohorts'] = wpc_policy_with_default_cohorts($p['cohorts']);
         }
         $local = wpc_policy_local();
         if (isset($local['serve']) && $local['serve'] === 'origin') {
@@ -385,18 +578,21 @@ if (!function_exists('wpc_policy_ingest')) {
         }
         $was_levers = is_array($old) && isset($old['wpc_levers']) ? $old['wpc_levers'] : null;
         $now_levers = isset($new['wpc_levers']) ? $new['wpc_levers'] : null;
-        $was_cohorts = $builtin_was !== [] ? $builtin_was : (is_array($old) && isset($old['cohorts']) ? $old['cohorts'] : []);
-        $now_cohorts = isset($new['cohorts']) ? $new['cohorts'] : [];
-        if (wpc_policy_render_part($was_cohorts, $was_levers) !== wpc_policy_render_part($now_cohorts, $now_levers)
+        $was_cohorts = wpc_policy_effective_cohorts($old, $builtin_was);
+        $now_cohorts = wpc_policy_effective_cohorts($new);
+        $was_lists = is_array($old) && isset($old['wpc_lists']) ? $old['wpc_lists'] : null;
+        $now_lists = isset($new['wpc_lists']) ? $new['wpc_lists'] : null;
+        if (wpc_policy_render_part($was_cohorts, $was_levers, $was_lists) !== wpc_policy_render_part($now_cohorts, $now_levers, $now_lists)
             && function_exists('wpc_delivery_config_version_flip')) {
             wpc_delivery_config_version_flip(true);
         }
-        if (($was_levers !== $now_levers || $was_cohorts !== $now_cohorts) && function_exists('wpc_cache_first_log')) {
+        if (($was_levers !== $now_levers || $was_cohorts !== $now_cohorts || $was_lists !== $now_lists) && function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('policy-levers', '', '', [
                 'rev_from' => is_array($was_levers) ? (int) $was_levers['rev'] : 0,
                 'rev_to'   => is_array($now_levers) ? (int) $now_levers['rev'] : 0,
                 'levers'   => is_array($now_levers) ? count($now_levers['levers']) : 0,
                 'cohorts'  => count($now_cohorts),
+                'lists'    => is_array($now_lists) ? count($now_lists) : 0,
             ]);
         }
         return true;
@@ -454,16 +650,19 @@ if (!function_exists('wpc_policy_forget_service_keys')) {
     function wpc_policy_forget_service_keys()
     {
         $stored = wpc_policy_stored();
-        if (!is_array($stored) || !array_intersect(['cohorts', 'wpc_levers', 'wpc_trial', 'version'], array_keys($stored))) {
+        if (!is_array($stored) || !array_intersect(['cohorts', 'wpc_levers', 'wpc_lists', 'wpc_trial', 'version'], array_keys($stored))) {
             return false;
         }
         $was = isset($stored['cohorts']) ? $stored['cohorts'] : [];
+        $was_effective = wpc_policy_effective_cohorts($stored);
         $was_levers = isset($stored['wpc_levers']) ? $stored['wpc_levers'] : null;
-        unset($stored['cohorts'], $stored['wpc_levers'], $stored['wpc_trial'], $stored['version']);
+        $was_lists = isset($stored['wpc_lists']) ? $stored['wpc_lists'] : null;
+        unset($stored['cohorts'], $stored['wpc_levers'], $stored['wpc_lists'], $stored['wpc_trial'], $stored['version']);
         update_option(WPC_POLICY_OPTION, $stored, false);
         wpc_policy(true);
         wpc_policy_cohort_effects($was, []);
-        if (wpc_policy_render_part($was, $was_levers) !== '' && function_exists('wpc_delivery_config_version_flip')) {
+        if (wpc_policy_render_part($was_effective, $was_levers, $was_lists) !== wpc_policy_render_part(wpc_policy_effective_cohorts($stored, wpc_policy_builtin_cohorts()), null, null)
+            && function_exists('wpc_delivery_config_version_flip')) {
             wpc_delivery_config_version_flip(true);
         }
         return true;
@@ -494,11 +693,12 @@ if (!function_exists('wpc_lever_acting_names')) {
     function wpc_lever_acting_names()
     {
         return ['delay_js', 'scripts_late', 'delay_onload', 'menu_early', 'lazy_skip', 'hero_eager', 'lcp_density_cap', 'fonts_origin', 'cv_below_fold', 'font_preload_drop',
-            'preload_cap', 'preload_gap_ms', 'css_barrier', 'late_css_timer_cap', 'style_hold_ms', 'submit_hold_ms', 'menu_resize_hold_ms',
+            'preload_cap', 'preload_gap_ms', 'css_barrier', 'late_css_timer_cap', 'style_hold_ms', 'submit_hold_ms', 'menu_resize_hold_ms', 'loader_pace_ms',
             'late_css_timer', 'late_css_lcp', 'late_css_cap', 'late_css_backstop', 'menu_early_lcp', 'delay_timeout',
             'loader_after_lcp_cap_ms', 'after_hero_cap_ms', 'after_hero_paint_ms', 'img_after_hero_cap_ms', 'hero_painted_timeout_ms', 'after_hero_entry_cap_ms', 'hero_lqip_load_cap_ms',
             'atf_inline_faces_cap', 'fonts_css_inline_max', 'localize_inline_fonts_cap', 'font_preload_max',
-            'hero_lqip_image_max', 'hero_lqip_inline_max', 'hero_lqip_selector_max', 'hero_lqip_layers_max', 'hero_lqip_images_max'];
+            'hero_lqip_image_max', 'hero_lqip_inline_max', 'hero_lqip_selector_max', 'hero_lqip_layers_max', 'hero_lqip_images_max',
+            'img_lqip_image_max', 'img_lqip_width_max'];
     }
 }
 
@@ -552,7 +752,8 @@ if (!function_exists('wpc_policy_nonrender_cohorts')) {
             'off_beacon_proof',
             'off_vitals_early',
             'vitals_push',
-            'cache_p1', 'cache_p2', 'cache_p3', 'cache_p4', 'hc_auth_legs', 'devmix_clear', 'off_lcp_preload_guard_per_device', 'off_cache_without_lcp_preload'];
+            'cache_p1', 'cache_p2', 'cache_p3', 'cache_p4', 'hc_auth_legs', 'devmix_clear', 'off_lcp_preload_guard_per_device', 'off_cache_without_lcp_preload',
+            'host_cache_purge', 'crit_leg_reopen'];
     }
 }
 
@@ -561,7 +762,7 @@ if (!function_exists('wpc_policy_render_cohorts')) {
     function wpc_policy_render_cohorts()
     {
         return ['plain_paths', 'encode_on_view', 'off_attach_match', 'off_zone_crit_urls', 'delay_trusted', 'menu_fix', 'css_order', 'body_js_ext',
-            'fetchpriority_hero', 'hero_fold', 'faces_range', 'atf_faces', 'asset_icv', 'crit_after_global', 'click_record', 'off_first_screen_swap', 'click_serviced', 'bg_hero_match', 'off_bg_preload_scan', 'off_painted_follow', 'native_assets', 'phone_hero', 'after_hero', 'img_after_hero', 'icon_font_preload_drop', 'late_faces_handover', 'late_faces_below_fold', 'release_no_transition', 'swap_no_transition', 'inline_data_pct', 'doc_trim', 'release_needs_gesture', 'css_release_idle', 'crit_retire', 'rest_swap_hold', 'embed_hold', 'menu_early', 'subset_face_swap', 'font_display_declared', 'faces_first_screen','hidden_until_js_idle', 'tap_first', 'form_submit_hold', 'bg_mobile_src', 'hero_lqip', 'hero_one_url', 'slice_keyframes', 'slice_page_sheets', 'refused_face_first', 'icon_guard_release', 'ar_pin_exact', 'hero_decode_sync', 'lazy_margin_native', 'atf_complete_lazy', 'hero_same_origin', 'ar_pin_disk', 'deferred_after_lcp', 'faces_base64_trim', 'menu_toggle_live', 'release_on_lcp_entry', 'img_hold_first_screen', 'faces_after_lcp', 'first_party_typed', 'lever_delay_js', 'lever_scripts_late', 'lever_delay_onload', 'lever_menu_early', 'lever_hero_eager', 'lever_fonts_origin', 'lever_cv_below_fold', 'lever_font_preload_drop', 'off_retire_live_gate', 'phone_bg_derive', 'safe_delay', 'safe_delay_families', 'delay_host_rule', 'divi_live_css_off', 'off_first_n_trim', 'off_icon_preload_unseen', 'off_gf_hold', 'off_data_only_call_guard', 'off_cio_rebase_fix', 'off_lcp_entry_match', 'off_rescan_late_faces', 'off_first_n_measured_fold', 'off_hidden_slide_defer', 'off_loader_after_lcp', 'off_bg_rung_fit', 'off_bg_rung_pair', 'off_img_load_unhold', 'off_preload_before_crit', 'off_rest_at_crit', 'rest_at_crit', 'off_late_chain_gate', 'off_cv_transition_guard', 'off_rest_focus_guard', 'off_offscreen_video', 'off_lcp_kind_gate', 'off_slider_fold_lazy', 'off_hero_lqip_after_paint', 'off_lcp_copy_low', 'off_el_stretch_fit', 'off_el_pin_reach', 'off_lcp_size_floor', 'ucss_heal', 'off_el_heal_px'];
+            'fetchpriority_hero', 'hero_fold', 'faces_range', 'atf_faces', 'asset_icv', 'crit_after_global', 'click_record', 'off_first_screen_swap', 'click_serviced', 'bg_hero_match', 'off_bg_preload_scan', 'off_painted_follow', 'native_assets', 'phone_hero', 'after_hero', 'img_after_hero', 'icon_font_preload_drop', 'late_faces_handover', 'late_faces_below_fold', 'release_no_transition', 'swap_no_transition', 'inline_data_pct', 'doc_trim', 'release_needs_gesture', 'css_release_idle', 'crit_retire', 'rest_swap_hold', 'embed_hold', 'menu_early', 'subset_face_swap', 'font_display_declared', 'faces_first_screen','hidden_until_js_idle', 'tap_first', 'form_submit_hold', 'bg_mobile_src', 'bg_mobile_edge_rung', 'hero_lqip', 'img_lqip', 'hero_one_url', 'slice_keyframes', 'slice_page_sheets', 'refused_face_first', 'icon_guard_release', 'ar_pin_exact', 'hero_decode_sync', 'lazy_margin_native', 'atf_complete_lazy', 'hero_same_origin', 'ar_pin_disk', 'deferred_after_lcp', 'faces_base64_trim', 'menu_toggle_live', 'release_on_lcp_entry', 'img_hold_first_screen', 'faces_after_lcp', 'first_party_typed', 'lever_delay_js', 'lever_scripts_late', 'lever_delay_onload', 'lever_menu_early', 'lever_hero_eager', 'lever_fonts_origin', 'lever_cv_below_fold', 'lever_font_preload_drop', 'off_retire_live_gate', 'phone_bg_derive', 'safe_delay', 'safe_delay_families', 'delay_host_rule', 'divi_live_css_off', 'off_first_n_trim', 'off_icon_preload_unseen', 'off_gf_hold', 'off_data_only_call_guard', 'off_cio_rebase_fix', 'off_lcp_entry_match', 'off_rescan_late_faces', 'off_first_n_measured_fold', 'off_hidden_slide_defer', 'off_loader_after_lcp', 'off_bg_rung_fit', 'off_bg_rung_pair', 'off_cf_bg_named', 'off_img_load_unhold', 'off_preload_before_crit', 'off_rest_at_crit', 'rest_at_crit', 'off_late_chain_gate', 'off_cv_transition_guard', 'off_rest_focus_guard', 'off_offscreen_video', 'off_lcp_kind_gate', 'off_slider_fold_lazy', 'off_hero_lqip_after_paint', 'off_hero_lqip_combined', 'off_lcp_copy_low', 'off_el_stretch_fit', 'off_el_pin_reach', 'off_lcp_size_floor', 'ucss_heal', 'off_el_heal_px', 'theme_bg_cdn', 'etcache_live_inline', 'lscwp_keep_inline', 'lcp_bg_path_exact', 'lcp_link_header', 'cdn_directories', 'slider_lcp', 'lcp_paint_exact', 'ar_pin_width_only', 'force_delay_jquery', 'atf_wire_clear'];
     }
 }
 
@@ -584,7 +785,7 @@ if (!function_exists('wpc_policy_render_part')) {
      * levers a person's setting does not block, and the levers' scope.
      * Empty when none is on, so a site that has none signs its delivery configuration as it always did.
      */
-    function wpc_policy_render_part($cohorts, $levers)
+    function wpc_policy_render_part($cohorts, $levers, $lists = null)
     {
         $cohortsOn = [];
         if (is_array($cohorts)) {
@@ -625,17 +826,27 @@ if (!function_exists('wpc_policy_render_part')) {
                 sort($scope);
             }
         }
+        $listsOn = [];
+        if (is_array($lists)) {
+            foreach (wpc_policy_lists_allowed() as $key => $def) {
+                $clean = isset($lists[$key]) && in_array($def['cohort'], $cohortsOn, true) ? wpc_policy_list_clean($key, $lists[$key]) : [];
+                if ($clean !== []) {
+                    $listsOn[$key] = $clean;
+                }
+            }
+            ksort($listsOn);
+        }
         if ($cohortsOn === [] && $leversOn === []) {
             return '';
         }
-        return substr(md5(serialize([$cohortsOn, $leversOn, $scope])), 0, 12);
+        return substr(md5(serialize($listsOn === [] ? [$cohortsOn, $leversOn, $scope] : [$cohortsOn, $leversOn, $scope, $listsOn])), 0, 12);
     }
 }
 
 if (!function_exists('wpc_policy_render_signature')) {
     function wpc_policy_render_signature()
     {
-        return wpc_policy_render_part(wpc_policy_get('cohorts', []), wpc_policy_get('wpc_levers', null));
+        return wpc_policy_render_part(wpc_policy_get('cohorts', []), wpc_policy_get('wpc_levers', null), wpc_policy_get('wpc_lists', null));
     }
 }
 
@@ -908,6 +1119,7 @@ if (!function_exists('wpc_policy_echo_fields')) {
         if ((string) wpc_policy_get('source', '') === 'builtin') {
             $f['cohorts_builtin_seen'] = 1;
         }
+        $f['wpc_lists'] = (object) wpc_policy_lists_counts();
         $f['policy_effective'] = ['serve' => (string) wpc_policy_serve(), 'land' => (string) wpc_policy_land()];
         $levers = wpc_policy_get('wpc_levers', null);
         if (is_array($levers)) {
@@ -947,6 +1159,12 @@ if (!function_exists('wpc_policy_echo_fields')) {
         }
         if (function_exists('wpc_site_noprescr_counts')) {
             $f = array_merge($f, wpc_site_noprescr_counts());
+        }
+        if (function_exists('wpc_host_cache_echo')) {
+            $f = array_merge($f, wpc_host_cache_echo());
+        }
+        if (function_exists('wpc_crit_leg_echo')) {
+            $f = array_merge($f, wpc_crit_leg_echo());
         }
         return $f;
     }
@@ -2016,7 +2234,11 @@ if (!function_exists('wpc_policy_tighten_ajax')) {
         }
         $ok = wpc_policy_tighten($key, $value);
         if ($ok) {
-            wp_send_json_success(['policy' => wpc_policy()]);
+            $policy = wpc_policy();
+            if (is_array($policy) && isset($policy['wpc_lists'])) {
+                $policy['wpc_lists'] = (object) wpc_policy_lists_counts();
+            }
+            wp_send_json_success(['policy' => $policy]);
         }
         wp_send_json_error(['error' => 'bad_key'], 400);
     }
@@ -2041,7 +2263,7 @@ if (!function_exists('wpc_v2_health_snapshot')) {
         $free = @disk_free_space($base); $total = @disk_total_space($base);
         $load = function_exists('sys_getloadavg') ? @sys_getloadavg() : null;
         $twin = get_option(WPC_TWIN_BYTES_OPTION, ['bytes' => 0, 'since' => 0]);
-        return [
+        $snapshot = [
             'plugin_version'  => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
             'mode'            => function_exists('wpc_get_optimization_mode') ? wpc_get_optimization_mode() : '',
             'policy'          => ['version' => function_exists('wpc_policy_version') ? (int) wpc_policy_version() : 0, 'serve' => function_exists('wpc_policy_serve') ? wpc_policy_serve() : '', 'land' => function_exists('wpc_policy_land') ? wpc_policy_land() : ''],
@@ -2052,6 +2274,16 @@ if (!function_exists('wpc_v2_health_snapshot')) {
             'safe_mode'       => function_exists('wpc_safe_mode') ? (int) wpc_safe_mode() : -1,
             'time'            => time(),
         ];
+        if (function_exists('wpc_policy_lists_counts')) {
+            $snapshot['wpc_lists'] = (object) wpc_policy_lists_counts();
+        }
+        if (function_exists('wpc_host_cache_echo')) {
+            $snapshot = array_merge($snapshot, wpc_host_cache_echo());
+        }
+        if (function_exists('wpc_crit_leg_echo')) {
+            $snapshot = array_merge($snapshot, wpc_crit_leg_echo());
+        }
+        return $snapshot;
     }
     add_action('rest_api_init', function () {
         register_rest_route('wpc/v2', '/health', [

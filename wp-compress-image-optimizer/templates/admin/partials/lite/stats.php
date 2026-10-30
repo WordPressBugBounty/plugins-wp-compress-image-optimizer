@@ -196,6 +196,13 @@ if (!empty($v2_gps) && !empty($v2_gps['result'])) {
                     <?php esc_html_e('Retest', WPS_IC_TEXTDOMAIN); ?>
                 </a>
             </div>
+            <?php } elseif ($warmupFailing) { ?>
+            <div class="wpc-v2-header-meta">
+                <a href="#" class="wps-ic-initial-retest wpc-v2-retest-btn">
+                    <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                    <?php esc_html_e('Retest', WPS_IC_TEXTDOMAIN); ?>
+                </a>
+            </div>
             <?php } ?>
         </div>
         <?php if ($v2_hasGPS && !$v2_scoresPending) { ?>
@@ -291,6 +298,11 @@ if (!empty($v2_gps) && !empty($v2_gps['result'])) {
             </div>
         </div>
         <?php } ?>
+        <?php } elseif ($warmupFailing && !$v2_hasGPS) { ?>
+        <div class="wpc-v2-scores-loading wpc-v2-scores-failed">
+            <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg" style="display:none"/>
+            <span><?php esc_html_e('Error: Connection to our API was blocked by a firewall on your server.', WPS_IC_TEXTDOMAIN); ?> <a href="<?php echo esc_url(function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/') : 'https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/'); ?>" target="_blank" rel="noopener"><?php echo esc_html__('Whitelisting Tutorial', WPS_IC_TEXTDOMAIN); ?></a></span>
+        </div>
         <?php } else { ?>
         <div class="wpc-v2-scores-loading">
             <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>

@@ -101,7 +101,7 @@ var jsDebug = 0;
 function load() {
     browserWidth = window.innerWidth;
     lazyImages = [].slice.call(document.querySelectorAll("img"));
-    elementorInvisible = [].slice.call(document.querySelectorAll("section.elementor-invisible"));
+    elementorInvisible = [].slice.call(document.querySelectorAll("section.elementor-invisible:not([data-wpc-ela])"));
     active = false;
     activeRegular = false;
     lazyLoad();

@@ -698,11 +698,17 @@ $return['mobile_path'] = $mobileFilePath;
                 // Read by the service at server.js:15727 (req.body.capabilities); a key not listed here has no reader.
                 $args['capabilities'] = ['delay_manifest' => 1, 'consolidated_callback' => 1, 'delay_inline' => 1, 'lcp_inline' => 1];
             }
+            if (function_exists('wpc_bg_mobile_edge_rung_capability')) {
+                wpc_bg_mobile_edge_rung_capability($args);
+            }
             if (function_exists('wpc_hero_rendition_capability')) {
                 wpc_hero_rendition_capability($args);
             }
             if (function_exists('wpc_hero_lqip_capability')) {
                 wpc_hero_lqip_capability($args);
+            }
+            if (function_exists('wpc_img_lqip_capability')) {
+                wpc_img_lqip_capability($args);
             }
             if (function_exists('wpc_signed_artifacts_capability')) {
                 wpc_signed_artifacts_capability($args);
@@ -1301,11 +1307,17 @@ $return['mobile_path'] = $mobileFilePath;
                 // Read by the service at server.js:15727 (req.body.capabilities); a key not listed here has no reader.
                 $args['capabilities'] = ['delay_manifest' => 1, 'consolidated_callback' => 1, 'delay_inline' => 1, 'lcp_inline' => 1];
             }
+            if (function_exists('wpc_bg_mobile_edge_rung_capability')) {
+                wpc_bg_mobile_edge_rung_capability($args);
+            }
             if (function_exists('wpc_hero_rendition_capability')) {
                 wpc_hero_rendition_capability($args);
             }
             if (function_exists('wpc_hero_lqip_capability')) {
                 wpc_hero_lqip_capability($args);
+            }
+            if (function_exists('wpc_img_lqip_capability')) {
+                wpc_img_lqip_capability($args);
             }
             if (function_exists('wpc_signed_artifacts_capability')) {
                 wpc_signed_artifacts_capability($args);

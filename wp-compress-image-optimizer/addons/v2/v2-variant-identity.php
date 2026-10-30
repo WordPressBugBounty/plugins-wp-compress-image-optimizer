@@ -113,9 +113,12 @@ if (!function_exists('wpc_v2_variant_identity')) {
         return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'];
     }
 
-    /** The kill switch: the filter answers false and every variant reads unverified. */
+    /** The kill switch: WPC_VARIANT_IDENTITY_OFF or the filter answering false, and every variant reads unverified. */
     function wpc_v2_variant_identity_on()
     {
+        if (defined('WPC_VARIANT_IDENTITY_OFF') && WPC_VARIANT_IDENTITY_OFF) {
+            return false;
+        }
         return function_exists('apply_filters') ? (bool) apply_filters('wpc_variant_identity_on', true) : true;
     }
 
@@ -1612,7 +1615,7 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
      */
     function wpc_v2_variant_identity_quarantine_tick()
     {
-        if (!function_exists('get_option')) {
+        if (!wpc_v2_variant_identity_on() || !function_exists('get_option')) {
             return;
         }
         $state = get_option('wpc_variant_identity_sweep', []);
@@ -1957,6 +1960,9 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
     function wpc_v2_variant_identity_sweep_run()
     {
         global $wpdb;
+        if (!wpc_v2_variant_identity_on()) {
+            return;
+        }
         $state = get_option('wpc_variant_identity_sweep', []);
         if (!is_array($state) || !empty($state['done'])) {
             if (function_exists('wp_clear_scheduled_hook')) {
@@ -2098,7 +2104,7 @@ if (!function_exists('wpc_v2_variant_identity_sweep_run')) {
      */
     function wpc_v2_variant_identity_sweep_arm()
     {
-        if (!function_exists('get_option') || !function_exists('wp_schedule_single_event') || !function_exists('wp_next_scheduled')) {
+        if (!wpc_v2_variant_identity_on() || !function_exists('get_option') || !function_exists('wp_schedule_single_event') || !function_exists('wp_next_scheduled')) {
             return;
         }
         $state = get_option('wpc_variant_identity_sweep', null);

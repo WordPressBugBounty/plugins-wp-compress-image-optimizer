@@ -1497,7 +1497,7 @@ class wps_ic_comms extends wps_ic
 
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
         $started_at = microtime(true);
-        $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => wpc_service_sslverify($url), 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'],]]);
+        $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => wpc_service_sslverify($url), 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '']]);
         $elapsed_ms = (int) round((microtime(true) - $started_at) * 1000);
 
         $fail = null;

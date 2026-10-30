@@ -109,7 +109,7 @@ if (!function_exists('wpc_stale_serve_plan')) {
         if (defined('WPS_IC_CACHE') && function_exists('wpc_fs_link_below') && wpc_fs_link_below(WPS_IC_CACHE, $dir)) {
             return;
         }
-        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt', 'links.txt', 'head.json'] as $copy_file) {
+        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt', 'links.txt', 'head.json', 'cohort.txt'] as $copy_file) {
             @unlink($dir . $prefix . $copy_file);
         }
     }
@@ -596,6 +596,10 @@ class wps_advancedCache
 
         // (stored headers), readable same-origin via the navigation entry's serverTiming.
         wpc_send_header('Server-Timing: wpc-cache;desc=hit', false);
+        $wpc_cohort_stamp = $wpc_localonly ? '' : wpc_copy_cohort_stamp($cache_filepath);
+        if ($wpc_cohort_stamp !== '') {
+            wpc_send_header('Server-Timing: wpc-coh;desc=' . $wpc_cohort_stamp, false);
+        }
 
 		    $headerCacheFile = $this->cachePath . 'headers.json';
 		    // A local-only copy never takes an edge directive from the stored set, whichever
@@ -630,6 +634,10 @@ class wps_advancedCache
 				    }
 			    }
 		    }
+
+        if (!$wpc_localonly && function_exists('wpc_link_headers_send_copy')) {
+            wpc_link_headers_send_copy($cache_filepath);
+        }
 
         wpc_send_header('X-Cache-By: Advanced Cache - ' . $type);
     }

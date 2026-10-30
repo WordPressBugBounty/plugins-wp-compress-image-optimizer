@@ -415,7 +415,9 @@ function wpc_v2_journal_drain_run() {
     if (function_exists('wpc_landed_pages_drain')) {
         wpc_landed_pages_drain();
     }
-    @ini_set('memory_limit', '256M');
+    if (function_exists('wpc_raise_memory_limit')) {
+        wpc_raise_memory_limit('256M');
+    }
     @ini_set('max_execution_time', '30');
     @ignore_user_abort(true);
 

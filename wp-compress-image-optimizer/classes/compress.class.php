@@ -389,7 +389,9 @@ class wps_ic_compress
         }
 
         setcookie('ic_varnish_clear', microtime(true), time() + 600, '/');
-        ini_set('memory_limit', '2024M');
+        if (function_exists('wpc_raise_memory_limit')) {
+            wpc_raise_memory_limit('2024M');
+        }
         ini_set('max_execution_time', '180');
 
         if (!function_exists('download_url')) {

@@ -2782,7 +2782,9 @@ class wps_local_compress
      */
     public function raiseLimits() {
         wp_raise_memory_limit('image');
-        ini_set('memory_limit', '1024M');
+        if (function_exists('wpc_raise_memory_limit')) {
+            wpc_raise_memory_limit('1024M');
+        }
     }
 
 

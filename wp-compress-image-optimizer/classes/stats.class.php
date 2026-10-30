@@ -306,6 +306,7 @@ class wps_ic_stats
                     'user-agent' => WPS_IC_API_USERAGENT,
                     'headers' => [
                         'apikey' => self::$api_key,
+                        'plugin-version' => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
                     ]
                 ]);
                 $body = wp_remote_retrieve_body($call);
@@ -403,6 +404,7 @@ class wps_ic_stats
             'user-agent' => WPS_IC_API_USERAGENT,
             'headers' => [
                 'apikey' => self::$api_key,
+                'plugin-version' => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
             ]
         ]);
 

@@ -27,6 +27,7 @@
  *   lcpElement($device, $page)  the measured (or service-derived) LCP element for one device
  *   lcpBackgroundUrl($device)   the file of the page's own measured LCP when it is a CSS background image, '' otherwise
  *   lcpPaintedUrl($device)      the file the service's browser fetched to paint the page's own background hero, '' otherwise
+ *   paintedUrl($device)         the address the service's browser fetched for the hero as the page spelled it (`painted_url`), '' when absent or not valid
  *   lcpPreloadHints($device)    the service's hero preload directives (the preload writers)
  *   observedPageKey()           the page the observation measured, for receipts
  *
@@ -127,6 +128,12 @@ class wps_ic_atf_observation
     const HERO_LQIP_LAYERS_MAX = 2048;
     const HERO_LQIP_IMAGES_MAX = 8;
 
+    const HERO_LQIP_MEDIA_MAX = 767.98;
+
+    const IMG_LQIP_IMAGE_MAX = 10240;
+    const IMG_LQIP_WIDTH_MAX = 2048;
+    const IMG_LQIP_PHONE_MAX = 450;
+
     public static function num($const)
     {
         $levers = [
@@ -135,6 +142,8 @@ class wps_ic_atf_observation
             'HERO_LQIP_SELECTOR_MAX' => ['hero_lqip_selector_max', 75, 1200],
             'HERO_LQIP_LAYERS_MAX'   => ['hero_lqip_layers_max', 512, 8192],
             'HERO_LQIP_IMAGES_MAX'   => ['hero_lqip_images_max', 2, 32],
+            'IMG_LQIP_IMAGE_MAX'     => ['img_lqip_image_max', 2560, 40960],
+            'IMG_LQIP_WIDTH_MAX'     => ['img_lqip_width_max', 512, 4096],
         ];
         $const = (string) $const;
         $default = defined(self::class . '::' . $const) ? (int) constant(self::class . '::' . $const) : 0;
@@ -179,6 +188,7 @@ class wps_ic_atf_observation
     private static $atfHandover = null;
     private static $hero = [];
     private static $heroLqip = [];
+    private static $imgLqip = [];
     private static $bgDerived = [];
 
     /**
@@ -504,6 +514,32 @@ class wps_ic_atf_observation
             return '';
         }
         return $src;
+    }
+
+    /**
+     * The address the service's browser fetched for one device's hero as the page spelled it (`painted_url` of lcp_element[device]: an <img>'s
+     * currentSrc or a background's computed url), '' when the leg has none, holds its hero back, is a video or text, or names an address that is
+     * longer than 300 characters, not http(s), not on this site's host or its zone, or carries a character no URL holds.
+     */
+    public static function paintedUrl($device)
+    {
+        $document = self::document(false);
+        if (!is_array($document) || self::documentHolds($document, $device)) {
+            return '';
+        }
+        $element = self::lcpElement($device);
+        if (!isset($element['painted_url']) || !is_string($element['painted_url'])) {
+            return '';
+        }
+        if (isset($element['type']) && is_string($element['type']) && in_array(strtolower(trim($element['type'])), ['video', 'text'], true)) {
+            return '';
+        }
+        $painted = trim($element['painted_url']);
+        if ($painted === '' || strlen($painted) > 300 || !preg_match('#^https?://[^/?\#\s"\'<>\\\\]+/[^\#\s"\'<>\\\\]*$#i', $painted)
+            || !self::ownHost((string) parse_url($painted, PHP_URL_HOST))) {
+            return '';
+        }
+        return $painted;
     }
 
     /**
@@ -983,6 +1019,68 @@ class wps_ic_atf_observation
         return function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('bg_mobile_src') === 1;
     }
 
+    const BG_EDGE_RUNG_MAX = 2560;
+
+    public static function bgMobileEdgeRungOn()
+    {
+        return self::bgMobileSourceOn() && (int) wpc_policy_cohort('bg_mobile_edge_rung') === 1
+            && self::bgMobileCdnOn() && self::bgMobileZoneHost() !== ''
+            && function_exists('wpc_cdn_drives_images') && wpc_cdn_drives_images();
+    }
+
+    /** Whether the CDN serves the page: the render's answer once a render set it, the site's answer from wpc_cdn_active() before (the dispatch). */
+    public static function bgMobileCdnOn()
+    {
+        if (class_exists('wps_cdn_rewrite') && isset(wps_cdn_rewrite::$cdnEnabled)) {
+            return (string) wps_cdn_rewrite::$cdnEnabled === '1';
+        }
+        return function_exists('wpc_cdn_active') && wpc_cdn_active()['on'];
+    }
+
+    public static function bgMobileZoneHost()
+    {
+        $zone = function_exists('get_option') ? strtolower(trim((string) strtok((string) get_option('ic_cdn_zone_name'), '/'))) : '';
+        return preg_match('/^[a-z0-9-]{1,63}\.zapwp\.com$/', $zone) ? $zone : '';
+    }
+
+    public static function bgMobileEdgeWhy($to, $was, $need, &$found)
+    {
+        $found = [];
+        $zone = self::bgMobileZoneHost();
+        if ($zone === '' || !is_string($to) || !preg_match('#^https://([a-z0-9.-]+)(/[^?\#\s"\'<>\\\\@]*)$#Di', $to, $address) || strtolower($address[1]) !== $zone) {
+            return 'zone';
+        }
+        if (!class_exists('wps_rewriteLogic') || !wps_rewriteLogic::isImage((string) $was) || wps_rewriteLogic::isExcluded((string) $was)
+            || wps_rewriteLogic::isExcludedFrom('cdn', (string) $was)) {
+            return 'lane';
+        }
+        $wasPath = (string) parse_url((string) $was, PHP_URL_PATH);
+        if (strpos($wasPath, '..') !== false || strpos($wasPath, '//') !== false || strpos($address[2], '..') !== false || strpos($address[2], '//') !== false
+            || !preg_match('#^(/(?:[^/]+/)*)([^/]+)\.(jpe?g|png|webp|avif)$#Di', $wasPath, $upload) || preg_match('/-\d+x\d+$|-\d+w$/i', $upload[2])) {
+            return 'upload';
+        }
+        if (!preg_match('#^' . preg_quote($upload[1] . $upload[2], '#') . '-([1-9]\d{1,4})w\.' . preg_quote($upload[3], '#') . '$#D', $address[2], $rung)) {
+            return 'name';
+        }
+        $w = (int) $rung[1];
+        if ($w !== $need || $w > self::BG_EDGE_RUNG_MAX) {
+            return 'size';
+        }
+        $wasFile = self::installFile($was);
+        if ($wasFile === '' || !@is_file($wasFile)) {
+            return 'file';
+        }
+        $dims = function_exists('wpc_image_file_dims') ? wpc_image_file_dims($wasFile) : null;
+        if (!is_array($dims) || (float) $dims[0] <= 0 || (float) $dims[1] <= 0) {
+            return 'dims';
+        }
+        if ($w >= (int) $dims[0]) {
+            return 'size';
+        }
+        $found = ['w' => $w, 'h' => max(1, (int) round($w * (float) $dims[1] / (float) $dims[0])), 'file' => $wasFile];
+        return '';
+    }
+
     /**
      * The per-site switch of the plugin's own pick of the phone's background source (the cohort phone_bg_derive, off unless set):
      * the one reader, asked by the render stage that derives the record.
@@ -1145,7 +1243,8 @@ class wps_ic_atf_observation
         $to = isset($record['to']) ? $record['to'] : null;
         $was = (isset($record['was']) && is_array($record['was']) && isset($record['was']['url'])) ? $record['was']['url'] : null;
         $need = isset($record['need_px']) ? $record['need_px'] : null;
-        if (!isset($record['v']) || $record['v'] !== 1 || !isset($record['kind']) || $record['kind'] !== 'wp_intermediate'
+        $edge = isset($record['kind']) && $record['kind'] === 'edge_rung' && self::bgMobileEdgeRungOn();
+        if (!isset($record['v']) || $record['v'] !== 1 || !isset($record['kind']) || ($record['kind'] !== 'wp_intermediate' && !$edge)
             || !is_string($to) || !is_string($was) || !is_int($need) || $need < 1 || $need > 8192) {
             return $refuse('shape');
         }
@@ -1162,11 +1261,15 @@ class wps_ic_atf_observation
         if (!isset($element['url']) || $element['url'] !== $to) {
             return $refuse('element');
         }
-        $why = self::bgMobileSizeWhy($to, $was, $need, $found);
+        $why = $edge ? self::bgMobileEdgeWhy($to, $was, $need, $found) : self::bgMobileSizeWhy($to, $was, $need, $found);
         if ($why !== '') {
             return $refuse($why);
         }
-        return ['state' => 'ok', 'to' => $to, 'was' => $was, 'w' => $found['w'], 'h' => $found['h'], 'need_px' => $need, 'file' => $found['file'], 'src' => 'crit'];
+        $ok = ['state' => 'ok', 'to' => $to, 'was' => $was, 'w' => $found['w'], 'h' => $found['h'], 'need_px' => $need, 'file' => $found['file'], 'src' => 'crit'];
+        if ($edge) {
+            $ok['edge'] = true;
+        }
+        return $ok;
     }
 
     /**
@@ -1183,7 +1286,7 @@ class wps_ic_atf_observation
         $element = (is_array($document) && isset($document['lcp_element']['mobile']) && is_array($document['lcp_element']['mobile'])) ? $document['lcp_element']['mobile'] : [];
         $record = (isset($element['bg_mobile_src']) && is_array($element['bg_mobile_src'])) ? $element['bg_mobile_src'] : [];
         return $record !== [] && isset($element['type'], $element['url'], $record['v'], $record['kind'], $record['to'], $record['was']['url'])
-            && $element['type'] === 'bg' && $record['v'] === 1 && $record['kind'] === 'wp_intermediate'
+            && $element['type'] === 'bg' && $record['v'] === 1 && ($record['kind'] === 'wp_intermediate' || ($record['kind'] === 'edge_rung' && self::bgMobileEdgeRungOn()))
             && is_string($record['to']) && is_string($record['was']['url']) && $element['url'] === $record['to'];
     }
 
@@ -1195,6 +1298,23 @@ class wps_ic_atf_observation
     public static function heroLqipOn()
     {
         return function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('hero_lqip') === 1;
+    }
+
+    public static function heroLqipCombinedOn()
+    {
+        if (defined('WPC_HERO_LQIP_COMBINED_OFF') && WPC_HERO_LQIP_COMBINED_OFF) {
+            return false;
+        }
+        if (function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('off_hero_lqip_combined') === 1) {
+            return false;
+        }
+        return !function_exists('apply_filters') || apply_filters('wpc_hero_lqip_combined', true) !== false;
+    }
+
+    public static function heroLqipCombinedLane()
+    {
+        return class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_combined_crit_on')
+            && wps_rewriteLogic::wpc_combined_crit_on() && self::heroLqipCombinedOn();
     }
 
     /**
@@ -1233,7 +1353,7 @@ class wps_ic_atf_observation
         if (!class_exists('wps_rewriteLogic')) {
             return [];
         }
-        if (wps_rewriteLogic::wpc_combined_crit_on()) {
+        if (wps_rewriteLogic::wpc_combined_crit_on() && !self::heroLqipCombinedOn()) {
             return ['state' => 'skipped', 'why' => 'combined-crit'];
         }
         $document = self::document(true);
@@ -1304,6 +1424,10 @@ class wps_ic_atf_observation
         if (strlen($media) < 1 || strlen($media) > 200 || !preg_match('/^[A-Za-z0-9() :.,\-]+$/D', $media) || strpos($media, '(') === false) {
             return $refuse('media');
         }
+        $media = self::heroLqipMedia($media);
+        if (wps_rewriteLogic::wpc_combined_crit_on() && stripos($media, 'max-width') === false) {
+            return $refuse('media');
+        }
         $images = $record['images'];
         if ($images === [] || count($images) > self::num('HERO_LQIP_IMAGES_MAX')) {
             return $refuse('images');
@@ -1355,6 +1479,16 @@ class wps_ic_atf_observation
             'capped' => $capped,
             'bytes'  => strlen($webp) + ($keepAvif ? strlen($avif) : 0),
         ];
+    }
+
+    public static function heroLqipMedia($media)
+    {
+        $media = (string) $media;
+        $max = (float) self::HERO_LQIP_MEDIA_MAX;
+        $out = preg_replace_callback('/\bmax-width\s*:\s*(\d+(?:\.\d+)?)px/i', static function ($m) use ($max) {
+            return (float) $m[1] > $max ? 'max-width: ' . self::HERO_LQIP_MEDIA_MAX . 'px' : $m[0];
+        }, $media);
+        return is_string($out) ? $out : $media;
     }
 
     /**
@@ -1409,6 +1543,142 @@ class wps_ic_atf_observation
         return (strlen($bytes) > 12 && substr($bytes, 4, 4) === 'ftyp' && (strpos($head, 'avif') !== false || strpos($head, 'avis') !== false)) ? $bytes : null;
     }
 
+    public static function imgLqipOn()
+    {
+        return function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('img_lqip') === 1;
+    }
+
+    public static function imgLqip($device)
+    {
+        if ($device !== 'mobile' || !self::imgLqipOn()) {
+            return [];
+        }
+        if (isset(self::$imgLqip[$device])) {
+            return self::$imgLqip[$device];
+        }
+        return self::$imgLqip[$device] = self::imgLqipRecord();
+    }
+
+    private static function imgLqipRecord()
+    {
+        if (!class_exists('wps_rewriteLogic')) {
+            return [];
+        }
+        if (wps_rewriteLogic::wpc_combined_crit_on()) {
+            return ['state' => 'skipped', 'why' => 'combined-crit'];
+        }
+        $document = self::document(true);
+        if (!is_array($document)) {
+            return ['state' => 'skipped', 'why' => 'no-document'];
+        }
+        if (self::documentHolds($document, 'mobile')) {
+            return ['state' => 'skipped', 'why' => 'held'];
+        }
+        $leg = (isset($document['leg_status']['mobile']) && is_array($document['leg_status']['mobile'])) ? $document['leg_status']['mobile'] : [];
+        if (array_key_exists('measured', $leg) && empty($leg['measured'])) {
+            return ['state' => 'skipped', 'why' => 'unmeasured'];
+        }
+        $container = (isset($document['lcp_element']['mobile']) && is_array($document['lcp_element']['mobile'])) ? $document['lcp_element']['mobile'] : [];
+        if (!array_key_exists('img_lqip', $container)) {
+            return ['state' => 'skipped', 'why' => 'no-record'];
+        }
+        $refuse = static function ($why) {
+            return ['state' => 'refused', 'why' => $why];
+        };
+        $r = $container['img_lqip'];
+        if (!is_array($r) || !isset($r['v'], $r['kind'], $r['hero_url'], $r['sig'], $r['source_sig'], $r['match'], $r['box_css'], $r['nat'], $r['fit'], $r['images'])
+            || $r['v'] !== 1 || $r['kind'] !== 'img_lqip' || !is_string($r['hero_url']) || !is_string($r['sig']) || !is_string($r['source_sig'])
+            || !is_array($r['match']) || !isset($r['match']['key'], $r['match']['file']) || !is_string($r['match']['key']) || !is_string($r['match']['file'])
+            || !is_array($r['box_css']) || !is_array($r['nat']) || !is_array($r['fit']) || !is_array($r['images']) || array_values($r['images']) !== $r['images']
+            || !isset($r['vp']['w'], $r['vp']['h']) || !is_int($r['vp']['w']) || !is_int($r['vp']['h']) || $r['vp']['w'] < 1 || $r['vp']['h'] < 1) {
+            return $refuse('shape');
+        }
+        foreach (['lazy', 'picture', 'srcset'] as $flag) {
+            if (!isset($r[$flag]) || !is_bool($r[$flag])) {
+                return $refuse('shape');
+            }
+        }
+        if (!preg_match('/^[0-9a-f]{16}$/D', $r['sig']) || !preg_match('/^[0-9a-f]{16}$/D', $r['source_sig'])) {
+            return $refuse('sig');
+        }
+        $key = self::heroLqipFile($r['hero_url'], true);
+        if ($key === '' || $r['match']['key'] !== $key || $r['match']['file'] !== self::heroLqipFile($r['hero_url'])) {
+            return $refuse('match');
+        }
+        $element = self::lcpElement('mobile', true);
+        if (!isset($element['type']) || $element['type'] !== 'img') {
+            return $refuse('type');
+        }
+        $owns = false;
+        foreach (['url', 'entry_url', 'net_url', 'zone_url', 'src'] as $field) {
+            if (isset($element[$field]) && is_string($element[$field]) && self::heroLqipFile($element[$field], true) === $key) {
+                $owns = true;
+            }
+        }
+        if (!$owns) {
+            return $refuse('element');
+        }
+        $fit = $r['fit'];
+        $sizes = ['cover' => 'cover', 'fill' => '100% 100%'];
+        if (!isset($fit['object_fit'], $fit['size'], $fit['position']) || !is_string($fit['object_fit']) || !isset($sizes[$fit['object_fit']])
+            || $fit['size'] !== $sizes[$fit['object_fit']] || !is_string($fit['position']) || strlen($fit['position']) > 40
+            || !preg_match('/^-?\d+(?:\.\d+)?(?:px|%) -?\d+(?:\.\d+)?(?:px|%)$/D', $fit['position'])) {
+            return $refuse('fit');
+        }
+        $box = $r['box_css'];
+        if (!isset($box['w'], $box['h']) || !is_int($box['w']) || !is_int($box['h']) || $box['w'] < 1 || $box['h'] < 1 || $box['w'] > 4096 || $box['h'] > 4096) {
+            return $refuse('box');
+        }
+        $nat = $r['nat'];
+        if (!isset($nat['w'], $nat['h']) || !is_int($nat['w']) || !is_int($nat['h']) || $nat['w'] < 1 || $nat['h'] < 1) {
+            return $refuse('shape');
+        }
+        if ($nat['w'] > self::num('IMG_LQIP_WIDTH_MAX')) {
+            return $refuse('too-wide');
+        }
+        $image = count($r['images']) === 1 ? $r['images'][0] : null;
+        if (!is_array($image) || !isset($image['type'], $image['uri'], $image['w'], $image['h']) || $image['type'] !== 'image/webp' || !is_string($image['uri'])
+            || !is_int($image['w']) || !is_int($image['h']) || $image['w'] < 1 || $image['h'] < 1) {
+            return $refuse('image');
+        }
+        $bytes = self::imgLqipImage($image['uri']);
+        $area = $box['w'] * $box['h'];
+        if ($bytes === null || abs(($image['w'] / $image['h']) / ($nat['w'] / $nat['h']) - 1) > 0.01 || $image['w'] * $image['h'] < $area
+            || strlen($bytes) * 8 / $area < 0.08 || strlen($bytes) * 8 / ($image['w'] * $image['h']) < 0.08) {
+            return $refuse('image');
+        }
+        $vw = $r['vp']['w'];
+        if ($vw > self::IMG_LQIP_PHONE_MAX || $image['w'] * $image['h'] < min($nat['w'] * $nat['h'], $area * pow(self::IMG_LQIP_PHONE_MAX / $vw, 2))) {
+            return $refuse('bound');
+        }
+        return [
+            'state'    => 'ok',
+            'sig'      => $r['sig'],
+            'url'      => $r['hero_url'],
+            'key'      => $key,
+            'uri'      => $image['uri'],
+            'bytes'    => strlen($bytes),
+            'size'     => $fit['size'],
+            'position' => $fit['position'],
+            'box'      => [$box['w'], $box['h']],
+            'lazy'     => $r['lazy'],
+            'picture'  => $r['picture'],
+            'srcset'   => $r['srcset'],
+        ];
+    }
+
+    private static function imgLqipImage($uri)
+    {
+        if (strlen($uri) > 60000 || !preg_match('#^data:image/webp;base64,([A-Za-z0-9+/]+={0,2})$#D', $uri, $parts)) {
+            return null;
+        }
+        $bytes = base64_decode($parts[1], true);
+        if (!is_string($bytes) || strlen($bytes) <= 12 || strlen($bytes) > self::num('IMG_LQIP_IMAGE_MAX')) {
+            return null;
+        }
+        return (substr($bytes, 0, 4) === 'RIFF' && substr($bytes, 8, 4) === 'WEBP') ? $bytes : null;
+    }
+
     /** The file on this install that an address on the site's own host names, '' when it is not inside the install. */
     private static function installFile($url)
     {
@@ -1460,6 +1730,9 @@ class wps_ic_atf_observation
         self::$hero['one'] = [];
         $record = self::bgMobileSource('mobile');
         if ($record !== [] && $record['state'] === 'ok') {
+            if (!empty($record['edge'])) {
+                return self::$hero['one'] = ['source' => 'bg_mobile_src', 'url' => $record['to'], 'was' => $record['was'], 'key' => wps_ic_image_preload_set::imageKey($record['to'], true), 'edge' => true];
+            }
             return self::$hero['one'] = ['source' => 'bg_mobile_src', 'url' => $record['to'], 'was' => $record['was'], 'key' => wps_ic_image_preload_set::imageKey($record['to'])];
         }
         if (!self::heroOneUrlOn()) {
@@ -1662,6 +1935,12 @@ class wps_ic_atf_observation
             : self::heroCostsMore($url, $one['url']);
         if (!$swap) {
             return '';
+        }
+        if (!empty($one['edge'])) {
+            $ext = static function ($address) {
+                return strtolower((string) pathinfo((string) parse_url((string) $address, PHP_URL_PATH), PATHINFO_EXTENSION));
+            };
+            return $ext($url) === $ext($one['was']) ? $one['url'] : '';
         }
         return self::heroRename($url, $name, $target);
     }
@@ -2605,6 +2884,7 @@ class wps_ic_atf_observation
         self::$atfHandover = null;
         self::$hero = [];
         self::$heroLqip = [];
+        self::$imgLqip = [];
         self::$bgDerived = [];
     }
 }

@@ -392,6 +392,7 @@ if (!function_exists('wpc_copy_family')) {
             'stale_br'   => $base . 'stale.html_br',
             'rewarm'     => $base . 'wpc-rewarm43.txt',
             'reason'     => $base . 'reason.txt',
+            'cohort'     => $base . 'cohort.txt',
             'links'      => $base . 'links.txt',
             'head'       => $base . 'head.json',
         ];
@@ -402,13 +403,18 @@ if (!function_exists('wpc_copy_family')) {
      * its stale copy and rewarm counter go, and so does every file of the other family for the same device, so the page is exactly one family
      * and a reader never finds a copy that is both. Every writer of a page copy calls this once its rename has landed.
      */
-    function wpc_copy_settle($dir, $device, $family, $reason = '')
+    function wpc_copy_settle($dir, $device, $family, $reason = '', $cohort = '', $linkHeader = false)
     {
         $names = wpc_copy_names($dir, $device, $family);
         if ((string) $family !== '' && preg_match('/^[a-z0-9-]{1,40}$/', (string) $reason)) {
             wpc_fs_put($names['reason'], (string) $reason);
         } else {
             @unlink($names['reason']);
+        }
+        if ((string) $family === '' && preg_match('/^[0-9a-f]{12}$/', (string) $cohort)) {
+            wpc_fs_put($names['cohort'], (string) $cohort . ($linkHeader === true ? '+lh' : ''));
+        } else {
+            @unlink($names['cohort']);
         }
         foreach (['rewarm', 'stale_br', 'stale_gzip', 'stale_html'] as $copyKey) {
             @unlink($names[$copyKey]);
@@ -629,6 +635,56 @@ if (!function_exists('wpc_copy_family')) {
     }
 
     /**
+     * The render cohort stamp of the render in progress: the first 12 hex characters of
+     * wpc_policy_render_signature(), or '' when no render-affecting cohort or lever is on or the
+     * signature is not available.
+     */
+    function wpc_cohort_stamp_now()
+    {
+        if (!function_exists('wpc_policy_render_signature')) {
+            return '';
+        }
+        $stamp = substr(strtolower((string) wpc_policy_render_signature()), 0, 12);
+        return preg_match('/^[0-9a-f]{12}$/', $stamp) === 1 ? $stamp : '';
+    }
+
+    /**
+     * The stamp a public copy was stored with, for the Server-Timing wpc-coh header of a file serve:
+     * the writer keeps it beside the copy ('[mobile_]cohort.txt'). A copy stored before the stamp was
+     * kept, or under no cohort, has no file and answers ''.
+     */
+    function wpc_copy_cohort_stamp($copy_path)
+    {
+        $record = wpc_copy_cohort_record($copy_path);
+        return $record['stamp'];
+    }
+
+    /**
+     * What a copy's cohort file holds: ['stamp' => the 12 hex or '', 'lh' => whether the copy was rendered with
+     * cohort lcp_link_header on and carries its marked preload (the file reads '<stamp>+lh')].
+     */
+    function wpc_copy_cohort_record($copy_path)
+    {
+        $record = ['stamp' => '', 'lh' => false];
+        $stamp_path = preg_replace('/(?:index|stale)\.html(?:_gzip|_br)?$/', 'cohort.txt', (string) $copy_path);
+        if ($stamp_path !== null && $stamp_path !== (string) $copy_path && @is_file($stamp_path)) {
+            $raw = trim((string) @file_get_contents($stamp_path, false, null, 0, 32));
+            if (preg_match('/^([0-9a-f]{12})(\+lh)?$/', $raw, $m) === 1) {
+                $record['stamp'] = $m[1];
+                $record['lh'] = isset($m[2]);
+            }
+        }
+        return $record;
+    }
+
+    /** Whether a render's document is stored as one the Link header is built from: cohort lcp_link_header is on and the document carries its marked preload. */
+    function wpc_copy_link_header_stored($html)
+    {
+        return is_string($html) && strpos($html, 'data-wpc-lh') !== false
+            && class_exists('wps_rewriteLogic') && wps_rewriteLogic::wpc_lcp_link_header_on();
+    }
+
+    /**
      * The family a reader serves for one device: local-only when that family holds a copy (fresh
      * or stale-marked), public otherwise. The writer removes the other family after every
      * rename, so both are present only for the instant between a rename and that unlink, and
@@ -715,6 +771,181 @@ if (!function_exists('wpc_served_head')) {
     {
         $head = wpc_served_head($urlKey, 'mobile');
         return $head !== null ? $head : wpc_served_head($urlKey, 'desktop');
+    }
+}
+
+if (!function_exists('wpc_link_header_lines')) {
+    /** The bytes of a document's head that carry the marked tags: a copy is read this far, a fresh render is cut here. */
+    function wpc_link_header_scan_bytes()
+    {
+        return 32768;
+    }
+
+    /** False once the constant WPC_LCP_LINK_HEADER_OFF or the filter wpc_lcp_link_header turns the header off at a serve door, and for a signed-in visitor or an admin request. */
+    function wpc_link_header_serve_on()
+    {
+        if (defined('WPC_LCP_LINK_HEADER_OFF') && WPC_LCP_LINK_HEADER_OFF) {
+            return false;
+        }
+        if ((function_exists('is_user_logged_in') && is_user_logged_in()) || (function_exists('is_admin') && is_admin())) {
+            return false;
+        }
+        return !function_exists('apply_filters') || (bool) apply_filters('wpc_lcp_link_header', true);
+    }
+
+    /** One attribute of a tag, entity-decoded, or null when the tag has none. */
+    function wpc_link_header_attr($tag, $name)
+    {
+        if (!preg_match('/\s' . $name . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\')/i', (string) $tag, $m)) {
+            return null;
+        }
+        $raw = (isset($m[2]) && $m[2] !== '') ? $m[2] : $m[1];
+        return html_entity_decode($raw, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+
+    /** An absolute http(s) address that can ride inside <...> of a Link header: visible ASCII, none of " , ; < > \. */
+    function wpc_link_header_url($value)
+    {
+        if (!is_string($value) || preg_match('#^https?://[\x21\x23-\x2b\x2d-\x3a\x3d\x3f-\x5b\x5d-\x7e]+$#i', $value) !== 1) {
+            return false;
+        }
+        $host = parse_url($value, PHP_URL_HOST);
+        return is_string($host) && preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/i', $host) === 1;
+    }
+
+    /** A value that can ride inside quotes of a Link header parameter: visible ASCII or a space, no " and no \. */
+    function wpc_link_header_text($value)
+    {
+        return is_string($value) && preg_match('/^[\x20\x21\x23-\x5b\x5d-\x7e]+$/', $value) === 1;
+    }
+
+    /**
+     * The Link header lines a document asks for: the head's tag marked data-wpc-lh (the preload the
+     * render wrote for its LCP, "1", or "zone" when that picture is on the zone) as a rel=preload
+     * line carrying the tag's own href, fetchpriority, imagesrcset, imagesizes, media and type, and
+     * for "zone" a rel=preconnect line for the picture's origin. One image line and one preconnect
+     * line at most; a tag whose values cannot ride in a header, or a preload line over 2048 bytes,
+     * adds no line. Only the first wpc_link_header_scan_bytes() bytes are read.
+     */
+    function wpc_link_header_lines($html)
+    {
+        $lines = [];
+        if (!is_string($html) || strpos($html, 'data-wpc-lh') === false) {
+            return $lines;
+        }
+        $head = substr($html, 0, wpc_link_header_scan_bytes());
+        $end = stripos($head, '</head');
+        if ($end !== false) {
+            $head = substr($head, 0, $end);
+        }
+        $head = preg_replace('#<!--.*?(?:-->|$)|<(script|style|noscript|template)\b[^>]*>.*?(?:</\1\s*>|$)#is', '', $head);
+        if (!is_string($head) || !preg_match_all('/<link\b(?:[^>"\']|"[^"]*"|\'[^\']*\')*>/i', $head, $tags)) {
+            return $lines;
+        }
+        foreach ($tags[0] as $tag) {
+            $mark = wpc_link_header_attr($tag, 'data-wpc-lh');
+            if ($mark !== '1' && $mark !== 'zone') {
+                continue;
+            }
+            $rel = wpc_link_header_attr($tag, 'rel');
+            $as = wpc_link_header_attr($tag, 'as');
+            if ($rel === null || $as === null || strcasecmp(trim($rel), 'preload') !== 0 || strcasecmp(trim($as), 'image') !== 0) {
+                continue;
+            }
+            $href = trim((string) wpc_link_header_attr($tag, 'href'));
+            $srcset = trim((string) wpc_link_header_attr($tag, 'imagesrcset'));
+            if ($href === '' && $srcset !== '') {
+                $first = preg_split('/[\s,]+/', $srcset);
+                $href = (string) $first[0];
+            }
+            if (!wpc_link_header_url($href)) {
+                continue;
+            }
+            $line = '<' . $href . '>; rel=preload; as=image';
+            $priority = strtolower(trim((string) wpc_link_header_attr($tag, 'fetchpriority')));
+            if ($priority === 'high' || $priority === 'low') {
+                $line .= '; fetchpriority=' . $priority;
+            }
+            $ok = true;
+            foreach (['imagesrcset', 'imagesizes', 'media', 'type'] as $param) {
+                $value = wpc_link_header_attr($tag, $param);
+                if ($value === null || trim($value) === '') {
+                    continue;
+                }
+                if (!wpc_link_header_text(trim($value))) {
+                    $ok = false;
+                    break;
+                }
+                $line .= '; ' . $param . '="' . trim($value) . '"';
+            }
+            if ($ok && strlen($line) <= 2048) {
+                $lines[] = 'Link: ' . $line;
+            }
+            if ($mark === 'zone') {
+                $parts = parse_url($href);
+                $lines[] = 'Link: <' . strtolower($parts['scheme']) . '://' . $parts['host'] . (isset($parts['port']) ? ':' . (int) $parts['port'] : '') . '>; rel=preconnect';
+            }
+            break;
+        }
+        return $lines;
+    }
+
+    /** The first wpc_link_header_scan_bytes() bytes of a stored copy's document, or '' (a Brotli blob is read through its gzip or plain pair). */
+    function wpc_link_header_scan_copy($copy_path)
+    {
+        $path = (string) $copy_path;
+        if (substr($path, -3) === '_br') {
+            $base = substr($path, 0, -3);
+            $path = @is_file($base . '_gzip') ? $base . '_gzip' : $base;
+        }
+        if (!@is_readable($path)) {
+            return '';
+        }
+        if (substr($path, -5) === '_gzip') {
+            if (!function_exists('gzopen')) {
+                return '';
+            }
+            $gz = @gzopen($path, 'rb');
+            if (!$gz) {
+                return '';
+            }
+            $bytes = @gzread($gz, wpc_link_header_scan_bytes());
+            @gzclose($gz);
+            return is_string($bytes) ? $bytes : '';
+        }
+        $bytes = @file_get_contents($path, false, null, 0, wpc_link_header_scan_bytes());
+        return is_string($bytes) ? $bytes : '';
+    }
+
+    /**
+     * Sends the Link lines a document asks for (wpc_link_header_lines) unless headers are gone or
+     * the serve switch is off, and keeps what it sent in $GLOBALS['wpc_link_header_sent'] so the
+     * stored header set leaves them out. Answers the number of lines sent.
+     */
+    function wpc_link_headers_send($html)
+    {
+        try {
+            if (headers_sent() || !wpc_link_header_serve_on()) {
+                return 0;
+            }
+            $lines = wpc_link_header_lines($html);
+            foreach ($lines as $line) {
+                wpc_send_header($line, false);
+                $GLOBALS['wpc_link_header_sent'][] = substr($line, 6);
+            }
+            return count($lines);
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /** wpc_link_headers_send() for the copy a serve door is about to send. */
+    function wpc_link_headers_send_copy($copy_path)
+    {
+        if (headers_sent() || !wpc_link_header_serve_on() || !wpc_copy_cohort_record($copy_path)['lh']) {
+            return 0;
+        }
+        return wpc_link_headers_send(wpc_link_header_scan_copy($copy_path));
     }
 }
 

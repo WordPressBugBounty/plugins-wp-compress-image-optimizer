@@ -542,7 +542,8 @@ class wps_ic_cache
 
     /**
      * Removes the plugin's stored page copies and, unless $layers is false, purges the layers in
-     * front of them: Varnish and the host and edge caches that listen on wps_ic_purge_all_cache.
+     * front of them: Varnish, and for one post that page's own layers through the foreign-purge
+     * gateway (per URL); only 'all' and 'home' reach the caches that listen on wps_ic_purge_all_cache.
      * $layers false leaves every one of those alone. A soft purge stale-marks the copies; a purge
      * is hard (copies removed) until a hard purge has recorded the running version
      * (wpc_stale43_ver), so right after an update it is hard whatever the caller asked.
@@ -610,12 +611,7 @@ class wps_ic_cache
             if (!$integrations_fired) {
                 $integrations_fired = true;
                 if (is_int($post_id)) {
-                    // Listeners treat this as purge-EVERYTHING — a single-post purge must not
-                    // nuke LiteSpeed/Nginx/Varnish more than once per 2 min
-                    $last_foreign_purge_at = (int) get_option('wpc_tp_purge_at');
-                    if (time() - $last_foreign_purge_at >= 120 && update_option('wpc_tp_purge_at', time(), false)) {
-                        wpc_purge_foreign_caches(get_permalink($post_id), 'post-purge');
-                    }
+                    wpc_purge_foreign_caches(get_permalink($post_id), 'post-purge');
                 } else {
                     wpc_purge_foreign_caches(false, 'purge-all');
                 }

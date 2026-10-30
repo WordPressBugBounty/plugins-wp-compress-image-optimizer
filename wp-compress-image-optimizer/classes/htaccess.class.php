@@ -661,6 +661,8 @@ HTACCESS;
 
 
         $http_host = $this->removeUrlProtocol(home_url());
+        $homeIsHttps = stripos((string) home_url(), 'https://') === 0;
+        $sslCond = $homeIsHttps ? 'RewriteCond %{ENV:WPC_SSL} =-https' . PHP_EOL : '';
 
         $rules = '';
         $gzip_rules = '';
@@ -686,6 +688,17 @@ HTACCESS;
         $rules .= 'RewriteEngine On' . PHP_EOL;
         $rules .= 'RewriteBase ' . $homeRoot . PHP_EOL;
         $rules .= $this->sslRewrite();
+        // Upgrade a plain-http visit to https only on the proxy-aware WPC_SSL signal set just above
+        // (sslRewrite() lists its signals), and only when the home URL is https.
+        // A pair judged by %{HTTPS} alone looped forever behind a proxy that ends TLS (Cloudflare
+        // flexible, load balancers: %{HTTPS} is never on there, ERR_TOO_MANY_REDIRECTS), and the
+        // same pair on an http home redirected sites that were never https. GET only: a 301 turns
+        // a POST into a GET and drops its body.
+        if ($homeIsHttps) {
+            $rules .= 'RewriteCond %{ENV:WPC_SSL} !=-https' . PHP_EOL;
+            $rules .= 'RewriteCond %{REQUEST_METHOD} GET' . PHP_EOL;
+            $rules .= 'RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]' . PHP_EOL;
+        }
         $rules .= $this->webpRewrite($cache_dir_path);
         $rules .= $gzip_rules;
 
@@ -702,6 +715,7 @@ HTACCESS;
 
         $rules .= 'RewriteCond %{HTTP:X-WPC-Cache-Warm} ^$' . PHP_EOL;
         $rules .= 'RewriteCond %{QUERY_STRING} ^$' . PHP_EOL;
+        $rules .= $sslCond;
 
         $cookies = $this->rejectCookies();
         if ($cookies) {
@@ -718,6 +732,7 @@ HTACCESS;
 
         $rules .= 'RewriteCond %{HTTP:X-WPC-Cache-Warm} ^$' . PHP_EOL;
         $rules .= 'RewriteCond %{QUERY_STRING} ^$' . PHP_EOL;
+        $rules .= $sslCond;
 
         // v7.10.682 — the desktop-file fallback must NEVER serve a mobile UA. Serving the desktop
         // mirror to a mobile visitor bypasses PHP, so the mobile variant is never rendered and the
@@ -1003,17 +1018,18 @@ HTACCESS;
         return $url;
     }
 
+    /**
+     * Sets WPC_SSL=-https when the visitor came over TLS, by any signal the server or a proxy that
+     * ends TLS gives: HTTPS on, port 443, X-Forwarded-Ssl on, Front-End-Https on, X-Forwarded-Proto
+     * https. The block's https upgrade and both mirror rule sets read it; a proxy whose signal is
+     * missing here is redirected forever on an https home.
+     */
     public function sslRewrite()
     {
-        // Redirect non SSL to SSL
-        $rules = '';
-        #$rules .= 'RewriteCond %{HTTPS} off' . PHP_EOL;
-        #$rules .= 'RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]' . PHP_EOL;
-        // TODO: Check if this works
-        $rules .= 'RewriteCond %{HTTPS} !=on' . PHP_EOL;
-        $rules .= 'RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]' . PHP_EOL;
-        $rules .= 'RewriteCond %{HTTPS} on [OR]' . PHP_EOL;
+        $rules = 'RewriteCond %{HTTPS} on [OR]' . PHP_EOL;
         $rules .= 'RewriteCond %{SERVER_PORT} ^443$ [OR]' . PHP_EOL;
+        $rules .= 'RewriteCond %{HTTP:X-Forwarded-Ssl} on [NC,OR]' . PHP_EOL;
+        $rules .= 'RewriteCond %{HTTP:Front-End-Https} on [NC,OR]' . PHP_EOL;
         $rules .= 'RewriteCond %{HTTP:X-Forwarded-Proto} https' . PHP_EOL;
         $rules .= 'RewriteRule .* - [E=WPC_SSL:-https]' . PHP_EOL;
         return $rules;

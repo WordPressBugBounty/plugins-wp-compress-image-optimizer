@@ -608,12 +608,69 @@ class wps_rewriteLogic
         return $was;
     }
 
+    private static $lscwpKeepInlineArmed = false;
+
+    public static function wpc_lscwp_keep_inline_on()
+    {
+        $on = function_exists('wpc_policy_cohort') && wpc_policy_cohort('lscwp_keep_inline') === 1;
+
+        return (bool) apply_filters('wpc_lscwp_keep_inline', $on);
+    }
+
+    public static function wpc_lscwp_keep_inline_arm($parkAllowed)
+    {
+        try {
+            if (self::$lscwpKeepInlineArmed) {
+                return true;
+            }
+            if (!$parkAllowed || !defined('LSCWP_V') || !function_exists('add_filter') || !self::wpc_lscwp_keep_inline_on()) {
+                return false;
+            }
+            add_filter('litespeed_optm_css_comb_ext_inl', [__CLASS__, 'wpc_lscwp_comb_ext_inl_off'], 99);
+            self::$lscwpKeepInlineArmed = true;
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public static function wpc_lscwp_comb_ext_inl_off($combine)
+    {
+        return false;
+    }
+
+    public static function wpc_lscwp_own_styles_arm()
+    {
+        try {
+            if (!defined('LSCWP_V') || !function_exists('add_filter')) {
+                return false;
+            }
+            add_filter('litespeed_optimize_css_excludes', [__CLASS__, 'wpc_lscwp_own_styles_excluded'], 99);
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public static function wpc_lscwp_own_styles_excluded($excludes)
+    {
+        if (!is_array($excludes)) {
+            $excludes = is_string($excludes) && trim($excludes) !== '' ? preg_split('/\R/', $excludes) : [];
+        }
+        $excludes[] = 'id="wpc-';
+
+        return $excludes;
+    }
+
     /** Sets the render's kept widget families for the CSS passes and returns the previous list. */
     public static function set_kept_families(array $families)
     {
         $was = self::$keptFamilies;
         self::$keptFamilies = $families;
         self::$keptFamilyInlineBytes = 0;
+        self::$etcacheInlineBytes = 0;
 
         return $was;
     }
@@ -1338,6 +1395,7 @@ class wps_rewriteLogic
         // The background park is armed with them: a sheet whose url() declarations sit behind
         // html.wpc-bgl255 is not the site's CSS until that class is on.
         $nt = function_exists('wpc_policy_cohort') && wpc_policy_cohort('swap_no_transition') === 1;
+        $pace = $nt && function_exists('wpc_lever_num') ? (int) wpc_lever_num('loader_pace_ms', 0, 0, 4000) : 0;
         $ntLink = $nt ? 'nl(e);' : '';
         $ntStyle = $nt ? 'no();' : '';
         $ntEnd = $nt ? 'ne()' : '';
@@ -1345,7 +1403,9 @@ class wps_rewriteLogic
             ? 'var N=window.wpcNt=window.wpcNt||{g:0,h:0},R=window.requestAnimationFrame;'
             . 'function no(){N.g++;if(N.s)return;try{var s=document.createElement("style");s.id="wpc-swap-no-transition";s.textContent="html.wpc-nt *,html.wpc-nt *::before,html.wpc-nt *::after{transition:none!important}";(document.head||d).appendChild(s);N.s=s;N.t=setTimeout(nf,4e3);d.classList.add("wpc-nt")}catch(x){}}'
             . 'function nf(){var s=N.s;if(!s)return;N.s=null;N.h=0;clearTimeout(N.t);try{s.parentNode&&s.parentNode.removeChild(s)}catch(x){}try{d.classList.remove("wpc-nt")}catch(x){}}'
-            . 'function ne(){if(!N.s)return;var k=++N.g,z=function(){k===N.g&&!N.h&&nf()};if(R){R(function(){R(z)})}else{setTimeout(z,100)}}'
+            . ($pace > 0
+                ? 'function ne(){if(!N.s)return;var k=++N.g,z=function(){k===N.g&&!N.h&&nf()};clearTimeout(N.w);N.w=setTimeout(function(){N.w=0;if(k!==N.g)return;if(R){R(function(){R(z)})}else{z()}},' . $pace . ')}'
+                : 'function ne(){if(!N.s)return;var k=++N.g,z=function(){k===N.g&&!N.h&&nf()};if(R){R(function(){R(z)})}else{setTimeout(z,100)}}')
             . 'function nl(e){N.h++;no();var l=function(){N.h>0&&N.h--;ne()};e.addEventListener("load",l,{once:!0});e.addEventListener("error",l,{once:!0})}'
             . 'document.addEventListener("load",function(e){var t=e&&e.target;if(t&&t.tagName==="LINK"&&(t.hasAttribute("data-wpc-rest")||t.hasAttribute("data-wpc-ucss")||t.hasAttribute("onload")&&(/^stylesheet$/i.test(t.getAttribute("rel")||"")||/^preload$/i.test(t.getAttribute("rel")||"")&&/^style$/i.test(t.getAttribute("as")||""))))no(),ne()},!0);'
             : '';
@@ -3507,6 +3567,372 @@ class wps_rewriteLogic
         return ($out === null) ? $html : $out;
     }
 
+    public static function plain_image_cdn_on($settings = null)
+    {
+        if (!function_exists('get_option') || !defined('WPS_IC_SETTINGS')) {
+            return false;
+        }
+        if (!is_array($settings)) {
+            $settings = get_option(WPS_IC_SETTINGS);
+        }
+        if (!is_array($settings) || empty($settings['live-cdn']) || (string) $settings['live-cdn'] !== '1') {
+            return false;
+        }
+        if (!class_exists('WPC_Negotiated_Delivery') && defined('WPS_IC_DIR') && @file_exists(WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php')) {
+            require_once WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php';
+        }
+        if (!class_exists('WPC_Negotiated_Delivery') || !WPC_Negotiated_Delivery::cdn_images_enabled($settings)) {
+            return false;
+        }
+        return !(function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed());
+    }
+
+    public static function plain_image_hosts($settings = null)
+    {
+        if (defined('WPC_NEGOTIATED_KILL') && WPC_NEGOTIATED_KILL) {
+            return [];
+        }
+        if (!function_exists('wpc_cdn_host') || !function_exists('apply_filters') || !apply_filters('wpc_plain_image_urls', true)) {
+            return [];
+        }
+        if (!self::plain_image_cdn_on($settings)) {
+            return [];
+        }
+        $home = function_exists('home_url') ? strtolower((string) wp_parse_url(home_url(), PHP_URL_HOST)) : '';
+        $out = [];
+        foreach ([(string) wpc_cdn_host(), (string) get_option('ic_cdn_zone_name')] as $raw) {
+            $host = strtolower(preg_replace('#/.*$#', '', trim($raw)));
+            if ($host === '' || ($home !== '' && $host === $home) || in_array($host, $out, true)) {
+                continue;
+            }
+            $out[] = $host;
+        }
+        return $out;
+    }
+
+    public static function plain_image_host($settings = null)
+    {
+        $hosts = self::plain_image_hosts($settings);
+        return $hosts === [] ? '' : $hosts[0];
+    }
+
+    public static function plain_image_pattern(array $zones)
+    {
+        $sl = '\\\\?/';
+        $ent = '(?:quot|apos|#0?3[49]|#x2[27])';
+        $unit = [
+            '\\\\(?=/)',
+            '&(?>(?:amp;)?)(?!' . $ent . ';)',
+            '\\([^()"\'\\s<>\\\\;|]*\\)',
+            ',(?![\\s"\'<>)]|$)',
+        ];
+        $nest = '(?!\\\\?/q:[a-z0-9]+\\\\?/)';
+        $pathUnit = '(?:' . $nest . '(?:' . implode('|', $unit) . '|[^"\'\\s<>\\\\?#|;&),]))';
+        $queryUnit = '(?:' . implode('|', $unit) . '|[^"\'\\s<>\\\\#|;&),])';
+        $after = '(?![\\w%\\~+@/-]|\\.\\w|\\\\(?=/)|,(?![\\s"\'<>)]|$))';
+        $hostAlt = implode('|', array_map(function ($z) { return preg_quote($z, '~'); }, $zones));
+        return '~((?:https?:)?' . $sl . $sl . '(?:' . $hostAlt . '))' . $sl . 'q:[a-z0-9]+((?:' . $sl . '[a-z]{1,3}:[^/"\'\\s,)<>\\\\]*)*?)' . $sl
+            . 'u:(https?:' . $sl . $sl . $pathUnit . '+?\\.(jpe?g|png|gif|webp|avif|svg|ico|bmp))' . $after
+            . '(\\?' . $queryUnit . '*)?(#[^"\'\\s<>\\\\|;&),]*)?~i';
+    }
+
+    public static function plain_image_urls($html, $settings = null, $scriptsOnly = false)
+    {
+        if (!is_string($html) || $html === '') {
+            return $html;
+        }
+        $zones = self::plain_image_hosts($settings);
+        if ($zones === []) {
+            return $html;
+        }
+        $origins = [];
+        foreach (['site_url', 'home_url'] as $urlFunc) {
+            if (function_exists($urlFunc)) {
+                $h = strtolower((string) wp_parse_url((string) $urlFunc(), PHP_URL_HOST));
+                if ($h !== '') {
+                    $origins[] = preg_replace('/^www\./', '', $h);
+                }
+            }
+        }
+        $count = 0;
+        $re = self::plain_image_pattern($zones);
+        $known = array_merge($origins, $zones);
+        if ($scriptsOnly) {
+            $out = preg_replace_callback('#(<script\b[^>]*>)(.*?)(</script>)#is', function ($m) use ($re, $known, $zones, &$count) {
+                return $m[1] . self::plain_image_run($m[2], $re, $known, $zones, $count, 3) . $m[3];
+            }, $html);
+            if (!is_string($out)) {
+                $out = $html;
+            }
+        } else {
+            $out = self::plain_image_run($html, $re, $known, $zones, $count, 0);
+        }
+        if ($count > 0 && function_exists('wpc_render_belt_note')) {
+            wpc_render_belt_note('transform-urls-plain', ['images' => $count], true);
+        }
+        return $out;
+    }
+
+    private static function plain_image_run($html, $re, array $origins, array $zones, &$count, $depth)
+    {
+        if ($depth < 3 && strpos($html, 'data-code="') !== false) {
+            $coded = preg_replace_callback('/data-code="([^"]+)"/', function ($m) use ($re, $origins, $zones, &$count, $depth) {
+                $decoded = base64_decode($m[1], true);
+                if ($decoded === false) {
+                    return $m[0];
+                }
+                $next = self::plain_image_run($decoded, $re, $origins, $zones, $count, $depth + 1);
+                return $next === $decoded ? $m[0] : 'data-code="' . base64_encode($next) . '"';
+            }, $html);
+            if (is_string($coded)) {
+                $html = $coded;
+            }
+        }
+        if (strpos($html, '/q:') === false) {
+            return self::plain_mint_form($html, $zones);
+        }
+        $convert = function ($m, $type) use ($origins, &$count) {
+            $escaped = strpos($m[0], '\\/') !== false;
+            $origin = $escaped ? str_replace('\\/', '/', $m[3]) : $m[3];
+            $plain = self::plain_image_path($origin, str_replace('\\/', '/', $m[2]), $type, $origins, isset($m[5]) ? $m[5] : '');
+            if ($plain === null) {
+                return $m[0];
+            }
+            $query = isset($m[5]) ? $m[5] : '';
+            $fragment = (isset($m[6]) && $m[6] !== '#') ? $m[6] : '';
+            $hint = $plain['src'] !== '' ? self::src_hint_qs($plain['src']) : '';
+            if ($hint !== '' && !preg_match('/[?&]src=/', $query)) {
+                $query = ($query === '') ? $hint : $query . (strpos($query, '&amp;') !== false ? '&amp;' : '&') . substr($hint, 1);
+            }
+            $count++;
+            return $m[1] . ($escaped ? str_replace('/', '\\/', $plain['path']) : $plain['path']) . $query . $fragment;
+        };
+        $apply = function ($text, $type) use ($re, $convert) {
+            for ($round = 0; $round < 3 && strpos($text, '/q:') !== false; $round++) {
+                $next = preg_replace_callback($re, function ($m) use ($convert, $type) {
+                    return $convert($m, $type);
+                }, $text);
+                if (!is_string($next) || $next === $text) {
+                    break;
+                }
+                $text = $next;
+            }
+            return $text;
+        };
+        $typed = preg_replace_callback(
+            '#<(?:source|link)\b[^>]*/u:[^>]*>#i',
+            function ($tag) use ($apply) {
+                $type = (preg_match('/\stype\s*=\s*["\']image\/(webp|avif)["\']/i', $tag[0], $tm)) ? strtolower($tm[1]) : '';
+                return $apply($tag[0], $type);
+            },
+            $html
+        );
+        if (!is_string($typed)) {
+            $typed = $html;
+        }
+        return self::plain_mint_form($apply($typed, ''), $zones);
+    }
+
+    /** A zone URL naming a -WxH or -Nw jpg/jpeg/png the site does not hold becomes the same name as .webp with ?src=<format>; a file on disk, or a folder that is not the site's, is left. */
+    public static function plain_mint_form($html, array $zones)
+    {
+        if (!is_string($html) || $html === '' || $zones === [] || !preg_match('/-\d+(?:x\d+|w)\.(?:jpe?g|png)/i', $html)) {
+            return $html;
+        }
+        $hostAlt = implode('|', array_map(function ($z) { return preg_quote($z, '~'); }, $zones));
+        $sl = '\\\\?/';
+        $ent = '(?:quot|apos|#0?3[49]|#x2[27])';
+        $queryUnit = '(?:\\\\(?=/)|&(?>(?:amp;)?)(?!' . $ent . ';)|\\([^()"\'\\s<>\\\\;|]*\\)|,(?![\\s"\'<>)]|$)|[^"\'\\s<>\\\\#|;&),])';
+        $re = '~((?:https?:)?' . $sl . $sl . '(?:' . $hostAlt . '))((?:' . $sl . '[^/"\'\\s<>\\\\?#|;&),:]+)+?)-(\\d+(?:x\\d+|w))\\.(jpe?g|png)'
+            . '(?![\\w%\\~+@/.-]|\\\\(?=/))(\\?' . $queryUnit . '*)?~i';
+        $out = preg_replace_callback($re, function ($m) {
+            $escaped = strpos($m[2], '\\/') !== false;
+            $path = $escaped ? str_replace('\\/', '/', $m[2]) : $m[2];
+            if (self::plain_path_on_disk($path . '-' . $m[3] . '.' . $m[4]) !== false) {
+                return $m[0];
+            }
+            $query = isset($m[5]) ? $m[5] : '';
+            if (!preg_match('/[?&;]src=/i', $query)) {
+                $hint = self::src_hint_qs(strtolower($m[4]));
+                if ($hint === '') {
+                    return $m[0];
+                }
+                $query = ($query === '' || $query === '?') ? $hint : $query . (strpos($query, '&amp;') !== false ? '&amp;' : '&') . substr($hint, 1);
+            }
+            return $m[1] . $m[2] . '-' . $m[3] . '.webp' . $query;
+        }, $html);
+        return is_string($out) ? $out : $html;
+    }
+
+    /** The origin path an image falls back to from a zone path: a .webp?src=<format> name in its source format, a size the site does not hold as its original, any other path without its query. */
+    public static function plain_fallback_path($path)
+    {
+        $path = (string) $path;
+        $clean = (string) preg_replace('/\?.*$/', '', $path);
+        if (preg_match('/^([^?#]*)\.webp\?(?:[^#]*?&(?:amp;)?)?src=(jpe?g|png)(?=[&#]|$)/i', $path, $m)) {
+            $clean = $m[1] . '.' . $m[2];
+        }
+        if (preg_match('/^(.*)-\d+(?:x\d+|w)\.(jpe?g|png)$/i', $clean, $r) && self::plain_path_on_disk($clean) === false && self::plain_path_on_disk($r[1] . '.' . $r[2]) === true) {
+            return $r[1] . '.' . $r[2];
+        }
+        return $clean;
+    }
+
+    /** True or false for a URL path under the uploads or content folder (mapped the way the site serves it), null for any other path. */
+    public static function plain_path_on_disk($path)
+    {
+        static $memo = [];
+        $roots = self::plain_disk_roots();
+        $path = (string) $path;
+        if (array_key_exists($path, $memo)) {
+            return $memo[$path];
+        }
+        $found = null;
+        if (strpos($path, '..') === false) {
+            foreach ($roots as $urlPath => $dir) {
+                if (strpos($path, $urlPath) === 0) {
+                    $found = @is_file($dir . rawurldecode(substr($path, strlen($urlPath))));
+                    if ($found) {
+                        break;
+                    }
+                }
+            }
+        }
+        if (count($memo) < 4096) {
+            $memo[$path] = $found;
+        }
+        return $found;
+    }
+
+    /** URL path prefix => folder for the uploads and content roots, in the order plain_path_on_disk reads them. */
+    private static function plain_disk_roots()
+    {
+        static $roots = null;
+        if ($roots === null) {
+            $roots = [];
+            if (function_exists('wp_upload_dir')) {
+                $uploads = wp_upload_dir();
+                $urlPath = rtrim((string) wp_parse_url(isset($uploads['baseurl']) ? (string) $uploads['baseurl'] : '', PHP_URL_PATH), '/');
+                $dir = rtrim(isset($uploads['basedir']) ? (string) $uploads['basedir'] : '', '/\\');
+                if ($urlPath !== '' && $dir !== '') {
+                    $roots[$urlPath . '/'] = $dir . '/';
+                }
+            }
+            if (defined('WP_CONTENT_DIR') && function_exists('content_url')) {
+                $urlPath = rtrim((string) wp_parse_url((string) content_url(), PHP_URL_PATH), '/');
+                if ($urlPath !== '' && !isset($roots[$urlPath . '/'])) {
+                    $roots[$urlPath . '/'] = rtrim((string) WP_CONTENT_DIR, '/\\') . '/';
+                }
+            }
+        }
+        return $roots;
+    }
+
+    /** Pixel width of the image file a URL path names under the uploads or content folder, 0 when the path is not a file there or its size cannot be read. */
+    public static function plain_disk_width($path)
+    {
+        $path = (string) $path;
+        if (strpos($path, '..') !== false) {
+            return 0;
+        }
+        foreach (self::plain_disk_roots() as $urlPath => $dir) {
+            if (strpos($path, $urlPath) === 0) {
+                $file = $dir . rawurldecode(substr($path, strlen($urlPath)));
+                if (!@is_file($file)) {
+                    continue;
+                }
+                if (function_exists('wpc_image_file_dims')) {
+                    $dims = wpc_image_file_dims($file);
+                } else {
+                    $size = function_exists('getimagesize') ? @getimagesize($file) : false;
+                    $dims = (is_array($size) && !empty($size[0])) ? [(int) $size[0]] : null;
+                }
+                return (is_array($dims) && !empty($dims[0])) ? (int) $dims[0] : 0;
+            }
+        }
+        return 0;
+    }
+
+    public static function plain_image_path($origin, $segs, $type, array $hosts, $query = '')
+    {
+        $parts = wp_parse_url($origin);
+        $host = isset($parts['host']) ? preg_replace('/^www\./', '', strtolower((string) $parts['host'])) : '';
+        $path = isset($parts['path']) ? (string) $parts['path'] : '';
+        if ($host === '' || !in_array($host, $hosts, true) || $path === ''
+            || strpos($path, '/q:') !== false || strpos($path, '/u:') !== false
+            || !preg_match('/^(.*)\.(jpe?g|png|gif|webp|avif|svg|ico|bmp)$/i', $path, $pm)) {
+            return null;
+        }
+        $stem = $pm[1];
+        $ext = strtolower($pm[2]);
+        $source = (preg_match('/[?&;]src=([a-z0-9]+)/i', (string) $query, $sm)) ? strtolower($sm[1]) : $ext;
+        if (!self::natural_lane_takes_source($source)) {
+            return null;
+        }
+        $wp = preg_match('#/wp:(\d)(?=/|$)#', $segs, $x) ? (int) $x[1] : 0;
+        $w = preg_match('#/w:(\d+)(?=/|$)#', $segs, $x) ? (int) $x[1] : 0;
+        $retina = $w > 5 && preg_match('#/r:1(?=/|$)#', $segs);
+        $raster = in_array($ext, ['jpg', 'jpeg', 'png'], true);
+        $fmt = $ext;
+        if ($raster && ($wp === 2 || ($wp === 1 && $type === 'webp'))) {
+            $fmt = ($wp === 2) ? 'avif' : 'webp';
+        }
+        $name = $stem;
+        if ($w > 5 && in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'avif'], true)) {
+            $suffix = function ($width, $meta) {
+                if (function_exists('wpc_v2_adaptive_variant_suffix')) {
+                    return wpc_v2_adaptive_variant_suffix($width, $meta);
+                }
+                return '-' . (int) $width . 'x' . (int) round($width * $meta['height'] / $meta['width']);
+            };
+            $proven = function ($base, $rung) use ($ext, $raster) {
+                if ($raster || !preg_match('/^-(\d+)x(\d+)$/', $rung, $box)) {
+                    return $rung !== '';
+                }
+                return self::wpc_natural_rung_on_disk($base, (int) $box[1], (int) $box[2], $ext);
+            };
+            if (preg_match('#^(.*)-(\d+)x(\d+)$#', $stem, $d) && (int) $d[2] > 0 && (int) $d[3] > 0 && (!$raster || self::plain_path_on_disk($d[1] . '.' . $pm[2]) === true)) {
+                if ($retina) {
+                    $w = min($w * 2, (int) $d[2]);
+                }
+                $h = (int) round($w * (int) $d[3] / (int) $d[2]);
+                if ($w < (int) $d[2] && $h > 0) {
+                    $rung = $suffix($w, ['width' => (int) $d[2], 'height' => (int) $d[3]]);
+                    if (preg_match('/^-\d+w$/', $rung) && self::wpc_nw_crop_kept($origin)) {
+                        $rung = '-' . $w . 'x' . $h;
+                    }
+                    if ($proven($d[1], $rung)) {
+                        $name = $d[1] . $rung;
+                    }
+                }
+            } elseif (function_exists('wp_get_attachment_metadata')) {
+                $id = self::wpc_att_id($origin);
+                $meta = $id > 0 ? wp_get_attachment_metadata($id) : null;
+                if ($retina && is_array($meta) && !empty($meta['width'])) {
+                    $w = min($w * 2, (int) $meta['width']);
+                }
+                if (is_array($meta) && !empty($meta['width']) && !empty($meta['height'])) {
+                    $base = preg_replace('/-scaled$/', '', $stem);
+                    $ownFile = !empty($meta['file']) ? preg_replace('/-scaled$/', '', pathinfo((string) $meta['file'], PATHINFO_FILENAME)) : '';
+                    $isOriginal = ($ownFile !== '') ? (basename($base) === $ownFile) : !preg_match('/-(?:\d+x\d+|\d+w)$/', $stem);
+                    if ($w < (int) $meta['width'] && $isOriginal) {
+                        $rung = $suffix($w, $meta);
+                        if ($proven($base, $rung)) {
+                            $name = $base . $rung;
+                        }
+                    }
+                } elseif ($raster && self::plain_path_on_disk($path) === true) {
+                    $nw = $retina ? $w * 2 : $w;
+                    $fileWidth = self::plain_disk_width($path);
+                    if ($fileWidth > 0 && $nw < $fileWidth) {
+                        $name = $stem . '-' . $nw . 'w';
+                    }
+                }
+            }
+        }
+        return ['path' => $name . '.' . (($fmt === $ext) ? $pm[2] : $fmt), 'src' => ($fmt === $ext) ? '' : $ext];
+    }
+
     public function allLinks($html)
     {
         $html = preg_replace_callback('/https?:(\/\/[^"\']*\.(?:svg|css|js|ico|icon))/i', [__CLASS__, 'cdnAllLinks'], $html);
@@ -5633,6 +6059,15 @@ SCRIPT;
                     // cover-2026-1536x545.webp and pinned it on the div while the served
                     // `.section-one-home::before` rule kept the 379 KB original, so a desktop
                     // fetched two different hero files for one hero.
+                    if (self::cdn_on() && !self::zone_crit_urls_off()
+                        && class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_theme_bg_zoneify')
+                        && wps_cdn_rewrite::wpc_theme_bg_cdn_on()) {
+                        $criticalCSSContent_Desktop = wps_cdn_rewrite::wpc_theme_bg_zoneify($criticalCSSContent_Desktop, '');
+                        $criticalCSSContent_Mobile = wps_cdn_rewrite::wpc_theme_bg_zoneify($criticalCSSContent_Mobile, '');
+                        if ($combinedCrit !== '') {
+                            $combinedCrit = wps_cdn_rewrite::wpc_theme_bg_zoneify($combinedCrit, '');
+                        }
+                    }
                     $combinedCritServed = ($combinedCrit !== '');
                     $lcpBackgroundPlans = [];
                     foreach ($critDevices as $wpc_dev_key) {
@@ -5714,9 +6149,16 @@ SCRIPT;
                         // This lane's rendition is the one the served crit rule (or, where the
                         // rule could not be rewritten, the authority pin) paints, so it outranks
                         // every other preload of the same picture in the set.
-                        $imagePreloads->add('wpc-lcp-bg-preload' . $bgPreloadIdSuffix, esc_url($wpc_pre_url), $bgPreloadDevice,
-                            'lcp-bg', wps_ic_image_preload_set::RANK_LCP_BACKGROUND,
-                            ['kind' => wps_ic_image_preload_set::KIND_BACKGROUND, 'paints' => ['wpc-lcp-bg-authority' . $bgPreloadIdSuffix]]);
+                        $bgPreloadHref = $wpc_pre_url;
+                        $bgPreloadExtras = ['kind' => wps_ic_image_preload_set::KIND_BACKGROUND, 'paints' => ['wpc-lcp-bg-authority' . $bgPreloadIdSuffix]];
+                        $bgPreloadNamed = (class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_cf_bg_named_preload'))
+                            ? wps_cdn_rewrite::wpc_cf_bg_named_preload($wpc_pre_url) : [];
+                        if (!empty($bgPreloadNamed['href'])) {
+                            $bgPreloadHref = $bgPreloadNamed['href'];
+                            $bgPreloadExtras['type'] = $bgPreloadNamed['type'];
+                        }
+                        $imagePreloads->add('wpc-lcp-bg-preload' . $bgPreloadIdSuffix, esc_url($bgPreloadHref), $bgPreloadDevice,
+                            'lcp-bg', wps_ic_image_preload_set::RANK_LCP_BACKGROUND, $bgPreloadExtras);
                         if ($wpc_phone_used && function_exists('wpc_cache_first_log')) {
                             wpc_cache_first_log('phone-hero', $wpc_dev_key, substr((string) $wpc_pre_url, 0, 180), ['w' => (int) $wpc_phone['w'], 'kind' => 'bg']);
                         }
@@ -5739,7 +6181,8 @@ SCRIPT;
                                 wpc_cache_first_log('lcp-pin-undersized-skip', '', '', ['w' => (int) $preloadRungMatch[1], 'url' => substr((string) $wpc_pre_url, -80)]);
                             }
                         }
-                        if ($wpc_auth_ok && $authorityPinWidthOk && (empty($lcpBackgroundRuleRewritten[$wpc_dev_key]) || $lcpBackgroundPlans[$wpc_dev_key]['host_rule'])) {
+                        if ($wpc_auth_ok && $authorityPinWidthOk && (empty($lcpBackgroundRuleRewritten[$wpc_dev_key]) || $lcpBackgroundPlans[$wpc_dev_key]['host_rule']
+                            || ($wpc_pre_url !== $lcpBackgroundPlans[$wpc_dev_key]['css_url'] && $lcpBackgroundPlans[$wpc_dev_key]['layer_rule']))) {
                             $authorityPinSelector = $wpc_auth_sel;
                             $wpc_auth_media = ($wpc_dev_key === 'mobile') ? '(max-width: 767.98px)' : '(min-width: 768px)';
                             $authorityPinDeclaration = $authorityPinSelector !== ''
@@ -5772,7 +6215,7 @@ SCRIPT;
                         $wpc_ad_blob = ($wpc_dev_key === 'mobile') ? $criticalCSSContent_Mobile : $criticalCSSContent_Desktop;
                         $wpc_ad = self::wpc_lcp_autoderive_bg($html, (string) $wpc_ad_blob);
                         if (is_array($wpc_ad) && !empty($wpc_ad['url']) && is_string($wpc_ad['url'])
-                            && self::wpc_lcp_bg_url_allowed($wpc_ad['url'])) {
+                            && self::wpc_lcp_bg_derived_ref_ok($wpc_ad['url'])) {
                             $derivedMobileRungUrl = ($wpc_dev_key === 'mobile') ? self::wpc_lcp_bg_rung_url($wpc_ad['url']) : '';
                             if ($derivedMobileRungUrl !== '' && wps_ic_atf_observation::heroOneUrlOn() && wps_ic_atf_observation::heroCostsMore($derivedMobileRungUrl, $wpc_ad['url'])) {
                                 $derivedMobileRungUrl = '';
@@ -5797,10 +6240,13 @@ SCRIPT;
                                 $derivedMobileRungUrl = '';
                             }
                             $derivedBackgroundHref = ($derivedMobileRungUrl !== '') ? $derivedMobileRungUrl : $wpc_ad['url'];
-                            $imagePreloads->add('wpc-lcp-bg-preload' . $bgPreloadIdSuffix, esc_url($derivedBackgroundHref), $bgPreloadDevice,
+                            $derivedPreloadNamed = (class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_cf_bg_named_preload'))
+                                ? wps_cdn_rewrite::wpc_cf_bg_named_preload($derivedBackgroundHref) : [];
+                            $imagePreloads->add('wpc-lcp-bg-preload' . $bgPreloadIdSuffix, esc_url(!empty($derivedPreloadNamed['href']) ? $derivedPreloadNamed['href'] : $derivedBackgroundHref), $bgPreloadDevice,
                                 'lcp-bg-derived', wps_ic_image_preload_set::RANK_LCP_BACKGROUND,
                                 ['kind' => wps_ic_image_preload_set::KIND_BACKGROUND]
-                                + ['paints' => array_merge($derivedMobileRungUrl !== '' && $rungPinDeclaration !== '' ? ['wpc-lcp-bg-rung'] : [], ['wpc-lcp-bg-authority' . $bgPreloadIdSuffix])]);
+                                + ['paints' => array_merge($derivedMobileRungUrl !== '' && $rungPinDeclaration !== '' ? ['wpc-lcp-bg-rung'] : [], ['wpc-lcp-bg-authority' . $bgPreloadIdSuffix])]
+                                + (!empty($derivedPreloadNamed['href']) ? ['type' => $derivedPreloadNamed['type']] : []));
                             if ($derivedMobileRungUrl !== '' && $rungPinDeclaration !== '') {
                                 $phoneRungPinStyle = '<style id="wpc-lcp-bg-rung">@media (max-width: 767.98px){' . $wpc_ad_sel . '{' . $rungPinDeclaration . '}}</style>';
                                 if (function_exists('wpc_cache_first_log')) {
@@ -7101,8 +7547,11 @@ SCRIPT;
                 }
                 $coverMedia = ($dev === 'mobile') ? '(max-width: 767.98px)' : '(min-width: 768px)';
                 if ($imagePreloads instanceof wps_ic_image_preload_set) {
-                    $imagePreloads->add('wpc-lcp-bg-preload700', esc_url($url), $dev, 'wire-fallback',
-                        wps_ic_image_preload_set::RANK_WIRE_FALLBACK, ['kind' => wps_ic_image_preload_set::KIND_BACKGROUND, 'paints' => ['wpc-lcp-bg-authority700']]);
+                    $wirePreloadNamed = (class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_cf_bg_named_preload'))
+                        ? wps_cdn_rewrite::wpc_cf_bg_named_preload($url) : [];
+                    $imagePreloads->add('wpc-lcp-bg-preload-wire', esc_url(!empty($wirePreloadNamed['href']) ? $wirePreloadNamed['href'] : $url), $dev, 'wire-fallback',
+                        wps_ic_image_preload_set::RANK_WIRE_FALLBACK, ['kind' => wps_ic_image_preload_set::KIND_BACKGROUND, 'paints' => ['wpc-lcp-bg-authority-wire']]
+                        + (!empty($wirePreloadNamed['href']) ? ['type' => $wirePreloadNamed['type']] : []));
                 }
                 $authorityStyle = '';
                 // Same layer as the plan's pin (wpc_lcp_bg_plan): the stamped pseudo-element on every site.
@@ -7114,7 +7563,7 @@ SCRIPT;
                 if ($lcpSelector !== '' && apply_filters('wpc_lcp_bg_authority', true)) {
                     $pinDeclaration = self::wpc_bg_pin_declaration($lcpSelector, $url, $h);
                     if ($pinDeclaration !== '') {
-                        $authorityStyle = '<style id="wpc-lcp-bg-authority700">@media ' . $coverMedia . '{' . $lcpSelector
+                        $authorityStyle = '<style id="wpc-lcp-bg-authority-wire">@media ' . $coverMedia . '{' . $lcpSelector
                             . '{' . $pinDeclaration . '}}</style>';
                     }
                 }
@@ -8304,7 +8753,7 @@ SCRIPT;
      * Whether every rule of $critText that names a URL $edits rewrite paints the element $authoritySelector names itself, not a pseudo-element of it.
      * False when the selector is a pseudo-element's or has no id or class, when no rule names a URL, and when a rule is not found whole or does not name the element.
      */
-    private static function wpc_lcp_bg_rules_paint_host($critText, array $edits, $authoritySelector)
+    private static function wpc_lcp_bg_rules_paint_host($critText, array $edits, $authoritySelector, $layer = false)
     {
         $critText = (string) $critText;
         $authorityLast = self::wpc_lcp_bg_last_compounds((string) $authoritySelector);
@@ -8312,9 +8761,11 @@ SCRIPT;
             return false;
         }
         $authorityTokens = self::wpc_lcp_bg_compound_tokens($authorityLast[0]);
-        if ($authorityTokens === null || $authorityTokens === [] || count(array_filter($authorityTokens, function ($token) { return $token[0] === ':'; })) > 0) {
+        if ($authorityTokens === null || $authorityTokens === [] || (!$layer && count(array_filter($authorityTokens, function ($token) { return $token[0] === ':'; })) > 0)) {
             return false;
         }
+        $authorityPseudo = array_values(array_filter($authorityTokens, function ($token) { return $token[0] === ':'; }));
+        sort($authorityPseudo);
         $found = false;
         foreach ($edits as $edit) {
             $url = isset($edit[0]) ? (string) $edit[0] : '';
@@ -8348,7 +8799,13 @@ SCRIPT;
                     }
                     $plain = array_values(array_filter($ruleTokens, function ($token) { return $token[0] !== ':'; }));
                     if ($plain !== [] && !array_diff($plain, $authorityTokens)) {
-                        if (count($plain) !== count($ruleTokens)) {
+                        if ($layer) {
+                            $rulePseudo = array_values(array_diff($ruleTokens, $plain));
+                            sort($rulePseudo);
+                            if ($rulePseudo !== $authorityPseudo) {
+                                return false;
+                            }
+                        } elseif (count($plain) !== count($ruleTokens)) {
                             return false;
                         }
                         $paintsHost = true;
@@ -8399,6 +8856,12 @@ SCRIPT;
     protected static function wpc_bg_pin_declaration($selector, $imageUrl, $cssHaystack, &$evidence = null)
     {
         try {
+            if (self::wpc_lcp_bg_path_exact_on() && !self::wpc_lcp_bg_ref_rooted($imageUrl)) {
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('lcp-bg-pin-relative', '', substr((string) $imageUrl, -120), ['sel' => substr((string) $selector, 0, 80)]);
+                }
+                return '';
+            }
             $defaultDeclaration = 'background-image:url("' . esc_url($imageUrl) . '") !important';
             if (!is_string($selector) || !is_string($cssHaystack) || $cssHaystack === '') {
                 return $defaultDeclaration;
@@ -8687,6 +9150,406 @@ SCRIPT;
         return strpos($html, $stem) !== false || strpos($html, rawurlencode($stem)) !== false;
     }
 
+    public static function wpc_lcp_bg_path_exact_on()
+    {
+        if (defined('WPC_LCP_BG_PATH_EXACT_OFF') && WPC_LCP_BG_PATH_EXACT_OFF) {
+            return false;
+        }
+        $on = function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('lcp_bg_path_exact') === 1;
+        return (bool) apply_filters('wpc_lcp_bg_path_exact', $on);
+    }
+
+    public static function wpc_lcp_link_header_on()
+    {
+        if (defined('WPC_LCP_LINK_HEADER_OFF') && WPC_LCP_LINK_HEADER_OFF) {
+            return false;
+        }
+        $on = function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('lcp_link_header') === 1;
+        return (bool) apply_filters('wpc_lcp_link_header', $on);
+    }
+
+    public static function wpc_slider_lcp_on()
+    {
+        if (defined('WPC_SLIDER_LCP_OFF') && WPC_SLIDER_LCP_OFF) {
+            return false;
+        }
+        $on = function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('slider_lcp') === 1;
+        return (bool) apply_filters('wpc_slider_lcp', $on);
+    }
+
+    public static function wpc_lcp_paint_exact_on()
+    {
+        if (defined('WPC_LCP_PAINT_EXACT_OFF') && WPC_LCP_PAINT_EXACT_OFF) {
+            return false;
+        }
+        $on = function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('lcp_paint_exact') === 1;
+        return (bool) apply_filters('wpc_lcp_paint_exact', $on);
+    }
+
+    /** 'sr7' for the inline config of a Slider Revolution 7 module, 'bb' for a Beaver Builder slideshow's inline script, '' for any other script body. */
+    public static function slider_config_kind($body)
+    {
+        $body = (string) $body;
+        if (strpos($body, 'SR7.JSON') !== false) {
+            return 'sr7';
+        }
+        return preg_match('/fl-slideshow|bb-slideshow|bbslideshow|flbuilderslideshow/i', $body) ? 'bb' : '';
+    }
+
+    /**
+     * The upload images a slider's inline config names, on the site's own host, moved to the zone
+     * ($zone '' leaves the text as it is). Only the host changes, in place: the path, the query, the
+     * quotes and the slash escaping (https:\/\/ in a JSON string) stay as the slider wrote them, so a
+     * config that decoded before decodes after. A URL already on a zone host counts as a slide image
+     * and is left alone, a transform link (/q:) is not one, and nothing on another host is read.
+     * $first is set to the first such image, unescaped and absolute.
+     */
+    public static function slider_config_urls($js, $zone, array $siteHosts, array $zoneHosts, &$first, &$moved = 0)
+    {
+        $js = (string) $js;
+        $first = '';
+        $moved = 0;
+        $hosts = [];
+        foreach (array_merge($siteHosts, $zoneHosts) as $host) {
+            $host = strtolower(preg_replace('/^www\./', '', trim((string) $host)));
+            if ($host !== '') {
+                $hosts[$host] = preg_quote($host, '~');
+            }
+        }
+        if ($hosts === [] || strpos($js, '//') === false && strpos($js, '\\/\\/') === false) {
+            return $js;
+        }
+        $bases = ['/wp-content/uploads'];
+        if (function_exists('wpc_v2_upload_base_paths')) {
+            foreach ((array) wpc_v2_upload_base_paths() as $base) {
+                $base = '/' . trim((string) $base, '/');
+                if ($base !== '/') {
+                    $bases[] = $base;
+                }
+            }
+        }
+        $siteSet = array_map('strtolower', array_map(function ($h) { return preg_replace('/^www\./', '', trim((string) $h)); }, $siteHosts));
+        $re = '~(?<![\w.:/-])((?:https?:)?)(\\\\?/\\\\?/)((?:www\.)?(?:' . implode('|', $hosts) . '))((?:/|\\\\/)(?:[^"\'\s<>\\\\?#]|\\\\(?=/))*?\.(?:jpe?g|png|gif|webp|avif|svg|ico|bmp))(?![\w%\~+@/-]|\.\w|\\\\/)~i';
+        $out = preg_replace_callback($re, function ($m) use ($zone, $siteSet, $bases, &$first, &$moved) {
+            $path = str_replace('\\/', '/', $m[4]);
+            if (strpos($path, '/q:') !== false || strpos($path, '/u:') !== false) {
+                return $m[0];
+            }
+            $host = strtolower(preg_replace('/^www\./', '', $m[3]));
+            $own = in_array($host, $siteSet, true);
+            if ($own) {
+                $uploads = false;
+                foreach ($bases as $base) {
+                    if (stripos($path, $base . '/') === 0) {
+                        $uploads = true;
+                        break;
+                    }
+                }
+                if (!$uploads) {
+                    return $m[0];
+                }
+            }
+            if ($own && $zone !== '') {
+                $moved++;
+                if ($first === '') {
+                    $first = 'https://' . $zone . $path;
+                }
+                return ($m[1] === '' ? '' : 'https:') . $m[2] . $zone . $m[4];
+            }
+            if ($first === '') {
+                $first = 'https://' . $m[3] . $path;
+            }
+            return $m[0];
+        }, $js);
+        return is_string($out) ? $out : $js;
+    }
+
+    /** The text of the first object literal that starts at $start in $js (strings and their escapes skipped), '' when it never closes. */
+    private static function slider_json_object($js, $start)
+    {
+        $depth = 0;
+        $inString = false;
+        $length = strlen($js);
+        for ($i = $start; $i < $length; $i++) {
+            $char = $js[$i];
+            if ($inString) {
+                if ($char === '\\') {
+                    $i++;
+                } elseif ($char === '"') {
+                    $inString = false;
+                }
+                continue;
+            }
+            if ($char === '"') {
+                $inString = true;
+            } elseif ($char === '{') {
+                $depth++;
+            } elseif ($char === '}') {
+                $depth--;
+                if ($depth === 0) {
+                    return substr($js, $start, $i - $start + 1);
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * The first slide's image in a Slider Revolution 7 config script: the first image layer's
+     * bg.image.src of slides[<first key>].layers, else its slidebg layer's, else the slide's own
+     * bg.image.src. Never settings.thumb or settings.imgs. null when no SR7.JSON object in the script
+     * decodes to a config with slides, '' when one does and the first slide names no image.
+     */
+    public static function slider_sr7_first_slide($js)
+    {
+        $js = (string) $js;
+        if (!preg_match_all('/SR7\.JSON\s*\[[^\]]*\]\s*=\s*(?=\{)/', $js, $found, PREG_OFFSET_CAPTURE)) {
+            return null;
+        }
+        foreach ($found[0] as $hit) {
+            $json = self::slider_json_object($js, $hit[1] + strlen($hit[0]));
+            $data = $json === '' ? null : json_decode($json, true);
+            if (!is_array($data) || empty($data['slides']) || !is_array($data['slides'])) {
+                continue;
+            }
+            $slides = $data['slides'];
+            $slide = reset($slides);
+            if (!is_array($slide)) {
+                return '';
+            }
+            $srcOf = function ($node) {
+                return (is_array($node) && isset($node['bg']['image']['src']) && is_string($node['bg']['image']['src'])) ? trim($node['bg']['image']['src']) : '';
+            };
+            $layers = (isset($slide['layers']) && is_array($slide['layers'])) ? $slide['layers'] : [];
+            foreach (['image', 'slidebg'] as $subtype) {
+                foreach ($layers as $layer) {
+                    if (is_array($layer) && isset($layer['subtype']) && $layer['subtype'] === $subtype && $srcOf($layer) !== '') {
+                        return $srcOf($layer);
+                    }
+                }
+            }
+
+            return $srcOf($slide);
+        }
+
+        return null;
+    }
+
+    /** The first slide's largeURL in the text of a Beaver Builder row-slideshow layout file (source:[{type:"urls",urls:[{thumbURL:..,largeURL:..}]}]), '' when it names none. */
+    public static function slider_bb_layout_first_url($js)
+    {
+        if (!preg_match('/\burls["\']?\s*:\s*\[\s*\{(.*?)\}/s', (string) $js, $slide)
+            || !preg_match('/(?<![\w$])(["\']?)largeURL\1\s*:\s*"((?:[^"\\\\]|\\\\.)*)"/', $slide[1], $large)) {
+            return '';
+        }
+        $url = json_decode('"' . $large[2] . '"');
+
+        return is_string($url) ? trim($url) : '';
+    }
+
+    /**
+     * The text of the Beaver Builder layout file the page loads (uploads/bb-plugin/cache/<id>-layout.js),
+     * read from this site's disk and never written: the script's host is the home host's (or absent),
+     * the path sits under the uploads URL, the file is a .js whose real path stays under the uploads
+     * directory, and it is at most 2 MB. '' for anything else.
+     */
+    public static function slider_bb_layout_text($html, array $siteHosts)
+    {
+        if (!preg_match('#<script\b[^>]*\bsrc\s*=\s*(["\'])([^"\']*/bb-plugin/cache/[\w.-]+-layout\.js)(?:\?[^"\']*)?\1#i', (string) $html, $script)) {
+            return '';
+        }
+        $src = html_entity_decode($script[2]);
+        $host = strtolower(preg_replace('/^www\./', '', (string) wp_parse_url($src, PHP_URL_HOST)));
+        $siteSet = array_map(function ($site) { return strtolower(preg_replace('/^www\./', '', trim((string) $site))); }, $siteHosts);
+        $path = (string) wp_parse_url($src, PHP_URL_PATH);
+        if (($host !== '' && !in_array($host, $siteSet, true)) || $path === '' || $path[0] !== '/' || strtolower(substr($path, -3)) !== '.js' || strpos($path, "\0") !== false) {
+            return '';
+        }
+        $uploads = function_exists('wp_get_upload_dir') ? wp_get_upload_dir() : (function_exists('wp_upload_dir') ? wp_upload_dir() : []);
+        $baseDir = (is_array($uploads) && !empty($uploads['basedir'])) ? rtrim((string) $uploads['basedir'], '/') : '';
+        $basePath = (is_array($uploads) && !empty($uploads['baseurl'])) ? rtrim((string) wp_parse_url((string) $uploads['baseurl'], PHP_URL_PATH), '/') : '';
+        if ($baseDir === '' || $basePath === '' || strpos($path, $basePath . '/') !== 0) {
+            return '';
+        }
+        $root = realpath($baseDir);
+        $file = realpath($baseDir . substr($path, strlen($basePath)));
+        if (!is_string($root) || !is_string($file) || strpos($file, rtrim($root, '/\\') . DIRECTORY_SEPARATOR) !== 0 || !is_file($file) || !is_readable($file)) {
+            return '';
+        }
+        $size = filesize($file);
+        if ($size === false || $size > 2097152) {
+            return '';
+        }
+        $text = file_get_contents($file);
+
+        return is_string($text) ? $text : '';
+    }
+
+    /**
+     * A slide image URL in the form its preload takes: a URL on a zone host as it stands, a site
+     * upload moved to the zone ($zone '' keeps the site's own), '' for any other host, any other path
+     * or a URL that is not an image.
+     */
+    public static function slider_first_url_form($url, $zone, array $siteHosts, array $zoneHosts)
+    {
+        $url = trim((string) $url);
+        if ($url === '' || preg_match('/[\s"\'<>\\\\]/', $url)) {
+            return '';
+        }
+        $host = strtolower(preg_replace('/^www\./', '', (string) wp_parse_url($url, PHP_URL_HOST)));
+        $zoneSet = array_map(function ($zoneHost) { return strtolower(preg_replace('/^www\./', '', trim((string) $zoneHost))); }, $zoneHosts);
+        if ($host !== '' && in_array($host, $zoneSet, true)) {
+            return preg_match('/\.(?:jpe?g|png|gif|webp|avif|svg|ico|bmp)$/i', (string) wp_parse_url($url, PHP_URL_PATH)) ? 'https://' . substr($url, strpos($url, '//') + 2) : '';
+        }
+        $out = '';
+        $count = 0;
+        self::slider_config_urls($url, $zone, $siteHosts, $zoneHosts, $out, $count);
+
+        return $out;
+    }
+
+    /**
+     * The first slide of a first-screen slider whose slides are not in an inline script: a Beaver
+     * Builder row background slideshow (its layout file read from disk, markers fl-row-bg-slideshow /
+     * fl-bg-slideshow) or an Elementor background slideshow (background_slideshow_gallery in a
+     * section's data-settings), each only when its marker sits before the third <section>. Returns
+     * ['kind' => 'bbfile'|'elementor', 'url' => the preload URL or '', 'docs' => text the page's
+     * own markup does not carry but the slide URLs live in], or null.
+     */
+    public static function slider_page_first_slide($html, $zone, array $siteHosts, array $zoneHosts)
+    {
+        $html = (string) $html;
+        if (stripos($html, 'bb-plugin/cache/') !== false
+            && wps_ic_js_delay_v3::wpc_first_screen_markup_has($html, '/(?<![\w-])fl-(?:row-)?bg-slideshow(?![\w-])/')) {
+            $text = self::slider_bb_layout_text($html, $siteHosts);
+            if ($text !== '') {
+                return ['kind' => 'bbfile', 'url' => self::slider_first_url_form(self::slider_bb_layout_first_url($text), '', $siteHosts, $zoneHosts), 'docs' => $text];
+            }
+        }
+        $gallery = '/\bdata-settings\s*=\s*"[^"]*background_slideshow_gallery/i';
+        if (stripos($html, 'background_slideshow_gallery') !== false && wps_ic_js_delay_v3::wpc_first_screen_markup_has($html, $gallery)
+            && preg_match('/\bdata-settings\s*=\s*"([^"]*background_slideshow_gallery[^"]*)"/i', $html, $settings)) {
+            $data = json_decode(html_entity_decode($settings[1], ENT_QUOTES), true);
+            $slides = (is_array($data) && isset($data['background_slideshow_gallery']) && is_array($data['background_slideshow_gallery'])) ? $data['background_slideshow_gallery'] : [];
+            $slide = reset($slides);
+            $url = (is_array($slide) && isset($slide['url']) && is_string($slide['url'])) ? $slide['url'] : '';
+
+            return ['kind' => 'elementor', 'url' => self::slider_first_url_form($url, $zone, $siteHosts, $zoneHosts), 'docs' => ''];
+        }
+
+        return null;
+    }
+
+    public static function wpc_lcp_bg_derived_ref_ok($url)
+    {
+        return is_string($url) && $url !== ''
+            && self::wpc_lcp_bg_url_allowed($url)
+            && (!self::wpc_lcp_bg_path_exact_on() || self::wpc_lcp_bg_ref_rooted($url));
+    }
+
+    public static function wpc_lcp_bg_ref_rooted($url)
+    {
+        $u = trim(html_entity_decode((string) $url, ENT_QUOTES), " \t\n\r\f\"'");
+        return (bool) preg_match('#^(?:https?:)?//[^/\s?\#\\\\]+(?:[/?\#]|$)#i', $u) || (bool) preg_match('#^/(?![/\\\\])#', $u);
+    }
+
+    public static function wpc_lcp_bg_file_id($url)
+    {
+        $u = trim(html_entity_decode((string) $url, ENT_QUOTES), " \t\n\r\f\"'");
+        if ($u === '' || stripos($u, 'data:') === 0 || !self::wpc_lcp_bg_ref_rooted($u)) {
+            return '';
+        }
+        $inner = strrpos($u, '/u:http');
+        if ($inner !== false) {
+            $u = substr($u, $inner + 3);
+        }
+        if (preg_match('#^https?://[^/]+/m:0/a:(https?://.+)$#i', $u, $wrapped)) {
+            $u = $wrapped[1];
+        }
+        if (strpos($u, '//') === 0) {
+            $u = 'https:' . $u;
+        }
+        $path = (string) parse_url($u, PHP_URL_PATH);
+        if ($path === '' || $path[0] !== '/') {
+            return '';
+        }
+        if (stripos($path, '/wp-content/') === false && function_exists('wpc_v2_upload_base_paths')) {
+            foreach ((array) wpc_v2_upload_base_paths() as $base) {
+                $base = '/' . trim((string) $base, '/');
+                if ($base !== '/' && stripos($base . '/', '/wp-content/') === false && ($at = stripos($path, $base . '/')) !== false) {
+                    $path = '/wp-content/uploads/' . substr($path, $at + strlen($base) + 1);
+                    break;
+                }
+            }
+        }
+        $at = strrpos($path, '/wp-content/');
+        $id = rawurldecode($at !== false ? substr($path, $at) : $path);
+        $id = (string) preg_replace('/\.(avif|webp)$/i', '', $id);
+        $id = (string) preg_replace('/\.[a-z0-9]{2,5}$/i', '', $id);
+        return (strlen($id) > 1 && substr($id, -1) !== '/') ? strtolower($id) : '';
+    }
+
+    public static function wpc_lcp_bg_dir_id($url)
+    {
+        $id = self::wpc_lcp_bg_file_id($url);
+        $slash = strrpos($id, '/');
+        return ($id === '' || $slash === false) ? '' : substr($id, 0, $slash);
+    }
+
+    public static function wpc_lcp_bg_crit_url($text, $heroUrl)
+    {
+        $want = self::wpc_lcp_bg_file_id($heroUrl);
+        $wantName = self::wpc_lcp_bg_file_name($heroUrl);
+        if ($want === '' || $wantName === '' || !preg_match_all('#url\(\s*["\']?([^"\')\s]+)["\']?\s*\)#i', (string) $text, $found, PREG_SET_ORDER)) {
+            return [];
+        }
+        foreach ($found as $candidate) {
+            if (self::wpc_lcp_bg_file_id($candidate[1]) === $want && self::wpc_lcp_bg_file_name($candidate[1]) === $wantName) {
+                return $candidate;
+            }
+        }
+        return [];
+    }
+
+    public static function wpc_lcp_bg_file_name($url)
+    {
+        $u = trim(html_entity_decode((string) $url, ENT_QUOTES), " \t\n\r\f\"'");
+        $inner = strrpos($u, '/u:http');
+        if ($inner !== false) {
+            $u = substr($u, $inner + 3);
+        }
+        if (preg_match('#^https?://[^/]+/m:0/a:(https?://.+)$#i', $u, $wrapped)) {
+            $u = $wrapped[1];
+        }
+        if (strpos($u, '//') === 0) {
+            $u = 'https:' . $u;
+        }
+        return strtolower(rawurldecode(basename((string) parse_url($u, PHP_URL_PATH))));
+    }
+
+    public static function wpc_lcp_rung_synth_path_ok($url)
+    {
+        if (!self::wpc_lcp_bg_path_exact_on()) {
+            return true;
+        }
+        $u = html_entity_decode((string) $url, ENT_QUOTES);
+        $inner = strrpos($u, '/u:http');
+        if ($inner !== false) {
+            $u = substr($u, $inner + 3);
+        }
+        $path = (string) parse_url($u, PHP_URL_PATH);
+        $bases = function_exists('wpc_v2_upload_base_paths') ? (array) wpc_v2_upload_base_paths() : [];
+        $bases[] = '/wp-content/uploads';
+        foreach ($bases as $base) {
+            $base = '/' . trim((string) $base, '/') . '/';
+            if ($base !== '//' && $path !== '' && stripos($path, $base) !== false) {
+                return true;
+            }
+        }
+        return (bool) apply_filters('wpc_lcp_rung_synth_outside_uploads', false, (string) $url);
+    }
+
     public static function wpc_lcp_bg_url_allowed($url)
     {
         $h = strtolower((string) parse_url((string) $url, PHP_URL_HOST));
@@ -8781,7 +9644,7 @@ SCRIPT;
         return (strlen($stem) < 3) ? ['stem' => '', 'why' => 'short', 'n' => 1] : ['stem' => $stem, 'why' => '', 'n' => 1];
     }
 
-    public static function wpc_lcp_stem_url($text, $stem, $dir = '')
+    public static function wpc_lcp_stem_url($text, $stem, $dir = '', $strictDir = null)
     {
         $text = (string) $text;
         $stem = strtolower((string) $stem);
@@ -8818,6 +9681,9 @@ SCRIPT;
         foreach ($found as $url) {
             $parts = self::wpc_lcp_image_parts($url);
             if ($parts[0] !== $stem || ($dir !== '' && $parts[2] !== '' && $parts[2] !== $dir)) {
+                continue;
+            }
+            if (is_string($strictDir) && ($strictDir === '' || self::wpc_lcp_bg_dir_id($url) !== $strictDir)) {
                 continue;
             }
             $files[$parts[2] . '/' . $parts[1]][] = (string) $url;
@@ -9394,7 +10260,9 @@ SCRIPT;
     public static function wpc_phone_hero_rung($cssUrl, array $phone)
     {
         $width = isset($phone['w']) ? (int) $phone['w'] : 0;
-        if ($width < 64 || !self::wpc_lcp_rung_synth_on() || !preg_match('#^(https?://[^\s"\')]+)\.(webp|avif|jpe?g|png)$#i', (string) $cssUrl, $parts)
+        if ($width < 64 || !self::wpc_lcp_rung_synth_on()
+            || (self::wpc_lcp_bg_path_exact_on() && !self::wpc_lcp_rung_synth_path_ok((string) $cssUrl))
+            || !preg_match('#^(https?://[^\s"\')]+)\.(webp|avif|jpe?g|png)$#i', (string) $cssUrl, $parts)
             || !self::isImage($cssUrl) || self::isExcluded($cssUrl) || self::isExcludedFrom('cdn', $cssUrl)) {
             return '';
         }
@@ -9758,7 +10626,11 @@ SCRIPT;
         if (!defined('WPS_IC_CSS') || $basename === '' || !is_dir(WPS_IC_CSS)) {
             return '';
         }
-        $tkey = 'wpc_painted_' . substr(md5($basename . '|' . (string) get_option('css_hash')), 0, 24);
+        $wantId = self::wpc_lcp_bg_path_exact_on() ? self::wpc_lcp_bg_file_id($cleanUrl) : '';
+        if (self::wpc_lcp_bg_path_exact_on() && $wantId === '') {
+            return '';
+        }
+        $tkey = 'wpc_painted_' . substr(md5(($wantId !== '' ? 'pe1|' . $wantId : $basename) . '|' . (string) get_option('css_hash')), 0, 24);
         $hit  = get_transient($tkey);
         if (is_string($hit)) {
             return $hit === (string) $cleanUrl ? '' : $hit;
@@ -9777,6 +10649,24 @@ SCRIPT;
             }
             $c = @file_get_contents($f);
             if (!is_string($c) || stripos($c, $basename) === false) {
+                continue;
+            }
+            if ($wantId !== '') {
+                if (preg_match_all('#url\(\s*["\']?([^"\')\s]*' . preg_quote($basename, '#') . '(?:\?[^"\')\s]*)?)["\']?\s*\)#i', $c, $all)) {
+                    foreach ($all[1] as $raw) {
+                        $u = html_entity_decode($raw);
+                        if (self::wpc_lcp_bg_file_id($u) !== $wantId) {
+                            continue;
+                        }
+                        if (strpos($u, '/w:1/u:') !== false || strpos($u, '/u:http') !== false) {
+                            $found = $u;
+                            break 2;
+                        }
+                        if ($found === '') {
+                            $found = $u;
+                        }
+                    }
+                }
                 continue;
             }
             if (preg_match('#url\(\s*["\']?([^"\')\s]*' . preg_quote($basename, '#') . '(?:\?[^"\')\s]*)?)["\']?\s*\)#i', $c, $m)) {
@@ -10000,12 +10890,13 @@ SCRIPT;
      *   'pre_url'   the URL that text names for the image once `edits` are applied, which is the
      *               URL the preload must name or the image is fetched twice;
      *   'auth_sel', 'auth_ok'   the pin's selector, and whether it may be used;
-     *   'host_rule' whether the rules `edits` rewrite paint the pin's element itself (not a pseudo-element of it) and, on the zone lane, the crit rule is rewritten to the pin's own url (a pin whose url the served crit does not carry is dropped before the preloads), which is when the pin may follow a rewrite.
+     *   'host_rule' whether the rules `edits` rewrite paint the pin's element itself (not a pseudo-element of it) and, on the zone lane, the crit rule is rewritten to the pin's own url (a pin whose url the served crit does not carry is dropped before the preloads), which is when the pin may follow a rewrite;
+     *   'layer_rule' (lcp_paint_exact only) whether the rules `edits` rewrite paint the very layer the pin names, pseudo-element included.
      */
     private static function wpc_lcp_bg_plan($deviceKey, $servedCrit)
     {
         $plan = ['element' => null, 'css_url' => '', 'edits' => [], 'pre_url' => '', 'auth_sel' => '', 'auth_ok' => false,
-            'phone' => [], 'phone_used' => false, 'standdown' => '', 'host_rule' => false];
+            'phone' => [], 'phone_used' => false, 'standdown' => '', 'host_rule' => false, 'layer_rule' => false];
         $element = wps_ic_atf_observation::lcpElement($deviceKey);
         if (wps_ic_atf_observation::heroFold()) {
             if (wps_ic_atf_observation::lcpHeld($deviceKey)) {
@@ -10065,8 +10956,14 @@ SCRIPT;
         // The URL as it actually appears in the crit text this device is served (zone or origin
         // form) — the swap and the preload must byte-match the CSS or it double-fetches.
         $originalFile = basename((string) parse_url($lcpUrl, PHP_URL_PATH));
-        $namedInCrit = $originalFile !== ''
-            && preg_match('#url\(\s*["\']?([^"\')\s]*/' . preg_quote($originalFile, '#') . ')["\']?\s*\)#i', (string) $servedCrit, $cssUrlMatch);
+        $pathExact = self::wpc_lcp_bg_path_exact_on();
+        if ($pathExact) {
+            $cssUrlMatch = self::wpc_lcp_bg_crit_url((string) $servedCrit, $lcpUrl);
+            $namedInCrit = $cssUrlMatch !== [];
+        } else {
+            $namedInCrit = $originalFile !== ''
+                && preg_match('#url\(\s*["\']?([^"\')\s]*/' . preg_quote($originalFile, '#') . ')["\']?\s*\)#i', (string) $servedCrit, $cssUrlMatch);
+        }
         if (!$namedInCrit && $phone !== []) {
             $cssUrlMatch = self::wpc_phone_hero_blob_url((string) $servedCrit, $phone);
             $namedInCrit = $cssUrlMatch !== [];
@@ -10075,7 +10972,8 @@ SCRIPT;
             $stemStanddown = self::wpc_lcp_stem_standdown($deviceKey);
             $heroStem = ($stemStanddown !== '') ? ['stem' => '', 'why' => $stemStanddown, 'n' => 1] : self::wpc_lcp_hero_stem($element, [$lcpUrl]);
             $stemPainted = ($heroStem['stem'] === '') ? ['url' => '', 'why' => $heroStem['why'], 'n' => $heroStem['n']]
-                : self::wpc_lcp_stem_url((string) $servedCrit, $heroStem['stem'], self::wpc_lcp_image_parts($lcpUrl)[2]);
+                : self::wpc_lcp_stem_url((string) $servedCrit, $heroStem['stem'], self::wpc_lcp_image_parts($lcpUrl)[2],
+                    $pathExact ? self::wpc_lcp_bg_dir_id($lcpUrl) : null);
             if ($stemPainted['url'] !== '' && self::wpc_lcp_bg_url_allowed($stemPainted['url'])) {
                 $cssUrlMatch = [$stemPainted['url'], $stemPainted['url']];
                 $namedInCrit = true;
@@ -10098,6 +10996,12 @@ SCRIPT;
             return $plan;
         }
         $cssUrl = $cssUrlMatch[1];
+        if ($pathExact && !self::wpc_lcp_bg_ref_rooted($cssUrl)) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('lcp-bg-ref-relative', $deviceKey, substr((string) $cssUrl, -120), ['lcp' => substr((string) $lcpUrl, -120)]);
+            }
+            return $plan;
+        }
         $plan['css_url'] = $cssUrl;
 
         // The FULL stylesheet can declare this same image as a TRANSFORM-chain
@@ -10160,6 +11064,7 @@ SCRIPT;
         if ($authorityOk && $sizedSibling === '' && $neededWidth >= 64 && $neededHeight >= 64
             && $neededWidth <= 2560 && $neededHeight <= 2560
             && self::wpc_lcp_rung_synth_on()
+            && (!$pathExact || self::wpc_lcp_rung_synth_path_ok($cssUrl))
             && preg_match('#^(https?://[^\s"\')]+)\.(webp|avif|jpe?g|png)$#i', $cssUrl, $synthMatch)
             && !preg_match('#-\d+x\d+$#', $synthMatch[1])) {
             $sizedSibling = $synthMatch[1] . ((function_exists('wpc_image_names_nw') && wpc_image_names_nw() && function_exists('wpc_v2_adaptive_variant_suffix')
@@ -10230,6 +11135,8 @@ SCRIPT;
         $plan['host_rule'] = $authorityOk && $plan['edits'] !== []
             && (!(class_exists('wps_cdn_rewrite') && wps_cdn_rewrite::wpc_svg_zoneify_active()) || wps_ic_atf_observation::heroFold())
             && self::wpc_lcp_bg_rules_paint_host($servedCrit, $plan['edits'], $authoritySelector);
+        $plan['layer_rule'] = $authorityOk && $plan['edits'] !== [] && self::wpc_lcp_paint_exact_on()
+            && self::wpc_lcp_bg_rules_paint_host($servedCrit, $plan['edits'], $authoritySelector, true);
         return $plan;
     }
 
@@ -11194,6 +12101,7 @@ WPCJS;
         // The callbacks are registered by name and take only the match, so the verdict travels
         // in the static; the render's standing verdict is restored when the two passes are done.
         $previousParkAllowed = self::set_park_allowed($parkAllowed);
+        self::wpc_lscwp_keep_inline_arm($parkAllowed);
         $previousKeptFamilies = self::set_kept_families($parkAllowed && class_exists('wps_ic_js_delay_v3') ? wps_ic_js_delay_v3::wpc_kept_families($html) : []);
         self::$linkInertRanges = self::wpc_link_inert_ranges($html);
         $rewrittenHtml = preg_replace_callback('/<link(.*?)>/si', [__CLASS__, 'cssLinkLazyAt'], $html, -1, $linkCount, PREG_OFFSET_CAPTURE);
@@ -11354,6 +12262,113 @@ WPCJS;
     public static function wpc_etcache_kept_live($fullTag)
     {
         return apply_filters('wpc_etcache_live', true) && !self::wpc_divi_live_css_off() && self::wpc_etcache_sheet($fullTag);
+    }
+
+    private static $etcacheInlineBytes = 0;
+
+    private static function wpc_etcache_inline_host_ok($href)
+    {
+        $href = trim((string) $href);
+        $host = strtolower((string) parse_url($href, PHP_URL_HOST));
+        if ($host === '') {
+            return strpos($href, '//') !== 0 && preg_match('#^[a-z][a-z0-9+.\-]*:#i', $href) !== 1;
+        }
+        $own = [];
+        foreach ([self::$siteUrl, self::$homeUrl, function_exists('home_url') ? home_url('/') : ''] as $url) {
+            $ownHost = strtolower((string) parse_url('//' . preg_replace('#^[a-z][a-z0-9+.\-]*://#i', '', trim((string) $url)), PHP_URL_HOST));
+            if ($ownHost !== '') {
+                $own[] = $ownHost;
+            }
+        }
+        $zoneHost = strtolower((string) strtok((string) self::$zoneName, '/'));
+        if ($zoneHost !== '') {
+            $own[] = $zoneHost;
+        }
+
+        return in_array($host, $own, true);
+    }
+
+    private static function wpc_etcache_copy_source_url($href, $path)
+    {
+        if (stripos($path, '/cache/wpc-hostfix/') === false
+            || !preg_match('/^et-(?:core-unified|divi-dynamic)-/i', basename($path))
+            || !class_exists('wps_cdn_rewrite') || !method_exists('wps_cdn_rewrite', 'wpc_sheet_copy_source')) {
+            return '';
+        }
+        $src = (string) wps_cdn_rewrite::wpc_sheet_copy_source(basename($path));
+        if ($src === '' || $src[0] !== '/' || stripos($src, '/et-cache/') === false || strpos($src, '..') !== false) {
+            return '';
+        }
+        $origin = preg_match('#^((?:https?:)?//[^/?\#]+)#i', trim((string) $href), $om) ? $om[1] : '';
+
+        return $origin . $src;
+    }
+
+    public static function wpc_etcache_live_inline_on()
+    {
+        $on = function_exists('wpc_policy_cohort') && wpc_policy_cohort('etcache_live_inline') === 1;
+
+        return (bool) apply_filters('wpc_etcache_live_inline', $on);
+    }
+
+    public static function wpc_etcache_live_sheet_inline($fullTag)
+    {
+        try {
+            $fullTag = (string) $fullTag;
+            if (!self::wpc_etcache_live_inline_on() || !class_exists('wps_ic_asset_version') || !self::wpc_etcache_kept_live($fullTag)) {
+                return '';
+            }
+            $a = self::wpc_link_attrs($fullTag);
+            if (!is_array($a) || !isset($a['rel'], $a['href']) || strtolower(trim($a['rel'])) !== 'stylesheet'
+                || trim($a['href']) === '' || isset($a['onload']) || isset($a['disabled']) || isset($a['integrity'])) {
+                return '';
+            }
+            $media = isset($a['media']) ? strtolower(trim($a['media'])) : '';
+            if ($media !== '' && $media !== 'all') {
+                return '';
+            }
+            $href = trim($a['href']);
+            $path = (string) parse_url($href, PHP_URL_PATH);
+            $rebaseUrl = $href;
+            if (stripos($path, '/et-cache/') === false) {
+                $rebaseUrl = self::wpc_etcache_copy_source_url($href, $path);
+                if ($rebaseUrl === '') {
+                    return '';
+                }
+            }
+            if (!self::wpc_etcache_inline_host_ok($href)) {
+                return '';
+            }
+            $file = wps_ic_asset_version::local_path($href);
+            if ($file === '' || strtolower(substr($file, -4)) !== '.css') {
+                return '';
+            }
+            $size = (int) @filesize($file);
+            if ($size <= 0 || $size > 16384 || self::$etcacheInlineBytes + $size > 32768) {
+                return '';
+            }
+            $css = @file_get_contents($file);
+            if (!is_string($css) || trim($css) === '' || stripos($css, '</style') !== false || stripos($css, '@import') !== false
+                || stripos($css, '@font-face') !== false) {
+                return '';
+            }
+            $css = (string) preg_replace('/^\xEF\xBB\xBF/', '', $css);
+            $css = (string) preg_replace('/^\s*@charset\s+[^;]+;/i', '', $css);
+            $css = self::wpc_family_sheet_rebase($css, $rebaseUrl);
+            if (!is_string($css) || trim($css) === '' || stripos($css, '</style') !== false) {
+                return '';
+            }
+            $attrs = '';
+            if (isset($a['id']) && trim($a['id']) !== '') {
+                $attrs .= ' id="' . htmlspecialchars(trim($a['id']), ENT_QUOTES) . '"';
+            }
+            $attrs .= ' data-etcache-inline="' . htmlspecialchars($path, ENT_QUOTES) . '"';
+            self::$etcacheInlineBytes += $size;
+
+            return '<style' . $attrs . '>' . $css . '</style>';
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 
     /** Whether an inline style stays live as a theme's own first-frame CSS (an id or class that declares itself critical, Divi's font and off-canvas carriers); cohort divi_live_css_off releases only Divi's three design blocks. */
@@ -11878,6 +12893,9 @@ WPCJS;
         // doctrine enforced at one write seam is not a doctrine.
         if (self::wpc_etcache_kept_live($fullTag) || self::wpc_kept_family_sheet($fullTag)) {
             $wpcFamilyInline = !self::$linkInert && self::wpc_kept_family_sheet($fullTag) ? self::wpc_kept_family_sheet_inline($fullTag) : '';
+            if ($wpcFamilyInline === '' && !self::$linkInert) {
+                $wpcFamilyInline = self::wpc_etcache_live_sheet_inline($fullTag);
+            }
             return $wpcFamilyInline !== '' ? $wpcFamilyInline : $fullTag;
         }
 
@@ -12141,7 +13159,7 @@ WPCJS;
             return $image[0];
         }
 
-        if (!empty($image_src[1])) {
+        if (isset($image_src[1]) && wps_ic_lazy_verdict::isImageAddress($image_src[1])) {
             $NewSrc = 'https://' . self::$zoneName . '/m:0/a:' . $this->specialChars(self::reformatUrl($image_src[1]));
             $img_tag = str_replace($image_src[1], $NewSrc, $img_tag);
         }
@@ -12792,6 +13810,10 @@ WPCJS;
             $imageElement = $image[0];
         }
 
+        if (wps_ic_lazy_verdict::namesNoImage($imageElement)) {
+            return $image[0];
+        }
+
         $newImageElement = '';
         $original_img_tag = [];
         $original_img_tag['original_tags'] = $this->getAllTags($imageElement, []);
@@ -13170,7 +14192,7 @@ WPCJS;
         // fetchpriority (stripped further down).
         $pageTag = $image[0];
 
-        if (wps_ic_lazy_verdict::isPlaceholderTag($image[0])) {
+        if (wps_ic_lazy_verdict::isPlaceholderTag($image[0]) || wps_ic_lazy_verdict::namesNoImage($image[0])) {
             return $image[0];
         }
 
@@ -13248,7 +14270,7 @@ WPCJS;
             $pageDataSrcUrl = (string) $original_img_tag['original_tags']['data-src'];
             unset($original_img_tag['original_tags']['data-src']);
         }
-        if (empty($original_img_tag['original_tags']['src']) && !empty($original_img_tag['original_tags']['srcset'])) {
+        if (!wps_ic_lazy_verdict::isImageAddress($original_img_tag['original_tags']['src'] ?? '') && !empty($original_img_tag['original_tags']['srcset'])) {
             $smallestSrcsetUrl = self::wpc_srcset_smallest_url((string) $original_img_tag['original_tags']['srcset']);
             if ($smallestSrcsetUrl !== '') {
                 $original_img_tag['original_tags']['src'] = $smallestSrcsetUrl;
@@ -13270,7 +14292,7 @@ WPCJS;
          * strpos blank is required to make it work when image has placeholder containing "blank" in it.
          */
         $image_source = '';
-        if (!empty($original_img_tag['original_tags']['src'])) {
+        if (wps_ic_lazy_verdict::isImageAddress($original_img_tag['original_tags']['src'] ?? '')) {
             $image_source = $original_img_tag['original_tags']['src'];
         } else {
             if (!empty($original_img_tag['original_tags']['data-src'])) {
@@ -13283,7 +14305,7 @@ WPCJS;
             }
         }
 
-        if (!empty($original_img_tag['original_tags']['data-src'])) {
+        if (wps_ic_lazy_verdict::isImageAddress($original_img_tag['original_tags']['data-src'] ?? '')) {
             $image_source = $original_img_tag['original_tags']['data-src'];
         }
 
@@ -13296,6 +14318,10 @@ WPCJS;
             }
         }
 
+
+        if (!wps_ic_lazy_verdict::isImageAddress($image_source)) {
+            return $pageTag;
+        }
 
         $exclusionLinks = [$image_source, $pageDataSrcUrl];
         if (self::isExcludedFromAny('cdn', $exclusionLinks)) {
@@ -15334,7 +16360,8 @@ WPCJS;
             return print_r([$original_img_tag, $imageElement], true);
         }
 
-        if (strpos($original_img_tag['original_tags']['src'], 'data:image') !== false || strpos($original_img_tag['original_tags']['src'], 'blank') !== false) {
+        if ((strpos($original_img_tag['original_tags']['src'], 'data:image') !== false || strpos($original_img_tag['original_tags']['src'], 'blank') !== false)
+            && wps_ic_lazy_verdict::isImageAddress($original_img_tag['original_tags']['data-src'] ?? '')) {
 
             $newImageElement = '<img ';
 

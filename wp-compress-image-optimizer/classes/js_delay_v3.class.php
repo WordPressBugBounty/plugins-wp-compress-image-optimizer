@@ -81,6 +81,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             'wpcVitals', // RUM collector — an observer released on gesture misses the load it
                          // exists to measure, and a bounce view never beacons at all
             'wpc-rum-beacon',
+            'wpc-ela',
             'wpc-dev-check',
 
             // /elementor/optimize.js (served from the service CDN) owns the deferred-STYLESHEET
@@ -473,7 +474,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return is_string($out) ? $out : $html;
     }
 
-    public static function wpc_force_delay_on($which)
+    public static function wpc_force_delay_on($which, $with_cohort = true)
     {
         $const = 'WPC_FORCE_DELAY_' . strtoupper((string) $which);
         if (defined($const) && constant($const)) {
@@ -481,6 +482,9 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         }
         $s = get_option(defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings');
         if (is_array($s) && !empty($s['force-delay-' . $which]) && $s['force-delay-' . $which] == '1') {
+            return true;
+        }
+        if ($with_cohort && $which === 'jquery' && function_exists('wpc_policy_cohort') && wpc_policy_cohort('force_delay_jquery') === 1) {
             return true;
         }
         // v7.22.60 — consent AUTO: the checkbox forces it on; unchecked means "decide by CMP".
@@ -932,7 +936,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return isset($this->wpc_src_path_handles[$src_path]) ? $this->wpc_src_path_handles[$src_path] : '';
     }
 
-    const WPC_OWN_SCRIPT_IDS = ['wpc-css-orb-fallback', 'wpc-icon-belt', 'wpc-ga-bot-shield', 'wpc-rum-beacon', 'wpc-dev-check'];
+    const WPC_OWN_SCRIPT_IDS = ['wpc-css-orb-fallback', 'wpc-icon-belt', 'wpc-ga-bot-shield', 'wpc-rum-beacon', 'wpc-ela', 'wpc-dev-check'];
 
     protected function should_exclude_script($attributes, $content = '')
     {
@@ -1037,6 +1041,16 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             }
             if (strpos($wpc_fsrc, 'jquery') !== false
                 && apply_filters('wpc_force_delay_jquery', self::wpc_force_delay_on('jquery'))) {
+                if (apply_filters('wpc_force_delay_jquery', self::wpc_force_delay_on('jquery', false))) {
+                    return false;
+                }
+                if (!empty($attributes['data-nodefer'])
+                    || (!empty($attributes['data-priority']) && $attributes['data-priority'] === 'high')
+                    || $this->checkKeyword(strtolower((string) $attributes['src']
+                        . (apply_filters('wpc_keep_match_id', false) && !empty($attributes['id']) ? ' ' . (string) $attributes['id'] : '')), $this->wpc_excludes_lower())
+                    || $this->wpc_user_delay_excluded((string) $attributes['src'])) {
+                    return true;
+                }
                 return false;
             }
         }
@@ -2125,12 +2139,19 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if (!is_string($html) || (stripos($html, 'sr7-module') === false && strpos($html, '___WPCSR7_MODULE_') === false)) {
             return false;
         }
+        return self::wpc_first_screen_markup_has($html, '/<sr7-module(?![\w:.-])|___WPCSR7_MODULE_\d+___/i');
+    }
+
+    /** True when the first match of $pattern outside inert markup lies between the page's <body and its third real <section (the whole body when it has fewer than three). */
+    public static function wpc_first_screen_markup_has($html, $pattern)
+    {
+        $html = (string) $html;
         $body = self::wpc_real_body_offset($html);
         if ($body === false) {
             return false;
         }
-        $modules = self::wpc_first_screen_markup_offsets($html, '/<sr7-module(?![\w:.-])|___WPCSR7_MODULE_\d+___/i', $body);
-        if ($modules === []) {
+        $hits = self::wpc_first_screen_markup_offsets($html, $pattern, $body);
+        if ($hits === []) {
             return false;
         }
         $end = strlen($html);
@@ -2138,7 +2159,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if (count($sections) >= 3) {
             $end = $sections[2];
         }
-        return $modules[0] < $end;
+        return $hits[0] < $end;
     }
 
     /** Where the inert markup that opens at $start ends: a comment at its closer, script, style and textarea at their first closing tag, a template at the closing tag that balances its own opener. */
@@ -6304,9 +6325,10 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             'styleHoldMs'      => ['style_hold_ms', 0, 10000],
             'submitHoldMs'     => ['submit_hold_ms', 0, 10000],
             'menuResizeHoldMs' => ['menu_resize_hold_ms', 0, 120000],
+            'loaderPaceMs'     => ['loader_pace_ms', 0, 4000, 0],
         ] as $key => $knob) {
             $value = wpc_lever_num($knob[0], null, $knob[1], $knob[2]);
-            if ($value !== null) {
+            if ($value !== null && !(isset($knob[3]) && $value == $knob[3])) {
                 $out[$key] = $value;
             }
         }

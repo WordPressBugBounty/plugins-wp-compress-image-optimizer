@@ -975,7 +975,7 @@ class wps_ic_cache_integrations
         }
         try { // LiteSpeed Cache plugin (official per-URL API)
             if (defined('LSCWP_V') || class_exists('\LiteSpeed\Purge')) {
-                do_action('litespeed_purge_url', $url);
+                function_exists('wpc_litespeed_purge_url') ? wpc_litespeed_purge_url($url) : do_action('litespeed_purge_url', $url);
                 $out['litespeed'] = true;
             } elseif (!headers_sent() && !empty($_SERVER['SERVER_SOFTWARE'])
                 && stripos($_SERVER['SERVER_SOFTWARE'], 'litespeed') !== false) {

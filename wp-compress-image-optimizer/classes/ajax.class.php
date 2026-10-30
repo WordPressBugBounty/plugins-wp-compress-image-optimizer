@@ -1656,6 +1656,9 @@ class wps_ic_ajax extends wps_ic
         if (function_exists('wpc_hero_lqip_capability')) {
             wpc_hero_lqip_capability($args);
         }
+        if (function_exists('wpc_bg_mobile_edge_rung_capability')) {
+            wpc_bg_mobile_edge_rung_capability($args);
+        }
         if (function_exists('wpc_signed_artifacts_capability')) {
             wpc_signed_artifacts_capability($args);
         }
@@ -6498,7 +6501,9 @@ class wps_ic_ajax extends wps_ic
             ]);
         }
 
-        ini_set('memory_limit', '2024M');
+        if (function_exists('wpc_raise_memory_limit')) {
+            wpc_raise_memory_limit('2024M');
+        }
         ini_set('max_execution_time', '180');
 
         $queue_data = self::wpc_bulk_queue_read();
@@ -6926,7 +6931,9 @@ class wps_ic_ajax extends wps_ic
             return;
         }
 
-        @ini_set('memory_limit', '512M');
+        if (function_exists('wpc_raise_memory_limit')) {
+            wpc_raise_memory_limit('512M');
+        }
         @ini_set('max_execution_time', '60');
         @ignore_user_abort(true);
 
@@ -6971,9 +6978,9 @@ class wps_ic_ajax extends wps_ic
                 if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
                 // RISK #3 — memory guard. Exit the loop (→ finally RELEASE_LOCK →
                 // self-chain re-fires a fresh worker; queue still non-empty so work advances).
-                $mem_limit = wp_convert_hr_to_bytes((string) @ini_get('memory_limit'));
-                if ($mem_limit > 0 && memory_get_usage(true) > (int) ($mem_limit * 0.8)) {
-                    error_log('[WPC Bulk] drain slice mem-cap break usage=' . memory_get_usage(true) . ' limit=' . $mem_limit);
+                $mem_guard = function_exists('wpc_memory_guard_bytes') ? wpc_memory_guard_bytes() : PHP_INT_MAX;
+                if (memory_get_usage(true) > $mem_guard) {
+                    error_log('[WPC Bulk] drain slice mem-cap break usage=' . memory_get_usage(true) . ' guard=' . $mem_guard);
                     break;
                 }
                 if (function_exists('wpc_v2_is_store_broken_active') && wpc_v2_is_store_broken_active()) {
@@ -8091,7 +8098,9 @@ class wps_ic_ajax extends wps_ic
             return;
         }
 
-        @ini_set('memory_limit', '512M');
+        if (function_exists('wpc_raise_memory_limit')) {
+            wpc_raise_memory_limit('512M');
+        }
         @ini_set('max_execution_time', '60');
         @ignore_user_abort(true);
 
@@ -8119,9 +8128,9 @@ class wps_ic_ajax extends wps_ic
                 if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
                 // RISK #3 — memory guard. Exit the loop (→ finally RELEASE_LOCK →
                 // self-chain re-fires a fresh worker; queue still non-empty so work advances).
-                $mem_limit = wp_convert_hr_to_bytes((string) @ini_get('memory_limit'));
-                if ($mem_limit > 0 && memory_get_usage(true) > (int) ($mem_limit * 0.8)) {
-                    error_log('[WPC Bulk Restore] drain slice mem-cap break usage=' . memory_get_usage(true) . ' limit=' . $mem_limit);
+                $mem_guard = function_exists('wpc_memory_guard_bytes') ? wpc_memory_guard_bytes() : PHP_INT_MAX;
+                if (memory_get_usage(true) > $mem_guard) {
+                    error_log('[WPC Bulk Restore] drain slice mem-cap break usage=' . memory_get_usage(true) . ' guard=' . $mem_guard);
                     break;
                 }
                 $queue = get_transient('wps_ic_restore_queue');

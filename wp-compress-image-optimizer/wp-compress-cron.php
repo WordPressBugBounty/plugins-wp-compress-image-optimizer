@@ -20,6 +20,8 @@ include_once __DIR__ . '/addons/vitals/vitals.php';
 
 // DOING_CRON). Hard-gated; loading is behavior-free.
 include_once __DIR__ . '/addons/cache/beacon.php';
+include_once __DIR__ . '/addons/cache/host-cache-purge.php';
+include_once __DIR__ . '/addons/cache/crit-leg-reopen.php';
 
 include_once __DIR__ . '/addons/cache/link-preset.php';
 

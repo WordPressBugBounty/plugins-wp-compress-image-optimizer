@@ -339,7 +339,7 @@ class WPC_Negotiated_Delivery
         $attrs = self::parse_attrs($tag);
 
         $src = isset($attrs['src']) ? trim($attrs['src']) : '';
-        if ($src === '') return $tag;
+        if ($src === '' || (class_exists('wps_ic_lazy_verdict') && !wps_ic_lazy_verdict::isImageAddress($src))) return $tag;
 
         // ── Intrinsic skips (render-independent; reuse legacy guards) ──────────────
         if (stripos($src, 'data:') === 0) return $tag;

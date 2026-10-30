@@ -914,7 +914,7 @@ class wps_ic_preload_warmup
                     $url_key_class = new wps_ic_url_key();
                     $urlKey = $url_key_class->setup($url);
                     if (self::responseIsPublicCopy($get)) {
-                        $this->saveCacheLocal($urlKey, $body, $url);
+                        $this->saveCacheLocal($urlKey, $body, $url, self::responseCohortStamp($get));
                     }
                 }
             } else if (wp_remote_retrieve_response_code($get) >= 300 && wp_remote_retrieve_response_code($get) < 400) {
@@ -938,7 +938,7 @@ class wps_ic_preload_warmup
                             $url_key_class = new wps_ic_url_key();
                             $urlKey = $url_key_class->setup($url);
                             if (self::responseIsPublicCopy($get)) {
-                                $this->saveCacheLocal($urlKey, $body, $url);
+                                $this->saveCacheLocal($urlKey, $body, $url, self::responseCohortStamp($get));
                             }
                         }
                     } else {
@@ -951,7 +951,7 @@ class wps_ic_preload_warmup
         return 'did local cache';
     }
 
-    public function saveCacheLocal($urlKey, $body, $url = null)
+    public function saveCacheLocal($urlKey, $body, $url = null, $cohort = '')
     {
         if (function_exists('wpc_page_cache_blocked') && wpc_page_cache_blocked()) {
             return 'blocked';
@@ -978,7 +978,7 @@ class wps_ic_preload_warmup
 
 
         if (function_exists('gzencode')) {
-            $this->saveGzCacheLocal($cachePath, $body);
+            $this->saveGzCacheLocal($cachePath, $body, $cohort);
         }
 
         return 'saved';
@@ -1020,7 +1020,14 @@ class wps_ic_preload_warmup
         return strpos($cacheControl, 'private') === false && strpos($cacheControl, 'no-store') === false;
     }
 
-    public function saveGzCacheLocal($cachePath, $body)
+    private static function responseCohortStamp($response)
+    {
+        $timing = wp_remote_retrieve_header($response, 'server-timing');
+        $timing = is_array($timing) ? implode(',', $timing) : (string) $timing;
+        return preg_match('/(?:^|,)\s*wpc-coh;desc="?([0-9a-f]{12})"?\s*(?:,|$)/', $timing, $m) ? $m[1] : '';
+    }
+
+    public function saveGzCacheLocal($cachePath, $body, $cohort = '')
     {
         if (function_exists('wpc_page_cache_blocked') && wpc_page_cache_blocked()) {
             return;
@@ -1057,7 +1064,7 @@ class wps_ic_preload_warmup
                 wpc_served_head_record($names['head'], $body, '', $final);
             }
             if (function_exists('wpc_copy_settle')) {
-                wpc_copy_settle($cachePath, '', '');
+                wpc_copy_settle($cachePath, '', '', '', (string) $cohort, function_exists('wpc_copy_link_header_stored') && wpc_copy_link_header_stored($body));
             }
         }
     }

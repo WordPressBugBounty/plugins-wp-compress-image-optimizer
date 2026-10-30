@@ -168,7 +168,7 @@ $warmupFailing = $warmup_class->isWarmupFailing();
 
 $cf = get_option(WPS_IC_CF);
 
-if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedScore))) {
+if (!empty($option['api_key']) && (empty($initialPageSpeedScore))) {
     ?>
     <script type="text/javascript">
         // One poller for this card and the Retest button (assets/v4/js/lite.js explains the
@@ -615,7 +615,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 } elseif (empty($initialPageSpeedScore) && $warmupFailing){
                                     echo '<div style="padding:35px 15px;text-align: center;">';
                                     echo '<strong>' . esc_html__('Error: Connection to our API was blocked by a firewall on your server.', WPS_IC_TEXTDOMAIN) . '</strong>';
-                                    echo '<br/><br/><a href="https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/" target="_blank">' . esc_html__('Whitelisting Tutorial', WPS_IC_TEXTDOMAIN) . '</a>';
+                                    echo '<br/><br/><a href="' . esc_url(function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/') : 'https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/') . '" target="_blank" rel="noopener">' . esc_html__('Whitelisting Tutorial', WPS_IC_TEXTDOMAIN) . '</a>';
                                     echo '</div>';
 
                                 } elseif (!empty($options['api_key']) && (empty($initialPageSpeedScore) && empty(get_transient('wpc_test_running')))) {
@@ -952,6 +952,13 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         <?php echo esc_html__('Retest', WPS_IC_TEXTDOMAIN); ?>
                                     </a>
                                 </div>
+                                <?php } elseif ($warmupFailing) { ?>
+                                <div class="wpc-v2-header-meta">
+                                    <a href="#" class="wps-ic-initial-retest wpc-v2-retest-btn">
+                                        <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                                        <?php echo esc_html__('Retest', WPS_IC_TEXTDOMAIN); ?>
+                                    </a>
+                                </div>
                                 <?php } ?>
                             </div>
                             <?php if ($v2_hasGPS) { ?>
@@ -1042,6 +1049,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 </div>
                             </div>
                             <?php } ?>
+                            <?php } elseif ($warmupFailing) { ?>
+                            <div class="wpc-v2-scores-loading wpc-v2-scores-failed">
+                                <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg" style="display:none"/>
+                                <span><?php echo esc_html__('Error: Connection to our API was blocked by a firewall on your server.', WPS_IC_TEXTDOMAIN); ?> <a href="<?php echo esc_url(function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/') : 'https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/'); ?>" target="_blank" rel="noopener"><?php echo esc_html__('Whitelisting Tutorial', WPS_IC_TEXTDOMAIN); ?></a></span>
+                            </div>
                             <?php } else { ?>
                             <div class="wpc-v2-scores-loading">
                                 <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>

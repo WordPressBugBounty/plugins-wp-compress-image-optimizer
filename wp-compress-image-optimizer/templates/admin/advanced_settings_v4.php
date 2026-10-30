@@ -483,7 +483,7 @@ if (!empty($cf)) {
 }
 
 $hasApiKey = !empty($option['api_key']) || (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY);
-if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
+if ($hasApiKey && (empty($initialPageSpeedScore))) {
     ?>
     <script type="text/javascript">
         // One poller for this card and the Retest button (assets/v4/js/lite.js explains the

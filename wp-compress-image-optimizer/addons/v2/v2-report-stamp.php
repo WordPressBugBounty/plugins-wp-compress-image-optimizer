@@ -67,3 +67,27 @@ if (!function_exists('wpc_report_stamp_mac')) {
         return substr(hash_hmac('sha256', (string) $label, $secret . '|' . ABSPATH), 0, 20);
     }
 }
+
+if (!function_exists('wpc_url_path_decode')) {
+    /** Percent-decodes a URL path. */
+    function wpc_url_path_decode($s)
+    {
+        return rawurldecode($s);
+    }
+}
+
+if (!function_exists('wpc_b64_decode_strict')) {
+    /** Strict base64 decode: the bytes, or false on any character outside the alphabet. */
+    function wpc_b64_decode_strict($s)
+    {
+        return base64_decode($s, true);
+    }
+}
+
+if (!function_exists('wpc_b64_encode')) {
+    /** Base64 encode. */
+    function wpc_b64_encode($s)
+    {
+        return base64_encode($s);
+    }
+}

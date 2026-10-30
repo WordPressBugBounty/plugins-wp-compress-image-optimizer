@@ -1418,7 +1418,7 @@ class WPC_Modern_Delivery
         // Parse attrs
         $attrs = self::parse_img_attrs($attrs_str);
         $src = $attrs['src'] ?? $attrs['data-src'] ?? '';
-        if (empty($src)) return $original_tag;
+        if (empty($src) || !wps_ic_lazy_verdict::isImageAddress($src)) return $original_tag;
 
         // Resolve attachment (prefers wp-image-{id} class, falls back to URL resolution)
         $attachment_id = self::resolve_attachment_id($src, $attrs['class'] ?? '');

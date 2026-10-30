@@ -389,6 +389,9 @@ include_once WPS_IC_DIR . 'classes/asset_version.class.php';
 include_once WPS_IC_DIR . 'addons/v2/v2-level.php';
 include WPS_IC_DIR . 'addons/cdn/rewriteLogic.php';
 include_once WPS_IC_DIR . 'addons/cdn/render-pipeline.php';
+include_once WPS_IC_DIR . 'addons/cdn/img-lqip.php';
+include_once WPS_IC_DIR . 'addons/cdn/atf-wire-clear.php';
+include_once WPS_IC_DIR . 'addons/cdn/css-url-zoneify.php';
 include WPS_IC_DIR . 'addons/minify/html.php';
 include_once WPS_IC_DIR . 'addons/cache/cacheHtml.php';
 
@@ -2010,12 +2013,19 @@ class wps_cdn_rewrite
         // no-repeat/position tokens, extra layers, !important, escaped/encoded quote) skips the
         // match; the idempotency lookahead tolerates preserved prior layers before image-set.
         $rx = '#(background(?:-image)?\s*:\s*[^;{}]*?url\(\s*)([\'"]?)(https?://' . $host_pattern . '/' . $base_alt . '/[^"\'()\s<>]+?)\.(png|jpe?g|webp)((?:\?[^"\'()\s<>]*)?)\2(\s*\))(?=\s*(?:[;}<&\\\\]|[\'"]|$))(?!\s*;\s*background-image\s*:\s*[^;{}]*?(?:-webkit-)?image-set)#i';
-        $out = preg_replace_callback($rx, static function ($m) use ($origin_host, $zone_host, $zone_is_plain_host) {
+        $cf_named = self::wpc_cf_bg_named_on();
+        if ($cf_named) {
+            $rx = str_replace('(\s*\))(?=', '(\s*\))((?:\s*!\s*important)?)(?=', $rx);
+        }
+        $out = preg_replace_callback($rx, static function ($m) use ($origin_host, $zone_host, $zone_is_plain_host, $cf_named) {
             if (stripos($m[0], 'image-set(') !== false) {
                 return $m[0];
             }
             $prior_layers = self::wpc_css_bg_prior_layers($m[1]);
             if (!empty($prior_layers['skip'])) {
+                return $m[0];
+            }
+            if (isset($m[7]) && $m[7] !== '' && !preg_match('/^background-image\s*:/i', $m[1])) {
                 return $m[0];
             }
             $matched_url = $m[3] . '.' . $m[4] . $m[5];
@@ -2032,9 +2042,46 @@ class wps_cdn_rewrite
             if ($iset !== '' && $prior_layers['layers'] !== '') {
                 $iset = str_replace('background-image:', 'background-image:' . $prior_layers['layers'], $iset);
             }
+            if ($iset !== '' && $cf_named && isset($m[7]) && $m[7] !== '') {
+                $iset = implode(' !important;background-image:', explode(';background-image:', $iset)) . ' !important';
+            }
             return ($iset !== '') ? $iset : $m[0];
         }, $css);
         return is_string($out) ? $out : $css; // NULL-safe: a backtrack returns the original, never blanks
+    }
+
+
+    public static function wpc_cf_bg_named_on()
+    {
+        if (defined('WPC_CF_BG_NAMED_OFF') && WPC_CF_BG_NAMED_OFF) {
+            return false;
+        }
+        if (function_exists('wpc_policy_cohort') && wpc_policy_cohort('off_cf_bg_named') === 1) {
+            return false;
+        }
+        return !empty(self::$zone_name) && self::wpc_zone_is_cf_direct() && self::wpc_css_bg_imageset_active();
+    }
+
+
+    public static function wpc_cf_bg_named_preload($url)
+    {
+        $url = (string) $url;
+        if ($url === '' || !self::wpc_cf_bg_named_on()) {
+            return [];
+        }
+        $pin = 'background-image:url("' . (function_exists('esc_url') ? esc_url($url) : $url) . '") !important}';
+        $swept = self::wpc_css_bg_imageset_sweep($pin);
+        if (!is_string($swept) || $swept === $pin) {
+            return [];
+        }
+        if (preg_match('#image-set\(\s*url\(\s*(["\']?)([^"\'()\s]+)\1\s*\)\s*type\(\s*["\'](image/(?:avif|webp))["\']\s*\)#i', $swept, $first)) {
+            return ['href' => html_entity_decode($first[2], ENT_QUOTES), 'type' => strtolower($first[3])];
+        }
+        if (stripos($swept, 'image-set(') === false
+            && preg_match('#^background-image:url\(\s*(["\']?)([^"\'()\s]+\.(avif|webp)(?:\?[^"\'()\s]*)?)\1\s*\) !important\}$#i', $swept, $single)) {
+            return ['href' => html_entity_decode($single[2], ENT_QUOTES), 'type' => 'image/' . strtolower($single[3])];
+        }
+        return [];
     }
 
 
@@ -2406,6 +2453,91 @@ class wps_cdn_rewrite
         return true;
     }
 
+    public static function wpc_theme_bg_cdn_on()
+    {
+        if (defined('WPC_THEME_BG_CDN_KILL') && WPC_THEME_BG_CDN_KILL) {
+            return false;
+        }
+        $on = function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('theme_bg_cdn') === 1;
+        if (function_exists('apply_filters')) {
+            $on = (bool) apply_filters('wpc_theme_bg_cdn', $on);
+        }
+        return $on && self::wpc_raster_zoneify_active();
+    }
+
+    public static function wpc_theme_bg_key()
+    {
+        return self::wpc_theme_bg_cdn_on() ? 'thbg1-natural' : '';
+    }
+
+    public static function wpc_theme_bg_zoneify($css, $baseUrl = '', &$count = 0)
+    {
+        $count = 0;
+        if (!is_string($css) || $css === '' || !class_exists('WPC_Css_Url_Zoneify') || !self::wpc_theme_bg_cdn_on()) {
+            return $css;
+        }
+        $home = (string) home_url();
+        $siteHost = (string) wp_parse_url($home, PHP_URL_HOST);
+        $sitePath = rtrim((string) wp_parse_url($home, PHP_URL_PATH), '/');
+        $defaults = function_exists('wpc_default_cdn_excludes') ? wpc_default_cdn_excludes() : [];
+        $dirs = function_exists('apply_filters')
+            ? (array) apply_filters('wpc_theme_bg_cdn_dirs', WPC_Css_Url_Zoneify::DEFAULT_DIRS)
+            : WPC_Css_Url_Zoneify::DEFAULT_DIRS;
+        return WPC_Css_Url_Zoneify::rewrite($css, [
+            'site_host' => $siteHost,
+            'site_path' => $sitePath,
+            'zone' => (string) self::$zone_name,
+            'base_url' => (string) $baseUrl,
+            'dirs' => $dirs,
+            'exts' => ['png', 'jpg', 'jpeg', 'webp', 'avif'],
+            'excluded' => static function ($url) use ($defaults) {
+                if (self::isExcluded('cdn', $url) || self::is_excluded($url, $url)) {
+                    return true;
+                }
+                foreach ($defaults as $d) {
+                    if ($d !== '' && strpos($url, $d) !== false) {
+                        return true;
+                    }
+                }
+                return false;
+            },
+        ], $count);
+    }
+
+    public static function wpc_theme_bg_import_safe($css, $sheetUrl)
+    {
+        $css = (string) $css;
+        if (stripos($css, '@import') === false) {
+            return $css;
+        }
+        $path = (string) wp_parse_url((string) $sheetUrl, PHP_URL_PATH);
+        $host = (string) wp_parse_url((string) $sheetUrl, PHP_URL_HOST);
+        $scheme = strtolower((string) wp_parse_url((string) $sheetUrl, PHP_URL_SCHEME));
+        if ($path === '' || $path[0] !== '/' || $host === '') {
+            return null;
+        }
+        return self::wpc_rebase_css_refs($css, $path, ($scheme === 'http' ? 'http' : 'https') . '://' . $host);
+    }
+
+
+    /** The spellings the page's own URL passes give an origin upload URL: itself, its zone form, its theme-background zone form. */
+    public static function wpc_lcp_paint_forms($url)
+    {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return [];
+        }
+        $forms = [$url];
+        $raster = trim((string) self::wpc_raster_zoneify('"' . $url . '"'), '"');
+        if ($raster !== '' && !in_array($raster, $forms, true)) {
+            $forms[] = $raster;
+        }
+        $theme = self::wpc_theme_bg_zoneify('url(' . $url . ')');
+        if (preg_match('/^url\(\s*(["\']?)([^"\')\s]+)\1\s*\)$/', (string) $theme, $themeForm) && !in_array($themeForm[2], $forms, true)) {
+            $forms[] = $themeForm[2];
+        }
+        return $forms;
+    }
 
     public static function wpc_raster_zoneify($html)
     {
@@ -2987,8 +3119,9 @@ class wps_cdn_rewrite
             $indexDirty = false;
             $sheetsChecked = 0;
             $repointed = 0;
+            $themeBgKey = self::wpc_theme_bg_key();
             $out = preg_replace_callback('/<link\b[^>]*\bhref=(["\'])([^"\']+\.css(?:\?[^"\']*)?)\1[^>]*>/i',
-                static function ($lm) use ($originHost, $sitePath, &$sheetIndex, &$indexDirty, &$sheetsChecked, &$repointed) {
+                static function ($lm) use ($originHost, $sitePath, &$sheetIndex, &$indexDirty, &$sheetsChecked, &$repointed, $themeBgKey) {
                     if ($sheetsChecked >= (int) apply_filters('wpc_host_twin_sweep_max', 64)) {
                         return $lm[0];
                     }
@@ -3026,7 +3159,7 @@ class wps_cdn_rewrite
                         return $lm[0];
                     }
                     $key = md5($path);
-                    $sig = $mt . ':' . $sz . ':168';
+                    $sig = $mt . ':' . $sz . ':168' . ($themeBgKey !== '' ? ':' . $themeBgKey : '');
                     if (isset($sheetIndex[$key]) && $sheetIndex[$key]['sig'] === $sig) {
                         $o = (string) $sheetIndex[$key]['out'];
                         if ($o === '') {
@@ -3034,6 +3167,7 @@ class wps_cdn_rewrite
                         }
                         if (@is_readable(WP_CONTENT_DIR . '/cache/wpc-hostfix/' . $o)) {
                             $repointed++;
+                            self::$wpcSheetCopySources[$o] = $path;
                             return str_replace($lm[1] . $lm[2] . $lm[1],
                                 $lm[1] . content_url('cache/wpc-hostfix/' . $o) . $lm[1], $lm[0]);
                         }
@@ -3068,6 +3202,22 @@ class wps_cdn_rewrite
                                 $healed = $absolutizedCss;
                             }
                         }
+                        $themeBgMoved = 0;
+                        if ($themeBgKey !== '' && stripos($healed, 'url(') !== false) {
+                            $zonedCss = self::wpc_theme_bg_zoneify($healed, 'https://' . $originHost . $path, $themeBgMoved);
+                            if ($themeBgMoved > 0 && is_string($zonedCss) && stripos($zonedCss, '@import') !== false) {
+                                $zonedCss = self::wpc_theme_bg_import_safe($zonedCss, 'https://' . $originHost . $path);
+                                if ($zonedCss === null) {
+                                    $themeBgMoved = 0;
+                                    if (function_exists('wpc_cache_first_log')) {
+                                        wpc_cache_first_log('theme-bg-import-refused', '', basename($path), ['lane' => 'hostfix']);
+                                    }
+                                }
+                            }
+                            if ($themeBgMoved > 0 && is_string($zonedCss) && $zonedCss !== '') {
+                                $healed = $zonedCss;
+                            }
+                        }
                         // v7.21.45 — EAGER EXCLUDED SHEETS MUST CARRY THE SPLICED STACKS. An
                         // origin-served kit sheet (elementor post-90) arrives after crit and its raw
                         // font-family:"Fredoka",sans-serif OVERRIDES the spliced stack — the metric
@@ -3098,7 +3248,8 @@ class wps_cdn_rewrite
                                 // (a copy with hosts:0 exists for its relative urls or its stacks).
                                 if (function_exists('wpc_cache_first_log')) {
                                     wpc_cache_first_log('host-twin-healed', '', basename($path), ['out' => $name,
-                                        'hosts' => (int) $hostsHealed, 'rel' => (int) $relAbsolutized, 'spliced' => (int) $stacksSpliced]);
+                                        'hosts' => (int) $hostsHealed, 'rel' => (int) $relAbsolutized, 'spliced' => (int) $stacksSpliced,
+                                        'thbg' => (int) $themeBgMoved]);
                                 }
                             }
                         }
@@ -3109,6 +3260,7 @@ class wps_cdn_rewrite
                         return $lm[0];
                     }
                     $repointed++;
+                    self::$wpcSheetCopySources[$verdict] = $path;
                     return str_replace($lm[1] . $lm[2] . $lm[1],
                         $lm[1] . content_url('cache/wpc-hostfix/' . $verdict) . $lm[1], $lm[0]);
                 }, $html);
@@ -3128,6 +3280,15 @@ class wps_cdn_rewrite
         } catch (\Throwable $e) {
             return $html;
         }
+    }
+
+    public static $wpcSheetCopySources = [];
+
+    public static function wpc_sheet_copy_source($name)
+    {
+        $name = (string) $name;
+
+        return isset(self::$wpcSheetCopySources[$name]) ? (string) self::$wpcSheetCopySources[$name] : '';
     }
 
     // v7.10.795 — collapse /a/b/../c and /./ segments without touching the filesystem.
@@ -3401,7 +3562,7 @@ class wps_cdn_rewrite
                 (int) (class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active()),
                 (int) wps_rewriteLogic::wpc_natural_nw(),
                 (int) (function_exists('wpc_image_plain_edge_on') && wpc_image_plain_edge_on()),
-                wps_rewriteLogic::src_hint_mode()]));
+                wps_rewriteLogic::src_hint_mode()]) . (self::wpc_cf_bg_named_on() ? '|cf1' : ''));
             $sig = $mtime . ':' . $size . ':u' . substr($lane, 0, 8);
             $key = md5('used-css|' . $sheetPath);
             $dir = WP_CONTENT_DIR . '/cache/wpc-bgset';
@@ -3456,6 +3617,7 @@ class wps_cdn_rewrite
             $bg_match = class_exists('wps_rewriteLogic') && wps_rewriteLogic::bg_hero_match_on();
             $zone_hosts = [];
             $lane_state = '';
+            $cf_sig = self::wpc_cf_bg_named_on() ? ':cf1' : '';
             if ($bg_match) {
                 foreach ([self::$zone_name, get_option('ic_cdn_zone_name'), get_option('ic_custom_cname')] as $zone_option) {
                     $zone_host = strtolower((string) strtok((string) $zone_option, '/'));
@@ -3468,7 +3630,7 @@ class wps_cdn_rewrite
                     wps_rewriteLogic::src_hint_mode()]));
             }
             $out = preg_replace_callback('/<link\b[^>]*\bhref=(["\'])([^"\']+\.css(?:\?[^"\']*)?)\1[^>]*>/i',
-                static function ($lm) use ($origin_host, $site_path, &$sheet_index, &$index_dirty, &$sheets_checked, $bg_match, $zone_hosts, $lane_state) {
+                static function ($lm) use ($origin_host, $site_path, &$sheet_index, &$index_dirty, &$sheets_checked, $bg_match, $zone_hosts, $lane_state, $cf_sig) {
                     if ($sheets_checked >= (int) apply_filters('wpc_css_bg_sweep_external_max', 40)) { return $lm[0]; }
                     $href = (string) $lm[2];
                     $bn = strtolower(basename((string) wp_parse_url($href, PHP_URL_PATH)));
@@ -3508,7 +3670,7 @@ class wps_cdn_rewrite
                         return $lm[0];
                     }
                     $key = md5($path);
-                    $sig = $mt . ':' . $sz . ($bg_match ? ':hm' . substr(md5($lane_state . '|' . $link_base), 0, 8) : '');
+                    $sig = $mt . ':' . $sz . ($bg_match ? ':hm' . substr(md5($lane_state . '|' . $link_base), 0, 8) : '') . $cf_sig;
                     if (isset($sheet_index[$key]) && $sheet_index[$key]['sig'] === $sig) {
                         $o = (string) $sheet_index[$key]['out'];
                         if ($o === '') { return $lm[0]; }
@@ -3568,7 +3730,7 @@ class wps_cdn_rewrite
         if ($ctx->isAmp) {
             return 'amp';
         }
-        if (!class_exists('wps_rewriteLogic') || empty(wps_rewriteLogic::$isMobile)) {
+        if (!class_exists('wps_rewriteLogic') || (empty(wps_rewriteLogic::$isMobile) && !wps_ic_atf_observation::heroLqipCombinedLane())) {
             return 'desktop';
         }
 
@@ -3666,8 +3828,13 @@ class wps_cdn_rewrite
                 $keys[$key] = true;
             }
         }
+        $combinedLane = wps_ic_atf_observation::heroLqipCombinedLane();
         foreach (array_keys($keys) as $key) {
-            $ctx->imagePreloads->veto($key, 'hero-lqip');
+            if ($combinedLane) {
+                $ctx->imagePreloads->vetoOn($key, 'hero-lqip', 'mobile');
+            } else {
+                $ctx->imagePreloads->veto($key, 'hero-lqip');
+            }
         }
 
         $at = $crit[0][1] + strlen($crit[0][0]);
@@ -3953,6 +4120,9 @@ class wps_cdn_rewrite
             $names['to'] = substr($toBase, 0, (int) strrpos($toBase, '.'));
             $names['toExt'] = substr($toBase, (int) strrpos($toBase, '.') + 1);
             $names['dir'] = dirname((string) $record['file']);
+            if (!empty($record['edge'])) {
+                $names['edge'] = (string) $record['to'];
+            }
             if (isset($record['src']) && $record['src'] === 'derived') {
                 $names['stem'] = (string) preg_replace('/-scaled$/', '', $wasName);
                 $names['probe'] = $names['stem'];
@@ -3987,6 +4157,9 @@ class wps_cdn_rewrite
                 'preloads' => (int) $state['preloads'], 'urls' => (int) $state['count'], 'unread' => (int) $state['unread'],
                 'to' => basename($toPath),
                 'src' => isset($record['src']) ? (string) $record['src'] : 'crit'];
+            if (!empty($record['edge'])) {
+                $applied['kind'] = 'edge_rung';
+            }
             $note($applied);
             return $out;
         } catch (\Throwable $e) {
@@ -4294,6 +4467,18 @@ class wps_cdn_rewrite
             return '';
         }
         $ext = strtolower($form[1]);
+        if (isset($names['edge'])) {
+            if ($ext === $names['wasExt']) {
+                return $names['edge'];
+            }
+            $plain = static function ($value) {
+                return strtolower($value) === 'jpeg' ? 'jpg' : strtolower($value);
+            };
+            if (($ext === 'webp' || $ext === 'avif') && $onZone && preg_match('/^\?src=(jpe?g|png)$/iD', $tail, $hint) && $plain($hint[1]) === $plain($names['wasExt'])) {
+                return substr($names['edge'], 0, strlen($names['edge']) - strlen($names['toExt'])) . $form[1] . $tail;
+            }
+            return null;
+        }
         if ($ext === $names['wasExt']) {
             $newExt = $names['toExt'];
         } elseif ($ext === 'webp' || $ext === 'avif') {
@@ -5771,8 +5956,10 @@ class wps_cdn_rewrite
         }
         $pin_as_var = apply_filters('wpc_ar_var_pin', true);
         $decl = ($pin_as_var ? '--wpc-ar:' : 'aspect-ratio:') . $w . '/' . $h;
-        if (preg_match('/\bstyle\s*=\s*"([^"]*)"/i', $t)) {
-            $t = (string) preg_replace('/\bstyle\s*=\s*"/i', 'style="' . $decl . ';', $t, 1);
+        if (preg_match('/\sstyle\s*=\s*(["\'])/i', $t)) {
+            $t = (string) preg_replace('/(\sstyle\s*=\s*)(["\'])/i', '${1}${2}' . $decl . ';', $t, 1);
+        } elseif (preg_match('/\sstyle\s*=/i', $t)) {
+            return $t;
         } else {
             $t = (string) preg_replace('/<img\b/i', '<img style="' . $decl . '"', $t, 1);
         }
@@ -5890,6 +6077,101 @@ class wps_cdn_rewrite
     public static function wpc_ar_pin_disk_on()
     {
         return function_exists('wpc_policy_cohort') && wpc_policy_cohort('ar_pin_disk') === 1 && apply_filters('wpc_ar_pin_disk', true);
+    }
+
+    /** On when cohort ar_pin_width_only is on: the per-site switch of the auto pin for an eager tag whose style sets a width and no height. */
+    public static function wpc_ar_pin_width_only_on()
+    {
+        if (defined('WPC_AR_PIN_WIDTH_ONLY_OFF') && WPC_AR_PIN_WIDTH_ONLY_OFF) {
+            return false;
+        }
+        $on = function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('ar_pin_width_only') === 1;
+        return (bool) apply_filters('wpc_ar_pin_width_only', $on);
+    }
+
+    /**
+     * [W, H] for the <img> $tag that has no width and no height attribute, whose inline style sets a width and no height, max-height or
+     * aspect-ratio (`height:auto` and `max-height:none` set none), and that is eager (no lazy marker, no loading=lazy): the -WxH
+     * suffix of its src, or the attachment metadata of its wp-image-N class when the src is that upload's own file. Null when a srcset
+     * address carries a -WxH ratio more than one percent from it, when the file is an SVG, or when neither source names a size.
+     */
+    public static function wpc_ar_width_only_ratio($tag)
+    {
+        static $metaMemo = [];
+        if (!is_string($tag) || !self::wpc_ar_pin_width_only_on() || !class_exists('wps_ic_image_sizing')
+            || preg_match('/\s(?:width|height)\s*=/i', $tag)
+            || preg_match('/\sdata-wpc-(?:bf|md)(?=[\s=>\/])/i', $tag)
+            || preg_match('/\b(?:data-count-lazy|ic-fade-in|wps-ic-lazy-image)\b|\s(?:data-src|data-srcset|data-lazy-src|data-wpc-qw-src|data-wpc-qw-srcset)\s*=/i', $tag)
+            || preg_match('/\sloading\s*=\s*(["\']?)lazy\1/i', $tag)
+            || !preg_match('/\sstyle\s*=\s*(["\'])(.*?)\1/is', $tag, $style)
+            || !preg_match('/\ssrc\s*=\s*(["\'])(.*?)\1/is', $tag, $src)) {
+            return null;
+        }
+        $setsWidth = false;
+        foreach (explode(';', html_entity_decode($style[2], ENT_QUOTES)) as $declaration) {
+            $colon = strpos($declaration, ':');
+            if ($colon === false) {
+                continue;
+            }
+            $property = strtolower(trim(substr($declaration, 0, $colon)));
+            $value = strtolower(trim((string) preg_replace('/!\s*important\s*$/i', '', substr($declaration, $colon + 1))));
+            if ($value === '') {
+                continue;
+            }
+            if ($property === 'aspect-ratio' || $property === '--wpc-ar') {
+                return null;
+            }
+            if (($property === 'height' && $value !== 'auto') || ($property === 'max-height' && $value !== 'none')) {
+                return null;
+            }
+            if ($property === 'width' && $value !== 'auto') {
+                $setsWidth = true;
+            }
+        }
+        if (!$setsWidth) {
+            return null;
+        }
+        $address = html_entity_decode($src[2], ENT_QUOTES);
+        $path = (string) preg_replace('/[?#].*$/', '', $address);
+        if ($address === '' || stripos(ltrim($address), 'data:') === 0 || preg_match('/\.svgz?$/i', $path)) {
+            return null;
+        }
+        $pair = null;
+        if (preg_match('/-(\d{2,5})x(\d{2,5})(?:\.[a-z0-9]{2,5})+$/i', $path, $size)) {
+            $pair = [(int) $size[1], (int) $size[2]];
+        } elseif (preg_match('/\bwp-image-(\d+)\b/i', $tag, $idMatch) && function_exists('wp_get_attachment_metadata')) {
+            $attachment = (int) $idMatch[1];
+            if (!array_key_exists($attachment, $metaMemo)) {
+                $meta = wp_get_attachment_metadata($attachment);
+                $metaMemo[$attachment] = is_array($meta) ? $meta : false;
+            }
+            $meta = $metaMemo[$attachment];
+            if (is_array($meta) && !empty($meta['file']) && is_string($meta['file']) && !preg_match('/\.svgz?$/i', $meta['file'])
+                && !empty($meta['width']) && !empty($meta['height']) && (int) $meta['width'] > 1 && (int) $meta['height'] > 1
+                && (string) preg_replace('/-\d{2,5}w$/', '', wps_ic_image_sizing::stem($address)) === wps_ic_image_sizing::stem($meta['file'])) {
+                $pair = [(int) $meta['width'], (int) $meta['height']];
+            }
+        }
+        if ($pair === null || $pair[0] < 2 || $pair[1] < 2) {
+            return null;
+        }
+        $own = (float) $pair[0] / (float) $pair[1];
+        if (preg_match_all('/\s(?:srcset|data-srcset)\s*=\s*(?:"([^"]*)"|\'([^\']*)\')/i', $tag, $sets, PREG_SET_ORDER)) {
+            foreach ($sets as $set) {
+                $text = html_entity_decode($set[1] !== '' ? $set[1] : (isset($set[2]) ? $set[2] : ''), ENT_QUOTES);
+                if (!preg_match_all('#(?:https?:)?//[^\s,"\'<>]+|/[^\s,"\'<>]+#i', $text, $found)) {
+                    continue;
+                }
+                foreach ($found[0] as $candidate) {
+                    $candidatePath = (string) preg_replace('/[?#].*$/', '', $candidate);
+                    if (preg_match('/-(\d{2,5})x(\d{2,5})(?:\.[a-z0-9]{2,5})+$/i', $candidatePath, $rung)
+                        && abs(((float) $rung[1] / (float) $rung[2]) - $own) > 0.01 * $own) {
+                        return null;
+                    }
+                }
+            }
+        }
+        return $pair;
     }
 
     /**
@@ -6088,9 +6370,10 @@ class wps_cdn_rewrite
             $pinLazy = apply_filters('wpc_img_aspect', true) && preg_match($ours, $html);
             $pinSvg = stripos($html, '.svg') !== false && apply_filters('wpc_svg_dims', true);
             $pinExact = apply_filters('wpc_img_aspect', true) && self::wpc_ar_pin_exact_on();
+            $pinWidthOnly = apply_filters('wpc_img_aspect', true) && self::wpc_ar_pin_width_only_on();
             $imgIndex = 0;
             $svgPins = 0;
-            $out = preg_replace_callback('/<img\b[^>]*>/i', function ($m) use ($sizing, $ours, $pinLazy, $pinSvg, $pinExact, &$imgIndex, &$svgPins) {
+            $out = preg_replace_callback('/<img\b[^>]*>/i', function ($m) use ($sizing, $ours, $pinLazy, $pinSvg, $pinExact, $pinWidthOnly, &$imgIndex, &$svgPins) {
                 $tag = $m[0];
                 $imgIndex++;
                 $pin = null;
@@ -6132,6 +6415,10 @@ class wps_cdn_rewrite
                     $pin = $pinDisk;
                     $pinKind = 'disk';
                     $pinIsExact = true;
+                } elseif ($pinWidthOnly && preg_match($ours, $tag) && stripos($tag, 'aspect-ratio') === false && stripos($tag, 'data-wpc-ar') === false
+                    && ($pinWidthOnlyPair = self::wpc_ar_width_only_ratio($tag)) !== null) {
+                    $pin = $pinWidthOnlyPair;
+                    $pinKind = 'width_only';
                 }
                 if ($pin === null) {
                     return $tag;
@@ -6544,6 +6831,7 @@ class wps_cdn_rewrite
             // with nothing between them; only the last one survives as a position, the other two
             // are aliases onto it. Same for the two branch-local labels inside the delay branches,
             // which now alias onto 3491.
+            wps_ic_render_stage::make('plain_image_urls_early', [$this, 'stage_plain_image_scripts'], $both, [$this, 'gate_plain_image_urls']),
             wps_ic_render_stage::make('delay_js', $marker, $both),
             wps_ic_render_stage::bail('bail_budget_integrations', [$this, 'bail_budget_integrations'], $both),
             wps_ic_render_stage::make('theme_integrations', [$this, 'stage_theme_integrations'], $both),
@@ -6655,7 +6943,9 @@ class wps_cdn_rewrite
             // see the preload hosts to keep their preconnects.
             wps_ic_render_stage::make('lcp_img_preload', [$this, 'stage_lcp_img_preload'], $both, [$this, 'gate_not_amp']),
             wps_ic_render_stage::make('hero_lqip', [$this, 'stage_hero_lqip'], $both, [$this, 'gate_hero_lqip']),
+            wps_ic_render_stage::make('img_lqip', [wps_ic_img_lqip::class, 'stage'], $both, [wps_ic_img_lqip::class, 'gate']),
             wps_ic_render_stage::make('crit_bg_preload', [$this, 'stage_crit_bg_preload'], $cdn),
+            wps_ic_render_stage::make('slider_first_slide', [$this, 'stage_slider_first_slide'], $both, [$this, 'gate_slider_first_slide']),
             wps_ic_render_stage::make('emit_image_preloads', [$this, 'stage_emit_image_preloads'], $both, [$this, 'gate_not_amp']),
             wps_ic_render_stage::make('hero_same_origin', [$this, 'stage_hero_same_origin'], $cdn, [$this, 'gate_hero_same_origin']),
             wps_ic_render_stage::make('after_hero', [$this, 'stage_after_hero'], $both, [$this, 'gate_after_hero']),
@@ -6667,6 +6957,7 @@ class wps_cdn_rewrite
             wps_ic_render_stage::make('cv_containers', [self::class, 'wpc_cv_containers_pass'], $both, [$this, 'gate_cv_containers']),
             wps_ic_render_stage::make('picture_fidelity', [self::class, 'wpc_picture_fidelity_pass'], $both),
             wps_ic_render_stage::make('lcp_demote_competitors', [$this, 'stage_lcp_demote_competitors'], $both, [$this, 'gate_not_amp']),
+            wps_ic_render_stage::make('atf_wire_clear', [wps_ic_atf_wire_clear::class, 'stage'], $both, [wps_ic_atf_wire_clear::class, 'gate']),
             wps_ic_render_stage::make('drop_dashicons', [self::class, 'drop_dashicons'], $both),
             wps_ic_render_stage::make('rum_beacon', [self::class, 'wpc_rum_beacon_pass'], $both, [$this, 'gate_not_amp']),
             wps_ic_render_stage::make('device_check', [self::class, 'wpc_device_check_pass'], $both, [$this, 'gate_not_amp']),
@@ -6691,7 +6982,10 @@ class wps_cdn_rewrite
             wps_ic_render_stage::make('image_preloads_first', [self::class, 'stage_image_preloads_first'], $both),
             wps_ic_render_stage::make('use_tags_restore', [$this, 'stage_use_tags_restore'], $both),
             wps_ic_render_stage::make('inline_data_pct', [self::class, 'wpc_inline_data_pct_pass'], $both, [$this, 'gate_inline_data_pct']),
+            wps_ic_render_stage::make('plain_image_urls', [$this, 'stage_plain_image_urls'], $both, [$this, 'gate_plain_image_urls']),
+            wps_ic_render_stage::make('plain_image_templates', [$this, 'stage_plain_image_templates'], $cdn, [$this, 'gate_plain_image_urls']),
             wps_ic_render_stage::make('restore_templates_final', [$this, 'stage_restore_templates_final'], $cdn),
+            wps_ic_render_stage::make('lcp_link_header', [$this, 'stage_lcp_link_header'], $both, [$this, 'gate_lcp_link_header']),
         ];
     }
 
@@ -6882,6 +7176,27 @@ class wps_cdn_rewrite
             });
         }
         return $marked;
+    }
+
+    /** Runs while cohort lcp_link_header is on, on an anonymous front-end render that is not AMP. */
+    public function gate_lcp_link_header($ctx)
+    {
+        if ($ctx->isAmp) {
+            return 'amp';
+        }
+        if (!empty($ctx->userLoggedIn) || (function_exists('is_admin') && is_admin())) {
+            return 'signed-in';
+        }
+        return (class_exists('wps_rewriteLogic') && wps_rewriteLogic::wpc_lcp_link_header_on()) ? true : 'cohort-off';
+    }
+
+    /** Marks the final document's LCP preload for the Link header the serve doors send: wps_ic_image_preload_set::markLinkHeader. */
+    public function stage_lcp_link_header($html, $ctx)
+    {
+        $renderDevice = (class_exists('wps_rewriteLogic') && !empty(wps_rewriteLogic::$isMobile)) ? 'mobile' : 'desktop';
+        $combined = class_exists('wps_rewriteLogic') && wps_rewriteLogic::wpc_combined_crit_on();
+        $zoneHost = !empty(self::$zone_name) ? (string) strtok((string) self::$zone_name, '/') : '';
+        return $ctx->imagePreloads->markLinkHeader($html, $renderDevice, $combined, $zoneHost);
     }
 
     /** Runs while cohort hero_same_origin is on for the page. */
@@ -7414,6 +7729,9 @@ class wps_cdn_rewrite
         if (isset($hold['inside'][$tag])) {
             return false;
         }
+        if (stripos($tag, 'data-wpclqip=') !== false) {
+            return false;
+        }
         $sized = (preg_match('/\swidth\s*=\s*(["\'])([1-9]\d{0,4})\1/i', $tag) && preg_match('/\sheight\s*=\s*(["\'])([1-9]\d{0,4})\1/i', $tag))
             || preg_match('/\sstyle\s*=\s*(["\'])[^"\']*aspect-ratio\s*:/i', $tag);
         if (!$sized || !preg_match('/\ssrc\s*=\s*(["\'])(?!data:)([^"\']+)\1/i', $tag, $src)) {
@@ -7544,10 +7862,14 @@ class wps_cdn_rewrite
             . ($withRelease ? 'window.wpcQwRelease=x;' : '')
             . 'var rt=0;function rs(ev){if(rt)return;rt=1;var go=function(){(window.requestAnimationFrame||setTimeout)(function(){rt=0;rn();});};pP(ev,go,1);}'
             . 'window.addEventListener("pointerdown",rs,{passive:true});window.addEventListener("keydown",rs,{passive:true});'
+            . 'var sk=[],wqn=0,wqt=0,rvn=0;function rk(){if(!o)return;var a=[],i;for(i=0;i<sk.length;i++){if(sk[i].getAttribute("data-wpc-qw-src"))a.push(sk[i]);}sk=a;for(i=0;i<a.length;i++){if(a[i].__wpcRq)continue;a[i].__wpcRq=1;o.unobserve(a[i]);o.observe(a[i]);}}'
+            . 'function wq(tg){if(sk.indexOf(tg)<0)sk.push(tg);if(!tg.__wpcRq){wqn=0;rvn=0;}tg.__wpcRq=0;if(wqt||wqn>=132)return;wqt=setTimeout(function(){wqt=0;wqn++;rk();},wqn<12?500:2000);}'
+            . 'var rvt=0;function rv(){if(rvt||!sk.length||rvn>=40)return;rvt=1;rvn++;(window.requestAnimationFrame||setTimeout)(function(){rvt=0;rk();});}'
+            . '["animationstart","animationend","transitionend"].forEach(function(t){document.addEventListener(t,rv,{passive:true,capture:true});});'
             . 'var o=null,mg="0px";function ob(m){try{if(!window.IntersectionObserver)return;'
-            . 'if(m&&m!==mg){mg=m;if(o){o.disconnect();o=null;}}'
+            . 'if(m&&m!==mg){mg=m;if(o){o.disconnect();o=null;for(var z=0;z<sk.length;z++)sk[z].__wpcRq=0;}}'
             . 'if(!o){o=new IntersectionObserver(function(en){'
-            . 'for(var k=0;k<en.length;k++){if(en[k].isIntersecting){var tg=en[k].target;if(tg&&tg.getAttribute){if(!wpcQuietWireIsVisible(tg))continue;o.unobserve(tg);r1(tg,1);}else{r(1);ob();return;}}}},{rootMargin:mg});}'
+            . 'for(var k=0;k<en.length;k++){if(en[k].isIntersecting){var tg=en[k].target;if(tg&&tg.getAttribute){if(!wpcQuietWireIsVisible(tg)){wq(tg);continue;}o.unobserve(tg);r1(tg,1);}else{r(1);ob();return;}}else{var nt=en[k].target,ni;if(nt){nt.__wpcRq=0;ni=sk.indexOf(nt);if(ni>=0)sk.splice(ni,1);}}}},{rootMargin:mg});}'
             . ($holdFirst ? 'var m=document.querySelectorAll("img[data-wpc-qw-src]"+(hf?":not([data-wpc-qw-hold])":""));' : 'var m=document.querySelectorAll("img[data-wpc-qw-src]");')
             . 'if(!m.length){o.disconnect();return;}'
             . 'for(var q=0;q<m.length;q++)o.observe(m[q]);}catch(e){}}'
@@ -8314,13 +8636,13 @@ class wps_cdn_rewrite
     public static function jquery_defer_pass($html)
     {
         if (!is_string($html) || $html === '') return $html;
-        if (function_exists('apply_filters') && !apply_filters('wpc_jq_defer', true)) return $html;
-        if (isset($_GET['jqdefer']) && $_GET['jqdefer'] === '0') return $html;
+        if (function_exists('apply_filters') && !apply_filters('wpc_jq_defer', true)) return self::jquery_defer_skip($html, 'filter-off');
+        if (isset($_GET['jqdefer']) && $_GET['jqdefer'] === '0') return self::jquery_defer_skip($html, 'query-off');
         if (stripos($html, 'wpcJqueryDeferMarker') !== false) return $html;
         // v7.22.58 — a CSP only matters here if it can refuse OUR inline gate script. The blanket
         // "any CSP header → stand down" left jQuery render-blocking (plus every sync dependant)
         // on hosts that send nothing but `upgrade-insecure-requests` (welliathome: openresty).
-        if (self::wpc_csp_blocks_inline_scripts($html)) return $html;
+        if (self::wpc_csp_blocks_inline_scripts($html)) return self::jquery_defer_skip($html, 'csp');
         // v7.21.136 — the .134 exclude stand-down is REVERTED: an excluded script stays
         // eager AND IN ORDER under this lane (everything after jquery defers in document
         // order), so excludes lose nothing — while standing down left the naive defer-list
@@ -8349,7 +8671,7 @@ class wps_cdn_rewrite
             $attrs = $scripts[1][$i][0];
             if (!preg_match('#\bsrc\s*=\s*["\'][^"\']*/jquery(?:\.min)?\.js(?:\?|["\'])#i', $attrs)) continue;
             if (!$isClassicScript($attrs)) continue;
-            if ($hasAttributeWord($attrs, 'async')) return $html;
+            if ($hasAttributeWord($attrs, 'async')) return self::jquery_defer_skip($html, 'jquery-async');
             if ($hasAttributeWord($attrs, 'defer')) {
                 // v7.21.52 — FOREIGN-DEFERRED JQUERY STILL NEEDS THE GATE. platformtraining dev:
                 // WP core script strategies (data-wp-strategy="defer") deferred jquery before we
@@ -8364,12 +8686,20 @@ class wps_cdn_rewrite
             $jqueryIndex = $i;
             break;
         }
-        if ($jqueryIndex < 0) return $html;
+        if ($jqueryIndex < 0) {
+            for ($i = 0; $i < $scriptCount; $i++) {
+                $attrs = $scripts[1][$i][0];
+                if (stripos($attrs, 'jquery') !== false && preg_match('/\bsrc\s*=/i', $attrs) && $isClassicScript($attrs)) {
+                    return self::jquery_defer_skip($html, 'no-jquery-match');
+                }
+            }
+            return $html;
+        }
         if ($jqueryDeferredByOthers) {
             $jqueryHoldAt = $scripts[0][$jqueryIndex][1] + strlen($scripts[0][$jqueryIndex][0]);
             $withReadyHold = substr($html, 0, $jqueryHoldAt) . self::jquery_ready_hold_tag() . substr($html, $jqueryHoldAt);
             $withForeignMarker = preg_replace('/<head\b[^>]*>/i', '$0' . self::jquery_defer_gate_marker(), $withReadyHold, 1);
-            if (!is_string($withForeignMarker) || $withForeignMarker === '' || stripos($withForeignMarker, 'wpcJqueryDeferMarker') === false) return $html;
+            if (!is_string($withForeignMarker) || $withForeignMarker === '' || stripos($withForeignMarker, 'wpcJqueryDeferMarker') === false) return self::jquery_defer_skip($html, 'marker-foreign-deferred');
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('jq-defer', '', '', array('foreign' => 1));
             }
@@ -8464,7 +8794,7 @@ class wps_cdn_rewrite
             }
             if ($hasAttributeWord($attrs, 'async|defer|nomodule')) continue;
             if (stripos($attrs, 'data-nodefer') !== false) continue;
-            if (preg_match('/\bnonce\s*=/i', $attrs)) return $html;
+            if (preg_match('/\bnonce\s*=/i', $attrs)) return self::jquery_defer_skip($html, 'nonce');
             if (preg_match('/\bsrc\s*=\s*["\']/i', $attrs)) {
                 if (preg_match('/delay-v3-loader|wpc-yield|inlined-delay/i', $attrs)) continue;
                 $edits[] = array($off, strlen($tag), preg_replace('/<script\b/i', '<script defer', $tag, 1));
@@ -8497,9 +8827,9 @@ class wps_cdn_rewrite
             // every site running it (ganoderma: no defer, no marker, the page's biggest lever
             // dead). Only a real, executable document.write is a stand-down.
             $commentFreeBody = preg_replace('#/\*.*?\*/#s', '', $inlineCode);
-            if (stripos(is_string($commentFreeBody) ? $commentFreeBody : $inlineCode, 'document.write') !== false) return $html;
+            if (stripos(is_string($commentFreeBody) ? $commentFreeBody : $inlineCode, 'document.write') !== false) return self::jquery_defer_skip($html, 'document-write');
             $inlineBytes += strlen($inlineCode);
-            if ($inlineBytes > $inlineCap) return $html;
+            if ($inlineBytes > $inlineCap) return self::jquery_defer_skip($html, 'inline-cap');
             $edits[] = array($off, strlen($tag),
                 '<script' . rtrim($attrs) . ' defer src="data:text/javascript;charset=utf-8;base64,' . base64_encode($inlineCode) . '"></script>');
             $inlineConverted++;
@@ -8507,16 +8837,24 @@ class wps_cdn_rewrite
         if ($asyncVerdictsChanged && function_exists('update_option')) {
             update_option('wpc_async_jqdep106', $asyncJqueryVerdicts, false);
         }
-        if (!count($edits)) return $html;
+        if (!count($edits)) return self::jquery_defer_skip($html, 'no-edits');
         for ($i = count($edits) - 1; $i >= 0; $i--) {
             $html = substr($html, 0, $edits[$i][0]) . $edits[$i][2] . substr($html, $edits[$i][0] + $edits[$i][1]);
         }
         $withMarker = preg_replace('/<head\b[^>]*>/i', '$0' . self::jquery_defer_gate_marker(), $html, 1);
-        if (!is_string($withMarker) || $withMarker === '' || stripos($withMarker, 'wpcJqueryDeferMarker') === false) return $html;
+        if (!is_string($withMarker) || $withMarker === '' || stripos($withMarker, 'wpcJqueryDeferMarker') === false) return self::jquery_defer_skip($html, 'marker-missing-deferred');
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('jq-defer', '', '', array('ext' => $externalDeferred, 'inl' => $inlineConverted));
         }
         return $withMarker;
+    }
+
+    private static function jquery_defer_skip($html, $why)
+    {
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('jq-defer-skip', '', '', array('why' => (string) $why));
+        }
+        return $html;
     }
 
     private static function wpc_own_inline_script($attrs)
@@ -9402,6 +9740,10 @@ class wps_cdn_rewrite
             if ($url !== '' && wps_rewriteLogic::wpc_is_lcp_preload_in_doc($html, $url, true)) {
                 return true;
             }
+            $painted = wps_rewriteLogic::wpc_lcp_paint_exact_on() ? wps_ic_atf_observation::paintedUrl($device) : '';
+            if ($painted !== '' && wps_rewriteLogic::wpc_is_lcp_preload_in_doc($html, $painted, true)) {
+                return true;
+            }
         }
         return false;
     }
@@ -9436,6 +9778,7 @@ class wps_cdn_rewrite
         $mobileLcpStem = '';
         $desktopLcpStem = '';
         $lcpDevice = 'mobile';
+        $lcpUrlDevice = 'mobile';
         $lcpDerived = false;
         $lcpTypeAndUrlOf = null;
         try {
@@ -9500,8 +9843,10 @@ class wps_cdn_rewrite
                             $lcpDevice = 'desktop';
                         }
                         $lcpTypeAndUrl = $lcpTypeAndUrlOf($lcpDevice);
+                        $lcpUrlDevice = $lcpDevice;
                         if ($lcpTypeAndUrl['u'] === '' && !(wps_ic_atf_observation::heroFold() && (wps_ic_atf_observation::lcpHeld($lcpDevice) || wps_ic_atf_observation::lcpUnknown($lcpDevice)))) {
-                            $lcpTypeAndUrl = $lcpTypeAndUrlOf($lcpDevice === 'mobile' ? 'desktop' : 'mobile');
+                            $lcpUrlDevice = ($lcpDevice === 'mobile') ? 'desktop' : 'mobile';
+                            $lcpTypeAndUrl = $lcpTypeAndUrlOf($lcpUrlDevice);
                         }
                         $lcpIdentityElement = wps_ic_atf_observation::lcpElement($lcpDevice);
                         $lcpDerived = ($lcpStem !== '' && ($lcpIdentityElement['lcp_confidence'] ?? '') === 'derived');
@@ -9603,14 +9948,28 @@ class wps_cdn_rewrite
             // both legs of lcp.json named leidensweg-bg.webp, and the page carried two
             // id="wpc-lcp-img-preload" tags for that one file, each with fetchpriority=high, one per
             // media query. A leg that measured another file keeps its own preload and media.
+            $paintExact = class_exists('wps_rewriteLogic') && wps_rewriteLogic::wpc_lcp_paint_exact_on();
+            $paintExactOf = static function ($url, $device) use ($paintExact) {
+                if (!$paintExact) {
+                    return [];
+                }
+                $painted = wps_ic_atf_observation::paintedUrl($device);
+                return ['paint_exact' => ['painted' => $painted, 'forms' => self::wpc_lcp_paint_forms($url)]];
+            };
             $bothLegsOneFile = ($otherBackgroundUrl !== '' && esc_url($otherBackgroundUrl) === esc_url($lcpUrl));
+            if ($bothLegsOneFile && $paintExact
+                && wps_ic_atf_observation::paintedUrl($lcpUrlDevice) !== wps_ic_atf_observation::paintedUrl($otherDevice)) {
+                $bothLegsOneFile = false;
+            }
             $imagePreloads->add('wpc-lcp-img-preload', esc_url($lcpUrl), $bothLegsOneFile ? 'both' : $proposalDevice, $proposalOrigin,
                 $proposalRank, ['kind' => wps_ic_image_preload_set::KIND_BACKGROUND]
-                + ($carriesPriority ? [] : ['supersedes' => [wps_ic_image_preload_set::SLOT_ATF_BG], 'exact' => true]));
+                + ($carriesPriority ? [] : ['supersedes' => [wps_ic_image_preload_set::SLOT_ATF_BG], 'exact' => true])
+                + $paintExactOf($lcpUrl, $lcpUrlDevice));
             if ($otherBackgroundUrl !== '' && !$bothLegsOneFile) {
                 $imagePreloads->add('wpc-lcp-img-preload', esc_url($otherBackgroundUrl), $otherDevice, $proposalOrigin,
                     $proposalRank, ['kind' => wps_ic_image_preload_set::KIND_BACKGROUND, 'exact' => true]
-                    + ($carriesPriority ? [] : ['supersedes' => [wps_ic_image_preload_set::SLOT_ATF_BG]]));
+                    + ($carriesPriority ? [] : ['supersedes' => [wps_ic_image_preload_set::SLOT_ATF_BG]])
+                    + $paintExactOf($otherBackgroundUrl, $otherDevice));
             }
             return $html;
         }
@@ -13068,6 +13427,23 @@ WPCSZRJS;
         }
     }
 
+    /**
+     * Writes what wpc_cdn_active() answered for this render: self::$cdnEnabled, and the lane values
+     * the answer sets (the page's CDN exclude, the account flag, a Cloudflare-live zone, the crit
+     * corpus request) into self::$settings, which the render reads. Decides nothing itself.
+     */
+    private static function apply_cdn_verdict(array $verdict)
+    {
+        self::$cdnEnabled = $verdict['on'] ? 1 : 0;
+        foreach ($verdict['lanes'] as $lane => $value) {
+            if ($lane === 'css' || $lane === 'js') {
+                self::$settings[$lane] = $value;
+            } else {
+                self::$settings['serve'][$lane] = $value;
+            }
+        }
+    }
+
     public function mainInit()
     {
 
@@ -13096,8 +13472,8 @@ WPCSZRJS;
         }
 
         // Raise memory limit
-        if (ini_get('memory_limit') !== '-1' && wpc_convert_to_bytes(ini_get('memory_limit')) < 1024 * 1024 * 1024) {
-            ini_set('memory_limit', '1024M');
+        if (function_exists('wpc_raise_memory_limit')) {
+            wpc_raise_memory_limit('1024M');
         }
 
         // Raise backtrack limit for regex
@@ -13269,48 +13645,8 @@ WPCSZRJS;
             $this->delay_js_exclude = '';
         }
 
-        $cf = get_option(WPS_IC_CF);
-        $cfLive = false;
-        if ($cf && isset($cf['settings'])) {
-            $cfLive = ($cf['settings']['assets'] == '1' && $cf['settings']['cdn'] == '0');
-        }
-        $allowLive = get_option('wps_ic_allow_live') && !$cfLive;
-
-        self::$cdnEnabled = self::$settings['live-cdn'];
-        if ((isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '0') || !$allowLive) {
-            self::$cdnEnabled = 0;
-            self::$settings['css'] = 0;
-            self::$settings['js'] = 0;
-            self::$settings['serve']['jpg'] = 0;
-            self::$settings['serve']['png'] = 0;
-            self::$settings['serve']['gif'] = 0;
-            self::$settings['serve']['svg'] = 0;
-        } else if (isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '1' && isset(self::$settings['live-cdn']) && self::$settings['live-cdn'] == '1') {
-
-
-            self::$cdnEnabled = 1;
-            self::$settings['css'] = 1;
-            self::$settings['js'] = 1;
-            self::$settings['serve']['jpg'] = 1;
-            self::$settings['serve']['png'] = 1;
-            self::$settings['serve']['gif'] = 1;
-            self::$settings['serve']['svg'] = 1;
-        }
-
-
-        if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && empty(self::$settings['fonts']) && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
-            self::$cdnEnabled = 0;
-        }
-
-        if (!empty($_GET['criticalCombine']) || !empty(wpcGetHeader('criticalCombine'))) {
-            self::$cdnEnabled = 0;
-            self::$settings['css'] = 0;
-            self::$settings['js'] = 0;
-            self::$settings['serve']['jpg'] = 0;
-            self::$settings['serve']['png'] = 0;
-            self::$settings['serve']['gif'] = 0;
-            self::$settings['serve']['svg'] = 0;
-        }
+        $cdnVerdict = wpc_cdn_active(self::$page_excludes);
+        self::apply_cdn_verdict($cdnVerdict);
 
         // Is an ajax request?
         self::$isAjax = (function_exists("wp_doing_ajax") && wp_doing_ajax()) || (defined('DOING_AJAX') && DOING_AJAX);
@@ -13354,9 +13690,8 @@ WPCSZRJS;
         self::$zone_name = wpc_cdn_host();
 
 
-        if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
+        if ($cdnVerdict['suppressed']) {
             self::$zone_name = '';
-            self::$cdnEnabled = 0;
         }
 
         if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
@@ -13576,30 +13911,9 @@ WPCSZRJS;
         }
 
 
-        if ((isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '0') || !$allowLive) {
-            self::$cdnEnabled = 0;
-            self::$settings['css'] = 0;
-            self::$settings['js'] = 0;
-            self::$settings['serve']['jpg'] = 0;
-            self::$settings['serve']['png'] = 0;
-            self::$settings['serve']['gif'] = 0;
-            self::$settings['serve']['svg'] = 0;
-        } else if (isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '1' && isset(self::$settings['live-cdn']) && self::$settings['live-cdn'] == '1') {
-
-
-            self::$cdnEnabled = 1;
-            self::$settings['css'] = 1;
-            self::$settings['js'] = 1;
-            self::$settings['serve']['jpg'] = 1;
-            self::$settings['serve']['png'] = 1;
-            self::$settings['serve']['gif'] = 1;
-            self::$settings['serve']['svg'] = 1;
-        }
-
-
-        if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && empty(self::$settings['fonts']) && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
-            self::$cdnEnabled = 0;
-        }
+        // The query overrides above (ic_lazy, css, js) write lanes after the owner answered; the
+        // lanes the answer set stand over them.
+        self::apply_cdn_verdict($cdnVerdict);
 
 
         // Default to swap if not explicitly set — fixes PageSpeed font-display warning
@@ -13833,6 +14147,10 @@ WPCSZRJS;
                 $wpc_cache_basis .= '|wpcbgis1';
             }
         }
+        $wpc_theme_bg_key = self::wpc_theme_bg_key();
+        if ($wpc_theme_bg_key !== '') {
+            $wpc_cache_basis .= '|' . $wpc_theme_bg_key . '|' . self::$zone_name;
+        }
         // remote_range is injected into @font-face at CSS-BUILD time (below), so it is baked into
         // this cached file. Without the map in the key, a landed range change never rebuilt the file
         // and the stale range served forever — busy kept 8de0d6bf's U+0-34 (covering U+33) after
@@ -13926,7 +14244,17 @@ WPCSZRJS;
 
 
         $wpc_has_fontface = (stripos($css_content, '@font-face') !== false);
-        if (!$wpc_has_fontface && !($wpc_svg_cdn && stripos($css_content, '/wp-content/uploads/') !== false)) {
+        $wpc_theme_bg = $wpc_theme_bg_key !== '' && WPC_Css_Url_Zoneify::has_candidate($css_content)
+            && self::wpc_theme_bg_zoneify($css_content, $clean_src) !== $css_content;
+        $wpc_theme_bg_import = $wpc_theme_bg && stripos($css_content, '@import') !== false;
+        if ($wpc_theme_bg_import && self::wpc_theme_bg_import_safe($css_content, $clean_src) === null) {
+            $wpc_theme_bg = false;
+            $wpc_theme_bg_import = false;
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('theme-bg-import-refused', '', basename($clean_src), ['lane' => 'cio']);
+            }
+        }
+        if (!$wpc_has_fontface && !($wpc_svg_cdn && stripos($css_content, '/wp-content/uploads/') !== false) && !$wpc_theme_bg) {
             return $src;
         }
 
@@ -14202,6 +14530,21 @@ WPCSZRJS;
         }
 
 
+        if ($wpc_theme_bg) {
+            $css_content = self::wpc_theme_bg_zoneify($css_content, $clean_src);
+            if ($wpc_theme_bg_import) {
+                $wpc_theme_bg_imported = self::wpc_theme_bg_import_safe($css_content, $clean_src);
+                if ($wpc_theme_bg_imported === null) {
+                    if (!$wpc_has_fontface && !($wpc_svg_cdn && stripos($css_content, '/wp-content/uploads/') !== false)) {
+                        return $src;
+                    }
+                } else {
+                    $css_content = $wpc_theme_bg_imported;
+                }
+            }
+        }
+
+
         if ($wpc_fonts_cdn
             && class_exists('wps_rewriteLogic')
             && method_exists('wps_rewriteLogic', 'natural_assets_on')
@@ -14326,6 +14669,9 @@ WPCSZRJS;
         $inputs['fonts-cdn'] = self::wpc_fonts_served_from_cdn();
         $inputs['svg-lane'] = self::wpc_svg_zoneify_active();
         $inputs['bg-imageset'] = self::wpc_css_bg_imageset_active();
+        if (self::wpc_cf_bg_named_on()) {
+            $inputs['cf-bg-named'] = true;
+        }
         if (class_exists('wps_rewriteLogic')) {
             $inputs['natural-assets'] = method_exists('wps_rewriteLogic', 'natural_assets_on') ? (bool) wps_rewriteLogic::natural_assets_on() : null;
             $inputs['natural-nw'] = method_exists('wps_rewriteLogic', 'wpc_natural_nw') ? (bool) wps_rewriteLogic::wpc_natural_nw() : null;
@@ -15972,6 +16318,137 @@ WPCSZRJS;
         return $html;
     }
 
+    public function gate_slider_first_slide($ctx)
+    {
+        if ($ctx->isAmp) {
+            return 'amp';
+        }
+
+        return (class_exists('wps_rewriteLogic') && wps_rewriteLogic::wpc_slider_lcp_on()) ? true : 'cohort-off';
+    }
+
+    /**
+     * The images a slider's inline config names (SR7.JSON of a Slider Revolution 7 module, a Beaver
+     * Builder slideshow's script) go to the zone when the zone serves images, in the page and in the
+     * parked modules alike; the first of them is the first slide, and it is registered as an image
+     * preload when its slider sits on the first screen. A slider whose slides are in no inline script
+     * (a Beaver Builder row slideshow's layout file, an Elementor background slideshow's data-settings)
+     * is read where its slides live (wps_rewriteLogic::slider_page_first_slide).
+     */
+    public function stage_slider_first_slide($html, $ctx)
+    {
+        $zone = self::$cdnEnabled ? (string) wps_rewriteLogic::plain_image_host(self::$settings) : '';
+        $siteHosts = [];
+        foreach (['site_url', 'home_url'] as $urlFunc) {
+            if (function_exists($urlFunc)) {
+                $host = strtolower((string) wp_parse_url((string) $urlFunc(), PHP_URL_HOST));
+                if ($host !== '') {
+                    $siteHosts[] = preg_replace('/^www\\./', '', $host);
+                }
+            }
+        }
+        if ($siteHosts === []) {
+            return $html;
+        }
+        $zoneHosts = $zone !== '' ? wps_rewriteLogic::plain_image_hosts(self::$settings) : [];
+        $first = '';
+        $firstKind = '';
+        $configKind = '';
+        $moved = 0;
+        $visit = function ($doc) use ($zone, $siteHosts, $zoneHosts, &$first, &$firstKind, &$configKind, &$moved) {
+            $out = preg_replace_callback('#(<script\b(?![^>]*\bsrc\s*=)[^>]*>)(.*?)(</script>)#is', function ($m) use ($zone, $siteHosts, $zoneHosts, &$first, &$firstKind, &$configKind, &$moved) {
+                $kind = wps_rewriteLogic::slider_config_kind($m[2]);
+                if ($kind === '') {
+                    return $m[0];
+                }
+                if ($configKind === '') {
+                    $configKind = $kind;
+                }
+                $url = '';
+                $count = 0;
+                $body = wps_rewriteLogic::slider_config_urls($m[2], $zone, $siteHosts, $zoneHosts, $url, $count);
+                $moved += $count;
+                $pick = $kind === 'sr7' ? wps_rewriteLogic::slider_sr7_first_slide($body) : null;
+                if ($pick !== null) {
+                    $url = '';
+                    $pickMoved = 0;
+                    if ($pick !== '') {
+                        wps_rewriteLogic::slider_config_urls($pick, $zone, $siteHosts, $zoneHosts, $url, $pickMoved);
+                    }
+                }
+                if ($first === '' && $url !== '') {
+                    $first = $url;
+                    $firstKind = $kind;
+                }
+
+                return $m[1] . $body . $m[3];
+            }, $doc);
+
+            return is_string($out) ? $out : $doc;
+        };
+        $html = $visit($html);
+        foreach ($ctx->sliderModuleStash as $key => $module) {
+            $ctx->sliderModuleStash[$key] = $visit($module);
+        }
+        if ($moved > 0 && function_exists('wpc_render_belt_note')) {
+            wpc_render_belt_note('slider-config-urls', ['moved' => $moved], true);
+        }
+        $pageSource = ($first === '' && class_exists('wps_ic_js_delay_v3')) ? wps_rewriteLogic::slider_page_first_slide($html, $zone, $siteHosts, $zoneHosts) : null;
+        $sourceDocs = '';
+        if ($pageSource !== null) {
+            $configKind = $pageSource['kind'];
+            $firstKind = $pageSource['kind'];
+            $first = $pageSource['url'];
+            $sourceDocs = $pageSource['docs'];
+        }
+        $listed = ($configKind !== '' && function_exists('wpc_policy_list')) ? wpc_policy_list('slider_first_url') : [];
+        if ($listed !== []) {
+            $docs = $html . implode('', $ctx->sliderModuleStash) . $sourceDocs;
+            foreach ($listed as $entry) {
+                $host = preg_replace('/^www\\./', '', strtolower((string) wp_parse_url($entry, PHP_URL_HOST)));
+                $path = (string) wp_parse_url($entry, PHP_URL_PATH);
+                if ((!in_array($host, $siteHosts, true) && !in_array($host, $zoneHosts, true)) || $path === '' || $path === '/'
+                    || (strpos($docs, $path) === false && strpos($docs, str_replace('/', '\\/', $path)) === false)) {
+                    $listed = [];
+                    break;
+                }
+            }
+        }
+        if ($listed !== [] && $configKind === 'bbfile') {
+            foreach ($listed as $entry) {
+                if (in_array(preg_replace('/^www\./', '', strtolower((string) wp_parse_url($entry, PHP_URL_HOST))), $zoneHosts, true)) {
+                    $listed = [];
+                    break;
+                }
+            }
+        }
+        if ($listed !== []) {
+            $firstKind = $configKind;
+        }
+        if (($first === '' && $listed === []) || !class_exists('wps_ic_js_delay_v3')) {
+            return $html;
+        }
+        if ($pageSource !== null) {
+            $firstScreen = true;
+        } elseif ($firstKind === 'sr7') {
+            $firstScreen = wps_ic_js_delay_v3::wpc_sr7_first_screen_module($html);
+        } else {
+            $firstScreen = wps_ic_js_delay_v3::wpc_first_screen_markup_has($html, '/(?<![\w-])fl-slideshow-container(?![\w-])/');
+        }
+        if ($firstScreen && $listed !== []) {
+            if (count($listed) === 1) {
+                $ctx->imagePreloads->add('wpc-slider-first-preload', esc_url($listed[0]), 'both', 'slider-first', wps_ic_image_preload_set::RANK_SLIDER_FIRST_SLIDE);
+            } else {
+                $ctx->imagePreloads->add('wpc-slider-first-preload', esc_url($listed[0]), 'mobile', 'slider-first', wps_ic_image_preload_set::RANK_SLIDER_FIRST_SLIDE);
+                $ctx->imagePreloads->add('wpc-slider-first-preload-d', esc_url($listed[1]), 'desktop', 'slider-first', wps_ic_image_preload_set::RANK_SLIDER_FIRST_SLIDE);
+            }
+        } elseif ($firstScreen) {
+            $ctx->imagePreloads->add('wpc-slider-first-preload', esc_url($first), 'both', 'slider-first', wps_ic_image_preload_set::RANK_SLIDER_FIRST_SLIDE);
+        }
+
+        return $html;
+    }
+
     public function stage_iframe_lazy_and_video_facade($html, $ctx)
     {
         // Layzload Iframe - sets load="lazy" to iframe tag
@@ -16825,11 +17302,13 @@ WPCSZRJS;
      * The critical setup both lanes need before the CSS block: which crit artifact exists, whether
      * critical CSS is active, one shared wps_criticalCss instance. It is pure request and option
      * reads, so the entry leaves the buffer untouched and gives both lanes the same context from
-     * this point on.
+     * this point on. On a LiteSpeed Cache site it also puts the plugin's own `<style id="wpc-…">` tags on
+     * LiteSpeed's CSS-combine exclude list, so the crit tag reaches the served page and the store verdict.
      */
     public function stage_critical_setup($html, $ctx)
     {
         $this->wpc_stage_critical_setup($ctx, $html);
+        wps_rewriteLogic::wpc_lscwp_own_styles_arm();
 
         // Nothing below reads this: cdn_rewrite_url takes an argument of the same name and does
         // not consult the context.
@@ -17807,6 +18286,35 @@ WPCSZRJS;
         return $ctx->closeWindow('nd_stash_local', $html);
     }
 
+    public function gate_plain_image_urls($ctx)
+    {
+        if (!class_exists('wps_rewriteLogic') || !self::$cdnEnabled || wps_rewriteLogic::plain_image_host(self::$settings) === '') {
+            return 'no-image-host';
+        }
+
+        return true;
+    }
+
+    public function stage_plain_image_urls($html, $ctx)
+    {
+        return wps_rewriteLogic::plain_image_urls($html, self::$settings);
+    }
+
+    /** The parked template bodies are the one part of the page plain_image_urls never saw; they are converted here, before the 'templates' window gives them back. */
+    public function stage_plain_image_templates($html, $ctx)
+    {
+        foreach ((array) $ctx->removedTemplates as $id => $body) {
+            $ctx->removedTemplates[$id] = wps_rewriteLogic::plain_image_urls($body, self::$settings);
+        }
+
+        return $html;
+    }
+
+    public function stage_plain_image_scripts($html, $ctx)
+    {
+        return wps_rewriteLogic::plain_image_urls($html, self::$settings, true);
+    }
+
     /** One door for both naturalize entries. */
     public function gate_natural_assets_on($ctx)
     {
@@ -17921,14 +18429,14 @@ WPCSZRJS;
         if (is_string($restCss) && $restCss !== '') $html = $restCss;
         $images = preg_replace_callback('#<img\b(?![^>]*\sdata-wpc-fb)[^>]*\ssrc=["\']https://' . $zq . '(/[^"\']+?)["\'][^>]*>#i', function ($m) use ($origin) {
             if (strpos($m[0], '/a:') !== false || strpos($m[0], '/u:') !== false) return $m[0];
-            $originUrl = 'https://' . $origin . preg_replace('/\?.*$/', '', $m[1]);
+            $originUrl = 'https://' . $origin . (class_exists('wps_rewriteLogic') ? wps_rewriteLogic::plain_fallback_path($m[1]) : preg_replace('/\?.*$/', '', $m[1]));
             $onerrorJs = "this.onerror=null;var p=this.parentNode;if(p&&p.tagName==='PICTURE'){var s;while(s=p.getElementsByTagName('source')[0])s.parentNode.removeChild(s);}this.removeAttribute('srcset');this.src=this.getAttribute('data-wpc-fb');";
             return str_replace('<img', '<img data-wpc-fb="' . esc_attr($originUrl) . '" onerror="' . $onerrorJs . '"', $m[0]);
         }, $html);
         if (is_string($images) && $images !== '') $html = $images;
         $lazyImages = preg_replace_callback('#<img\b(?![^>]*\sdata-wpc-fb)[^>]*\sdata-wpc-qw-src=["\']https://' . $zq . '(/[^"\']+?)["\'][^>]*>#i', function ($m) use ($origin) {
             if (strpos($m[1], '/a:') !== false || strpos($m[1], '/u:') !== false) return $m[0];
-            $originUrl = 'https://' . $origin . preg_replace('/\?.*$/', '', $m[1]);
+            $originUrl = 'https://' . $origin . (class_exists('wps_rewriteLogic') ? wps_rewriteLogic::plain_fallback_path($m[1]) : preg_replace('/\?.*$/', '', $m[1]));
             $onerrorJs = "this.onerror=null;var p=this.parentNode;if(p&&p.tagName==='PICTURE'){var s;while(s=p.getElementsByTagName('source')[0])s.parentNode.removeChild(s);}this.removeAttribute('srcset');this.src=this.getAttribute('data-wpc-fb');";
             return str_replace('<img', '<img data-wpc-fb="' . esc_attr($originUrl) . '" onerror="' . $onerrorJs . '"', $m[0]);
         }, $html);
@@ -17942,8 +18450,61 @@ WPCSZRJS;
         return $html;
     }
 
+    public static function wpc_cdn_directories_on()
+    {
+        if (defined('WPC_CDN_DIRECTORIES_OFF') && WPC_CDN_DIRECTORIES_OFF) {
+            return false;
+        }
+        $on = function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('cdn_directories') === 1;
+        return (bool) apply_filters('wpc_cdn_directories', $on);
+    }
+
+    public static function wpc_cdn_directories_alternation()
+    {
+        $listed = [];
+        if (is_array(self::$settings) && !empty(self::$settings['cdn_directories'])) {
+            $override = self::$settings['cdn_directories'];
+            $listed = is_array($override) ? $override : explode(',', (string) $override);
+        }
+        if (function_exists('wpc_v2_upload_base_paths')) {
+            $listed = array_merge($listed, (array) wpc_v2_upload_base_paths());
+        }
+        if (function_exists('wpc_policy_list') && self::wpc_cdn_directories_on()) {
+            $listed = array_merge($listed, wpc_policy_list('cdn_dirs'));
+        }
+        $reserved = ['wp-admin', 'wp-login.php', 'wp-json', 'wp-cron.php', 'wp-signup.php', 'wp-activate.php', 'wp-comments-post.php', 'xmlrpc.php'];
+        $parts = ['wp\-content' => 'wp\-content', 'wp\-includes' => 'wp\-includes'];
+        foreach ($listed as $entry) {
+            if (!is_scalar($entry)) {
+                continue;
+            }
+            $segments = explode('/', trim(trim((string) $entry), '/'));
+            $lower = array_map('strtolower', $segments);
+            if (in_array('wp-content', $lower, true) || in_array('wp-includes', $lower, true) || in_array($lower[0], $reserved, true)) {
+                continue;
+            }
+            foreach ($segments as $segment) {
+                if ($segment === '' || $segment === '.' || $segment === '..') {
+                    continue 2;
+                }
+            }
+            $quoted = implode('/', array_map(static function ($segment) {
+                return preg_quote($segment, '#');
+            }, $segments)) . '/';
+            $parts[$quoted] = $quoted;
+        }
+        return implode('|', $parts);
+    }
+
     public function getRegexp()
     {
+        if (self::wpc_cdn_directories_on()) {
+            $escapedSiteURL = quotemeta(self::$home_url);
+            self::$regExURL = '(https?:|)' . substr($escapedSiteURL, strpos($escapedSiteURL, '//'));
+            self::$regExDir = self::wpc_cdn_directories_alternation();
+            return;
+        }
+
         if (!isset(self::$options['regExUrl']) || !isset(self::$options['regexpDirectories']) || empty(self::$options['regExUrl']) || empty(self::$options['regexpDirectories'])) {
             $escapedSiteURL = quotemeta(self::$home_url);
             self::$options['regExUrl'] = $regExURL = '(https?:|)' . substr($escapedSiteURL, strpos($escapedSiteURL, '//'));
@@ -19360,6 +19921,10 @@ JS;
             return $image[0];
         }
 
+        if (wps_ic_lazy_verdict::namesNoImage($image[0])) {
+            return $image[0];
+        }
+
         if (!($ctx->lazyVerdict instanceof wps_ic_lazy_verdict)) {
             $ctx->lazyVerdict = wps_ic_lazy_verdict::forRequest();
         }
@@ -19415,7 +19980,7 @@ JS;
             $image_source = isset($original_img_tag['original_tags']['data-src']) ? $original_img_tag['original_tags']['data-src'] : '';
         }
 
-        if (!is_string($image_source) || $image_source === '') {
+        if (!is_string($image_source) || !wps_ic_lazy_verdict::isImageAddress($image_source)) {
             return $image[0];
         }
 

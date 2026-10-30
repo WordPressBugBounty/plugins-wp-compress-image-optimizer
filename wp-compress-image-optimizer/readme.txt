@@ -5,7 +5,7 @@ Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 8.0
 Requires at least: 6.5
 Tested up to: 7.1
-Stable tag: 7.30.00
+Stable tag: 7.30.30
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -221,6 +221,12 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 6. Example Results from Aggressive Mode + Smart Optimization
 
 == Changelog ==
+
+= 7.30.30 =
+* Elementor Entrance Animations and Looping Slider Improvements
+* Fixed Redirect Loop Behind Proxies and Load Balancers
+* Improved LiteSpeed Cache Compatibility
+* Improved Cache Purging and Security
 
 = 7.30.00 =
 * Smart Delivery Speed and Reliability Updates

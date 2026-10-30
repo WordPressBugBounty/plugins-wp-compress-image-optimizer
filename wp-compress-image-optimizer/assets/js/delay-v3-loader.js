@@ -4341,7 +4341,7 @@
                 if (!els.length || !window.IntersectionObserver) { return; }
                 var reveal = function(el) {
                     try {
-                        if (!el.classList.contains("elementor-invisible")) { return; }
+                        if (!el.classList.contains("elementor-invisible") || el.hasAttribute("data-wpc-ela")) { return; }
                         var anim = "";
                         try {
                             var ds = el.getAttribute("data-settings");
@@ -4382,7 +4382,7 @@
                         }
                     }
                 }, { rootMargin: "0px 0px 10% 0px" });
-                for (var k = 0; k < els.length; k++) { io.observe(els[k]); }
+                for (var k = 0; k < els.length; k++) { if (!els[k].hasAttribute("data-wpc-ela")) { io.observe(els[k]); } }
             } catch (e) {}
         };
         setTimeout(wpcRevealInvisibleOnViewportEntry, 1200);
@@ -4608,12 +4608,33 @@
             document.documentElement.classList.remove("wpc-nt");
         } catch (z) {}
     }
+    function wpcLoaderPaceMs() {
+        var cfg = window.wpcDelayV3Cfg, v = cfg && 1 === +cfg.swapNoTransition ? +cfg.loaderPaceMs : 0;
+        return v > 0 ? Math.min(v, 4e3) : 0;
+    }
     function wpcSwapNtEnd() {
         var nt = window.wpcNt;
         if (!nt || !nt.s) return;
         var gen = ++nt.g, gone = function() {
             gen === nt.g && !nt.h && wpcSwapNtOff();
-        };
+        }, pace = wpcLoaderPaceMs();
+        if (pace) {
+            try { nt.w && clearTimeout(nt.w); } catch (z) {}
+            nt.w = setTimeout(function() {
+                nt.w = 0;
+                if (gen !== nt.g) return;
+                try {
+                    if (window.requestAnimationFrame) {
+                        window.requestAnimationFrame(function() {
+                            window.requestAnimationFrame(gone);
+                        });
+                        return;
+                    }
+                } catch (z) {}
+                gone();
+            }, pace);
+            return;
+        }
         try {
             if (window.requestAnimationFrame) {
                 window.requestAnimationFrame(function() {
@@ -5060,20 +5081,85 @@ if (!window.__wpcEngaged) {
             }
         } catch (e) {}
     };
-    function wpcUnhideStuckInvisibleElements() {
+    function wpcUnhideStuckInvisibleBatch(queue, size) {
         try {
-            [].slice.call(document.querySelectorAll(".elementor-invisible")).forEach(function(el) {
+            queue = queue || [].slice.call(document.querySelectorAll(".elementor-invisible:not([data-wpc-ela])"));
+            var batch = size ? queue.splice(0, size) : queue.splice(0, queue.length), hid = [], mark = {}, back = [], i, el, p, under;
+            for (i = 0; size && i < batch.length; i++) {
+                try { hid[i] = getComputedStyle(batch[i]).visibility === "hidden"; } catch (e) { hid[i] = false; }
+            }
+            for (i = 0; i < batch.length; i++) {
+                el = batch[i];
                 try {
-                    if (getComputedStyle(el).visibility !== "hidden") { return; }
+                    if (!size) { hid[i] = getComputedStyle(el).visibility === "hidden"; }
+                    if (!hid[i] || el.hasAttribute("data-wpc-ela")) { continue; }
+                    under = false;
+                    if (size) {
+                        for (p = el.parentNode; p; p = p.parentNode) { if (p.__wpcUnhideMark === mark) { under = true; break; } }
+                        if (under) { back.push(el); continue; }
+                        el.__wpcUnhideMark = mark;
+                    }
                     el.classList.remove("elementor-invisible");
                     el.style.visibility = "visible";
                     try { window.wpcPinVisible && window.wpcPinVisible(el, false); } catch (e3) {}
                     try { window.wpcScrubAnimationSettings(el); } catch (e3) {}
                 } catch (e) {}
-            });
+            }
+            queue = back.concat(queue);
+            if (size && queue.length) {
+                var ran = 0, go = function() { if (!ran) { ran = 1; wpcUnhideStuckInvisibleBatch(queue, size); } };
+                try {
+                    window.requestAnimationFrame && window.requestAnimationFrame(function() { setTimeout(go, 0); });
+                } catch (e) {}
+                setTimeout(go, 250);
+            }
         } catch (e) {}
     }
+    function wpcUnhideStuckInvisibleElements() {
+        wpcUnhideStuckInvisibleBatch(null, wpcLoaderPaceMs() ? 40 : 0);
+    }
     setTimeout(wpcUnhideStuckInvisibleElements, 3000);
+    var wpcElaBeltIO = null;
+    function wpcElaBeltFix(el, tries) {
+        try {
+            if (!el.classList.contains("elementor-invisible")) { return; }
+            if (el.getAttribute("data-wpc-ela-q") && tries < 6) {
+                setTimeout(function() { wpcElaBeltFix(el, tries + 1); }, 1500);
+                return;
+            }
+            el.classList.remove("elementor-invisible");
+            try { window.wpcScrubAnimationSettings && window.wpcScrubAnimationSettings(el); } catch (e) {}
+        } catch (e) {}
+    }
+    function wpcElaBeltArm() {
+        try {
+            var els = [].slice.call(document.querySelectorAll("[data-wpc-ela].elementor-invisible"));
+            if (!els.length || !window.IntersectionObserver) {
+                for (var n = 0; n < els.length; n++) { wpcElaBeltFix(els[n], 6); }
+                return;
+            }
+            wpcElaBeltIO = new IntersectionObserver(function(entries) {
+                for (var i = 0; i < entries.length; i++) {
+                    var en = entries[i];
+                    if (!en.isIntersecting) { continue; }
+                    wpcElaBeltIO.unobserve(en.target);
+                    (function(el) { setTimeout(function() { wpcElaBeltFix(el, 0); }, 600); })(en.target);
+                }
+            });
+            var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+            var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+            for (var k = 0; k < els.length; k++) {
+                var b = els[k].getBoundingClientRect();
+                var onScreen = b.bottom >= 0 && b.top <= vh && b.right >= 0 && b.left <= vw;
+                if (onScreen) {
+                    (function(el) { setTimeout(function() { wpcElaBeltFix(el, 0); }, 600); })(els[k]);
+                } else {
+                    wpcElaBeltIO.observe(els[k]);
+                }
+            }
+        } catch (e) {}
+    }
+    setTimeout(wpcElaBeltArm, 3000);
     // v7.21.299 — STRANDED-WIDGET BELT. Element Pack modules register their widget
     // handlers on jQuery's 'elementor/frontend/init' — an event Elementor fires ONCE,
     // and replay ordering can run the module after the firing: handler never registers,
@@ -5160,9 +5246,11 @@ if (!window.__wpcEngaged) {
                             // scrub the animation from attribute AND jQuery cache, strip the
                             // conceal class, pin visible with animation:none.
                             try {
-                                if (w.classList.contains("elementor-invisible")) { w.classList.remove("elementor-invisible"); }
-                                window.wpcScrubAnimationSettings && window.wpcScrubAnimationSettings(w);
-                                window.wpcPinVisible && window.wpcPinVisible(w, false);
+                                if (!w.hasAttribute("data-wpc-ela")) {
+                                    if (w.classList.contains("elementor-invisible")) { w.classList.remove("elementor-invisible"); }
+                                    window.wpcScrubAnimationSettings && window.wpcScrubAnimationSettings(w);
+                                    window.wpcPinVisible && window.wpcPinVisible(w, false);
+                                }
                             } catch (e4) {}
                             if (window.wpcRunReadyTriggerForElement && window.wpcRunReadyTriggerForElement(w)) { n++; }
                         } catch (e) {}
@@ -6523,6 +6611,9 @@ if (!window.__wpcEngaged) {
         list.forEach((function(cls) {
             [].slice.call(document.querySelectorAll("." + cls)).forEach((function(el) {
                 try {
+                    if (cls === "elementor-invisible" && el.hasAttribute("data-wpc-ela")) {
+                        return;
+                    }
                     var live = false, at = el.attributes, i, s;
                     for (i = 0; i < at.length; i++) {
                         if (at[i].name === "class") {
@@ -6546,7 +6637,7 @@ if (!window.__wpcEngaged) {
         if (animOff || window.wpcDelayV3Cfg && +window.wpcDelayV3Cfg.atfReveal === 0) {
             return;
         }
-        var els = [].slice.call(document.querySelectorAll(".elementor-invisible"));
+        var els = [].slice.call(document.querySelectorAll(".elementor-invisible:not([data-wpc-ela])"));
         if (!els.length) {
             return;
         }
@@ -7495,7 +7586,7 @@ if (!window.__wpcEngaged) {
             // 25% == the old innerHeight*1.25 window; scroll now reveals below-fold too (a strict
             // never-blank gain, matching wpcRevealInvisibleOnViewportEntry).
             try {
-                var invisibleEls = [].slice.call(document.querySelectorAll(".elementor-invisible"));
+                var invisibleEls = [].slice.call(document.querySelectorAll(".elementor-invisible:not([data-wpc-ela])"));
                 if (invisibleEls.length && window.IntersectionObserver) {
                     var revealObserver = new IntersectionObserver((function(ents) {
                         for (var qi = 0; qi < ents.length; qi++) {

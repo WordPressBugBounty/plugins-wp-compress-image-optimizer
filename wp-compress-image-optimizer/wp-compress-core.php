@@ -85,7 +85,7 @@ if (!function_exists('wpc_request_carries_site_key')) {
             return false;
         }
         $options = get_option(WPS_IC_OPTIONS);
-        $siteKey = (is_array($options) && isset($options['api_key']) && is_string($options['api_key'])) ? $options['api_key'] : '';
+        $siteKey = (is_array($options) && isset($options['api_key']) && (is_string($options['api_key']) || is_int($options['api_key']) || is_float($options['api_key']))) ? (string) $options['api_key'] : '';
         if ($siteKey === '') {
             return false;
         }
@@ -751,7 +751,7 @@ function wpc_bulk_process_active() {
  */
 function wpc_get_whitelabel_url($fallback = 'https://www.wpcompress.com/') {
     static $cached = null;
-    if ($cached !== null) return $cached;
+    if ($cached !== null) return $cached !== '' ? $cached : $fallback;
 
     if (class_exists('wps_ic') && !empty(wps_ic::$slug)) {
         $wl_file = WP_PLUGIN_DIR . '/' . wps_ic::$slug . '/whitelabel.php';
@@ -773,8 +773,8 @@ function wpc_get_whitelabel_url($fallback = 'https://www.wpcompress.com/') {
         return $cached;
     }
 
-    $cached = $fallback;
-    return $cached;
+    $cached = '';
+    return $fallback;
 }
 
 /**
@@ -2010,7 +2010,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '7.30.00';
+        self::$version = '7.30.30';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -2403,12 +2403,14 @@ class wps_ic
 
                 try {
                     $staticServeSettings = function_exists('get_option') ? get_option(WPS_IC_SETTINGS) : [];
-                    if (is_array($staticServeSettings) && !empty($staticServeSettings['static-serve']) && $staticServeSettings['static-serve'] == '1') {
-                        if (!class_exists('wps_ic_htaccess')) {
-                            @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
-                        }
-                        if (class_exists('wps_ic_htaccess')) {
+                    if (!class_exists('wps_ic_htaccess')) {
+                        @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+                    }
+                    if (class_exists('wps_ic_htaccess')) {
+                        if (is_array($staticServeSettings) && !empty($staticServeSettings['static-serve']) && $staticServeSettings['static-serve'] == '1') {
                             (new wps_ic_htaccess())->applyStaticServe();
+                        } else {
+                            (new wps_ic_htaccess())->refreshStaticServeBlock();
                         }
                     }
                 } catch (\Throwable $e) {
@@ -3909,8 +3911,8 @@ class wps_ic
     {
         if (!is_admin()) {
             // Raise memory limit
-            if (ini_get('memory_limit') !== '-1' && wpc_convert_to_bytes(ini_get('memory_limit')) < 1024 * 1024 * 1024) {
-                ini_set('memory_limit', '1024M');
+            if (function_exists('wpc_raise_memory_limit')) {
+                wpc_raise_memory_limit('1024M');
             }
         }
 
@@ -4333,11 +4335,15 @@ class wps_ic
                 }
                 $wpc_manifest_url_key = (new wps_ic_url_key())->setup($wpc_manifest_page_url);
                 $wpc_manifest_result = 0;
+                $GLOBALS['wpc_manifest_fail_why'] = '';
                 if (!empty($wpc_manifest_url_key) && function_exists('wpc_manifest_consume')) {
                     $wpc_manifest_result = (int) wpc_manifest_consume((string) $wpc_manifest_url_key, (string) $wpc_cb_body['manifest_url'], (string) $wpc_cb_body['gen_id'], $wpc_manifest_page_url, $wpc_cb_body['epoch'] ?? null);
                     if ($wpc_manifest_result === 1 && !empty($wpc_cb_body['url_key']) && is_string($wpc_cb_body['url_key']) && function_exists('wpc_land_url_key_note')) {
                         wpc_land_url_key_note((string) $wpc_manifest_url_key, $wpc_cb_body['url_key'], (string) $wpc_cb_body['gen_id']);
                     }
+                }
+                if (!empty($wpc_manifest_url_key) && function_exists('wpc_crit_leg_on_announce')) {
+                    wpc_crit_leg_on_announce((string) $wpc_manifest_url_key, 'manifest', $wpc_manifest_result === 1, (string) $GLOBALS['wpc_manifest_fail_why']);
                 }
                 wp_send_json_success(['manifest' => $wpc_manifest_result]);
             }
@@ -4803,6 +4809,12 @@ class wps_ic
                     } catch (\Throwable $e) {
                     }
                     unset($GLOBALS['wpc_land_callback_running']);
+                    if (function_exists('wpc_crit_leg_on_announce')) {
+                        $wpc_leg_superseded = isset($wpc_announced_uuid, $wpc_landed_uuid) && function_exists('wpc_gen_dispatched_before')
+                            && wpc_gen_dispatched_before((string) $urlKey, (string) $wpc_announced_uuid, (string) $wpc_landed_uuid);
+                        wpc_crit_leg_on_announce((string) $urlKey, 'callback', !empty($wpc_land_ack['stored']),
+                            !empty($wpc_land_ack['stored']) ? '' : ($wpc_leg_superseded ? 'superseded' : 'not-stored'));
+                    }
                     if (function_exists('wpc_land_report')) {
                         wpc_land_report((string) $urlKey, ['ack' => $wpc_land_ack, 'ready' => (string) $wpc_cb_ready,
                             'uuid' => (string) $uuid, 'url_key' => $wpc_cb_url_key, 'page_url' => (string) $pageUrl]);
@@ -8159,6 +8171,8 @@ include_once WPS_IC_DIR . 'addons/vitals/vitals.php';
 
 // + Auto Mode toggle); with the gate closed loading is a boolean check, zero HTTP/DB.
 include_once WPS_IC_DIR . 'addons/cache/beacon.php';
+include_once WPS_IC_DIR . 'addons/cache/host-cache-purge.php';
+include_once WPS_IC_DIR . 'addons/cache/crit-leg-reopen.php';
 
 
 include_once WPS_IC_DIR . 'addons/cache/link-preset.php';

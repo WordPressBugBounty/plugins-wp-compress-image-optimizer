@@ -207,7 +207,7 @@ if (!function_exists('wpc_stale_serve_plan')) {
         if (defined('WPS_IC_CACHE') && function_exists('wpc_fs_link_below') && wpc_fs_link_below(WPS_IC_CACHE, $dir)) {
             return;
         }
-        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt', 'links.txt', 'head.json'] as $copy_file) {
+        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt', 'links.txt', 'head.json', 'cohort.txt'] as $copy_file) {
             @unlink($dir . $prefix . $copy_file);
         }
     }
@@ -2080,6 +2080,7 @@ class wps_cacheHtml
         // which decides it with the same wps_cacheHtml::wpc_matched_personal_cookie() the verdict
         // uses, on every front-end GET whatever the cache setting. The verdict refuses the copy;
         // it no longer sends those headers a second time.
+        $wpc_cohort_stamp = function_exists('wpc_cohort_stamp_now') ? wpc_cohort_stamp_now() : '';
         if (empty($GLOBALS['wpc_cc_guarded'])) {
             if ($wpc_reason !== 'personal-cookie' && !headers_sent() && !is_admin()
                 && !(function_exists('is_user_logged_in') && is_user_logged_in())) {
@@ -2143,6 +2144,12 @@ class wps_cacheHtml
             // the collector reads it same-origin via the navigation entry and classifies a
             // replay older than its threshold as cache-served. Fresh renders read as now.
             wpc_send_header('Server-Timing: wpc-mint;desc=' . time(), false);
+            if ($wpc_cohort_stamp !== '') {
+                wpc_send_header('Server-Timing: wpc-coh;desc=' . $wpc_cohort_stamp, false);
+            }
+            if (function_exists('wpc_link_headers_send') && function_exists('wpc_copy_link_header_stored') && wpc_copy_link_header_stored($buffer)) {
+                wpc_link_headers_send($buffer);
+            }
             if (function_exists('wpc_views_24h_bump')) { wpc_views_24h_bump((string) $this->urlKey); }
             // Natural-assets verdict for THIS render, riding the same frozen-header channel:
             // 'natural' when on, else the first refusing gate. One DevTools look answers
@@ -2257,7 +2264,7 @@ class wps_cacheHtml
         $buffer = self::wpc_css_sidecar($buffer);
 
         if (function_exists('gzencode')) {
-            $this->saveGzCache($buffer, $prefix, $wpc_copy_family, $wpc_reason);
+            $this->saveGzCache($buffer, $prefix, $wpc_copy_family, $wpc_reason, $wpc_cohort_stamp);
         }
 
 
@@ -2279,8 +2286,12 @@ class wps_cacheHtml
     public static function storedHeaderSet(array $lines)
     {
         $headers = [];
+        $ours = isset($GLOBALS['wpc_link_header_sent']) && is_array($GLOBALS['wpc_link_header_sent']) ? $GLOBALS['wpc_link_header_sent'] : [];
         foreach ($lines as $line) {
             $parts = explode(':', (string) $line, 2);
+            if (count($parts) == 2 && strcasecmp(trim($parts[0]), 'Link') === 0 && in_array(trim($parts[1]), $ours, true)) {
+                continue;
+            }
             if (count($parts) == 2 && strcasecmp(trim($parts[0]), 'X-WPC-CC') !== 0 && strcasecmp(trim($parts[0]), 'Set-Cookie') !== 0) {
                 $headers[trim($parts[0])] = trim($parts[1]);
             }
@@ -2354,9 +2365,11 @@ class wps_cacheHtml
      * wpc_copy_names). The copy lands in one atomic rename; after it, the other family's copy of
      * the same device is removed, so a reader never finds a page that is both. $reason is the
      * store verdict's reason; a local-only copy keeps it beside itself for the serve header
-     * (wpc_copy_reason_label()).
+     * (wpc_copy_reason_label()). $cohort is the render cohort stamp (wpc_cohort_stamp_now()); a public
+     * copy outside a signed-in visitor's folder keeps it beside itself (wpc_copy_cohort_stamp()), and
+     * any other copy has none. Left at null it is read now.
      */
-    public function saveGzCache($buffer, $prefix, $family = '', $reason = '')
+    public function saveGzCache($buffer, $prefix, $family = '', $reason = '', $cohort = null)
     {
         if (function_exists('wpc_page_cache_blocked') && wpc_page_cache_blocked()) {
             return $buffer;
@@ -2417,7 +2430,10 @@ class wps_cacheHtml
             if ($family === '' && $this->userFolder === '' && defined('WPC_CACHE_LOGGED_IN') && function_exists('wpc_cache_phase_on') && wpc_cache_phase_on('p4')) {
                 wpc_br_prestore($wpc_names['br'], $wpc_names['md5'], $buffer);
             }
-            wpc_copy_settle($this->cachePath, (string) $prefix, $family, $reason);
+            if ($cohort === null) {
+                $cohort = function_exists('wpc_cohort_stamp_now') ? wpc_cohort_stamp_now() : '';
+            }
+            wpc_copy_settle($this->cachePath, (string) $prefix, $family, $reason, $this->userFolder === '' ? (string) $cohort : '', $this->userFolder === '' && function_exists('wpc_copy_link_header_stored') && wpc_copy_link_header_stored($buffer));
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('copy-written', (string) $this->urlKey, '', [
                     'family' => $family === '' ? 'public' : 'localonly',
@@ -2884,6 +2900,13 @@ class wps_cacheHtml
 
         // (stored headers), readable same-origin via the navigation entry's serverTiming.
         wpc_send_header('Server-Timing: wpc-cache;desc=hit', false);
+        $wpc_cohort_stamp = function_exists('wpc_copy_cohort_stamp') ? wpc_copy_cohort_stamp($cache_filepath) : '';
+        if ($wpc_cohort_stamp !== '') {
+            wpc_send_header('Server-Timing: wpc-coh;desc=' . $wpc_cohort_stamp, false);
+        }
+        if (function_exists('wpc_link_headers_send_copy')) {
+            wpc_link_headers_send_copy($cache_filepath);
+        }
 
         wpc_send_header('X-Cache-By: Advanced Cache - Gzip');
     }

@@ -632,7 +632,7 @@ if (!function_exists('wpc_vitals_rollup')) {
                 return 'cohort';
             }
             $options = (array) get_option(defined('WPS_IC_OPTIONS') ? WPS_IC_OPTIONS : 'wps_ic');
-            if (empty($options['api_key']) || !is_string($options['api_key'])) {
+            if (empty($options['api_key']) || !(is_string($options['api_key']) || is_int($options['api_key']) || is_float($options['api_key']))) {
                 return 'apikey';
             }
             $state = get_option('wpc_vitals_push', []);
@@ -677,7 +677,7 @@ if (!function_exists('wpc_vitals_rollup')) {
                     $body = (string) wp_json_encode([
                         'v' => 2,
                         'kind' => 'vitals',
-                        'apikey' => $options['api_key'],
+                        'apikey' => (string) $options['api_key'],
                         'day' => $day,
                         'sample' => max(1, (int) (isset($agg['s']) ? $agg['s'] : get_option('wpc_vitals_sample', 1))),
                         'm' => $m,
