@@ -5,7 +5,7 @@ Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 8.0
 Requires at least: 6.5
 Tested up to: 7.1
-Stable tag: 7.30.30
+Stable tag: 7.30.35
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -222,7 +222,8 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 
 == Changelog ==
 
-= 7.30.30 =
+= 7.30.35 =
+* UI Patch
 * Elementor Entrance Animations and Looping Slider Improvements
 * Fixed Redirect Loop Behind Proxies and Load Balancers
 * Improved LiteSpeed Cache Compatibility

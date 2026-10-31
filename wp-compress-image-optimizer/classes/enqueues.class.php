@@ -629,6 +629,7 @@ JS;
                 'media_page_' . $this::$slug . '_optimize', 'media_page_' . $this::$slug . '_restore', 'media_page_' . $this::$slug . '_restore', 'settings_page_' . $this::$slug, 'plugins'];
 
         $this->asset_style('menu-icon', 'css/menu.wp.css');
+        wp_enqueue_style($this::$slug . '-admin-bar', WPS_IC_URI . 'assets/css/admin-bar.css', [], $this::$version);
         wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js', ['jquery'], $this::$version, true);
 
         wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
