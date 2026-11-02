@@ -52,6 +52,7 @@ add_action('init', function () {
     if (!hash_equals($key, $given)) {
         wpc_lcp_health_json(['error' => 'bad key (admin: ?wpc_lcp_health=mykey to retrieve it)'], 403);
     }
+    if (function_exists('wpc_cmd_census')) { wpc_cmd_census('get:wpc_lcp_health', 'key-token'); }
 
     // ---- build state ----
     $url     = (isset($_GET['url']) && $_GET['url'] !== '') ? esc_url_raw(urldecode((string) $_GET['url'])) : home_url('/');

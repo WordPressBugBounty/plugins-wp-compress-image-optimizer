@@ -100,6 +100,16 @@ add_action('wpc_tpl_purge_all312_ev', function () {
     }
 });
 
+add_action('wpc_static_serve_reprobe', function () {
+    wpc_cron_lane_load_core();
+    if (!class_exists('wps_ic_htaccess', false) && is_readable(__DIR__ . '/classes/htaccess.class.php')) {
+        include_once __DIR__ . '/classes/htaccess.class.php';
+    }
+    if (class_exists('wps_ic_htaccess', false)) {
+        (new wps_ic_htaccess())->reprobeStaticServe();
+    }
+});
+
 add_action('wpc_reoptimize_edited_image_event', function ($attachment_id) {
     wpc_cron_lane_load_core();
     if (class_exists('wps_local_compress', false)) {
@@ -247,9 +257,15 @@ class wps_ic_cron
         // shape as the Elementor lanes .920 already deferred).
         add_action('save_post', [$this, 'purgeCacheDeferred']);
         $purge_rules = get_option('wps_ic_purge_rules');
+        $date = null;
         if ($purge_rules && !empty($purge_rules['scheduled'])) {
-
-            $time = $purge_rules['scheduled'];
+            try {
+                $date = new DateTime('today ' . $purge_rules['scheduled'], wp_timezone());
+            } catch (\Throwable $e) {
+                $date = null;
+            }
+        }
+        if ($date) {
 
             // v7.21.345 — 'today HH:MM' is PAST for most of the day, and this block ran on
             // every cron boot: the unconditional clear+reschedule re-armed an already-due
@@ -258,7 +274,6 @@ class wps_ic_cron
             // purge-local-all hook:wps_ic_scheduled_purge_hook each tick; homepage only
             // survived because warming re-wrote it). Schedule the NEXT future occurrence,
             // and leave a schedule alone when it already fires at the configured time.
-            $date = new DateTime('today ' . $time, wp_timezone());
             $timestamp = $date->getTimestamp();
             if ($timestamp <= time()) {
                 $timestamp += DAY_IN_SECONDS;
@@ -276,6 +291,8 @@ class wps_ic_cron
                 wp_clear_scheduled_hook('wps_ic_scheduled_purge_hook');
                 wp_schedule_event($timestamp, 'daily', 'wps_ic_scheduled_purge_hook');
             }
+        } elseif (wp_next_scheduled('wps_ic_scheduled_purge_hook')) {
+            wp_clear_scheduled_hook('wps_ic_scheduled_purge_hook');
         }
 
         // Daily apikey check

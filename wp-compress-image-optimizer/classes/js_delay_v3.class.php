@@ -75,14 +75,9 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             'wpcJqueryDeferMarker',
             'ngf298gh738qwbdh0s87v_vars',
             'wpcRunningCritical',
-            'wpc-ga-bot-shield',
             'wpc-presc-reserve', // A3 uniqueness guard: apply-time count, never delayed
-            'wpc-icon-belt', // icon-guard settle belt: must observe fonts as they load, not on gesture
             'wpcVitals', // RUM collector — an observer released on gesture misses the load it
                          // exists to measure, and a bounce view never beacons at all
-            'wpc-rum-beacon',
-            'wpc-ela',
-            'wpc-dev-check',
 
             // /elementor/optimize.js (served from the service CDN) owns the deferred-STYLESHEET
             // activation (rel="wpc-stylesheet" -> stylesheet), crit-CSS cleanup, and delayed
@@ -128,7 +123,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             'sourcebuster',
             'borlabs',
 
-        ], $wpc_closure)));
+        ], $wpc_closure, self::WPC_OWN_SCRIPT_IDS)));
 
         // v7.21.25 — v3's constructor REPLACES v2's excludes list instead of extending it
         // (the literal above, merged only with $wpc_closure — v2's list never enters it), so
@@ -308,17 +303,13 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
     /** The consent managers' script and style names: the tokens the keep-eager list holds, the force-delay-consent opt-in releases, and the delay-pattern gate refuses (lowercased when $lower). */
     public static function wpc_consent_tokens($lower = false)
     {
-        $tokens = [
-            'gdpr-cookie-consent', 'cookie-law-info', 'cookieyes', 'complianz', 'cmplz',
-            'cookie-notice', 'cookie-consent', 'moove_gdpr', 'osano', 'termly', 'iubenda',
-            'wpl_cookie_consent', 'wpl_viewed_cookie', 'CookieConsent', 'cookiebot',
-            'tarteaucitron', 'onetrust', 'quantcast', 'usercentrics', 'consently',
-            'didomi', 'trustarc', 'truste.com', 'sourcepoint', 'axeptio', 'klaro', 'securiti.ai',
-            'real-cookie-banner', 'devowl', 'realCookieBanner',
-            'surecookie', 'ccm19', 'consentmanager.net', 'cookiefirst', 'cookiehub', 'cookie-script.com', 'cookieinformation',
-        ];
+        return wpc_consent_tokens($lower);
+    }
 
-        return $lower ? array_map('strtolower', $tokens) : $tokens;
+    /** The tokens that mark a tag or id as a consent manager's: the owner list plus the names the markup carries that the script keep list has no entry for. */
+    public static function wpc_consent_family_tokens()
+    {
+        return wpc_consent_family_tokens();
     }
 
     /** A1 pattern sanity gate: match[] entries are applied via userForceDelay, which
@@ -935,8 +926,6 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         $src_path = '/' . ltrim($src_path, '/');
         return isset($this->wpc_src_path_handles[$src_path]) ? $this->wpc_src_path_handles[$src_path] : '';
     }
-
-    const WPC_OWN_SCRIPT_IDS = ['wpc-css-orb-fallback', 'wpc-icon-belt', 'wpc-ga-bot-shield', 'wpc-rum-beacon', 'wpc-ela', 'wpc-dev-check'];
 
     protected function should_exclude_script($attributes, $content = '')
     {
@@ -6480,6 +6469,16 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             . 's.src=o.getAttribute("data-wpc-late-src");o.parentNode.replaceChild(s,o)})};';
     }
 
+    private static function wpc_picture_hero_wait_js()
+    {
+        return 'if(x.p){im=d.querySelector(x.p);if(!im)return;var loaded=function(){if(im.naturalWidth>0&&im.currentSrc&&im.currentSrc.indexOf("data:")!==0){im.removeEventListener("load",loaded);ok()}};im.addEventListener("load",loaded);if(im.complete)loaded();return}';
+    }
+
+    private static function wpc_picture_hero_matcher_js()
+    {
+        return 'var pm=function(e){try{for(var j=0;j<hs.length;j++){if(hs[j].p&&e&&e.currentSrc&&e.currentSrc.indexOf("data:")!==0&&e.naturalWidth>0&&e.matches&&e.matches(hs[j].p))return 1}}catch(x){}return 0};';
+    }
+
     /**
      * The JS the three hero-gated starters share for a placeholder hero (a hero entry carrying `q`): qm(element) answers 1 when the element matches the `q` of an entry of $list.
      */
@@ -6506,6 +6505,10 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         $seen = $trusted ? 'w.wpcHardSeen===1' : ($needs ? 'w.wpcGestureSeen===1' : 'w.wpcGestureSeen===1||h.classList.contains("wpc-bgl255")');
         $events = $trusted ? '["pointerdown","keydown","touchstart","wheel","click"]' : '["pointerdown","keydown","touchstart","wheel","scroll","mousemove","click"]';
         $noHero = $heroes === [];
+        $hasP = false;
+        foreach ($heroes as $hero) {
+            $hasP = $hasP || !empty($hero['p']);
+        }
         $hasQ = false;
         foreach ($heroes as $hero) {
             $noHero = $noHero || !empty($hero['m']);
@@ -6530,11 +6533,12 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             . 'E.forEach(function(e){w.addEventListener(e,on,{passive:!0,capture:!0})});'
             . ($entry ? 'if(C.e&&hs.length&&w.wpcHeroPainted){w.wpcHeroPainted(function(){setTimeout(function(){open(0)},0)})}else{' : '')
             . ($hasQ ? self::wpc_hero_q_matcher_js('hs') : '')
+            . ($hasP ? self::wpc_picture_hero_matcher_js() : '')
             . 'var left=hs.length,want=[],paint=function(){var s=0,po=0,fp=0,st=0,fin=function(){if(s)return;s=1;clearTimeout(st);try{po&&po.disconnect();fp&&fp.disconnect()}catch(x){}setTimeout(function(){open(0)},0)};var sp=function(){if(!st&&!s)st=setTimeout(fin,C.p)};'
             . 'try{fp=new PerformanceObserver(function(l){var a=l.getEntries();for(var i=0;i<a.length;i++){if(a[i].name==="first-contentful-paint"){try{fp.disconnect()}catch(x){}return sp()}}});fp.observe({type:"paint",buffered:!0});if((PerformanceObserver.supportedEntryTypes||["paint"]).indexOf("paint")<0)throw 0}catch(x){try{fp&&fp.disconnect()}catch(x){}if(w.requestAnimationFrame){w.requestAnimationFrame(function(){w.requestAnimationFrame(sp)})}else{sp()}}'
-            . 'try{po=new PerformanceObserver(function(l){var a=l.getEntries();for(var i=0;i<a.length;i++){if(want.indexOf(a[i].url)>-1' . ($hasQ ? '||qm(a[i].element)' : '') . ')return fin()}});po.observe({type:"largest-contentful-paint",buffered:!0})}'
+            . 'try{po=new PerformanceObserver(function(l){var a=l.getEntries();for(var i=0;i<a.length;i++){if(want.indexOf(a[i].url)>-1' . ($hasQ ? '||qm(a[i].element)' : '') . ($hasP ? '||pm(a[i].element)' : '') . ')return fin()}});po.observe({type:"largest-contentful-paint",buffered:!0})}'
             . 'catch(x){if(w.requestAnimationFrame){w.requestAnimationFrame(function(){w.requestAnimationFrame(fin)})}else{fin()}}},after=function(){if(--left>0)return;paint()};'
-            . 'hs.forEach(function(x){' . ($hasQ ? 'if(x.q){after();return}' : '') . 'var im=new Image(),r=0,ok=function(){if(r)return;r=1;try{want.push(im.currentSrc||new URL(x.u,d.baseURI).href)}catch(e){}after()};im.onload=im.onerror=ok;if(x.z)im.sizes=x.z;if(x.s)im.srcset=x.s;if(x.u)im.src=x.u;if(im.complete&&(im.currentSrc||im.src))ok()});'
+            . 'hs.forEach(function(x){' . ($hasQ ? 'if(x.q){after();return}' : '') . 'var im=new Image(),r=0,ok=function(){if(r)return;r=1;try{' . ($hasP ? 'if(!x.p)' : '') . 'want.push(im.currentSrc||new URL(x.u,d.baseURI).href)}catch(e){}after()};' . ($hasP ? self::wpc_picture_hero_wait_js() : '') . 'im.onload=im.onerror=ok;if(x.z)im.sizes=x.z;if(x.s)im.srcset=x.s;if(x.u)im.src=x.u;if(im.complete&&(im.currentSrc||im.src))ok()});'
             . ($lcp ? ($noHero ? 'if(!hs.length){try{var q=new PerformanceObserver(function(l){var a=l.getEntries();for(var i=0;i<a.length;i++){if(a[i].url&&a[i].size>=(w.innerWidth||0)*(w.innerHeight||0)*0.2){q.disconnect();setTimeout(function(){open(0)},0);return}}});q.observe({type:"largest-contentful-paint",buffered:!0})}catch(x){}}' : '')
                 . 'var ld=function(){setTimeout(function(){open(0)},hs.length?120:0)};if(d.readyState==="complete"){ld()}else{w.addEventListener("load",ld,{once:!0})}' : '')
             . ($entry ? '}' : '')
@@ -6555,6 +6559,10 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if (!is_string($config) || $config === '') {
             return '';
         }
+        $hasP = false;
+        foreach ($heroes as $hero) {
+            $hasP = $hasP || !empty($hero['p']);
+        }
         $hasQ = false;
         foreach ($heroes as $hero) {
             $hasQ = $hasQ || !empty($hero['q']);
@@ -6566,6 +6574,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             . 'setTimeout(go,C.c);'
             . 'var left=hs.length;' . ($hasQ ? self::wpc_hero_q_matcher_js('hs') : '') . 'hs.forEach(function(x){var im=new Image(),r=0,ok=function(){if(r)return;r=1;if(--left<1)go()};'
             . ($hasQ ? 'if(x.q){var pq=0,fq=function(){if(r)return;try{pq&&pq.disconnect()}catch(e){}ok()};try{pq=new PerformanceObserver(function(l){var a=l.getEntries();for(var i=0;i<a.length;i++){if(qm(a[i].element))return fq()}});pq.observe({type:"largest-contentful-paint",buffered:!0})}catch(e){if(w.requestAnimationFrame){w.requestAnimationFrame(function(){w.requestAnimationFrame(fq)})}else{fq()}}return}' : '')
+            . ($hasP ? self::wpc_picture_hero_wait_js() : '')
             . 'im.onload=im.onerror=ok;if(x.z)im.sizes=x.z;if(x.s)im.srcset=x.s;if(x.u)im.src=x.u;if(im.complete&&(im.currentSrc||im.src))ok()})}catch(x){go()}})();</script>';
     }
 
@@ -6584,6 +6593,10 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if (!is_string($config) || $config === '') {
             return '';
         }
+        $hasP = false;
+        foreach ($heroes as $hero) {
+            $hasP = $hasP || !empty($hero['p']);
+        }
         $hasQ = false;
         foreach ($heroes as $hero) {
             $hasQ = $hasQ || !empty($hero['q']);
@@ -6597,9 +6610,10 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             . 'var hit=function(u){if(!u||u.indexOf("data:")===0)return 0;if(W.indexOf(u)>-1)return 1;var s=st(u);return s&&S.indexOf(s)>-1?1:0};'
             . 'try{var hs=C.h.filter(function(x){return!x.m||(w.matchMedia&&w.matchMedia(x.m).matches)});if(!hs.length){fire("none");return}'
             . ($hasQ ? self::wpc_hero_q_matcher_js('hs') : '')
-            . 'hs.forEach(function(x){if(x.u)add(x.u);if(x.s)String(x.s).split(",").forEach(function(c){c=c.trim().split(/\s+/)[0];if(c)add(c)})});'
+            . ($hasP ? self::wpc_picture_hero_matcher_js() : '')
+            . 'hs.forEach(function(x){' . ($hasP ? 'if(x.p)return;' : '') . 'if(x.u)add(x.u);if(x.s)String(x.s).split(",").forEach(function(c){c=c.trim().split(/\s+/)[0];if(c)add(c)})});'
             . 'var ok=0;try{ok=!!(w.PerformanceObserver&&PerformanceObserver.supportedEntryTypes&&PerformanceObserver.supportedEntryTypes.indexOf("largest-contentful-paint")>-1)}catch(x){}'
-            . 'if(ok){try{po=new PerformanceObserver(function(l){var a=l.getEntries();for(var i=0;i<a.length;i++){if(hit(a[i].url)' . ($hasQ ? '||qm(a[i].element)' : '') . '){fire("entry");return}}});po.observe({type:"largest-contentful-paint",buffered:!0});tm=setTimeout(function(){fire("timeout")},C.t)}catch(x){ok=0;po=0}}'
+            . 'if(ok){try{po=new PerformanceObserver(function(l){var a=l.getEntries();for(var i=0;i<a.length;i++){if(hit(a[i].url)' . ($hasQ ? '||qm(a[i].element)' : '') . ($hasP ? '||pm(a[i].element)' : '') . '){fire("entry");return}}});po.observe({type:"largest-contentful-paint",buffered:!0});tm=setTimeout(function(){fire("timeout")},C.t)}catch(x){ok=0;po=0}}'
             . ($swap ? 'w.wpcHeroPaintedBy=function(){if(w.wpcHeroLqip==="swapped")fire("swap")};w.wpcHeroPaintedBy();if(f)return;' : '')
             . 'if(!ok){if(d.readyState==="complete"){fire("load")}else{w.addEventListener("load",function(){fire("load")},{once:!0})}}}catch(x){fire("error")}})();</script>';
     }
@@ -7227,6 +7241,8 @@ JS;
 
 
             'atfReveal' => apply_filters('wpc_delay_atf_anim_reveal', true) ? 1 : 0,
+
+            'animKeys' => self::WPC_ANIMATION_KEYS,
 
 
             'lateCssBackstop' => (int) apply_filters('wpc_delay_latecss_backstop', self::wpc_knob('late_css_backstop', 30000, 7500, 120000)),

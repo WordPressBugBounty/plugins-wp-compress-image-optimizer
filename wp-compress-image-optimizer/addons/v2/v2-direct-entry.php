@@ -185,6 +185,9 @@ add_action('wp_ajax_wpc_v2_redetect_direct_entry', function () {
     if (!current_user_can('manage_wpc_settings')) {
         wp_send_json_error('forbidden');
     }
+    if (!check_ajax_referer('wps_ic_nonce_action', 'nonce', false)) {
+        wp_send_json_error('bad-nonce', 403);
+    }
     $res = wpc_v2_probe_direct_entry(true);
     wp_send_json_success($res);
 });
@@ -195,8 +198,7 @@ add_action('wp_ajax_nopriv_wpc_v2_journal_drain', 'wpc_v2_journal_drain_handler'
 
 
 function wpc_v2_journal_drain_handler() {
-    // Auth via HMAC. Canonical helper also reads 'wps_ic_settings' (where the
-    // settings UI writes the api_key on fresh installs).
+    // Auth via HMAC with the connected key in 'wps_ic'.
     $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
     if ($apikey === '') {
         wp_die('', '', ['response' => 200]);
@@ -211,6 +213,7 @@ function wpc_v2_journal_drain_handler() {
         error_log('[wpc_v2_journal_drain] auth_rejected sig_mismatch');
         wp_die('', '', ['response' => 200]);
     }
+    if (function_exists('wpc_cmd_census')) { wpc_cmd_census('ajax:wpc_v2_journal_drain', 'self-hmac'); }
 
     wpc_v2_journal_drain_run();
     wp_die('', '', ['response' => 200]);
@@ -1034,7 +1037,7 @@ function wpc_v2_journal_list_files($limit = 50) {
  * they may not have wp_remote_post available in SHORTINIT.
  */
 function wpc_v2_journal_fire_loopback_from_wp() {
-    // Canonical helper (reads 'wps_ic_settings', falls back to 'wps_ic_options').
+    // Canonical helper (reads the connected key in 'wps_ic').
     $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
     if ($apikey === '') return;
     $ts = time();

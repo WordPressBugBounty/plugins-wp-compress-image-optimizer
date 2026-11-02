@@ -73,7 +73,16 @@ class wps_ic_preload_warmup
             return $force_location;
         }
 
-        $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        $timeout = 30;
+        try {
+            if (!is_admin() && !(defined('DOING_CRON') && DOING_CRON) && !wp_doing_ajax()) {
+                return ['country' => 'EU', 'server' => 'frankfurt.zapwp.net'];
+            }
+            $timeout = 5;
+        } catch (\Throwable $e) {
+        }
+
+        $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), ['timeout' => $timeout, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
         if (wp_remote_retrieve_response_code($call) == 200) {
             $body = wp_remote_retrieve_body($call);
             $body = json_decode($body);

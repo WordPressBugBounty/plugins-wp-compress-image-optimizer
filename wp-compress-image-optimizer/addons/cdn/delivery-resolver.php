@@ -54,6 +54,24 @@ class WPC_Delivery_Resolver
         return isset($n[$tier]) ? $n[$tier] : 'unknown';
     }
 
+    public static function stored_summary()
+    {
+        $state = get_option(self::STATE_OPTION, []);
+        if (!is_array($state)) $state = [];
+        $verify = isset($state['verify']) && is_array($state['verify']) ? $state['verify'] : [];
+        $cdn = isset($verify['cdn']) && is_array($verify['cdn']) ? $verify['cdn'] : [];
+        $fingerprint = get_option('wpc_delivery_applied_fp', '');
+        $tier = is_string($fingerprint) && preg_match('/^([0-3]):[01]:(?:off|webp|avif)(?::(?:plain|names))?$/D', $fingerprint, $match)
+            ? self::tier_name((int) $match[1]) : 'unknown';
+        return [
+            'tier' => $tier,
+            'cdn_ok' => isset($cdn['ok']) && is_bool($cdn['ok']) ? $cdn['ok'] : null,
+            'fails' => isset($state['fails']) ? max(0, (int) $state['fails']) : 0,
+            'detail' => isset($cdn['detail']) && is_string($cdn['detail']) ? $cdn['detail'] : '',
+            'checked' => isset($state['at']) ? max(0, (int) $state['at']) : 0,
+        ];
+    }
+
 
     //  PURE CORE — no IO, no globals. The brain. Fully unit-testable.
 
@@ -85,7 +103,7 @@ class WPC_Delivery_Resolver
         if (!self::edge_usable(is_array($caps) ? $caps : array())) return false;
         if (!is_array($caps) || (isset($caps['orch_native_accept_vary']) ? $caps['orch_native_accept_vary'] : null) !== true) return false;
         $v = (is_array($verify) && isset($verify['cdn'])) ? $verify['cdn'] : null;
-        if (!is_array($v) || !empty($v['ok'])) return false;
+        if (!is_array($v) || !array_key_exists('ok', $v) || $v['ok'] !== false) return false;
         $d = isset($v['detail']) ? (string) $v['detail'] : '';
         if ($d === '') return false;
         if (strpos($d, 'no-200') !== false || strpos($d, 'loop') !== false
@@ -112,6 +130,9 @@ class WPC_Delivery_Resolver
         $out = ['ok' => false, 'classes' => [], 'vary' => false, 'detail' => '', 'pending_orch' => false, 'inconsistent' => false];
         $want = ['avif' => ['avif', 'webp', 'jpeg'], 'webp' => ['webp', 'jpeg'], 'legacy' => ['jpeg', 'png']];
         if (!is_array($probes)) { $out['detail'] = 'no-probes'; return $out; }
+        foreach (['avif', 'webp', 'legacy'] as $pc) {
+            if (isset($probes[$pc]['url']) && !self::cdn_probe_url_negotiable($probes[$pc]['url'])) return null;
+        }
         // Note the interim-AVIF signal (additive — does NOT change pass/fail). Lets the UI
         // distinguish "edge is generating AVIF in the background" from a genuine miss.
         foreach (['avif', 'webp', 'legacy'] as $pc) {
@@ -808,6 +829,12 @@ class WPC_Delivery_Resolver
         return 'unknown';
     }
 
+    private static function cdn_probe_url_negotiable($url)
+    {
+        $path = parse_url((string) $url, PHP_URL_PATH);
+        return is_string($path) && in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['webp', 'avif'], true);
+    }
+
     /** Run the live verifications for whichever optimistic tiers are applicable. */
     public static function run_verifications($caps)
     {
@@ -815,7 +842,8 @@ class WPC_Delivery_Resolver
         $test = self::pick_test_image();
         if (!$test) return $verify;
 
-        if (self::edge_usable(is_array($caps) ? $caps : []) && !empty($test['cdn_webp_url'])) {
+        if (self::edge_usable(is_array($caps) ? $caps : []) && !empty($test['cdn_webp_url'])
+            && self::cdn_probe_url_negotiable($test['cdn_webp_url'])) {
 
 
             $probe_url = $test['cdn_webp_url'];
@@ -868,9 +896,10 @@ class WPC_Delivery_Resolver
 
         $st = self::wpc_ensure_selftest_image();
         if (is_array($st) && !empty($st['url'])
-            && class_exists('WPC_Negotiated_Delivery') && method_exists('WPC_Negotiated_Delivery', 'build_natural_url')) {
-            $st_webp = (string) WPC_Negotiated_Delivery::build_natural_url('wpc-selftest.png', ['file' => 'wpc-selftest.png']);
-            if ($st_webp !== '' && $st_webp !== $st['url']) {
+            && class_exists('WPC_Negotiated_Delivery') && method_exists('WPC_Negotiated_Delivery', 'build_probe_url')) {
+            $st_webp = (string) WPC_Negotiated_Delivery::build_probe_url('wpc-selftest.png', ['file' => 'wpc-selftest.png']);
+            if (!self::cdn_probe_url_negotiable($st_webp)) $st_webp = '';
+            if ($st_webp !== $st['url']) {
                 $cache = ['attachment_id' => 0, 'origin_jpg_url' => $st['url'], 'cdn_webp_url' => $st_webp, 'local_variant' => false, 'selftest' => true];
                 return $cache;
             }
@@ -888,6 +917,7 @@ class WPC_Delivery_Resolver
         if (empty($atts)) return $cache;
 
         $fallback = null;
+        $origin_only = null;
         foreach ($atts as $id) {
             $file = function_exists('get_attached_file') ? get_attached_file($id) : '';
             if (!$file || !file_exists($file)) continue;
@@ -896,13 +926,13 @@ class WPC_Delivery_Resolver
             if (!$jpg_url) continue;
 
             $cdn_webp = '';
-            if (class_exists('WPC_Negotiated_Delivery') && method_exists('WPC_Negotiated_Delivery', 'build_natural_url')) {
+            if (class_exists('WPC_Negotiated_Delivery') && method_exists('WPC_Negotiated_Delivery', 'build_probe_url')) {
                 $meta = function_exists('wp_get_attachment_metadata') ? wp_get_attachment_metadata($id) : [];
                 if (is_array($meta) && !empty($meta['file'])) {
-                    $cdn_webp = WPC_Negotiated_Delivery::build_natural_url(basename((string) $meta['file']), $meta);
+                    $cdn_webp = WPC_Negotiated_Delivery::build_probe_url(basename((string) $meta['file']), $meta);
                 }
             }
-            if ($cdn_webp === '') continue;
+            if (!self::cdn_probe_url_negotiable($cdn_webp)) $cdn_webp = '';
 
 
             // The swapped-name twins are asked of their owner, which withholds one a same-stem rival
@@ -928,12 +958,16 @@ class WPC_Delivery_Resolver
                 }
             }
             $entry = ['attachment_id' => (int) $id, 'origin_jpg_url' => $jpg_url, 'cdn_webp_url' => $cdn_webp, 'local_variant' => $has_local];
+            if ($cdn_webp === '') {
+                if ($origin_only === null) $origin_only = $entry;
+                continue;
+            }
             if ($has_local) { $cache = $entry; return $cache; }
 
 
             if ($fallback === null) $fallback = $entry;
         }
-        $cache = $fallback;
+        $cache = $fallback !== null ? $fallback : $origin_only;
         return $cache;
     }
 
@@ -950,7 +984,7 @@ class WPC_Delivery_Resolver
             && @file_exists(WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php')) {
             require_once WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php';
         }
-        if (!class_exists('WPC_Negotiated_Delivery') || !method_exists('WPC_Negotiated_Delivery', 'build_natural_url')) {
+        if (!class_exists('WPC_Negotiated_Delivery') || !method_exists('WPC_Negotiated_Delivery', 'build_probe_url')) {
             return $out;
         }
         $limit = max(1, min(5, (int) $limit));
@@ -979,8 +1013,8 @@ class WPC_Delivery_Resolver
                     if ($area > 0 && $area < $best_area) { $best_area = $area; $sub_file = (string) $sz['file']; }
                 }
             }
-            $cdn_webp = (string) WPC_Negotiated_Delivery::build_natural_url($sub_file, $meta);
-            if ($cdn_webp === '') continue;
+            $cdn_webp = (string) WPC_Negotiated_Delivery::build_probe_url($sub_file, $meta);
+            if (!self::cdn_probe_url_negotiable($cdn_webp)) continue;
             $out[] = ['attachment_id' => (int) $id, 'cdn_webp_url' => $cdn_webp];
             if (count($out) >= $limit) break;
         }
@@ -997,7 +1031,7 @@ class WPC_Delivery_Resolver
             && @file_exists(WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php')) {
             require_once WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php';
         }
-        if (!class_exists('WPC_Negotiated_Delivery') || !method_exists('WPC_Negotiated_Delivery', 'build_natural_url')) {
+        if (!class_exists('WPC_Negotiated_Delivery') || !method_exists('WPC_Negotiated_Delivery', 'build_probe_url')) {
             return $cache;
         }
         $atts = get_posts([
@@ -1026,8 +1060,8 @@ class WPC_Delivery_Resolver
                     if ($area > 0 && $area < $best_area) { $best_area = $area; $sub_file = (string) $sz['file']; }
                 }
             }
-            $cdn_webp = (string) WPC_Negotiated_Delivery::build_natural_url($sub_file, $meta);
-            if ($cdn_webp === '') continue;
+            $cdn_webp = (string) WPC_Negotiated_Delivery::build_probe_url($sub_file, $meta);
+            if (!self::cdn_probe_url_negotiable($cdn_webp)) continue;
             $cache = ['attachment_id' => (int) $id, 'cdn_webp_url' => $cdn_webp];
             return $cache;
         }
@@ -1190,6 +1224,27 @@ class WPC_Delivery_Resolver
         $prior_for_sig = is_array($prior_state)
             && isset($prior_state['sig']) && $prior_state['sig'] === $sig
             && isset($prior_state['verify']) && is_array($prior_state['verify']);
+
+        if ($prior_for_sig && (!isset($fresh_verify['cdn'])
+                || (is_array($fresh_verify['cdn']) && (!array_key_exists('ok', $fresh_verify['cdn']) || $fresh_verify['cdn']['ok'] === null)))
+            && isset($prior_state['verify']['cdn']) && is_array($prior_state['verify']['cdn'])) {
+            $ht = isset($fresh_verify['htaccess']) && is_array($fresh_verify['htaccess']) ? $fresh_verify['htaccess'] : [];
+            if (isset($ht['ok']) && is_bool($ht['ok'])) {
+                $prior_ht_ok = isset($prior_state['verify']['htaccess']['ok']) && $prior_state['verify']['htaccess']['ok'] === true;
+                if ($ht['ok']) {
+                    $prior_state['fails'] = 0;
+                } elseif ($prior_ht_ok) {
+                    $prior_state['fails'] = (int) (isset($prior_state['fails']) ? $prior_state['fails'] : 0) + 1;
+                }
+                if ($ht['ok'] || !$prior_ht_ok || $prior_state['fails'] >= self::VERIFY_FAIL_GRACE) {
+                    $prior_state['verify']['htaccess'] = $ht;
+                }
+            }
+            $prior_state['held'] = 1;
+            $prior_state['inconclusive'] = 1;
+            $prior_state['at'] = self::now();
+            return $prior_state;
+        }
 
         $prior_proven = $prior_for_sig && (
             (isset($prior_state['verify']['cdn']['ok']) && $prior_state['verify']['cdn']['ok'] === true)

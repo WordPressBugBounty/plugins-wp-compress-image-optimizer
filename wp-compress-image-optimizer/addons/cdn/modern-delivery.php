@@ -1017,7 +1017,7 @@ class WPC_Modern_Delivery
 
         $mime = ($format === 'avif') ? 'image/avif' : (($format === 'webp') ? 'image/webp' : 'image/jpeg');
         // Pick a middle-width entry as the primary href (neither smallest nor largest)
-        $entries = array_map('trim', explode(',', $preload_srcset));
+        $entries = wpc_srcset_entries($preload_srcset) ?: [''];
         $href_entry = $entries[intval(count($entries) / 2)] ?? $entries[0];
         $href = trim(preg_replace('/\s+\d+w$/', '', $href_entry));
 
@@ -1115,8 +1115,8 @@ class WPC_Modern_Delivery
             $merge_census_rungs = function ($srcset, $extras) {
                 if (empty($extras)) { return $srcset; }
                 $have = [];
-                foreach (preg_split('/\s*,\s*/', (string) $srcset) as $c) {
-                    if (preg_match('/\s(\d+)w$/', trim($c), $m)) { $have[(int) $m[1]] = 1; }
+                foreach (wpc_srcset_entries((string) $srcset) as $c) {
+                    if (preg_match('/\s(\d+)w$/', $c, $m)) { $have[(int) $m[1]] = 1; }
                 }
                 $add = [];
                 foreach ($extras as $e) {
@@ -1195,7 +1195,7 @@ class WPC_Modern_Delivery
         // Determine <img> fallback src — use a mid-size jpeg variant, or original
         $fallback_src = '';
         if (!empty($jpg_srcset)) {
-            $entries = array_map('trim', explode(',', $jpg_srcset));
+            $entries = wpc_srcset_entries($jpg_srcset) ?: [''];
             $mid_entry = $entries[intval(count($entries) / 2)] ?? $entries[0];
             $fallback_src = trim(preg_replace('/\s+\d+w$/', '', $mid_entry));
         } else {

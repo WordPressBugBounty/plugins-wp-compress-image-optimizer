@@ -1,3 +1,61 @@
+if (!window.wpcNonceFix) {
+    window.wpcNonceFix = {
+        refresh: function (done) {
+            jQuery.ajax({url: window.ajaxurl, type: 'POST', timeout: 15000, data: {action: 'wps_ic_refresh_nonce'}}).done(function (r) {
+                var n = (r && r.success && r.data && r.data.nonce) ? String(r.data.nonce) : '';
+                if (n) {
+                    if (window.ajaxVar) { window.ajaxVar.nonce = n; }
+                    if (window.wpc_ajaxVar) { window.wpc_ajaxVar.nonce = n; }
+                }
+                done(n);
+            }).fail(function () { done(''); });
+        },
+        refused: function (xhr) {
+            var body = xhr ? String(xhr.responseText || '') : '';
+            if (xhr && (xhr.status === 401 || (xhr.status === 400 && body === '0'))) { return 'out'; }
+            return (xhr && xhr.status === 403 && body.indexOf('bad-nonce') !== -1) ? 'stale' : '';
+        },
+        reload: function () {
+            try {
+                var t = parseInt(window.sessionStorage.getItem('wpcNonceReload'), 10) || 0;
+                if (Date.now() - t < 300000) { return false; }
+                window.sessionStorage.setItem('wpcNonceReload', String(Date.now()));
+            } catch (e) { return false; }
+            window.onbeforeunload = null;
+            window.location.reload();
+            return true;
+        },
+        recover: function (xhr, retried, retry, giveUp) {
+            var self = window.wpcNonceFix, kind = self.refused(xhr);
+            if (!kind) { return false; }
+            if (retried || kind === 'out') {
+                if (!self.reload()) { giveUp(); }
+                return true;
+            }
+            self.refresh(function (n) {
+                if (n) { retry(n); } else if (!self.reload()) { giveUp(); }
+            });
+            return true;
+        },
+        send: function (opts, onFail) {
+            var self = window.wpcNonceFix, retried = false, inner = jQuery.extend({}, opts);
+            function fail(xhr, st, err) {
+                if (opts.error) { opts.error(xhr, st, err); }
+                if (onFail) { onFail(xhr); }
+            }
+            inner.error = function (xhr, st, err) {
+                var again = function (n) {
+                    retried = true;
+                    inner.data = jQuery.extend({}, inner.data, {nonce: n});
+                    jQuery.ajax(inner);
+                };
+                if (!self.recover(xhr, retried, again, function () { fail(xhr, st, err); })) { fail(xhr, st, err); }
+            };
+            jQuery.ajax(inner);
+        }
+    };
+}
+
 jQuery(document).ready(function ($) {
 
     // v7.02 — Mirror to window so the global onbeforeunload handler below
@@ -1174,12 +1232,13 @@ jQuery(document).ready(function ($) {
         // flicker during in-flight ic_savings recompute).
         window['wpcSavingsMax_' + attachment_id] = 0;
 
-        $.ajax({
+        window.wpcNonceFix.send({
             url: ajaxurl,
             type: 'POST',
             timeout: 90000,
             data: {
                 action: 'wps_ic_restore_live',
+                nonce: wpc_ajaxVar.nonce,
                 attachment_id: attachment_id,
             },
             success: function (response) {
@@ -1393,7 +1452,7 @@ jQuery(document).ready(function ($) {
         // Ensure heartbeat is in burst mode so chip cadence is 500ms not 8s.
         heartbeatBurst();
 
-        $.ajax({
+        window.wpcNonceFix.send({
             url: ajaxurl,
             type: 'POST',
             // 7.01.1 — 60s timeout accommodates blocking AJAX (~3-6s typical, up to ~15s worst case under service transient).
@@ -1401,6 +1460,7 @@ jQuery(document).ready(function ($) {
             timeout: 60000,
             data: {
                 action: 'wps_ic_compress_live',
+                nonce: wpc_ajaxVar.nonce,
                 bulk: false,
                 attachment_id: attachment_id
             },
@@ -1518,6 +1578,15 @@ jQuery(document).ready(function ($) {
                 }
                 heartbeatBurst();
                 button.removeClass('wpc-action-pending');
+            }
+        }, function (xhr) {
+            if (xhr && (xhr.status === 403 || window.wpcNonceFix.refused(xhr))) {
+                if (window['wpcLoadingPhase_' + attachment_id]) {
+                    clearTimeout(window['wpcLoadingPhase_' + attachment_id]);
+                    delete window['wpcLoadingPhase_' + attachment_id];
+                }
+                card.removeClass('is-compressing');
+                wpcWatchCard(attachment_id, { maxAttempts: 1, interval: 500 });
             }
         });
     });

@@ -1115,8 +1115,8 @@ HTACCESS;
 
     /**
      * Rewrites the static-serve block when it is live and differs from what the rules are now (a
-     * cookie list was saved, the phase switch changed); answers whether it wrote. No self-test: the
-     * rules differ only in their cookie conditions.
+     * cookie list was saved, the phase switch changed); answers whether it wrote. A write leaves a
+     * receipt and schedules one re-probe (reprobeStaticServe) instead of testing inline.
      */
     public function refreshStaticServeBlock()
     {
@@ -1138,7 +1138,36 @@ HTACCESS;
         if (empty($rules) || strpos($content, '#StartWPC-StaticServe' . PHP_EOL . $rules . '#EndWPC-StaticServe') !== false) {
             return false;
         }
-        return $this->writeStaticServeBlock() !== false;
+        $wrote = $this->writeStaticServeBlock() !== false;
+        if ($wrote) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('static-serve-refreshed', '', '', ['bytes' => strlen($rules)]);
+            }
+            if (function_exists('wp_next_scheduled') && function_exists('wp_schedule_single_event') && !wp_next_scheduled('wpc_static_serve_reprobe')) {
+                wp_schedule_single_event(time() + 60, 'wpc_static_serve_reprobe');
+            }
+        }
+        return $wrote;
+    }
+
+    /** The one re-probe after a refresh rewrote the live block: runs the self-test, leaves its verdict in the probe option and a receipt, and changes nothing else. */
+    public function reprobeStaticServe()
+    {
+        if ((int) get_option('wpc_static_serve_active', 0) !== 1) {
+            return null;
+        }
+        if (method_exists($this, 'isApache')) {
+            $this->isApache();
+        }
+        $this->htaccessPath = $this->getHtaccessPath();
+        if (empty($this->htaccessPath) || !$this->staticServeBlockPresent()) {
+            return null;
+        }
+        $ok = (bool) $this->staticServeSelfTest();
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('static-serve-reprobe', '', '', ['ok' => $ok ? 1 : 0]);
+        }
+        return $ok;
     }
 
     public function removeHtaccessRules()
@@ -1331,13 +1360,13 @@ HTACCESS;
     public function setAdvancedCache()
     {
         if (self::pageCacheBlocked()) {
-            return;
+            return 'blocked';
         }
         $error = false;
         $this->advancedCachePath = $this->getAdvancedCachePath();
 
         if (!$this->advancedCachePath) {
-            return;
+            return 'no-path';
         }
 
         if (function_exists('wpc_advanced_cache_dropin_state') && wpc_advanced_cache_dropin_state($this->advancedCachePath) === 'foreign') {
@@ -1345,7 +1374,7 @@ HTACCESS;
                 set_transient('wpc_dropin_foreign_kept', 1, 6 * HOUR_IN_SECONDS);
                 wpc_cache_first_log('drop-in-foreign-kept', '', '', ['path' => basename(dirname($this->advancedCachePath)) . '/' . basename($this->advancedCachePath)]);
             }
-            return;
+            return 'foreign';
         }
 
         // Is the file writeable?
@@ -1360,7 +1389,7 @@ HTACCESS;
             $this->notice('not-readable-adv-cache');
         }
 
-        if ($error) return;
+        if ($error) return 'not-writable';
 
         // Get Contents
         $advancedCacheSample = $this->getContents(WPS_IC_DIR . 'templates/samples/advancedCacheSample.php');
@@ -1482,13 +1511,16 @@ HTACCESS;
             $homePathReplacement = "#WPC_HOME_PATH_START\ndefine('WPC_HOME_PATH', " . $homePathConstant . ");\n#WPC_HOME_PATH_END";
             $newContents = preg_replace("/$homePathPattern/s", str_replace(['\\', '$'], ['\\\\', '\\$'], $homePathReplacement), $newContents);
 
+            $verdict = 'unchanged';
             if ($newContents !== $currentAdvancedCache) {
-                wpc_fs_put($this->advancedCachePath, $newContents);
+                $verdict = wpc_fs_put($this->advancedCachePath, $newContents) === false ? 'not-writable' : 'written';
             }
             if (function_exists('wpc_cache_phase_on') && wpc_cache_phase_on('p4')) {
                 $this->refreshStaticServeBlock();
             }
+            return $verdict;
         }
+        return 'no-template';
     }
 
     private function advancedCacheFilePath()

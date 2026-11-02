@@ -17,21 +17,9 @@ if (!defined('WPC_V2_CAPS_TTL'))           define('WPC_V2_CAPS_TTL',           8
 if (!function_exists('wpc_v2_get_apikey')) {
     function wpc_v2_get_apikey()
     {
-        // 1) Canonical — `wps_ic` option (WPS_IC_OPTIONS).
         $canon = get_option('wps_ic');
         if (is_array($canon) && !empty($canon['api_key'])) {
             return (string) $canon['api_key'];
-        }
-        // 2) Migration-staging option `wps_ic_options` (WPS_IC_OPTIONS_V2).
-        $migration = get_option('wps_ic_options');
-        if (is_array($migration) && !empty($migration['api_key'])) {
-            return (string) $migration['api_key'];
-        }
-        // 3) Settings option `wps_ic_settings` — `api_key` field is rarely
-        //    populated there but check as last resort.
-        $settings = get_option('wps_ic_settings');
-        if (is_array($settings) && !empty($settings['api_key'])) {
-            return (string) $settings['api_key'];
         }
         return '';
     }
@@ -644,6 +632,7 @@ if (!function_exists('wpc_lazy_v2_drain_ajax')) {
         if (!$valid) {
             wp_die('bad nonce', 403);
         }
+        if (function_exists('wpc_cmd_census')) { wpc_cmd_census(wpc_cmd_door(), 'self-hmac'); }
 
 
         $existing = get_post_meta($attachment_id, 'ic_local_variants', true);

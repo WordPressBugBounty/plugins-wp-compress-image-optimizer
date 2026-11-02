@@ -348,6 +348,22 @@ if (!function_exists('wpc_v2_store_bytes')) {
             return ['ok' => false, 'error' => 'outside_root', 'msg' => ''];
         }
 
+        if (isset($opts['variant']) && is_array($opts['variant']) && wpc_v2_twin_collides($dest, (int) ($opts['variant']['id'] ?? 0))) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('variant-twin-refused', '', '', ['id' => (int) ($opts['variant']['id'] ?? 0), 'vs' => basename($dest)]);
+            }
+            $settled = wpc_v2_variant_settle($opts['variant'], 'twin_collides');
+            return [
+                'ok'             => false,
+                'error'          => 'twin_collides',
+                'msg'            => basename($dest),
+                'bytes'          => strlen($bytes),
+                'settled'        => true,
+                'recorded'       => $settled['recorded'],
+                'drain_complete' => $settled['drain_complete'],
+            ];
+        }
+
         // A variant never replaces a smaller file. The rule lives here, in the one writer, so every
         // landing lane obeys it (wpc_v2_variant_larger_than_disk).
         if (isset($opts['variant']) && is_array($opts['variant'])) {
@@ -450,10 +466,10 @@ if (!function_exists('wpc_v2_store_bytes')) {
      * mirrors this order inline.
      *
      * Rule: the plugin writes a .jpg beside a .png source (the jpeg output of a PNG dispatch) and
-     * never a .png beside a .jpg, and WordPress (since 5.3.1, wp_unique_filename /
-     * _wp_check_existing_file_names) never lets two uploads share one stem with different
-     * extensions in a directory, so when both exist the png is the attachment's own file and the
-     * jpg is ours. Hence png first.
+     * never a .png beside a .jpg, so when both exist the png is usually the attachment's own file
+     * and the jpg ours. Hence png first. WordPress does let two uploads share one stem with
+     * different extensions (7.1.4 keeps stemtest.png beside stemtest.jpg), so the jpg can be its
+     * own attachment; wps_ic_image_variants::held_by_others is what tells them apart.
      *
      * Observed (gmob.ca, ticket 12231, 2026-10-14): with the order jpg, jpeg, png a PNG's July jpg
      * twin answered the missing .webp request through the fast-404 redirect, and the CDN cached
@@ -473,6 +489,46 @@ if (!function_exists('wpc_v2_store_bytes')) {
             }
         }
         return '';
+    }
+
+    /**
+     * True when $dest is a format attachment $id did not upload and the name is another upload's:
+     * the output would replace that upload's file or one of its sizes (a logo.png beside a logo.jpg
+     * or a logo.webp in one month), or it is a WebP or AVIF of a stem whose other upload outranks
+     * this one (wpc_outranking_upload_names, the rule the twin listing asks). A file no other
+     * attachment names is this image's own twin. Reads $wpdb only: the direct-entry files run this
+     * under SHORTINIT.
+     */
+    function wpc_v2_twin_collides($dest, $id)
+    {
+        global $wpdb;
+        $id = (int) $id;
+        $ext = strtolower((string) pathinfo($dest, PATHINFO_EXTENSION));
+        $nextgen = in_array($ext, ['webp', 'avif'], true);
+        $present = @is_file($dest);
+        if ($id <= 0 || (!$present && !$nextgen)) {
+            return false;
+        }
+        if (!isset($wpdb) || !is_object($wpdb) || !method_exists($wpdb, 'get_var')) {
+            return false;
+        }
+        $rel = str_replace('\\', '/', (string) $wpdb->get_var($wpdb->prepare("SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = '_wp_attached_file' LIMIT 1", $id)));
+        $upload_ext = strtolower((string) pathinfo($rel, PATHINFO_EXTENSION));
+        if ($rel === '' || str_replace('jpeg', 'jpg', $ext) === str_replace('jpeg', 'jpg', $upload_ext)) {
+            return false;
+        }
+        $prefix = strpos($rel, '/') !== false ? substr($rel, 0, strrpos($rel, '/') + 1) : '';
+        $stem = preg_replace('/-scaled$/', '', (string) pathinfo($rel, PATHINFO_FILENAME));
+        $rels = $present ? [$prefix . basename($dest), $prefix . $stem . '.' . $ext, $prefix . $stem . '-scaled.' . $ext] : [];
+        if ($nextgen) {
+            $rels = array_merge($rels, wpc_outranking_upload_names(dirname((string) $dest), $rel));
+        }
+        if (empty($rels)) {
+            return false;
+        }
+        $marks = implode(',', array_fill(0, count($rels), '%s'));
+        $hit = $wpdb->get_var($wpdb->prepare("SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND post_id <> %d AND meta_value IN ({$marks}) LIMIT 1", $id, ...$rels));
+        return !empty($hit);
     }
 
     /**

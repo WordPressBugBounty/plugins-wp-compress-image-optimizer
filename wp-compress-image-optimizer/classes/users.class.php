@@ -94,7 +94,7 @@ class wps_ic_users extends wps_ic{
 
     public static function isLocalOnlySetting($key)
     {
-        return in_array(strtolower(trim((string) $key)), ['permissions'], true);
+        return in_array(strtolower(trim((string) $key)), ['permissions', 'api_key'], true);
     }
 
 

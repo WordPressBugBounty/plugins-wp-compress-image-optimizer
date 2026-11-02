@@ -819,6 +819,17 @@ class WPC_Negotiated_Delivery
         return !self::$jpeg_mode && !self::$modeb_test && function_exists('wpc_image_plain_on') && wpc_image_plain_on();
     }
 
+    public static function build_probe_url($sub_file, $meta)
+    {
+        $prev = self::$plain;
+        self::$plain = false;
+        try {
+            return (string) self::build_natural_url($sub_file, $meta);
+        } finally {
+            self::$plain = $prev;
+        }
+    }
+
     public static function build_natural_url($sub_file, $meta)
     {
         $host = self::cdn_host();

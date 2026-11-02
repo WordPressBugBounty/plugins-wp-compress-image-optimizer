@@ -721,6 +721,9 @@ if (!function_exists('wpc_register_manual_process_ajax')) {
         if (!current_user_can('manage_options')) {
             wp_die('Forbidden', '', ['response' => 403]);
         }
+        if (!check_ajax_referer('wps_ic_nonce_action', 'nonce', false)) {
+            wp_die('Forbidden', '', ['response' => 403]);
+        }
         $processed = wpc_handle_async_ladder_gen(10, 'manual');
         $queue = get_option('wpc_ladder_gen_queue', []);
         wp_send_json_success([
@@ -2678,7 +2681,7 @@ class wps_local_compress
      */
     public function wpc_get_expected_api_key($apikey) {
         if (!wpc_site_key_matches($apikey)) {
-            wp_send_json_error('Unauthorized: apikey ' . $apikey, 403);
+            wp_send_json_error('Unauthorized', 403);
         }
 
         $options = get_option(WPS_IC_OPTIONS);
@@ -2800,7 +2803,7 @@ class wps_local_compress
         $imagesCompressed = get_post_meta($post_id, 'wpc_images_compressed', true);
         if (!empty($imagesCompressed) && is_array($imagesCompressed)) {
             foreach ($imagesCompressed as $image => $data) {
-                if (!empty($data['webp_path']) && file_exists($data['webp_path'])) {
+                if (!empty($data['webp_path']) && file_exists($data['webp_path']) && !wps_ic_image_variants::held_upload($data['webp_path'])) {
                     unlink($data['webp_path']);
                 }
             }
@@ -2812,7 +2815,7 @@ class wps_local_compress
             foreach ($variants as $variant) {
                 if (!is_array($variant)) continue;
                 foreach (['avif_path', 'webp_path', 'jpg_path'] as $pathKey) {
-                    if (!empty($variant[$pathKey]) && file_exists($variant[$pathKey])) {
+                    if (!empty($variant[$pathKey]) && file_exists($variant[$pathKey]) && !wps_ic_image_variants::held_upload($variant[$pathKey])) {
                         @unlink($variant[$pathKey]);
                     }
                 }
@@ -3816,9 +3819,23 @@ class wps_local_compress
             }
         }
 
-        $deleted = 0;
+        $found = [];
         foreach (array_keys($twins) as $twin) {
-            if (isset($own[$twin]) || !@is_file($twin)) {
+            if (!isset($own[$twin]) && @is_file($twin)) {
+                $found[$twin] = (string) pathinfo($twin, PATHINFO_FILENAME);
+            }
+        }
+        if (!$found) {
+            return 0;
+        }
+        $held = wps_ic_image_variants::held_by_others($imageID, array_values(array_unique(array_merge([$stem], array_values($found)))));
+        if (isset($held[$stem])) {
+            return 0;
+        }
+
+        $deleted = 0;
+        foreach ($found as $twin => $name) {
+            if (isset($held[$name])) {
                 continue;
             }
             $bytes = (int) @filesize($twin);

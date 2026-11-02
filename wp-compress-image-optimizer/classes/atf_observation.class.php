@@ -1050,8 +1050,7 @@ class wps_ic_atf_observation
         if ($zone === '' || !is_string($to) || !preg_match('#^https://([a-z0-9.-]+)(/[^?\#\s"\'<>\\\\@]*)$#Di', $to, $address) || strtolower($address[1]) !== $zone) {
             return 'zone';
         }
-        if (!class_exists('wps_rewriteLogic') || !wps_rewriteLogic::isImage((string) $was) || wps_rewriteLogic::isExcluded((string) $was)
-            || wps_rewriteLogic::isExcludedFrom('cdn', (string) $was)) {
+        if (!class_exists('wps_rewriteLogic') || !wps_rewriteLogic::wpc_rung_zone_lane((string) $was)) {
             return 'lane';
         }
         $wasPath = (string) parse_url((string) $was, PHP_URL_PATH);
@@ -1108,7 +1107,8 @@ class wps_ic_atf_observation
 
     /**
      * The smaller WordPress size a phone's background hero is painted from, one answer for every reader: the service's
-     * record (bgMobileSourceCrit) whenever it holds one, ok or refused, else the record this render derived
+     * record (bgMobileSourceCrit) whenever it holds one, ok or refused (a record refused 'lane' gives way to the record this
+     * render derived, bgMobileSourceStands), else the record this render derived
      * (setBgDerived), else []. Only 'mobile' is answered.
      */
     public static function bgMobileSource($device)
@@ -1117,10 +1117,16 @@ class wps_ic_atf_observation
             return [];
         }
         $crit = self::bgMobileSourceCrit($device);
-        if ($crit !== []) {
+        if ($crit !== [] && (self::bgMobileSourceStands($crit) || self::$bgDerived === [])) {
             return $crit;
         }
         return self::$bgDerived;
+    }
+
+    /** Whether the service's record $crit (bgMobileSourceCrit) stands in the way of the plugin's own pick: any record but one refused 'lane', the one refusal that says the zone is not this file's lane, not that the service's record is untrustworthy. */
+    public static function bgMobileSourceStands(array $crit)
+    {
+        return $crit !== [] && !(isset($crit['state'], $crit['why']) && $crit['state'] === 'refused' && $crit['why'] === 'lane');
     }
 
     /**

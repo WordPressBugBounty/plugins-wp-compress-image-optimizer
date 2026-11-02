@@ -2188,7 +2188,7 @@ class wps_cacheHtml
         }
         $type_lists = [];
         if (!empty($purge_rules['type-lists'])) {
-            $type_lists = $purge_rules['type-lists'];
+            $type_lists = array_filter((array) $purge_rules['type-lists'], 'is_array');
         }
 
         if (is_archive() || is_category() || is_tag() || is_author() || is_date() || is_post_type_archive() || is_tax()) {
@@ -3128,6 +3128,10 @@ class wps_cacheHtml
             foreach (['index.html_br', 'index.html_gzip', 'index.html'] as $copy_file) {
                 $source_path = $dir . '/' . $copy_prefix . $copy_file;
                 if (@is_file($source_path) && @rename($source_path, $dir . '/' . $copy_prefix . str_replace('index.html', 'stale.html', $copy_file))) {
+                    try {
+                        @touch($dir . '/' . $copy_prefix . str_replace('index.html', 'stale.html', $copy_file));
+                    } catch (\Throwable $e) {
+                    }
                     $n++;
                 }
             }

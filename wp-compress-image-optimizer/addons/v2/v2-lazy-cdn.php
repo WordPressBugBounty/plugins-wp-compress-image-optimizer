@@ -285,6 +285,13 @@ if (!function_exists('wpc_landed_purge_drain')) {
         if ($key === '') {
             return 0;
         }
+        $backoff = get_option('wpc_landed_purge_backoff', []);
+        $backoff = is_array($backoff) ? $backoff : [];
+        $wait = (int) ($backoff['until'] ?? 0) - time();
+        if ($wait > 0) {
+            wpc_landed_purge_schedule_drain($wait);
+            return 0;
+        }
         if (get_transient('wpc_landed_purge_draining88')) {
             wpc_landed_purge_schedule_drain(60);
             return 0;
@@ -296,9 +303,10 @@ if (!function_exists('wpc_landed_purge_drain')) {
             return 0;
         }
         if (function_exists('set_time_limit')) { @set_time_limit(120); }
+        $done = [];
         $urls = array_keys($spool);
         $sent = 0;
-        $done = [];
+        $failed = false;
         $chunks = array_chunk($urls, 200);
         $deadline = microtime(true) + 60;
         foreach ($chunks as $i => $chunk) {
@@ -320,6 +328,7 @@ if (!function_exists('wpc_landed_purge_drain')) {
                 wpc_cache_first_log('landed-purge-deferred', '', '', ['urls' => count($chunk), 'http' => $http, 'spool' => count($spool)]);
             }
             error_log('[WPC LazyCDN] landed purge deferred urls=' . count($chunk) . ' http=' . $http . ' spool=' . count($spool));
+            $failed = true;
             break;
         }
         $locked = wpc_landed_purge_acquire_lock();
@@ -335,8 +344,16 @@ if (!function_exists('wpc_landed_purge_drain')) {
             wpc_landed_purge_release_lock();
         }
         delete_transient('wpc_landed_purge_draining88');
+        $delay = 60;
+        if ($failed && $sent === 0) {
+            $fails = (int) ($backoff['fails'] ?? 0) + 1;
+            $delay = min(900, 60 * (2 ** min($fails - 1, 4)));
+            update_option('wpc_landed_purge_backoff', ['fails' => $fails, 'until' => time() + $delay], false);
+        } elseif ($backoff) {
+            delete_option('wpc_landed_purge_backoff');
+        }
         if (!empty($fresh)) {
-            wpc_landed_purge_schedule_drain(60);
+            wpc_landed_purge_schedule_drain($delay);
         }
         return $sent;
     }
@@ -1405,6 +1422,16 @@ if (!function_exists('wpc_v2_lazy_cdn_ingest')) {
         if (!in_array($wpc_out_ext, ['avif', 'webp'], true)) {
             wpc_v2_lazy_outcome('ack_non_nextgen');
             error_log('[WPC LazyCDN] ack-skip: non-next-gen variant ext=' . $wpc_out_ext . ' (lazy writes avif/webp only) ' . substr($abs_path, -50));
+            return true;
+        }
+        if ($master_id > 0 && function_exists('wpc_v2_twin_collides') && wpc_v2_twin_collides($abs_path, $master_id)) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('variant-twin-refused', '', '', ['id' => $master_id, 'vs' => basename($abs_path)]);
+            }
+            if (function_exists('wpc_v2_variant_settle')) {
+                wpc_v2_variant_settle(['id' => $master_id, 'size' => $size_label, 'fmt' => $format], 'twin_collides');
+            }
+            wpc_v2_lazy_outcome('ack_twin_collides');
             return true;
         }
 

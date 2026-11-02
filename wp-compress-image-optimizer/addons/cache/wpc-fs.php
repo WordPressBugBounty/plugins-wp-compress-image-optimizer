@@ -62,8 +62,9 @@ if (!function_exists('wpc_fs_update')) {
      * null to leave the file untouched. Returns [ok(bool), result(mixed)] where result is
      * $cb's second return value; ok is false when the lock or the write could not be had.
      */
-    function wpc_fs_update($path, $cb, $nonblock = false)
+    function wpc_fs_update($path, $cb, $nonblock = false, &$wouldBlock = null)
     {
+        $wouldBlock = false;
         $path = (string) $path;
         if ($path === '' || !is_callable($cb)) {
             return [false, null];
@@ -72,7 +73,8 @@ if (!function_exists('wpc_fs_update')) {
         if (!$fh) {
             return [false, null];
         }
-        if (!@flock($fh, $nonblock ? (LOCK_EX | LOCK_NB) : LOCK_EX)) {
+        if (!@flock($fh, $nonblock ? (LOCK_EX | LOCK_NB) : LOCK_EX, $blocked)) {
+            $wouldBlock = !empty($blocked);
             @fclose($fh);
             return [false, null];
         }
@@ -344,6 +346,126 @@ if (!function_exists('wpc_image_source_exts')) {
     function wpc_image_source_exts()
     {
         return ['png', 'PNG', 'jpg', 'JPG', 'jpeg', 'JPEG', 'gif', 'GIF'];
+    }
+}
+
+if (!function_exists('wpc_outranking_upload_names')) {
+    /**
+     * The _wp_attached_file values that would outrank upload $rel for the twin names of its stem: each
+     * source spelling above its own in wpc_image_source_exts() with a file of that stem or its -scaled
+     * form in $dir, as an upload or its -scaled copy. The landing guard and the twin listing both ask
+     * this, so what one refuses the other never expects to delete.
+     */
+    function wpc_outranking_upload_names($dir, $rel)
+    {
+        $rel = str_replace('\\', '/', (string) $rel);
+        $prefix = strpos($rel, '/') !== false ? substr($rel, 0, strrpos($rel, '/') + 1) : '';
+        $own = strtolower((string) pathinfo($rel, PATHINFO_EXTENSION));
+        $stem = preg_replace('/-scaled$/', '', (string) pathinfo($rel, PATHINFO_FILENAME));
+        $names = [];
+        foreach (wpc_image_source_exts() as $spelling) {
+            if (strtolower($spelling) === $own) {
+                break;
+            }
+            if (@is_file($dir . '/' . $stem . '.' . $spelling) || @is_file($dir . '/' . $stem . '-scaled.' . $spelling)) {
+                $names[] = $prefix . $stem . '.' . $spelling;
+                $names[] = $prefix . $stem . '-scaled.' . $spelling;
+            }
+        }
+        return $names;
+    }
+}
+
+if (!function_exists('wpc_consent_tokens')) {
+    /** The consent managers' script and style names (lowercased when $lower): the one list the delay engine, the late-chain guards and the markup readers all take. */
+    function wpc_consent_tokens($lower = false)
+    {
+        $tokens = [
+            'gdpr-cookie-consent', 'cookie-law-info', 'cookieyes', 'complianz', 'cmplz',
+            'cookie-notice', 'cookie-consent', 'moove_gdpr', 'osano', 'termly', 'iubenda',
+            'wpl_cookie_consent', 'wpl_viewed_cookie', 'CookieConsent', 'cookiebot',
+            'tarteaucitron', 'onetrust', 'quantcast', 'usercentrics', 'consently',
+            'didomi', 'trustarc', 'truste.com', 'sourcepoint', 'axeptio', 'klaro', 'securiti.ai',
+            'real-cookie-banner', 'devowl', 'realCookieBanner',
+            'surecookie', 'ccm19', 'consentmanager.net', 'cookiefirst', 'cookiehub', 'cookie-script.com', 'cookieinformation',
+        ];
+
+        return $lower ? array_map('strtolower', $tokens) : $tokens;
+    }
+}
+
+if (!function_exists('wpc_consent_family_tokens')) {
+    /** The tokens that mark a tag or id as a consent manager's: the owner list plus the names the markup carries that the script keep list has no entry for. */
+    function wpc_consent_family_tokens()
+    {
+        return array_values(array_unique(array_merge(wpc_consent_tokens(), ['cky-consent', 'cky-style', 'borlabs', 'moove-gdpr'])));
+    }
+}
+
+if (!function_exists('wpc_srcset_parse')) {
+    /**
+     * A srcset read the way a browser reads it: an address is a run of non-space characters, so a
+     * comma inside it (Cloudinary w_600,h_400, imgix) belongs to it, and a comma ends a candidate
+     * only after a descriptor or before a space. One row per candidate, none left out:
+     * [address, descriptor as written, the whole candidate as written].
+     */
+    function wpc_srcset_parse($srcset)
+    {
+        $parsed = [];
+        if (!preg_match_all('/([^\s,](?:\S*[^\s,])?)(?:,+(?=\s|$)|\s+([^,]*))?/', (string) $srcset, $found, PREG_SET_ORDER)) {
+            return $parsed;
+        }
+        foreach ($found as $one) {
+            $parsed[] = [$one[1], isset($one[2]) ? trim($one[2]) : '', trim(rtrim(trim($one[0]), ','))];
+        }
+        return $parsed;
+    }
+}
+
+if (!function_exists('wpc_srcset_entries')) {
+    /** The candidates of a srcset as "address descriptor" strings, every one of them, in the form the page wrote them. */
+    function wpc_srcset_entries($srcset)
+    {
+        return array_map(function ($row) { return $row[2]; }, wpc_srcset_parse($srcset));
+    }
+}
+
+if (!function_exists('wpc_srcset_urls')) {
+    /** The address of every candidate of a srcset, descriptors dropped, none left out. */
+    function wpc_srcset_urls($srcset)
+    {
+        return array_map(function ($row) { return $row[0]; }, wpc_srcset_parse($srcset));
+    }
+}
+
+if (!function_exists('wpc_srcset_map')) {
+    /** A srcset with every address replaced by $each(address, descriptor) and written back as "address descriptor, address descriptor". */
+    function wpc_srcset_map($srcset, $each)
+    {
+        $parts = [];
+        foreach (wpc_srcset_parse($srcset) as $row) {
+            $parts[] = $each($row[0], $row[1]) . ($row[1] !== '' ? ' ' . $row[1] : '');
+        }
+        return implode(', ', $parts);
+    }
+}
+
+if (!function_exists('wpc_srcset_candidates')) {
+    /**
+     * The fetchable candidates of a srcset as [address, lower-case first descriptor]: a data URI and
+     * an address with no slash are not files and are left out.
+     */
+    function wpc_srcset_candidates($srcset)
+    {
+        $candidates = [];
+        foreach (wpc_srcset_parse($srcset) as $row) {
+            if (stripos($row[0], 'data:') === 0 || strpos($row[0], '/') === false) {
+                continue;
+            }
+            $desc = preg_split('/\s+/', $row[1]);
+            $candidates[] = [$row[0], strtolower((string) $desc[0])];
+        }
+        return $candidates;
     }
 }
 
@@ -855,8 +977,7 @@ if (!function_exists('wpc_link_header_lines')) {
             $href = trim((string) wpc_link_header_attr($tag, 'href'));
             $srcset = trim((string) wpc_link_header_attr($tag, 'imagesrcset'));
             if ($href === '' && $srcset !== '') {
-                $first = preg_split('/[\s,]+/', $srcset);
-                $href = (string) $first[0];
+                $href = (string) (wpc_srcset_urls($srcset)[0] ?? '');
             }
             if (!wpc_link_header_url($href)) {
                 continue;
@@ -2072,21 +2193,36 @@ if (!function_exists('wpc_serve_stale_copy')) {
                     $staleSince = $staleCopyTime;
                 }
             }
-            $rewarmsFired = 0;
             if (@is_file($rewarmCounterFile) && (int) @filemtime($rewarmCounterFile) >= $staleSince) {
                 if (time() - (int) @filemtime($rewarmCounterFile) < 120) {
                     return false;
                 }
-                $rewarmsFired = (int) @file_get_contents($rewarmCounterFile);
             }
-            wpc_fs_put($rewarmCounterFile, (string) ($rewarmsFired + 1));
             $target = wpc_loopback_target(wpc_loopback_page_url());
             if ($target === []) {
                 return false;
             }
+            $counted = !wpc_rewarm_single_flight();
+            if ($counted) {
+                if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
+                    return false;
+                }
+                $claim = wpc_fs_update($rewarmCounterFile, function ($current) use ($rewarmCounterFile, $staleSince) {
+                    clearstatcache(true, $rewarmCounterFile);
+                    $mtime = (int) @filemtime($rewarmCounterFile);
+                    $live = $current !== '' && $mtime >= $staleSince;
+                    if ($live && time() - $mtime < 120) {
+                        return [null, false];
+                    }
+                    return [(string) (($live ? (int) $current : 0) + 1), true];
+                }, true, $wouldBlock);
+                if ($wouldBlock || ($claim[0] && $claim[1] !== true)) {
+                    return false;
+                }
+            }
             $userAgent = substr((string) preg_replace('/[\r\n]+/', ' ', isset($_SERVER['HTTP_USER_AGENT']) ? (string) $_SERVER['HTTP_USER_AGENT'] : 'Mozilla/5.0'), 0, 300);
             $accept = substr((string) preg_replace('/[\r\n]+/', ' ', isset($_SERVER['HTTP_ACCEPT']) ? (string) $_SERVER['HTTP_ACCEPT'] : 'text/html'), 0, 200);
-            register_shutdown_function('wpc_fire_stale_rewarm', $target, $userAgent, $accept, $dir, (string) $prefix);
+            register_shutdown_function('wpc_fire_stale_rewarm', $target, $userAgent, $accept, $dir, (string) $prefix, $counted);
             return true;
         } catch (\Throwable $e) {
             return false;
@@ -2100,10 +2236,40 @@ if (!function_exists('wpc_serve_stale_copy')) {
      * ends or four rewarms have been spent on it. A status that was not read (the response could not
      * be released first) decides nothing.
      */
-    function wpc_fire_stale_rewarm(array $target, $userAgent, $accept, $dir = '', $prefix = '')
+    function wpc_fire_stale_rewarm(array $target, $userAgent, $accept, $dir = '', $prefix = '', $counted = false)
     {
         try {
-            $sent = wpc_loopback_send($target, ['User-Agent' => $userAgent, 'Accept' => $accept, 'X-WPC-Cache-Warm' => wpc_warm_header_for_target($target)]);
+            $token = '';
+            try {
+                if (!$counted && function_exists('wpc_under_pressure') && wpc_under_pressure()) { return false; }
+                if (!$counted && wpc_rewarm_single_flight() && defined('WPS_IC_CACHE')) {
+                    $token = bin2hex(random_bytes(16));
+                    $claim = wpc_fs_update(rtrim(WPS_IC_CACHE, '/') . '/wpc-stale-rewarm.claim', function ($current) use ($token) {
+                        $now = time();
+                        return (int) $current > $now ? [null, false] : [($now + 60) . ' ' . $token, true];
+                    }, true, $wouldBlock);
+                    if ($wouldBlock || ($claim[0] && $claim[1] === false)) { return false; }
+                    if (!$claim[0]) { $token = ''; }
+                }
+            } catch (\Throwable $e) {
+                $token = '';
+            }
+            if ($dir !== '' && !$counted) {
+                $counter = rtrim($dir, '/') . '/' . $prefix . 'wpc-rewarm43.txt';
+                $since = defined('WPS_IC_CACHE') ? (int) @file_get_contents(rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt') : 0;
+                foreach (['stale.html_gzip', 'stale.html'] as $copy) {
+                    $since = max($since, (int) @filemtime(rtrim($dir, '/') . '/' . $prefix . $copy));
+                }
+                $count = @is_file($counter) && (int) @filemtime($counter) >= $since ? (int) @file_get_contents($counter) : 0;
+                wpc_fs_put($counter, (string) ($count + 1));
+            }
+            $warm = wpc_warm_header_for_target($target);
+            $headers = ['User-Agent' => $userAgent, 'Accept' => $accept, 'X-WPC-Cache-Warm' => $warm];
+            if ($token !== '') {
+                $headers['X-WPC-Stale-Rewarm'] = $token . '.' . wpc_stale_rewarm_mac($token, $warm);
+            }
+            $sent = wpc_loopback_send($target, $headers);
+            if ($sent['rung'] === '' && $token !== '') { wpc_stale_rewarm_release($token); }
             wpc_fs_log('stale-fire', substr((string) $target['path'], 0, 120), $sent);
             if ($dir !== '' && $sent['rung'] !== '' && preg_match('#^HTTP/\S+\s+(404|410)\b#', (string) $sent['status'], $gone) === 1 && function_exists('wpc_stale_unlink_copies') && !wpc_off_flag('off_gone_drop')) {
                 if (wpc_page_address_differs($dir, (!empty($target['https']) ? 'https' : 'http') . '://' . (string) $target['host'] . (string) $target['path'])) {
@@ -2293,5 +2459,100 @@ if (!function_exists('wpc_request_body_head')) {
     function wpc_request_body_head($max)
     {
         return (string) @file_get_contents('php://input', false, null, 0, max(0, (int) $max));
+    }
+}
+
+if (!function_exists('wpc_cgroup_cores')) {
+    function wpc_cgroup_cores()
+    {
+        $v2 = @is_readable('/sys/fs/cgroup/cpu.max') ? trim((string) @file_get_contents('/sys/fs/cgroup/cpu.max')) : '';
+        if ($v2 !== '' && preg_match('/^(\d+)\s+(\d+)$/', $v2, $m) && (int) $m[2] > 0) {
+            return max(1, (int) ceil((int) $m[1] / (int) $m[2]));
+        }
+        $q = @is_readable('/sys/fs/cgroup/cpu/cpu.cfs_quota_us') ? (int) trim((string) @file_get_contents('/sys/fs/cgroup/cpu/cpu.cfs_quota_us')) : 0;
+        $p = @is_readable('/sys/fs/cgroup/cpu/cpu.cfs_period_us') ? (int) trim((string) @file_get_contents('/sys/fs/cgroup/cpu/cpu.cfs_period_us')) : 0;
+        if ($q > 0 && $p > 0) {
+            return max(1, (int) ceil($q / $p));
+        }
+        return 0;
+    }
+}
+
+if (!function_exists('wpc_stale_rewarm_release')) {
+    function wpc_stale_rewarm_mac($token, $warm)
+    {
+        return substr(hash_hmac('sha256', 'stale-rewarm|' . $token . '|' . $warm, wpc_warm_secret()), 0, 20);
+    }
+
+    function wpc_stale_rewarm_release($token)
+    {
+        if (!defined('WPS_IC_CACHE') || !is_string($token) || $token === '') { return false; }
+        $result = wpc_fs_update(rtrim(WPS_IC_CACHE, '/') . '/wpc-stale-rewarm.claim', function ($current) use ($token) {
+            $parts = explode(' ', trim($current), 2);
+            return isset($parts[1]) && hash_equals($parts[1], $token) ? ['', true] : [null, false];
+        }, true);
+        return $result[0] && $result[1] === true;
+    }
+
+    function wpc_stale_rewarm_receiver()
+    {
+        $header = $_SERVER['HTTP_X_WPC_STALE_REWARM'] ?? '';
+        $warm = $_SERVER['HTTP_X_WPC_CACHE_WARM'] ?? '';
+        if (is_string($header) && preg_match('/^([a-f0-9]{32})\.([a-f0-9]{20})$/', $header, $parts) === 1
+            && wpc_warm_request() && hash_equals(wpc_stale_rewarm_mac($parts[1], $warm), $parts[2])) {
+            $token = $parts[1];
+            register_shutdown_function(function () use ($token) {
+                register_shutdown_function('wpc_stale_rewarm_release', $token);
+            });
+        }
+    }
+}
+
+
+if (!function_exists('wpc_fs_online_cores')) {
+    function wpc_fs_online_cores()
+    {
+        $count = 0;
+        $online = @is_readable('/sys/devices/system/cpu/online') ? trim((string) @file_get_contents('/sys/devices/system/cpu/online')) : '';
+        foreach ($online === '' ? [] : explode(',', $online) as $range) {
+            if (preg_match('/^(\d+)(?:-(\d+))?$/', trim($range), $m)) {
+                $count += isset($m[2]) ? max(0, (int) $m[2] - (int) $m[1]) + 1 : 1;
+            }
+        }
+        $quota = wpc_cgroup_cores();
+        if ($count === 0) { return $quota > 0 ? $quota : 2; }
+        return $quota > 0 ? min($count, $quota) : $count;
+    }
+}
+
+if (!function_exists('wpc_rewarm_single_flight')) {
+    function wpc_rewarm_single_flight()
+    {
+        return (function_exists('wpc_is_constrained_host') ? wpc_is_constrained_host()
+            : (@file_exists('/etc/cloudlinux-release') || @file_exists('/proc/lve/list') || @is_dir('/usr/local/cpanel')))
+            || (function_exists('wpc_box_cores') ? wpc_box_cores() : wpc_fs_online_cores()) <= 2;
+    }
+}
+
+if (!function_exists('wpc_cron_heartbeat_claim')) {
+    function wpc_cron_heartbeat_claim($stamp)
+    {
+        $lock = null;
+        try {
+            $lock = @fopen($stamp . '.lock', 'c');
+            if ($lock && !@flock($lock, LOCK_EX | LOCK_NB)) { return false; }
+            clearstatcache(true, $stamp);
+            if (@file_exists($stamp) && time() - (int) @filemtime($stamp) <= 60) { return false; }
+            @touch($stamp);
+            return true;
+        } catch (\Throwable $e) {
+            if (!@file_exists($stamp) || time() - (int) @filemtime($stamp) > 60) {
+                @touch($stamp);
+                return true;
+            }
+            return false;
+        } finally {
+            if (is_resource($lock)) { @fclose($lock); }
+        }
     }
 }

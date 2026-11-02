@@ -79,7 +79,7 @@ if (!class_exists('wps_ic_doctor_logs')) {
                     $files[] = $logFile + ['tail' => self::tail(rtrim(WPS_IC_LOG, '/') . '/' . basename($logFile['path']), self::TEXT_LOG_TAIL)];
                 }
             }
-            $facts[] = self::fact('text debug log', ['on' => $textOn, 'files' => $files === [] ? 'none' : $files], 'option:wps_ic_debug_log; dir:cache/logs/');
+            $facts[] = self::fact('text debug log', ['on' => $textOn, 'files' => $files === [] ? 'none' : $files], 'option:wps_ic_debug_log; dir:cache/logs/<option wpc_log_dir>/');
 
             if ($recentErrors !== []) {
                 $verdict = self::verdict('warn', 'php-warnings', sprintf('%d PHP warning(s) from plugin files in the window, the last: %s', count($recentErrors), end($recentErrors)));

@@ -964,6 +964,7 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
             http_response_code(401);
             exit('sig');
         }
+        if (function_exists('wpc_cmd_census')) { wpc_cmd_census(wpc_cmd_door(), 'self-hmac'); }
 
 
         $wpc_loop_src = (isset($_POST['src']) && in_array((string) $_POST['src'], ['fire', 'inline'], true)) ? (string) $_POST['src'] : 'ext';

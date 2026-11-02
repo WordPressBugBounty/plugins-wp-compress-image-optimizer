@@ -62,8 +62,10 @@ if (version_compare(phpversion(), '7.2', '<')
   return;
 }
 
-if (!file_exists($pluginExists . 'addons/cache/advancedCache.php')) {
-  return;
+foreach (['traits/url_key.php', 'classes/config.class.php', 'addons/cache/wpc-fs.php', 'addons/cache/advancedCache.php'] as $wpc_part) {
+  if (!file_exists($pluginExists . $wpc_part)) {
+    return;
+  }
 }
 
 include_once $pluginExists . 'traits/url_key.php';

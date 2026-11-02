@@ -26,6 +26,17 @@ class wps_ic_js_delay_v2
         'js-cookie', 'js.cookie', 'woocommerce.min.js', self::WOO_CART_FRAGMENTS,
         'wc-add-to-cart', 'wc-checkout'];
 
+    // The ids of the scripts the plugin prints itself: never delayed, in every engine. One list, read
+    // by both engines' exclude lists and by the v3 own-script test.
+    const WPC_OWN_SCRIPT_IDS = ['wpc-css-orb-fallback', 'wpc-icon-belt', 'wpc-ga-bot-shield', 'wpc-rum-beacon', 'wpc-ela', 'wpc-dev-check'];
+
+    // The Elementor settings keys that name an entrance animation (per device) or its delay. One list:
+    // the head owner script, the loader's scrub and its first-screen reveal all read it (the loader
+    // through wpcDelayV3Cfg.animKeys).
+    const WPC_ANIMATION_KEYS = ['animation', '_animation', 'animation_tablet', '_animation_tablet', 'animation_mobile', '_animation_mobile',
+        'animation_laptop', '_animation_laptop', 'animation_widescreen', '_animation_widescreen', 'animation_tablet_extra', '_animation_tablet_extra',
+        'animation_mobile_extra', '_animation_mobile_extra', 'animation_delay', '_animation_delay'];
+
     protected $userExcludes;
     protected $deferPatterns;
     protected $userDeferScripts;
@@ -43,7 +54,6 @@ class wps_ic_js_delay_v2
           'ngf298gh738qwbdh0s87v_vars', // WPC adaptive optimizer config vars (inline wp_localize_script output)
           'wpcRunningCritical',
           'wpc-presc-reserve', // A3 uniqueness guard must run at parse (apply-time count)
-          'wpc-icon-belt', // icon-guard settle belt: must observe fonts as they load, not on gesture
           'trustLogo',
           'turnstile',
 
@@ -68,7 +78,6 @@ class wps_ic_js_delay_v2
           'js/dist/i18n',
           'wp-polyfill',
           'document.write',
-          'wpc-ga-bot-shield',
           'sourcebuster',
           'SR7.', // Slider Revolution inline scripts, load ugly if delayed
           // GDPR / Cookie consent plugins — must run immediately to show/hide banners
@@ -113,6 +122,7 @@ class wps_ic_js_delay_v2
           'typeform',         // Typeform embed
           'jotform',          // JotForm embed
         ];
+        $this->excludes = array_merge($this->excludes, self::WPC_OWN_SCRIPT_IDS);
 
 
         $cookiePlugins = [
@@ -295,12 +305,32 @@ class wps_ic_js_delay_v2
             return $html;
         }
 
-        $head_end = strpos($elementor_result['html'], '</head>');
+        $head_end = $this->wpc_ela_head_offset($elementor_result['html']);
         if ($head_end === false) {
             return $html;
         }
 
         return substr($elementor_result['html'], 0, $head_end) . $elementor_result['script'] . substr($elementor_result['html'], $head_end);
+    }
+
+    protected function wpc_ela_head_offset($html)
+    {
+        $parts = preg_split('#(<script\b.*?</script>|<style\b.*?</style>|<template\b.*?</template>|<!--.*?-->)#si', $html, -1, PREG_SPLIT_DELIM_CAPTURE);
+        if (!is_array($parts)) {
+            return false;
+        }
+        $offset = 0;
+        foreach ($parts as $index => $part) {
+            if ($index % 2 === 0) {
+                $at = strpos($part, '</head>');
+                if ($at !== false) {
+                    return $offset + $at;
+                }
+            }
+            $offset += strlen($part);
+        }
+
+        return false;
     }
 
     protected function wpc_ela_plan($tag)
@@ -380,7 +410,10 @@ class wps_ic_js_delay_v2
         if ($frontend !== '') {
             $reduced_rule = preg_match('/@media\s*\(prefers-reduced-motion:\s*reduce\)\{(?:[^{}]*\{[^{}]*\})*?[^{}]*\.animated\{[^{}]*animation:\s*none/', $frontend)
                 ? '@media (prefers-reduced-motion:reduce){.animated{animation:none!important}}' : '';
-            $top_level = preg_replace('/@[a-z-]+[^{};]*(\{(?:[^{}]++|(?1))*\})/i', '', $frontend);
+            $top_level = preg_replace('~@[a-z-]+[^{};]*+(\{(?:[^{}"\'/]++|"(?:[^"\\\\]++|\\\\.)*+"|\'(?:[^\'\\\\]++|\\\\.)*+\'|/\*(?:[^*]++|\*(?!/))*+\*/|/|(?1))*+\})~i', '', $frontend);
+            if (!is_string($top_level) && function_exists('wpc_belt_receipt')) {
+                wpc_belt_receipt('ela-css-pcre-null', ['err' => (int) preg_last_error(), 'bytes' => strlen($frontend)], false, '');
+            }
             if (is_string($top_level) && preg_match_all('/(?<![\w.-])\.animated(?:\.animated-(?:slow|fast)|\.infinite|\.reverse)?\{[^{}]*\}/', $top_level, $found)) {
                 $rules = implode('', $found[0]);
             }
@@ -520,24 +553,28 @@ class wps_ic_js_delay_v2
 
     protected function generate_animation_script($mobile_max = 767, $tablet_max = 1024)
     {
-        return '<script id="wpc-ela" data-nodefer="1">(function(){var d=document,w=window,M=' . (int) $mobile_max . ',T=' . (int) $tablet_max . ',Q=[],io=null,moved=0,K=/^_?animation(?:_(?:tablet|mobile|laptop|widescreen|tablet_extra|mobile_extra|delay))?$/;'
+        return '<script id="wpc-ela" data-nodefer="1">(function(){var d=document,w=window,M=' . (int) $mobile_max . ',T=' . (int) $tablet_max . ',A=' . json_encode(self::WPC_ANIMATION_KEYS) . ',Q=[],io=null,mo=null,moved=0,done=0,bt=0;'
             . 'function mv(){moved=1}'
             . '["scroll","wheel","touchmove","keydown","mousedown"].forEach(function(t){w.addEventListener(t,mv,{passive:true,capture:true})});'
             . 'function dev(){var x=w.innerWidth||d.documentElement.clientWidth||0;return x<=M?2:x<=T?1:0}'
             . 'function plan(e){var p=(e.getAttribute("data-wpc-ela")||"").split("|");return{n:[p[0]||"",p[1]||"",p[2]||""],y:parseInt(p[3],10)||0,u:p[4]||""}}'
             . 'function pick(p){var v=dev(),n=p.n;return v===2?(n[2]||n[1]||n[0]):v===1?(n[1]||n[0]):n[0]}'
-            . 'function scrub(e){var s=e.getAttribute("data-settings"),o,k,j=w.jQuery;if(s){try{o=JSON.parse(s);for(k in o){if(K.test(k))delete o[k]}e.setAttribute("data-settings",JSON.stringify(o))}catch(x){e.removeAttribute("data-settings")}}'
-            . 'if(j&&j.data){try{o=j.data(e,"settings");if(o&&typeof o==="object"){for(k in o){if(K.test(k))delete o[k]}}}catch(x){}}}'
+            . 'function key(k){return A.indexOf(k)!==-1}'
+            . 'function scrub(e){var s=e.getAttribute("data-settings"),o,k,j=w.jQuery;if(s){try{o=JSON.parse(s);for(k in o){if(key(k))delete o[k]}e.setAttribute("data-settings",JSON.stringify(o))}catch(x){e.removeAttribute("data-settings")}}'
+            . 'if(j&&j.data){try{o=j.data(e,"settings");if(o&&typeof o==="object"){for(k in o){if(key(k))delete o[k]}}}catch(x){}}}'
+            . 'function prune(){var k,L=[];if(!done)return;for(k=0;k<Q.length;k++){if(Q[k].classList.contains("elementor-invisible"))L.push(Q[k])}Q=L;if(!Q.length){if(io)io.disconnect();if(mo)mo.disconnect();io=null;mo=null}}'
+            . 'function bg(){if(bt)return;bt=setTimeout(function(){bt=0;if(w.wpcRestoreVisibleBackgrounds){try{w.wpcRestoreVisibleBackgrounds()}catch(x){}}},0)}'
             . 'function run(e,anim){if(e.__wpcEla)return;e.__wpcEla=1;if(!e.classList.contains("elementor-invisible"))return;var p=plan(e),n=anim?pick(p):"",c=e.classList,'
-            . 'go=function(){e.removeAttribute("data-wpc-ela-q");c.remove("elementor-invisible");if(n&&n!=="none"){c.add("animated");c.add(n);if(p.u)c.add("animated-"+p.u)}};'
+            . 'go=function(){e.removeAttribute("data-wpc-ela-q");c.remove("elementor-invisible");if(n&&n!=="none"){c.add("animated");c.add(n);if(p.u)c.add("animated-"+p.u)}bg();prune()};'
             . 'if(anim&&p.y>0&&n&&n!=="none"){e.setAttribute("data-wpc-ela-q","1");setTimeout(go,p.y)}else go()}'
-            . 'function seen(list){var i,en,e,r;for(i=0;i<list.length;i++){en=list[i];e=en.target;if(!en.isIntersecting)continue;io.unobserve(e);r=en.boundingClientRect||e.getBoundingClientRect();run(e,r.width>0&&r.height>0?moved:0)}}'
+            . 'function seen(list){var i,en,e,r;for(i=0;i<list.length;i++){en=list[i];e=en.target;if(!en.isIntersecting)continue;if(io)io.unobserve(e);r=en.boundingClientRect||e.getBoundingClientRect();run(e,r.width>0&&r.height>0?moved:0)}prune()}'
             . 'function own(e){if(e.__wpcOwn)return;e.__wpcOwn=1;scrub(e);Q.push(e);if(io)io.observe(e);else run(e,0)}'
             . 'function added(R){var i,j,k,N,n,L;for(i=0;i<R.length;i++){N=R[i].addedNodes;for(j=0;j<N.length;j++){n=N[j];if(n.nodeType!==1)continue;if(n.hasAttribute("data-wpc-ela"))own(n);L=n.querySelectorAll("[data-wpc-ela]");for(k=0;k<L.length;k++)own(L[k])}}}'
+            . 'function fin(){var k;for(k=0;k<Q.length;k++)scrub(Q[k]);done=1;prune()}'
             . 'function init(){var L=d.querySelectorAll("[data-wpc-ela]"),i;if(!L.length)return;if(w.IntersectionObserver)io=new IntersectionObserver(seen,{threshold:[0,1]});'
             . 'for(i=0;i<L.length;i++)own(L[i]);'
-            . 'if(!Q.length)return;if(w.MutationObserver)new MutationObserver(added).observe(d.documentElement,{childList:true,subtree:true});'
-            . 'w.addEventListener("load",function(){for(var k=0;k<Q.length;k++)scrub(Q[k])})}'
+            . 'if(!Q.length)return;if(w.MutationObserver){mo=new MutationObserver(added);mo.observe(d.documentElement,{childList:true,subtree:true})}'
+            . 'if(d.readyState==="complete")fin();else w.addEventListener("load",fin)}'
             . 'if(d.readyState==="loading")d.addEventListener("DOMContentLoaded",init);else init()})();</script>';
     }
 

@@ -4,6 +4,10 @@
 class wps_ic_comms extends wps_ic
 {
 
+    const EXCLUDE_OPTIONS = ['wpc-excludes', 'wpc-inline', 'wpc-url-excludes'];
+
+    const NOT_ACTIONS = ['__construct', 'start_comms', 'gpsRunState', 'sendGpsRunState', 'cf_without_token'];
+
     public function __construct()
     {
         if (!is_admin()) {
@@ -312,7 +316,7 @@ class wps_ic_comms extends wps_ic
         if (!empty($savedForm)) {
             foreach ($savedForm as $settingName => $settingData) {
 
-                if (!in_array($settingName, ['wpc-excludes', 'wpc-inline', 'wpc-url-excludes'])) {
+                if (!in_array($settingName, self::EXCLUDE_OPTIONS, true)) {
                     wp_send_json_error('Forbidden.');
                 }
 
@@ -344,18 +348,22 @@ class wps_ic_comms extends wps_ic
 
     public static function get_excludes()
     {
-        $option = get_option($_GET['name']);
-        $subset = $_GET['subset'];
-        if ($_GET['name'] === 'wpc-excludes') {
+        $name = isset($_GET['name']) && is_string($_GET['name']) ? $_GET['name'] : '';
+        if (!in_array($name, self::EXCLUDE_OPTIONS, true)) {
+            wp_send_json_error('Forbidden.');
+        }
+        $option = get_option($name);
+        $subset = isset($_GET['subset']) && is_scalar($_GET['subset']) ? (string) $_GET['subset'] : '';
+        if ($name === 'wpc-excludes') {
             $option = wpc_delay_excludes_fold($option);
             $subset = wpc_delay_excludes_key($subset);
         }
-        $value = $option[$subset];
+        $value = is_array($option) && isset($option[$subset]) ? $option[$subset] : '';
 
         if (empty($value)) {
             $value = '';
         } else {
-            $value = implode("\n", $value);
+            $value = implode("\n", (array) $value);
         }
 
         wp_send_json_success($value);
@@ -808,20 +816,25 @@ class wps_ic_comms extends wps_ic
 
     public function purgeAfterSave()
     {
-        $form        = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
-        $changedKeys = isset($form['changed_keys']) ? (array) $form['changed_keys'] : [];
+        try {
+            $form        = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
+            $changedKeys = isset($form['changed_keys']) ? (array) $form['changed_keys'] : [];
 
-        // The page cache is not purged here. The portal's settings write (saveSettings) already
-        // ran update_option on this site, and the delivery-config flip that hook runs is the one
-        // owner of "settings changed, the stored pages are stale" (a purge of every layer, hard
-        // for a relayed save: wpc_purge_human_save()).
-        // This handler purged again from its own key list and then deleted cache/wp-cio
-        // wholesale, which erased the receipt journal on every portal save.
+            // The page cache is not purged here. The portal's settings write (saveSettings) already
+            // ran update_option on this site, and the delivery-config flip that hook runs is the one
+            // owner of "settings changed, the stored pages are stale" (a purge of every layer, hard
+            // for a relayed save: wpc_purge_human_save()).
+            // This handler purged again from its own key list and then deleted cache/wp-cio
+            // wholesale, which erased the receipt journal on every portal save.
 
-        // The same call the site's own settings save makes: a setting changed from the portal
-        // invalidates the critical CSS exactly as the same change made on the site does.
-        if (function_exists('wpc_crit_invalidate_on_settings_save')) {
-            wpc_crit_invalidate_on_settings_save($changedKeys);
+            // The same call the site's own settings save makes: a setting changed from the portal
+            // invalidates the critical CSS exactly as the same change made on the site does.
+            if (function_exists('wpc_crit_invalidate_on_settings_save')) {
+                wpc_crit_invalidate_on_settings_save($changedKeys);
+            }
+
+        } finally {
+            delete_option('wpc_crit_enable_save');
         }
 
         wp_send_json_success();
@@ -885,6 +898,13 @@ class wps_ic_comms extends wps_ic
     {
         $form = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
 
+        if (!wpc_import_groups_ok($form)) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('import-refused', '', '', ['door' => 'comms']);
+            }
+            wp_send_json_error('invalid-import');
+        }
+
         $options_class = new wps_ic_options();
 
         if (isset($form['settings'])) {
@@ -894,7 +914,7 @@ class wps_ic_comms extends wps_ic
 
         if (isset($form['excludes'])) {
             // An export from an older site carries two Delay JS lists; store the one.
-            update_option('wpc-excludes', wpc_delay_excludes_fold($form['excludes']));
+            update_option('wpc-excludes', wpc_delay_excludes_fold(wpc_excludes_shape($form['excludes'])));
         }
 
         $url_excludes = wpc_url_excludes_import($form['url_excludes'] ?? null);
@@ -1196,9 +1216,16 @@ class wps_ic_comms extends wps_ic
             require_once WPS_IC_DIR . 'addons/doctor/doctor.php';
         }
         $site_facts = wpc_site_facts();
+        $settings_chosen = get_option('wpc_settings_chosen', []);
+        if (!class_exists('WPC_Delivery_Resolver')) {
+            require_once WPS_IC_DIR . 'addons/cdn/delivery-resolver.php';
+        }
+        $delivery_summary = WPC_Delivery_Resolver::stored_summary();
 
         wp_send_json_success([
             'settings'       => $options,
+            'settings_chosen' => (object) (is_array($settings_chosen) ? $settings_chosen : []),
+            'delivery_state' => (object) $delivery_summary,
             'excludes'       => $excludes,
             'inline'         => $inlines,
             'wpc-url-excludes' => $url_excludes,
@@ -1222,7 +1249,7 @@ class wps_ic_comms extends wps_ic
             'vitals'         => function_exists('wpc_vitals_export') ? wpc_vitals_export() : null,
             'auto_mode'      => [
                 'on'    => function_exists('wpc_auto_mode_on') ? (bool) wpc_auto_mode_on() : false,
-                'state' => function_exists('wpc_auto_state') ? wpc_auto_state() : [],
+                'state' => function_exists('wpc_auto_state') ? wpc_auto_state(true) : [],
             ],
             'crit_off'       => function_exists('wpc_crit_off_state') ? wpc_crit_off_state() : null,
         ]);
@@ -1393,6 +1420,16 @@ class wps_ic_comms extends wps_ic
         return [$apikey, $action];
     }
 
+    private static function is_comms_action($action)
+    {
+        if (!is_string($action) || $action === '' || !method_exists(__CLASS__, $action)) {
+            return false;
+        }
+        $method = new ReflectionMethod(__CLASS__, $action);
+        return $method->isPublic() && $method->getDeclaringClass()->getName() === __CLASS__
+            && !in_array($method->getName(), self::NOT_ACTIONS, true);
+    }
+
     public function start_comms()
     {
         global $wps_ic;
@@ -1414,7 +1451,10 @@ class wps_ic_comms extends wps_ic
                 wp_send_json_error('Hacking?');
             }
 
-            if (!method_exists($this, $action) || (new ReflectionMethod($this, $action))->isPrivate()) {
+            if (!self::is_comms_action($action)) {
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('comms-refused', '', '', ['action' => substr((string) $action, 0, 64)]);
+                }
                 wp_send_json_error('Function does not exist');
             }
 

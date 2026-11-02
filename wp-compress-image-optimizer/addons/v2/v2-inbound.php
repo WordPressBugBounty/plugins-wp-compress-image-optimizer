@@ -42,7 +42,7 @@ if (!function_exists('wpc_v2_inbound_verify')) {
         if (strlen($body) > $cap) {
             return wpc_v2_inbound_refuse($route, 413, 'too-large', strlen($body) . '>' . $cap);
         }
-        $v = wpc_v2_verify_hmac((string) $sig, $body, isset($opts['window']) ? (int) $opts['window'] : 60, isset($opts['scope']) ? (string) $opts['scope'] : '');
+        $v = wpc_v2_verify_hmac((string) $sig, $body, isset($opts['window']) ? (int) $opts['window'] : 60, isset($opts['scope']) ? (string) $opts['scope'] : '', 'v2:' . $route);
         if (empty($v['ok'])) {
             return wpc_v2_inbound_refuse($route, isset($opts['auth_status']) ? (int) $opts['auth_status'] : 403, 'bad-signature', (string) ($v['reason'] ?? ''));
         }
@@ -298,7 +298,7 @@ if (!function_exists('wpc_v2_verify_hmac')) {
      *   of which should keep using the identifier. Anything not explicitly 'write' is exempt
      *   from hardening and from the migration counter.
      */
-    function wpc_v2_verify_hmac($sig_header, $body_raw, $replay_window_s = 60, $scope = '')
+    function wpc_v2_verify_hmac($sig_header, $body_raw, $replay_window_s = 60, $scope = '', $door = '')
     {
         if (!is_string($sig_header) || $sig_header === '') {
             return ['ok' => false, 'reason' => 'missing_sig'];
@@ -339,6 +339,9 @@ if (!function_exists('wpc_v2_verify_hmac')) {
                 wpc_v2_note_callback_secret_use();
             }
             wpc_v2_note_rest_form();
+            if (function_exists('wpc_cmd_census')) {
+                wpc_cmd_census($door !== '' ? $door : wpc_cmd_door(), 'cb-secret');
+            }
             return ['ok' => true, 'via' => 'cb_secret'];
         }
 
@@ -363,6 +366,9 @@ if (!function_exists('wpc_v2_verify_hmac')) {
         }
 
         wpc_v2_note_rest_form();
+        if (function_exists('wpc_cmd_census')) {
+            wpc_cmd_census($door !== '' ? $door : wpc_cmd_door(), 'key-hmac');
+        }
         return ['ok' => true, 'via' => 'apikey_legacy'];
     }
 }

@@ -253,6 +253,9 @@ add_action('wp_ajax_wpc_v2_set_concurrency_manual', function () {
     if (!current_user_can('manage_wpc_settings')) {
         wp_send_json_error('forbidden');
     }
+    if (!check_ajax_referer('wps_ic_nonce_action', 'nonce', false)) {
+        wp_send_json_error('bad-nonce', 403);
+    }
     $type  = isset($_POST['type'])  ? sanitize_key((string) $_POST['type'])  : '';
     $value = isset($_POST['value']) ? (string) $_POST['value'] : '';
 

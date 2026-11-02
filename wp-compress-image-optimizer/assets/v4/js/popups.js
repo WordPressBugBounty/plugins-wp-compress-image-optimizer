@@ -717,6 +717,8 @@ jQuery(document).ready(function ($) {
 
             }
             $(loading).fadeOut(150, function() { $(content).fadeIn(150); });
+        }).fail(function () {
+            $(loading).text('Could not load these settings. Reload the page and try again.');
         });
 
         saveCacheCookiesPopup(popup);

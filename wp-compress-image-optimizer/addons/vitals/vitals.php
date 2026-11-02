@@ -425,11 +425,11 @@ if (!function_exists('wpc_vitals_today_partial')) {
             if ($wpc_tp_pre !== null) {
                 return is_array($wpc_tp_pre) ? $wpc_tp_pre : null;
             }
-            $cfg = wpc_vitals_config();
-            if (!$cfg) {
+            $dir = wpc_vitals_stats_dir();
+            if ($dir === '') {
                 return null;
             }
-            $f = $cfg['dir'] . gmdate('Ymd') . '.bin';
+            $f = $dir . gmdate('Ymd') . '.bin';
             if (!@is_readable($f)) {
                 return null;
             }

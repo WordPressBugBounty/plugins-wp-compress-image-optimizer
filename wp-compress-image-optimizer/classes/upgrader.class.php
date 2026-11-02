@@ -50,8 +50,10 @@ class wps_ic_upgrader extends wps_ic
             // force_update RETURNS (it skipped the lock/tries above, so falling
             // through would run the deferred work untracked — the same DoS detached).
             if (!empty($_GET['force_update'])) {
-                if ((function_exists('current_user_can') && current_user_can('manage_options'))
-                    || (defined('WPC_PERF_DEBUG_TOKEN') && isset($_GET['t'])
+                if ((function_exists('current_user_can') && current_user_can('manage_options')
+                        && isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST'
+                        && wpc_admin_nonce_ok($_POST))
+                    || (defined('WPC_PERF_DEBUG_TOKEN') && (string) WPC_PERF_DEBUG_TOKEN !== '' && isset($_GET['t'])
                         && hash_equals((string) WPC_PERF_DEBUG_TOKEN, (string) $_GET['t']))) {
                     $this->run_upgrade_work(); // explicit manual run stays synchronous
                 }

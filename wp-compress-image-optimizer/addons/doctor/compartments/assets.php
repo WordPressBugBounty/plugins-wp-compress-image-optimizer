@@ -161,7 +161,7 @@ if (!class_exists('wps_ic_doctor_assets')) {
                 }
                 foreach ($attrs as $attr) {
                     $value = html_entity_decode(isset($attr[3]) && $attr[3] !== '' ? $attr[3] : $attr[2], ENT_QUOTES);
-                    $candidates = strtolower($attr[1]) === 'srcset' ? preg_split('/(?<=\d[wx]),|\s*,\s+/', trim($value)) : [$value];
+                    $candidates = strtolower($attr[1]) === 'srcset' ? wpc_srcset_urls($value) : [$value];
                     foreach ($candidates as $candidate) {
                         $parts = preg_split('/\s+/', trim((string) $candidate));
                         $path = self::upload_path((string) $parts[0], $host, $base);

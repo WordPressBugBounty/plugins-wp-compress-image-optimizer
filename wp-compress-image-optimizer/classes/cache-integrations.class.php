@@ -112,6 +112,10 @@ class wps_ic_cache_integrations
 
     public static function purgeCombinedFiles($url_key = false)
     {
+        try {
+            if (function_exists('wpc_save_is_crit_enable_only') && wpc_save_is_crit_enable_only()) { return true; }
+        } catch (\Throwable $e) {
+        }
         if ($url_key === '') {
             return;
         }
@@ -933,7 +937,7 @@ class wps_ic_cache_integrations
 
         // 6. Full-only local page caches (no per-URL API): bounded coalesced full purge —
         //    skipping any cache the per-page adapters above already handled (hit-rate law).
-        $layers['fullonly'] = self::maybeFullPurgeFullOnlyLayers(array_keys(array_filter($third_party_layers)));
+        $layers['fullonly'] = self::maybeFullPurgeFullOnlyLayers(array_keys(array_filter($third_party_layers)), isset($opts['context']) ? (string) $opts['context'] : '');
 
         // 7. Extensibility — deliberately NOT the legacy wps_ic_purge_all_cache hook (its listeners
 
@@ -1079,12 +1083,58 @@ class wps_ic_cache_integrations
     }
 
     /**
+     * The active integrations whose purge_cache(false) empties a whole page cache and which have no
+     * per-URL purge in purgeThirdPartyUrl, by short key => class. SiteGround and Pantheon are left
+     * out while the host_cache_purge lane is on and detects them.
+     */
+    private static function activeFullOnlyIntegrations()
+    {
+        $classes = [
+            'nginx'      => 'wps_ic_nginx_helper',
+            'zen'        => 'wps_ic_zen_cache',
+            'spinupwp'   => 'wps_ic_spinupwp',
+            'pagely'     => 'wps_ic_pagely',
+            'pressidium' => 'wps_ic_pressidium',
+            'savvii'     => 'wps_ic_savvii',
+            'siteground' => 'wps_ic_siteground',
+            'pantheon'   => 'wps_ic_pantheon',
+        ];
+        $active = [];
+        if (!class_exists('wps_ic_integrations', false)) {
+            if (((defined('DOING_CRON') && DOING_CRON) || (defined('WP_CLI') && WP_CLI)) && function_exists('wpc_cron_lane_load_core')) {
+                wpc_cron_lane_load_core();
+            }
+            if (!class_exists('wps_ic_integrations')) {
+                return $active;
+            }
+        }
+        $lane_on = function_exists('wpc_host_cache_purge_on') && function_exists('wpc_host_cache_adapters') && wpc_host_cache_purge_on();
+        $lane_adapters = $lane_on ? wpc_host_cache_adapters() : [];
+        foreach ($classes as $key => $class) {
+            try {
+                if (isset($lane_adapters[$key]) && call_user_func($lane_adapters[$key]['detect'])) {
+                    continue;
+                }
+                if (!class_exists($class)) {
+                    continue;
+                }
+                $probe = (new \ReflectionClass($class))->newInstanceWithoutConstructor();
+                if ($probe->is_active()) {
+                    $active[$key] = $class;
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+        return $active;
+    }
+
+    /**
      * Page caches with NO per-URL API (they'd otherwise pin the stale crit-less HTML for their full
      * TTL): a coalesced full purge, at most once per window (default 10 min) — bounded blast instead
      * of today's full purge on EVERY crit-land. Calls mirror the in-repo integrations/*.php exactly.
      * Opt out: add_filter('wpc_purge_fullonly_on_crit', '__return_false').
      */
-    private static function maybeFullPurgeFullOnlyLayers($handled = [])
+    private static function maybeFullPurgeFullOnlyLayers($handled = [], $context = '')
     {
         if (!apply_filters('wpc_purge_fullonly_on_crit', true)) {
             return 'off';
@@ -1100,14 +1150,19 @@ class wps_ic_cache_integrations
             'swift'   => is_callable(['Swift_Performance_Cache', 'clear_all_cache']) && !in_array('swift_page', $handled, true),
             'wpo'     => class_exists('WP_Optimize') && !in_array('wpo_page', $handled, true),
         ];
+        $integrations = self::activeFullOnlyIntegrations();
+        foreach ($integrations as $key => $class) {
+            $need[$key] = true;
+        }
         $need = array_filter($need);
         if (empty($need)) {
             return 'scoped'; // everything present was handled per-page — zero full purges
         }
-        if (get_transient('wpc_fullonly_purge_lock')) {
+        $lock = stripos((string) $context, 'crit') === 0 ? 'wpc_fullonly_purge_lock_crit' : 'wpc_fullonly_purge_lock';
+        if (get_transient($lock)) {
             return 'coalesced';
         }
-        set_transient('wpc_fullonly_purge_lock', 1, max(60, (int) apply_filters('wpc_fullonly_purge_window', 600)));
+        set_transient($lock, 1, max(60, (int) apply_filters('wpc_fullonly_purge_window', 600)));
         try {
             if (!empty($need['breeze'])) {
                 do_action('breeze_clear_all_cache');
@@ -1132,6 +1187,14 @@ class wps_ic_cache_integrations
             }
             if (!empty($need['wpo'])) {
                 WP_Optimize()->get_page_cache()->purge();
+            }
+            foreach ($integrations as $key => $class) {
+                try {
+                    $integration = new $class();
+                    $integration->purge_cache(false);
+                } catch (\Throwable $e) {
+                    unset($need[$key]);
+                }
             }
         } catch (\Throwable $e) {
             return 'error';

@@ -537,13 +537,6 @@ final class wps_ic_img_lqip
     /** The addresses of a srcset, descriptors dropped. */
     private static function candidates($srcset)
     {
-        $out = [];
-        foreach (explode(',', (string) $srcset) as $candidate) {
-            $parts = preg_split('/\s+/', trim($candidate));
-            if (is_array($parts) && isset($parts[0]) && $parts[0] !== '') {
-                $out[] = $parts[0];
-            }
-        }
-        return $out;
+        return wpc_srcset_urls((string) $srcset);
     }
 }

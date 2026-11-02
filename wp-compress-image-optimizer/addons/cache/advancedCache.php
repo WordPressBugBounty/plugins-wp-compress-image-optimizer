@@ -389,8 +389,7 @@ class wps_advancedCache
             // a subdirectory install is not this install's cron (for noktaltema.com/tibet/teknikservis/
             // it asked noktaltema.com/wp-cron.php; found by reading, 2026-09-24).
             $cronHeartbeatStamp = $this->cachePath ? dirname(rtrim($this->cachePath, '/')) . '/wpc-cron-heartbeat.stamp' : '';
-            if ($cronHeartbeatStamp && (!@file_exists($cronHeartbeatStamp) || (time() - (int) @filemtime($cronHeartbeatStamp)) > 60)) {
-                @touch($cronHeartbeatStamp);
+            if ($cronHeartbeatStamp && wpc_cron_heartbeat_claim($cronHeartbeatStamp)) {
                 $cronTarget = wpc_loopback_target(wpc_loopback_install_url('wp-cron.php') . '?doing_wp_cron');
                 if ($cronTarget !== [] && strpos($cronTarget['host'], ':') === false) {
                     $cronSocket = @fsockopen(($cronTarget['https'] ? 'ssl://' : '') . $cronTarget['host'], $cronTarget['https'] ? 443 : 80, $cronErrorNumber, $cronErrorText, 0.3);

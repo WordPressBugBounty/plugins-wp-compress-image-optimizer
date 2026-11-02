@@ -51,6 +51,9 @@ if (!defined('WP_CONTENT_URL') && function_exists('get_option')) {
 
 
 // The signature, size, fetch-host and image checks are the REST callbacks' own (v2-inbound.php).
+if (@is_file(__DIR__ . '/../../addons/v2/v2-cmd-census.php') && @is_readable(__DIR__ . '/../../addons/v2/v2-cmd-census.php')) {
+    require_once __DIR__ . '/../../addons/v2/v2-cmd-census.php';
+}
 require_once __DIR__ . '/../../addons/v2/v2-inbound.php';
 if (@is_file(__DIR__ . '/../../addons/v2/v2-service.php') && @is_readable(__DIR__ . '/../../addons/v2/v2-service.php')) {
     require_once __DIR__ . '/../../addons/v2/v2-service.php';
@@ -70,16 +73,13 @@ function wpc_v2_read_apikey() {
     global $wpdb;
 
 
-    foreach (['wps_ic', 'wps_ic_options', 'wps_ic_settings'] as $opt_name) {
-        $row = $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
-                $opt_name
-            )
-        );
-        if (!$row) {
-            continue;
-        }
+    $row = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
+            'wps_ic'
+        )
+    );
+    if ($row) {
         $opts = maybe_unserialize($row);
         if (is_array($opts) && !empty($opts['api_key'])) {
             $cached = (string) $opts['api_key'];

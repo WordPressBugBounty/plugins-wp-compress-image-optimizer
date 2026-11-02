@@ -247,6 +247,11 @@ class wps_ic_image_variants
     /** The AVIF and WebP files beside this attachment's own files, as absolute paths; never its own files. */
     public static function twin_files($id)
     {
+        return self::twins_on_disk($id, true);
+    }
+
+    private static function twins_on_disk($id, $ask_uploads)
+    {
         $id = (int) $id;
         $attached = $id > 0 ? (string) get_attached_file($id) : '';
         if ($attached === '') {
@@ -307,16 +312,22 @@ class wps_ic_image_variants
             }
         }
         $candidates = [];
+        $formats = [];
         foreach (array_keys($found) as $file) {
             $name = (string) pathinfo($file, PATHINFO_FILENAME);
+            $formats[strtolower((string) pathinfo($file, PATHINFO_EXTENSION))] = true;
             if (!isset($own[basename($file)]) && !isset($exact[$name])) {
                 $candidates[$name] = true;
             }
         }
+        if ($ask_uploads && !empty($found) && self::rival_source_held($id)) {
+            return [];
+        }
         $held = self::held_by_others($id, array_keys($candidates));
+        $uploaded = $ask_uploads ? self::formats_held_by_others($id, array_keys($exact + $bases), array_keys($formats)) : [];
         $twins = [];
         foreach (array_keys($found) as $file) {
-            if (!isset($own[basename($file)]) && !isset($held[(string) pathinfo($file, PATHINFO_FILENAME)])) {
+            if (!isset($own[basename($file)]) && !isset($held[(string) pathinfo($file, PATHINFO_FILENAME)]) && !isset($uploaded[strtolower((string) pathinfo($file, PATHINFO_EXTENSION))])) {
                 $twins[] = $file;
             }
         }
@@ -325,24 +336,17 @@ class wps_ic_image_variants
     }
 
     /** Which of these file names (no extension, in this attachment's month directory) another attachment holds as its own upload or its -scaled copy; asks at most 40 names, and a name past that counts as held. Answers [name => true]. */
-    private static function held_by_others($id, array $names)
+    public static function held_by_others($id, array $names)
     {
         global $wpdb;
         $held = [];
         if (empty($names) || !isset($wpdb) || !is_object($wpdb) || !method_exists($wpdb, 'get_var')) {
             return $held;
         }
-        $rel = (string) get_post_meta((int) $id, '_wp_attached_file', true);
-        if ($rel === '') {
-            $up = function_exists('wp_get_upload_dir') ? wp_get_upload_dir() : [];
-            $base = !empty($up['basedir']) ? rtrim(str_replace('\\', '/', (string) $up['basedir']), '/') . '/' : '';
-            $attached = str_replace('\\', '/', (string) get_attached_file((int) $id));
-            $rel = $base !== '' && strpos($attached, $base) === 0 ? substr($attached, strlen($base)) : '';
-        }
-        if ($rel === '') {
+        $prefix = self::upload_prefix($id);
+        if ($prefix === null) {
             return $held;
         }
-        $prefix = strpos($rel, '/') !== false ? substr($rel, 0, strrpos($rel, '/') + 1) : '';
         $asked = 0;
         foreach ($names as $name) {
             if (++$asked > 40) {
@@ -361,6 +365,71 @@ class wps_ic_image_variants
             }
         }
         return $held;
+    }
+
+    /** Whether WordPress holds this file for an attachment of its own; a file the owner can't check counts as held. */
+    public static function held_upload($path)
+    {
+        return !function_exists('wpc_v2_variant_identity_sweep_referenced') || wpc_v2_variant_identity_sweep_referenced($path);
+    }
+
+    /** The month directory of this attachment's upload, relative to the uploads root ('' at the root), or null when it has none. */
+    private static function upload_prefix($id)
+    {
+        $rel = (string) get_post_meta((int) $id, '_wp_attached_file', true);
+        if ($rel === '') {
+            $up = function_exists('wp_get_upload_dir') ? wp_get_upload_dir() : [];
+            $base = !empty($up['basedir']) ? rtrim(str_replace('\\', '/', (string) $up['basedir']), '/') . '/' : '';
+            $attached = str_replace('\\', '/', (string) get_attached_file((int) $id));
+            $rel = $base !== '' && strpos($attached, $base) === 0 ? substr($attached, strlen($base)) : '';
+        }
+        if ($rel === '') {
+            return null;
+        }
+        return strpos($rel, '/') !== false ? substr($rel, 0, strrpos($rel, '/') + 1) : '';
+    }
+
+    /** The formats in which another attachment uploaded one of these stems: that upload's sizes share the names, so no file of that format and stem is a twin. Answers [ext => true]. */
+    public static function formats_held_by_others($id, array $stems, array $exts)
+    {
+        global $wpdb;
+        $held = [];
+        $prefix = !empty($stems) && !empty($exts) && isset($wpdb) && is_object($wpdb) && method_exists($wpdb, 'get_var') ? self::upload_prefix($id) : null;
+        if ($prefix === null) {
+            return $held;
+        }
+        foreach ($exts as $ext) {
+            $rels = [];
+            foreach ($stems as $stem) {
+                $rels[] = $prefix . $stem . '.' . $ext;
+                $rels[] = $prefix . $stem . '-scaled.' . $ext;
+            }
+            $marks = implode(',', array_fill(0, count($rels), '%s'));
+            $hit = $wpdb->get_var($wpdb->prepare("SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value IN ($marks) AND post_id <> %d LIMIT 1", ...array_merge($rels, [(int) $id])));
+            if (!empty($hit)) {
+                $held[(string) $ext] = true;
+            }
+        }
+        return $held;
+    }
+
+    /** Whether another attachment's upload outranks this one for the twin names of its stem (wpc_outranking_upload_names). */
+    public static function rival_source_held($id)
+    {
+        global $wpdb;
+        $id = (int) $id;
+        $attached = $id > 0 ? (string) get_attached_file($id) : '';
+        $prefix = $attached === '' ? null : self::upload_prefix($id);
+        if ($prefix === null || !function_exists('wpc_outranking_upload_names') || !isset($wpdb) || !is_object($wpdb) || !method_exists($wpdb, 'get_var')) {
+            return false;
+        }
+        $rels = wpc_outranking_upload_names(dirname($attached), $prefix . basename($attached));
+        if (empty($rels)) {
+            return false;
+        }
+        $marks = implode(',', array_fill(0, count($rels), '%s'));
+        $hit = $wpdb->get_var($wpdb->prepare("SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value IN ($marks) AND post_id <> %d LIMIT 1", ...array_merge($rels, [$id])));
+        return !empty($hit);
     }
 
     /** The file names, without extension, of every size this attachment's landed variants carry: the set's keys and urls, the ideal widths asked, and the twin files on disk; only names of this attachment's own stem. */
@@ -446,7 +515,7 @@ class wps_ic_image_variants
     {
         $id = (int) $id;
         $attached = $id > 0 ? (string) get_attached_file($id) : '';
-        $twins = $attached === '' ? [] : self::twin_files($id);
+        $twins = $attached === '' ? [] : self::twins_on_disk($id, false);
         if (empty($twins) || !function_exists('wp_get_upload_dir') || !function_exists('wpc_v2_variant_identity_sweep_referenced')) {
             return [];
         }
@@ -492,7 +561,7 @@ class wps_ic_image_variants
                 break;
             }
         }
-        return $over;
+        return !empty($over) && self::rival_source_held($id) ? [] : $over;
     }
 
     /** Remove the oversized twins and their set entries. Answers ['paths' => removed files, 'bytes' => bytes freed, 'keys' => entries dropped]. */

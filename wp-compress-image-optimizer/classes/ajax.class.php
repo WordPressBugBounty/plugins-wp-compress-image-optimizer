@@ -335,6 +335,7 @@ class wps_ic_ajax extends wps_ic
         }
 
 
+        $this->add_ajax('wps_ic_refresh_nonce');
         $this->add_ajax('wpc_gf_refresh_nonce');
         $this->add_ajax_nopriv('wpc_gf_refresh_nonce');
 
@@ -366,6 +367,7 @@ class wps_ic_ajax extends wps_ic
         if (!function_exists('current_user_can') || !current_user_can('manage_options')) {
             wp_send_json_error(['e' => 'cap']);
         }
+        self::wpc_require_ajax_nonce('wps_ic_nonce');
         $out = ['landed' => false, 'nudged' => false];
         try {
             // The admin's request IS the worker: run OUR due one-shot events inline —
@@ -446,6 +448,14 @@ class wps_ic_ajax extends wps_ic
         } catch (\Throwable $e) {
         }
         wp_send_json_success($out);
+    }
+
+    public function wps_ic_refresh_nonce()
+    {
+        if (!current_user_can('upload_files') && !current_user_can('manage_options') && !current_user_can('manage_wpc_settings')) {
+            wp_send_json_error(['msg' => 'forbidden'], 403);
+        }
+        wp_send_json_success(['nonce' => wp_create_nonce('wps_ic_nonce_action')]);
     }
 
     public function wpc_gf_refresh_nonce()
@@ -1957,7 +1967,8 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_dismiss_notice()
     {
-        if (!wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        self::wpc_require_bulk_capability();
+        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -1975,7 +1986,8 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_fix_notice()
     {
-        if (!wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        self::wpc_require_bulk_capability();
+        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2495,6 +2507,9 @@ class wps_ic_ajax extends wps_ic
         $modernFlippedOn = !$prevModern && $newModern;
         $wpc_livecdn_before_b = isset($prevSettings['live-cdn']) ? (string) $prevSettings['live-cdn'] : '';
 
+        if ($cf !== null && $cf !== get_option(WPS_IC_CF) && function_exists('wpc_save_cf_changed')) {
+            wpc_save_cf_changed(true);
+        }
         update_option(WPS_IC_SETTINGS, $options);
         if ($grantsChanged) {
             new wps_ic_users();
@@ -2588,123 +2603,135 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_success();
         }
 
-        // Settings that affect cached HTML output
-        $htmlPurgeKeys = [
-            // Fonts
-            'replace-fonts', 'font-display', 'icon-font-display',
-            'preload-crit-fonts', 'fontawesome-lazy',
-            // CDN file types
-            'css', 'js', 'fonts', 'lazy', 'nativeLazy',
-            'serve,jpg', 'serve,png', 'serve,gif', 'serve,svg',
-            // Image optimization (changes CDN URL parameters in HTML)
-            'generate_adaptive', 'generate_webp', 'picture_webp', 'picture_avif',
-            'retina', 'background-sizing', 'optimize-lcp', 'modern_image_delivery',
-            'qualityLevel', 'local_qualityLevel', 'local_optimization',
-            'maxWidth', 'lazySkipCount',
+        try {
+            // Settings that affect cached HTML output
+            $htmlPurgeKeys = [
+                // Fonts
+                'replace-fonts', 'font-display', 'icon-font-display',
+                'preload-crit-fonts', 'fontawesome-lazy',
+                // CDN file types
+                'css', 'js', 'fonts', 'lazy', 'nativeLazy',
+                'serve,jpg', 'serve,png', 'serve,gif', 'serve,svg',
+                // Image optimization (changes CDN URL parameters in HTML)
+                'generate_adaptive', 'generate_webp', 'picture_webp', 'picture_avif',
+                'retina', 'background-sizing', 'optimize-lcp', 'modern_image_delivery',
+                'qualityLevel', 'local_qualityLevel', 'local_optimization',
+                'maxWidth', 'lazySkipCount',
 
 
-            'avif-natural-source', 'fetchpriority-high', 'single-url-image-format',
-            // Performance
-            'critical,css', 'delay,js', 'delay-js-v2',
-            'minify,html', 'minify,css', 'minify,js',
-            // CF / CDN routing
-            'cf,cdn', 'cf,assets', 'eu-routing',
-            // v7.21.149 — the simple panel's pillar keys. It saves through the batch now and
-            // sends the pillar name, not the member keys it expands to, so the gate has to know
-            // them by name or a simple-screen save would purge nothing. wps_ic_options::$purgeList
-            // already declares imagesPreset/cdnAll as cdn+critical+html.
-            'imagesPreset', 'cdnAll', 'cache,advanced',
-        ];
-        $changedKeys = !empty($_POST['changed_keys']) ? array_map('sanitize_text_field', (array) $_POST['changed_keys']) : [];
+                'avif-natural-source', 'fetchpriority-high', 'single-url-image-format',
+                // Performance
+                'critical,css', 'delay,js', 'delay-js-v2',
+                'minify,html', 'minify,css', 'minify,js',
+                // CF / CDN routing
+                'cf,cdn', 'cf,assets', 'eu-routing',
+                // v7.21.149 — the simple panel's pillar keys. It saves through the batch now and
+                // sends the pillar name, not the member keys it expands to, so the gate has to know
+                // them by name or a simple-screen save would purge nothing. wps_ic_options::$purgeList
+                // already declares imagesPreset/cdnAll as cdn+critical+html.
+                'imagesPreset', 'cdnAll', 'cache,advanced',
+            ];
+            $changedKeys = !empty($_POST['changed_keys']) ? array_map('sanitize_text_field', (array) $_POST['changed_keys']) : [];
 
-        $needsHtmlPurge = !empty($changedKeys) && !empty(array_intersect($changedKeys, $htmlPurgeKeys));
+            $needsHtmlPurge = !empty($changedKeys) && !empty(array_intersect($changedKeys, $htmlPurgeKeys));
 
-        if ($needsHtmlPurge) {
-            // Purge WPC HTML cache + bump ICV hashes
-            delete_transient('wps_ic_css_cache');
-            delete_option('wps_ic_modified_css_cache');
-            delete_option('wps_ic_css_combined_cache');
-            $cache = new wps_ic_cache_integrations();
-            $cache::purgeAll(false, true, false, false, true);
-            $cache::purgeCombinedFiles();
-
-            // Purge third-party caches. The page cache itself is purged by the purgeAll() above
-            // (hard: a human save, wpc_purge_human_save()); a wholesale delete of cache/wp-cio here
-            // erased the receipt journal on every save.
-            self::purgeBreeze();
-            if (function_exists('rocket_clean_domain')) rocket_clean_domain();
-            if (defined('LSCWP_V')) do_action('litespeed_purge_all');
-            if (defined('WPHB_VERSION')) do_action('wphb_clear_page_cache');
-        }
-
-        // The agency relay of the same save (comms purgeAfterSave) makes this same call.
-        if (function_exists('wpc_crit_invalidate_on_settings_save')) {
-            wpc_crit_invalidate_on_settings_save($changedKeys);
-        }
-
-
-        if (!empty($changedKeys) && in_array('font-display', $changedKeys, true) && class_exists('wps_ic_fonts')) {
-            try {
-                $wpc_fonts_rebake = new wps_ic_fonts();
-                if (method_exists($wpc_fonts_rebake, 'rebakeFontDisplay')) {
-                    $wpc_fonts_rebake->rebakeFontDisplay();
-                }
-            } catch (\Throwable $e) {
-                // A font re-bake error must never break the settings save.
-            }
-        }
-
-
-        $wpc_cf_live   = get_option(WPS_IC_CF);
-        $wpc_cf_active = !empty($wpc_cf_live) && !empty($wpc_cf_live['token']) && !empty($wpc_cf_live['zone']);
-
-
-        $wpc_wpe_active = class_exists('WpeCommon');
-        if ($wpc_cf_active || $wpc_wpe_active) {
-
-
-            if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
-                wps_ic_cache::removeHtmlCacheFiles('all');
-            }
-
-            // WP Engine — direct, registration-independent flush (idempotent; safe to double-fire vs the
-            // fan-out leg). Each call is method-guarded so a partial WpeCommon surface can't fatal the save.
-            if ($wpc_wpe_active) {
+            if ($needsHtmlPurge) {
+                // Purge WPC HTML cache + bump ICV hashes
+                $keepDependencies = false;
                 try {
-                    if (method_exists('WpeCommon', 'purge_memcached'))     { WpeCommon::purge_memcached(); }
-                    if (method_exists('WpeCommon', 'purge_varnish_cache')) { WpeCommon::purge_varnish_cache(); }
-                    if (method_exists('WpeCommon', 'clear_cdn_cache'))     { WpeCommon::clear_cdn_cache(); }
+                    $keepDependencies = function_exists('wpc_save_is_crit_enable_only') && wpc_save_is_crit_enable_only();
                 } catch (\Throwable $e) {
-                    // A WPE flush error must never break the settings save.
                 }
+                if (!$keepDependencies) {
+                    delete_transient('wps_ic_css_cache');
+                    delete_option('wps_ic_modified_css_cache');
+                    delete_option('wps_ic_css_combined_cache');
+                }
+                $cache = new wps_ic_cache_integrations();
+                $cache::purgeAll(false, true, false, false, true);
+                $cache::purgeCombinedFiles();
+
+                // Purge third-party caches. The page cache itself is purged by the purgeAll() above
+                // (hard: a human save, wpc_purge_human_save()); a wholesale delete of cache/wp-cio here
+                // erased the receipt journal on every save.
+                self::purgeBreeze();
+                if (function_exists('rocket_clean_domain')) rocket_clean_domain();
+                if (defined('LSCWP_V')) do_action('litespeed_purge_all');
+                if (defined('WPHB_VERSION')) do_action('wphb_clear_page_cache');
+            }
+
+            // The agency relay of the same save (comms purgeAfterSave) makes this same call.
+            if (function_exists('wpc_crit_invalidate_on_settings_save')) {
+                wpc_crit_invalidate_on_settings_save($changedKeys);
             }
 
 
-            if ($wpc_cf_active) {
+            if (!empty($changedKeys) && in_array('font-display', $changedKeys, true) && class_exists('wps_ic_fonts')) {
                 try {
-                    if (apply_filters('wpc_cf_purge_html_full', false)) {
-
-                        if (!class_exists('WPC_CloudflareAPI') && defined('WPS_IC_DIR') && file_exists(WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php')) {
-                            @include_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
-                        }
-                        if (class_exists('WPC_CloudflareAPI')) {
-                            $wpc_cfapi_save = new WPC_CloudflareAPI($wpc_cf_live['token']);
-                            if ($wpc_cfapi_save) {
-                                $wpc_cfapi_save->purgeCache($wpc_cf_live['zone']);
-                            }
-                        }
-                    } elseif (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
-
-
-                        wps_ic_cache::cfPurgeAllHtml();
-                    } elseif (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeEdgeHtmlUrls')) {
-
-                        wps_ic_cache::purgeEdgeHtmlUrls([home_url('/'), home_url()]);
+                    $wpc_fonts_rebake = new wps_ic_fonts();
+                    if (method_exists($wpc_fonts_rebake, 'rebakeFontDisplay')) {
+                        $wpc_fonts_rebake->rebakeFontDisplay();
                     }
                 } catch (\Throwable $e) {
-                    // A CF API error must never break the settings save.
+                    // A font re-bake error must never break the settings save.
                 }
             }
+
+
+            $wpc_cf_live   = get_option(WPS_IC_CF);
+            $wpc_cf_active = !empty($wpc_cf_live) && !empty($wpc_cf_live['token']) && !empty($wpc_cf_live['zone']);
+
+
+            $wpc_wpe_active = class_exists('WpeCommon');
+            if ($wpc_cf_active || $wpc_wpe_active) {
+
+
+                if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+                    wps_ic_cache::removeHtmlCacheFiles('all');
+                }
+
+                // WP Engine — direct, registration-independent flush (idempotent; safe to double-fire vs the
+                // fan-out leg). Each call is method-guarded so a partial WpeCommon surface can't fatal the save.
+                if ($wpc_wpe_active) {
+                    try {
+                        if (method_exists('WpeCommon', 'purge_memcached'))     { WpeCommon::purge_memcached(); }
+                        if (method_exists('WpeCommon', 'purge_varnish_cache')) { WpeCommon::purge_varnish_cache(); }
+                        if (method_exists('WpeCommon', 'clear_cdn_cache'))     { WpeCommon::clear_cdn_cache(); }
+                    } catch (\Throwable $e) {
+                        // A WPE flush error must never break the settings save.
+                    }
+                }
+
+
+                if ($wpc_cf_active) {
+                    try {
+                        if (apply_filters('wpc_cf_purge_html_full', false)) {
+
+                            if (!class_exists('WPC_CloudflareAPI') && defined('WPS_IC_DIR') && file_exists(WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php')) {
+                                @include_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
+                            }
+                            if (class_exists('WPC_CloudflareAPI')) {
+                                $wpc_cfapi_save = new WPC_CloudflareAPI($wpc_cf_live['token']);
+                                if ($wpc_cfapi_save) {
+                                    $wpc_cfapi_save->purgeCache($wpc_cf_live['zone']);
+                                }
+                            }
+                        } elseif (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
+
+
+                            wps_ic_cache::cfPurgeAllHtml();
+                        } elseif (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeEdgeHtmlUrls')) {
+
+                            wps_ic_cache::purgeEdgeHtmlUrls([home_url('/'), home_url()]);
+                        }
+                    } catch (\Throwable $e) {
+                        // A CF API error must never break the settings save.
+                    }
+                }
+            }
+
+        } finally {
+            delete_option('wpc_crit_enable_save');
         }
 
         wp_send_json_success();
@@ -4355,6 +4382,9 @@ class wps_ic_ajax extends wps_ic
      */
     public function wps_lite_connect()
     {
+        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'wpc_live_connect')) {
+            wp_send_json_error('Forbidden.');
+        }
         $connect = new wps_ic_connect();
         $call = $connect->connectLite();
     }
@@ -5852,9 +5882,10 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_StopBulk()
     {
-        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error('Forbidden.');
         }
+        self::wpc_require_ajax_nonce();
 
 
         @ignore_user_abort(true);
@@ -5936,6 +5967,7 @@ class wps_ic_ajax extends wps_ic
     public function wps_ic_getBulkStats()
     {
         self::wpc_require_bulk_capability();
+        self::wpc_require_ajax_nonce();
         $bulkStatus = get_option('wps_ic_BulkStatus');
         $parsedImages = get_option('wps_ic_parsed_images');
 
@@ -6166,9 +6198,10 @@ class wps_ic_ajax extends wps_ic
      */
     public function wpc_ic_start_bulk_restore()
     {
-        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error('Forbidden.');
         }
+        self::wpc_require_ajax_nonce();
         // Performance Lab - generate webp on upload
         if (function_exists('webp_uploads_create_sources_property')) {
             wp_send_json_error(['msg' => 'performance-lab-compatibility']);
@@ -6373,9 +6406,10 @@ class wps_ic_ajax extends wps_ic
 
     public function wpc_ic_start_bulk_compress()
     {
-        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error('Forbidden.');
         }
+        self::wpc_require_ajax_nonce();
 
         if (function_exists('webp_uploads_create_sources_property')) {
             wp_send_json_error(['msg' => 'performance-lab-compatibility']);
@@ -6907,6 +6941,7 @@ class wps_ic_ajax extends wps_ic
         if ($apikey === '' || $ts <= 0 || $sig === '' || abs(time() - $ts) > 60) { http_response_code(401); exit('auth'); }
         $expected = hash_hmac('sha256', 'wpc_bulk_compress_drain.' . $ts, $apikey); // DISTINCT namespace
         if (!hash_equals($expected, $sig)) { http_response_code(401); exit('sig'); }
+        if (function_exists('wpc_cmd_census')) { wpc_cmd_census(wpc_cmd_door(), 'self-hmac'); }
         // The worker must outlive the caller's socket: set before any output, since PHP stops a
         // script at its first write to a client that has gone unless ignore_user_abort is on.
         @ignore_user_abort(true);
@@ -7993,6 +8028,7 @@ class wps_ic_ajax extends wps_ic
         if ($apikey === '' || $ts <= 0 || $sig === '' || abs(time() - $ts) > 60) { http_response_code(401); exit('auth'); }
         $expected = hash_hmac('sha256', 'wpc_bulk_restore_drain.' . $ts, $apikey); // DISTINCT namespace
         if (!hash_equals($expected, $sig)) { http_response_code(401); exit('sig'); }
+        if (function_exists('wpc_cmd_census')) { wpc_cmd_census(wpc_cmd_door(), 'self-hmac'); }
         // LAYER 0 — close the client connection then run detached (FPM/LiteSpeed only; mod_php falls through).
         if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { http_response_code(200); echo 'queued'; wpc_finish_request(); }
         elseif (function_exists('litespeed_finish_request')) { http_response_code(200); echo 'queued'; @litespeed_finish_request(); }
@@ -8524,6 +8560,7 @@ class wps_ic_ajax extends wps_ic
         if (!current_user_can('manage_options')) {
             wp_send_json_error('unauthorized');
         }
+        self::wpc_require_ajax_nonce();
 
         $lastProgress = $_POST['lastProgress'];
         $bulkStats = get_transient('wps_ic_bulk_stats');
@@ -8571,6 +8608,7 @@ class wps_ic_ajax extends wps_ic
     public function wps_ic_media_library_bulk_heartbeat()
     {
         self::wpc_require_bulk_capability();
+        self::wpc_require_ajax_nonce();
         global $wpdb, $wps_ic;
         $like_compress = $wpdb->esc_like('_transient_wps_ic_compress_') . '%';
         $like_restore  = $wpdb->esc_like('_transient_wps_ic_restore_') . '%';
@@ -8614,6 +8652,13 @@ class wps_ic_ajax extends wps_ic
         }
     }
 
+    public static function wpc_require_ajax_nonce($field = 'nonce')
+    {
+        if (!check_ajax_referer('wps_ic_nonce_action', $field, false)) {
+            wp_send_json_error(['msg' => 'bad-nonce'], 403);
+        }
+    }
+
     public static function wpc_require_media_action_capability()
     {
         $attachment_id = isset($_POST['attachment_id']) ? absint($_POST['attachment_id']) : 0;
@@ -8626,6 +8671,7 @@ class wps_ic_ajax extends wps_ic
     public function wps_ic_restore_live()
     {
         self::wpc_require_media_action_capability();
+        self::wpc_require_ajax_nonce();
         if (function_exists('webp_uploads_create_sources_property')) {
             wp_send_json_error(['msg' => 'performance-lab-compatibility']);
         }
@@ -9429,6 +9475,7 @@ class wps_ic_ajax extends wps_ic
     public function wps_ic_compress_live()
     {
         self::wpc_require_media_action_capability();
+        self::wpc_require_ajax_nonce();
         if (function_exists('webp_uploads_create_sources_property')) {
             wp_send_json_error(['msg' => 'performance-lab-compatibility']);
         }
@@ -11303,6 +11350,7 @@ class wps_ic_ajax extends wps_ic
     public function wps_ic_get_cache_cookies()
     {
         self::wpc_require_bulk_capability();
+        self::wpc_require_ajax_nonce('wps_ic_nonce');
         if ($this->isAgencyPortal()) {
             global $api;
             $apikey          = sanitize_text_field($_POST['apikey'] ?? '');
@@ -11678,7 +11726,7 @@ class wps_ic_ajax extends wps_ic
         $json = [];
 
         if ($settings) {
-            $json['settings'] = get_option(WPS_IC_SETTINGS);
+            $json['settings'] = wps_ic_users::keepLocalOnlySettings(get_option(WPS_IC_SETTINGS), []);
         }
 
         if ($excludes) {
@@ -11758,6 +11806,13 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error(['msg' => 'No import data provided']);
         }
 
+        if (!wpc_import_groups_ok($import_data)) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('import-refused', '', '', ['door' => 'ajax']);
+            }
+            wp_send_json_error(['msg' => 'Invalid import data']);
+        }
+
         // In agency mode, relay the import to the remote client site.
         if ($apikey && $this->isAgencyPortal()) {
             global $api;
@@ -11771,13 +11826,13 @@ class wps_ic_ajax extends wps_ic
         $options_class = new wps_ic_options();
 
         if (isset($import_data['settings'])) {
-            $import_data['settings'] = $options_class->setMissingSettings($import_data['settings']);
+            $import_data['settings'] = $options_class->setMissingSettings(wps_ic_users::keepLocalOnlySettings($import_data['settings'], get_option(WPS_IC_SETTINGS)));
             update_option(WPS_IC_SETTINGS, $import_data['settings']);
         }
 
         if (isset($import_data['excludes'])) {
             // An export from an older site carries two Delay JS lists; store the one.
-            update_option('wpc-excludes', wpc_delay_excludes_fold($import_data['excludes']));
+            update_option('wpc-excludes', wpc_delay_excludes_fold(wpc_excludes_shape($import_data['excludes'])));
         }
 
         $url_excludes = wpc_url_excludes_import($import_data['url_excludes'] ?? null);

@@ -1587,24 +1587,14 @@ final class wps_ic_hero_land
     /** A srcset-shaped list with each plain address of a rendition renamed; $count is how many. */
     private static function renameList($list, array $rows, &$count)
     {
-        $parts = [];
-        foreach (preg_split('/\s*,\s*/', html_entity_decode((string) $list, ENT_QUOTES)) as $candidate) {
-            if ($candidate === '') {
-                continue;
-            }
-            $descriptor = '';
-            if (preg_match('/^(\S+)(\s+\d+(?:\.\d+)?[wx])$/', $candidate, $found)) {
-                $candidate = $found[1];
-                $descriptor = $found[2];
-            }
+        return wpc_srcset_map(html_entity_decode((string) $list, ENT_QUOTES), static function ($candidate) use ($rows, &$count) {
             $twin = self::matchTwin($candidate, $rows);
-            if ($twin !== '') {
-                $count++;
-                $candidate = $twin;
+            if ($twin === '') {
+                return $candidate;
             }
-            $parts[] = $candidate . $descriptor;
-        }
-        return implode(', ', $parts);
+            $count++;
+            return $twin;
+        });
     }
 
     private static function encode($value)

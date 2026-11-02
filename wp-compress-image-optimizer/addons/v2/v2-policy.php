@@ -762,7 +762,7 @@ if (!function_exists('wpc_policy_render_cohorts')) {
     function wpc_policy_render_cohorts()
     {
         return ['plain_paths', 'encode_on_view', 'off_attach_match', 'off_zone_crit_urls', 'delay_trusted', 'menu_fix', 'css_order', 'body_js_ext',
-            'fetchpriority_hero', 'hero_fold', 'faces_range', 'atf_faces', 'asset_icv', 'crit_after_global', 'click_record', 'off_first_screen_swap', 'click_serviced', 'bg_hero_match', 'off_bg_preload_scan', 'off_painted_follow', 'native_assets', 'phone_hero', 'after_hero', 'img_after_hero', 'icon_font_preload_drop', 'late_faces_handover', 'late_faces_below_fold', 'release_no_transition', 'swap_no_transition', 'inline_data_pct', 'doc_trim', 'release_needs_gesture', 'css_release_idle', 'crit_retire', 'rest_swap_hold', 'embed_hold', 'menu_early', 'subset_face_swap', 'font_display_declared', 'faces_first_screen','hidden_until_js_idle', 'tap_first', 'form_submit_hold', 'bg_mobile_src', 'bg_mobile_edge_rung', 'hero_lqip', 'img_lqip', 'hero_one_url', 'slice_keyframes', 'slice_page_sheets', 'refused_face_first', 'icon_guard_release', 'ar_pin_exact', 'hero_decode_sync', 'lazy_margin_native', 'atf_complete_lazy', 'hero_same_origin', 'ar_pin_disk', 'deferred_after_lcp', 'faces_base64_trim', 'menu_toggle_live', 'release_on_lcp_entry', 'img_hold_first_screen', 'faces_after_lcp', 'first_party_typed', 'lever_delay_js', 'lever_scripts_late', 'lever_delay_onload', 'lever_menu_early', 'lever_hero_eager', 'lever_fonts_origin', 'lever_cv_below_fold', 'lever_font_preload_drop', 'off_retire_live_gate', 'phone_bg_derive', 'safe_delay', 'safe_delay_families', 'delay_host_rule', 'divi_live_css_off', 'off_first_n_trim', 'off_icon_preload_unseen', 'off_gf_hold', 'off_data_only_call_guard', 'off_cio_rebase_fix', 'off_lcp_entry_match', 'off_rescan_late_faces', 'off_first_n_measured_fold', 'off_hidden_slide_defer', 'off_loader_after_lcp', 'off_bg_rung_fit', 'off_bg_rung_pair', 'off_cf_bg_named', 'off_img_load_unhold', 'off_preload_before_crit', 'off_rest_at_crit', 'rest_at_crit', 'off_late_chain_gate', 'off_cv_transition_guard', 'off_rest_focus_guard', 'off_offscreen_video', 'off_lcp_kind_gate', 'off_slider_fold_lazy', 'off_hero_lqip_after_paint', 'off_hero_lqip_combined', 'off_lcp_copy_low', 'off_el_stretch_fit', 'off_el_pin_reach', 'off_lcp_size_floor', 'ucss_heal', 'off_el_heal_px', 'theme_bg_cdn', 'etcache_live_inline', 'lscwp_keep_inline', 'lcp_bg_path_exact', 'lcp_link_header', 'cdn_directories', 'slider_lcp', 'lcp_paint_exact', 'ar_pin_width_only', 'force_delay_jquery', 'atf_wire_clear'];
+            'fetchpriority_hero', 'hero_fold', 'faces_range', 'atf_faces', 'asset_icv', 'crit_after_global', 'click_record', 'off_first_screen_swap', 'click_serviced', 'bg_hero_match', 'off_bg_preload_scan', 'off_painted_follow', 'native_assets', 'phone_hero', 'after_hero', 'img_after_hero', 'icon_font_preload_drop', 'late_faces_handover', 'late_faces_below_fold', 'release_no_transition', 'swap_no_transition', 'inline_data_pct', 'doc_trim', 'release_needs_gesture', 'css_release_idle', 'crit_retire', 'rest_swap_hold', 'embed_hold', 'menu_early', 'subset_face_swap', 'font_display_declared', 'faces_first_screen','hidden_until_js_idle', 'tap_first', 'form_submit_hold', 'bg_mobile_src', 'bg_mobile_edge_rung', 'hero_lqip', 'img_lqip', 'hero_one_url', 'slice_keyframes', 'slice_page_sheets', 'refused_face_first', 'icon_guard_release', 'ar_pin_exact', 'hero_decode_sync', 'lazy_margin_native', 'atf_complete_lazy', 'hero_same_origin', 'ar_pin_disk', 'deferred_after_lcp', 'faces_base64_trim', 'menu_toggle_live', 'release_on_lcp_entry', 'img_hold_first_screen', 'faces_after_lcp', 'first_party_typed', 'lever_delay_js', 'lever_scripts_late', 'lever_delay_onload', 'lever_menu_early', 'lever_hero_eager', 'lever_fonts_origin', 'lever_cv_below_fold', 'lever_font_preload_drop', 'off_retire_live_gate', 'phone_bg_derive', 'safe_delay', 'safe_delay_families', 'delay_host_rule', 'divi_live_css_off', 'off_first_n_trim', 'off_icon_preload_unseen', 'off_gf_hold', 'off_data_only_call_guard', 'off_cio_rebase_fix', 'off_lcp_entry_match', 'off_rescan_late_faces', 'off_first_n_measured_fold', 'off_hidden_slide_defer', 'off_loader_after_lcp', 'off_bg_rung_fit', 'off_bg_rung_pair', 'off_cf_bg_named', 'off_img_load_unhold', 'off_preload_before_crit', 'off_rest_at_crit', 'rest_at_crit', 'off_late_chain_gate', 'off_cv_transition_guard', 'off_rest_focus_guard', 'off_offscreen_video', 'off_lcp_kind_gate', 'off_slider_fold_lazy', 'off_hero_lqip_after_paint', 'off_hero_lqip_combined', 'off_lcp_copy_low', 'off_el_stretch_fit', 'off_el_pin_reach', 'off_lcp_size_floor', 'ucss_heal', 'off_el_heal_px', 'theme_bg_cdn', 'etcache_live_inline', 'lscwp_keep_inline', 'lcp_bg_path_exact', 'lcp_link_header', 'cdn_directories', 'slider_lcp', 'lcp_paint_exact', 'ar_pin_width_only', 'force_delay_jquery', 'atf_wire_clear', 'off_picture_inherit'];
     }
 }
 
@@ -888,6 +888,13 @@ if (!function_exists('wpc_lever_value_off')) {
     }
 }
 
+if (!function_exists('wpc_lever_recorded_only_names')) {
+    function wpc_lever_recorded_only_names()
+    {
+        return ['delay_js'];
+    }
+}
+
 if (!function_exists('wpc_lever_blocked')) {
     function wpc_lever_blocked($name, $value = null)
     {
@@ -897,8 +904,10 @@ if (!function_exists('wpc_lever_blocked')) {
         if ($value !== null && in_array((string) $name, wpc_lever_kill_names(), true) && wpc_lever_value_off($value)) {
             return false;
         }
+        $recorded_only = in_array((string) $name, wpc_lever_recorded_only_names(), true);
+        $chosen = $recorded_only ? get_option('wpc_settings_chosen', []) : [];
         foreach (wpc_lever_setting_keys($name) as $key) {
-            if (wpc_setting_chosen($key)) {
+            if ($recorded_only ? (is_array($chosen) && isset($chosen[$key]) && (int) $chosen[$key] > 0) : wpc_setting_chosen($key)) {
                 return true;
             }
         }
@@ -1021,6 +1030,9 @@ if (!function_exists('wpc_lever_test_verify')) {
         $key = function_exists('wpc_v2_get_apikey') ? (string) wpc_v2_get_apikey() : '';
         if ($key === '' || !hash_equals(wpc_lever_sign($key, $path, implode('&', $pairs), $exp), $sig)) {
             return null;
+        }
+        if (function_exists('wpc_cmd_census')) {
+            wpc_cmd_census('get:wpc_lever', 'key-hmac');
         }
         $out = ['exp' => (int) $exp, 'test' => 0, 'levers' => []];
         foreach ($params as $k => $v) {

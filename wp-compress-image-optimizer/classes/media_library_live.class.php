@@ -233,11 +233,11 @@ class wps_ic_media_library_live extends wps_ic
                 require_once(ABSPATH . "wp-includes" . '/option.php');
             }
 
-            $path_to_image = get_attached_file($_GET['regen']);
+            $imageID = is_scalar($_GET['regen']) ? (int) $_GET['regen'] : 0;
+            $path_to_image = $imageID > 0 ? get_attached_file($imageID) : '';
             if (!empty($path_to_image)) {
-                $imageID = $_GET['regen'];
-                $meta = wp_generate_attachment_metadata($_GET['regen'], $path_to_image);
-                wp_update_attachment_metadata($_GET['regen'], $meta);
+                $meta = wp_generate_attachment_metadata($imageID, $path_to_image);
+                wp_update_attachment_metadata($imageID, $meta);
 
                 // Remove meta tags
                 delete_post_meta($imageID, 'ic_stats');

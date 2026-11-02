@@ -28,6 +28,10 @@ class wps_ic_autoptimize extends wps_ic_integrations {
     }
 
     public function purge_cache($url_key = false) {
+        try {
+            if (function_exists('wpc_save_is_crit_enable_only') && wpc_save_is_crit_enable_only()) { return; }
+        } catch (\Throwable $e) {
+        }
         if (class_exists('autoptimizeCache')) {
             autoptimizeCache::clearall();
         }

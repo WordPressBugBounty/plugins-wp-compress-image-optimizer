@@ -222,7 +222,7 @@ if (!empty($_POST['options']['font-display']) && isset($_POST['fonts'])) {
 
 }
 
-if (!empty($_GET['resetTest'])) {
+if (!empty($_GET['resetTest']) && wpc_admin_nonce_ok($_GET)) {
     delete_transient('wpc_initial_test');
     update_option(WPS_IC_LITE_GPS, ['result' => array(), 'failed' => false, 'lastRun' => time()]);
     $tests = get_option(WPS_IC_TESTS);

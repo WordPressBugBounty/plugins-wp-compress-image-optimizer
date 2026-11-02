@@ -331,9 +331,8 @@ class wps_ic_crit_corpus
     }
 
     /**
-     * Writes the corpus so far to this device's file. It runs after every sheet, so the file is
-     * rewritten as it grows (wpc_write_if_changed skips identical bytes); corpus_from_html only
-     * collects.
+     * Writes the corpus to this device's file, once per push_render, after every sheet is read
+     * (wpc_write_if_changed skips identical bytes); corpus_from_html only collects.
      */
     public function write_file_and_next()
     {
@@ -709,8 +708,6 @@ class wps_ic_crit_corpus
 
         $this->current_file .= "/* SCRIPT : $src */" . PHP_EOL;
         $this->current_file .= wpc_css_wrap($content, $media_query, true) . PHP_EOL;
-
-        $this->write_file_and_next();
 
         if (!$this->firstFoundStyle) {
             $this->firstFoundStyle = true;

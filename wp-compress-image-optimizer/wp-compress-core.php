@@ -1074,21 +1074,9 @@ function wpc_v2_rewrite_img_to_natural_urls($img_tag, $cdn_zone, $upload_basedir
 
 function wpc_v2_rewrite_srcset_value($srcset, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url) {
     if (empty($srcset)) return $srcset;
-    $entries = explode(',', $srcset);
-    foreach ($entries as &$entry) {
-        $entry = trim($entry);
-        if ($entry === '') continue;
-        // Entry is "URL [descriptor]" — split on the first whitespace so URLs
-        // with embedded colons stay intact.
-        if (preg_match('/^(\S+)(\s+.+)?$/', $entry, $em)) {
-            $url = $em[1];
-            $descriptor = isset($em[2]) ? $em[2] : '';
-            $new_url = wpc_v2_rewrite_single_url_to_natural($url, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url);
-            $entry = $new_url . $descriptor;
-        }
-    }
-    unset($entry);
-    return implode(', ', $entries);
+    return wpc_srcset_map($srcset, function ($url) use ($cdn_zone, $upload_basedir, $upload_baseurl, $site_url) {
+        return wpc_v2_rewrite_single_url_to_natural($url, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url);
+    });
 }
 
 function wpc_v2_rewrite_single_url_to_natural($url, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url) {
@@ -1337,6 +1325,7 @@ function wpc_inject_picture_tags($content) {
     $upload_basedir_for_rewrite = isset($upload_dir_for_rewrite['basedir']) ? $upload_dir_for_rewrite['basedir'] : '';
     $upload_baseurl_for_rewrite = isset($upload_dir_for_rewrite['baseurl']) ? $upload_dir_for_rewrite['baseurl'] : '';
     $site_url_for_rewrite = site_url();
+    $cdn_zone = '';
 
     // Match <img> tags with wp-image-{ID} class (WordPress standard)
     $content = preg_replace_callback(
@@ -1582,19 +1571,19 @@ function wpc_inject_picture_tags($content) {
 
             if (function_exists('wpc_encode_on_view_on') && wpc_encode_on_view_on()
                 && preg_match('/\s' . preg_quote($srcsetAttr, '/') . '="([^"]*)"/i', $img_tag, $wpc_ladder_attr)) {
-                foreach (explode(',', $wpc_ladder_attr[1]) as $wpc_ladder_entry) {
-                    if (!preg_match('/^\s*(\S+)\s+(\d+)w\s*$/', $wpc_ladder_entry, $wpc_ladder_rung)) {
+                foreach (wpc_srcset_parse($wpc_ladder_attr[1]) as $wpc_ladder_rung) {
+                    if (!preg_match('/^(\d+)w$/', $wpc_ladder_rung[1], $wpc_ladder_width)) {
                         continue;
                     }
-                    $wpc_ladder_w = (int) $wpc_ladder_rung[2];
+                    $wpc_ladder_w = (int) $wpc_ladder_width[1];
                     if ($wpc_ladder_w <= 0) {
                         continue;
                     }
                     if (!empty($webp_srcset) && !isset($webp_srcset[$wpc_ladder_w])) {
-                        $webp_srcset[$wpc_ladder_w] = esc_url($wpc_ladder_rung[1]) . ' ' . $wpc_ladder_w . 'w';
+                        $webp_srcset[$wpc_ladder_w] = esc_url($wpc_ladder_rung[0]) . ' ' . $wpc_ladder_w . 'w';
                     }
                     if (!empty($avif_srcset) && !isset($avif_srcset[$wpc_ladder_w])) {
-                        $avif_srcset[$wpc_ladder_w] = esc_url($wpc_ladder_rung[1]) . ' ' . $wpc_ladder_w . 'w';
+                        $avif_srcset[$wpc_ladder_w] = esc_url($wpc_ladder_rung[0]) . ' ' . $wpc_ladder_w . 'w';
                     }
                 }
             }
@@ -1946,7 +1935,27 @@ if (!function_exists('wpc_spawn_cron')) {
         if ($min > 0 && ($now - $last) < $min) {
             return false;
         }
-        update_option('wpc_cron_spawn_at', $now, false);
+        $claimed = null;
+        try {
+            if (add_option('wpc_cron_spawn_at', $now, '', false)) {
+                $claimed = true;
+            } else {
+                global $wpdb;
+                if (is_object($wpdb) && method_exists($wpdb, 'query')) {
+                    $changed = $wpdb->query($wpdb->prepare("UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", (string) $now, 'wpc_cron_spawn_at', (string) $last));
+                    if ($changed !== false) {
+                        $claimed = $changed === 1;
+                        if ($claimed && function_exists('wp_cache_delete')) {
+                            wp_cache_delete('wpc_cron_spawn_at', 'options');
+                            wp_cache_delete('alloptions', 'options');
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        if ($claimed === false) { return false; }
+        if ($claimed === null) { update_option('wpc_cron_spawn_at', $now, false); }
         spawn_cron();
         return true;
     }
@@ -2010,7 +2019,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '7.30.35';
+        self::$version = '7.30.45';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -2560,7 +2569,7 @@ class wps_ic
         // and only when the homepage has no crit. A homepage kick (src upgrade) used to fire here
         // as well, before the resync, on every run of this lane: a second ask for the same page in
         // the same minute. Collecting the homepage's existing artifacts is the repull the update
-        // window schedules (wpc_artifact_refresh_on_update, 90 s after the update).
+        // window schedules (wpc_artifact_refresh_on_update, inside the update window).
         $resynced = false;
         try {
             // v7.10.830 — OUT-OF-THE-BOX CONVERGENCE ON UPDATE. The update window's repull re-pulls
@@ -4297,8 +4306,22 @@ class wps_ic
                 $wpc_manifest_expected_sig = $wpc_manifest_api_key === '' ? '' : hash_hmac('sha256',
                     (string) $wpc_cb_body['gen_id'] . '|' . (string) ($wpc_cb_body['url_key'] ?? '') . '|' . (string) ($wpc_cb_body['ts'] ?? ''),
                     $wpc_manifest_api_key);
-                $wpc_manifest_authorized = ($wpc_manifest_expected_sig !== '' && $wpc_manifest_sig !== '' && hash_equals($wpc_manifest_expected_sig, $wpc_manifest_sig))
+                $wpc_manifest_signed = $wpc_manifest_expected_sig !== '' && $wpc_manifest_sig !== '' && hash_equals($wpc_manifest_expected_sig, $wpc_manifest_sig);
+                $wpc_manifest_authorized = $wpc_manifest_signed
                     || ($wpc_manifest_api_key !== '' && wpc_site_key_matches(wpc_get_string('apikey')));
+                if ($wpc_manifest_signed) {
+                    if (function_exists('wpc_cmd_census')) {
+                        wpc_cmd_census('get:criticalDone', 'key-hmac');
+                    }
+                    $wpc_manifest_ts = (string) ($wpc_cb_body['ts'] ?? '');
+                    $wpc_manifest_ts_s = ctype_digit($wpc_manifest_ts) ? (float) $wpc_manifest_ts : 0;
+                    if ($wpc_manifest_ts_s > 20000000000) {
+                        $wpc_manifest_ts_s = $wpc_manifest_ts_s / 1000;
+                    }
+                    if (($wpc_manifest_ts_s <= 0 || abs(time() - $wpc_manifest_ts_s) > 600) && function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('crit-manifest-ts-stale', (string) ($wpc_cb_body['url_key'] ?? ''), '', ['ts' => substr($wpc_manifest_ts, 0, 16), 'age' => $wpc_manifest_ts_s > 0 ? (int) (time() - $wpc_manifest_ts_s) : null]);
+                    }
+                }
                 if (!$wpc_manifest_authorized) {
                     // v7.21.137 — crit-team ask: a rejected webhook must be a real non-2xx so the
                     // service's manifest_webhook_failed metric sees the truth (their .115 accepts
@@ -4425,7 +4448,7 @@ class wps_ic
                     if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) { wpc_finish_request(); }
                     $GLOBALS['wpc_land_callback_running'] = true;
 
-                    if (!empty($_GET['debug'])) {
+                    if (!empty($_GET['debug']) && function_exists('current_user_can') && current_user_can('manage_options')) {
                         ini_set('display_errors', 1);
                         error_reporting(E_ALL);
                     }
@@ -4853,7 +4876,7 @@ class wps_ic
                     if (!headers_sent()) { http_response_code(200); }
                     if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) { wpc_finish_request(); }
 
-                    if (!empty($_GET['debug'])) {
+                    if (!empty($_GET['debug']) && function_exists('current_user_can') && current_user_can('manage_options')) {
                         ini_set('display_errors', 1);
                         error_reporting(E_ALL);
                     }

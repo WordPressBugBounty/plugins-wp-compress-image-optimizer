@@ -46,7 +46,7 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
             </button>
             <?php if (defined('WPC_PERF_DEBUG_UI') && WPC_PERF_DEBUG_UI) : ?>
             <a class="wpc-oa-bench" id="wpc-oa-bench" target="_blank" rel="noopener noreferrer"
-               href="<?php echo esc_url(admin_url('admin-ajax.php?action=wpc_perf_debug&url=' . rawurlencode(home_url('/')))); ?>"
+               href="<?php echo esc_url(admin_url('admin-ajax.php?action=wpc_perf_debug&url=' . rawurlencode(home_url('/')) . '&_wpnonce=' . wp_create_nonce('wpc_perf_debug'))); ?>"
                title="<?php echo esc_attr__('Opens the performance diagnostic in a new tab. Mints this site\'s benchmark key, arms cacheable tier arms, and prints ready-made tier URLs.', WPS_IC_TEXTDOMAIN); ?>">
                 <?php echo esc_html__('Perf diagnostic', WPS_IC_TEXTDOMAIN); ?>
             </a>

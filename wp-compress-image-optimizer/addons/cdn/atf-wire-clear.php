@@ -300,10 +300,9 @@ final class wps_ic_atf_wire_clear
         if (trim($src) !== '' && stripos(ltrim($src), 'data:') !== 0) {
             $out[] = trim($src);
         }
-        foreach (explode(',', $srcset) as $candidate) {
-            $parts = preg_split('/\s+/', trim($candidate));
-            if (is_array($parts) && isset($parts[0]) && $parts[0] !== '' && stripos($parts[0], 'data:') !== 0) {
-                $out[] = $parts[0];
+        foreach (wpc_srcset_urls($srcset) as $address) {
+            if (stripos($address, 'data:') !== 0) {
+                $out[] = $address;
             }
         }
         return $out;

@@ -40,6 +40,9 @@ if (!function_exists('wpc_land_html_brotli_copy')) {
             if ($posted_apikey === '' || $site_apikey === '' || !hash_equals($site_apikey, $posted_apikey)) {
                 wp_send_json_error('auth');
             }
+            if (function_exists('wpc_cmd_census')) {
+                wpc_cmd_census('ajax:wpc_html_br_land', 'key-body');
+            }
             $url_key = isset($_POST['url_key']) ? basename((string) $_POST['url_key']) : '';
             $html_md5 = isset($_POST['html_md5']) ? strtolower(trim((string) $_POST['html_md5'])) : '';
             $brotli_base64 = isset($_POST['br_b64']) ? (string) $_POST['br_b64'] : '';

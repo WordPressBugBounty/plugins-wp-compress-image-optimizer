@@ -2068,7 +2068,12 @@ jQuery(document).ready(function ($) {
                 }
                 wait = Math.min(60000, wait * 1.5);
                 setTimeout(tick, wait);
-            }).fail(function () {
+            }).fail(function (xhr) {
+                if (xhr && xhr.status === 403) {
+                    $s.text('Session expired. Reload the page and try again.');
+                    setTimeout(function () { $s.text(''); }, 8000);
+                    return;
+                }
                 wait = Math.min(60000, wait * 1.5);
                 setTimeout(tick, wait);
             });

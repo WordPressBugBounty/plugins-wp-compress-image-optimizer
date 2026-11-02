@@ -440,6 +440,12 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
         if (function_exists('wpc_device_mix_echo')) {
             $body_payload['device_mix'] = wpc_device_mix_echo();
         }
+        if (function_exists('wpc_cmd_census_echo')) {
+            $cmd_census = wpc_cmd_census_echo();
+            if ($cmd_census !== []) {
+                $body_payload['cmd_census'] = $cmd_census;
+            }
+        }
         if (function_exists('get_bloginfo')) {
             $body_payload['wp_version'] = (string) get_bloginfo('version');
         }
@@ -665,6 +671,19 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
                     wps_ic_cache::removeHtmlCacheFiles('all');
                 } elseif (function_exists('wpc_purge_foreign_caches')) {
                     wpc_purge_foreign_caches(false, 'config-sync');
+                }
+            }
+        }
+
+        $custom_host = trim((string) get_option('ic_custom_cname', ''));
+        if ($witness_host === '' && $custom_host !== '' && $del_cfg['cname'] === $custom_host
+            && is_array($rbody) && !empty($rbody['zones']) && is_array($rbody['zones'])) {
+            $carried_zone_ids = array_map(function ($entry) { return (string) $entry['zone_id']; }, $clean);
+            foreach ($rbody['zones'] as $rz) {
+                if (is_array($rz) && isset($rz['zone_id']) && in_array((string) $rz['zone_id'], $carried_zone_ids, true)
+                    && array_key_exists('cname_verified', $rz) && $rz['cname_verified'] !== null) {
+                    update_option('wpc_custom_cname_witness', ['host' => $custom_host, 'v' => $rz['cname_verified'] ? 1 : 0, 't' => time()], false);
+                    break;
                 }
             }
         }

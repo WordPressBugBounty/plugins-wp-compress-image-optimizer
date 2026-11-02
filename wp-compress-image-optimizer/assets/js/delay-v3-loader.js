@@ -4348,10 +4348,6 @@
                             var m = ds && JSON.parse(ds);
                             anim = (m && (m._animation || m.animation || m._animation_mobile)) || "";
                         } catch (e) {}
-                        if (!anim) {
-                            var wa = el.getAttribute("wpc-elementor-animation") || "";
-                            anim = wa.replace(/^animated\s+/, "");
-                        }
                         el.classList.remove("elementor-invisible");
                         if (anim && anim !== "none") {
                             el.classList.add("animated");
@@ -5058,10 +5054,16 @@ if (!window.__wpcEngaged) {
             } else { kill(); }
         } catch (e) {}
     };
+    function wpcAnimKeys() {
+        var c = window.wpcDelayV3Cfg;
+        return c && c.animKeys && c.animKeys.forEach ? c.animKeys : ["animation", "_animation", "animation_tablet", "_animation_tablet",
+            "animation_mobile", "_animation_mobile", "animation_laptop", "_animation_laptop", "animation_widescreen",
+            "_animation_widescreen", "animation_tablet_extra", "_animation_tablet_extra", "animation_mobile_extra",
+            "_animation_mobile_extra", "animation_delay", "_animation_delay"];
+    }
     window.wpcScrubAnimationSettings = window.wpcScrubAnimationSettings || function(el) {
         try {
-            var ks = ["_animation", "_animation_tablet", "_animation_mobile", "animation",
-             "animation_tablet", "animation_mobile", "_animation_delay", "animation_delay"];
+            var ks = wpcAnimKeys();
             var ds = el.getAttribute("data-settings");
             if (ds && ds.indexOf("animation") !== -1) {
                 var m = JSON.parse(ds);
@@ -5129,7 +5131,31 @@ if (!window.__wpcEngaged) {
             }
             el.classList.remove("elementor-invisible");
             try { window.wpcScrubAnimationSettings && window.wpcScrubAnimationSettings(el); } catch (e) {}
+            try { window.wpcRestoreVisibleBackgrounds && window.wpcRestoreVisibleBackgrounds(); } catch (e) {}
         } catch (e) {}
+    }
+    function wpcElaNoLayout(b) {
+        return !b.width && !b.height && !b.top && !b.left;
+    }
+    function wpcElaHiddenByDisplay(el) {
+        try {
+            for (var n = el; n && n.nodeType === 1; n = n.parentNode) {
+                if (getComputedStyle(n).display === "none") { return true; }
+            }
+        } catch (e) {}
+        return false;
+    }
+    function wpcElaBoxTarget(el) {
+        try {
+            if (getComputedStyle(el).display === "contents") {
+                var all = el.querySelectorAll("*"), i, r;
+                for (i = 0; i < all.length && i < 50; i++) {
+                    r = all[i].getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) { return all[i]; }
+                }
+            }
+        } catch (e) {}
+        return el;
     }
     function wpcElaBeltArm() {
         try {
@@ -5143,19 +5169,31 @@ if (!window.__wpcEngaged) {
                     var en = entries[i];
                     if (!en.isIntersecting) { continue; }
                     wpcElaBeltIO.unobserve(en.target);
-                    (function(el) { setTimeout(function() { wpcElaBeltFix(el, 0); }, 600); })(en.target);
+                    (function(el) { setTimeout(function() { wpcElaBeltFix(el, 0); }, 600); })(en.target.__wpcElaOf || en.target);
                 }
             });
             var vw = window.innerWidth || document.documentElement.clientWidth || 0;
             var vh = window.innerHeight || document.documentElement.clientHeight || 0;
             for (var k = 0; k < els.length; k++) {
                 var b = els[k].getBoundingClientRect();
-                var onScreen = b.bottom >= 0 && b.top <= vh && b.right >= 0 && b.left <= vw;
+                var noLayout = wpcElaNoLayout(b);
+                var onScreen = !noLayout && b.bottom >= 0 && b.top <= vh && b.right >= 0 && b.left <= vw;
                 if (onScreen) {
                     (function(el) { setTimeout(function() { wpcElaBeltFix(el, 0); }, 600); })(els[k]);
                 } else {
-                    wpcElaBeltIO.observe(els[k]);
+                    var watch = noLayout ? wpcElaBoxTarget(els[k]) : els[k];
+                    if (watch !== els[k]) { watch.__wpcElaOf = els[k]; }
+                    wpcElaBeltIO.observe(watch);
                 }
+            }
+            setTimeout(wpcElaBeltFinal, 15000);
+        } catch (e) {}
+    }
+    function wpcElaBeltFinal() {
+        try {
+            var els = [].slice.call(document.querySelectorAll("[data-wpc-ela].elementor-invisible"));
+            for (var i = 0; i < els.length; i++) {
+                if (wpcElaNoLayout(els[i].getBoundingClientRect()) && !wpcElaHiddenByDisplay(els[i])) { wpcElaBeltFix(els[i], 6); }
             }
         } catch (e) {}
     }
@@ -6647,7 +6685,7 @@ if (!window.__wpcEngaged) {
                 var ds = el.getAttribute("data-settings");
                 if (ds && ds.indexOf("nimation") !== -1) {
                     var o = JSON.parse(ds), ch = false;
-                    [ "_animation", "animation", "_animation_mobile", "animation_mobile", "_animation_tablet", "animation_tablet" ].forEach((function(k) {
+                    wpcAnimKeys().forEach((function(k) {
                         if (k in o) {
                             delete o[k];
                             ch = true;
@@ -6709,7 +6747,7 @@ if (!window.__wpcEngaged) {
                 entries.forEach(function(en) { if (en.isIntersecting && wpcIsPainted(en.target)) { parkedBackgroundObserver.unobserve(en.target); wpcApplyParkedBackground(en.target); } });
             }, { rootMargin: "0px" });
         }
-        els.forEach(function(el) { parkedBackgroundObserver.observe(el); });
+        els.forEach(function(el) { parkedBackgroundObserver.unobserve(el); parkedBackgroundObserver.observe(el); });
     }
     window.wpcRestoreVisibleBackgrounds = function() { wpcRestoreParkedBackgrounds(false); };
     window.wpcRestoreAllParkedBackgrounds = function() { wpcRestoreParkedBackgrounds(true); };

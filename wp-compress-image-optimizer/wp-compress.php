@@ -4,7 +4,7 @@
  * Plugin URI: https://www.wpcompress.com
  * Author: WP Compress
  * Author URI: https://www.wpcompress.com
- * Version: 7.30.35
+ * Version: 7.30.45
  * Description: Automatically compress and optimize images to shrink image file size, improve  times and boost SEO ranks - all without lifting a finger after setup.
  * Text Domain: wp-compress-image-optimizer
  * Domain Path: /languages
@@ -12,7 +12,7 @@
 
 
 if (!defined('WPC_PLUGIN_VERSION')) {
-    define('WPC_PLUGIN_VERSION', '7.30.35');
+    define('WPC_PLUGIN_VERSION', '7.30.45');
 }
 
 
@@ -295,6 +295,7 @@ if (!function_exists('wpc_plugin_tree_missing_files')) {
             'addons/v2/v2-callback.php',
             'addons/v2/v2-capabilities.php',
             'addons/v2/v2-client.php',
+            'addons/v2/v2-cmd-census.php',
             'addons/v2/v2-concurrency.php',
             'addons/v2/v2-config-sync.php',
             'addons/v2/v2-customer-purge.php',
@@ -409,10 +410,28 @@ if (!function_exists('wpc_plugin_tree_incomplete_notice')) {
         );
     }
 }
+if (!function_exists('wpc_plugin_tree_offer_repair')) {
+    /** Filter on site_transient_update_plugins while files are missing: the package wordpress.org listed as up to date becomes an offered update, unless WordPress already offers one or that package is older than this copy. */
+    function wpc_plugin_tree_offer_repair($updates)
+    {
+        $file = plugin_basename(__FILE__);
+        if (!is_object($updates) || !empty($updates->response[$file]->package) || empty($updates->no_update[$file]->package)
+            || version_compare((string) ($updates->no_update[$file]->new_version ?? '0'), WPC_PLUGIN_VERSION, '<')) {
+            return $updates;
+        }
+        if (empty($updates->response) || !is_array($updates->response)) {
+            $updates->response = [];
+        }
+        $updates->response[$file] = $updates->no_update[$file];
+        return $updates;
+    }
+}
 if (!function_exists('wpc_plugin_tree_stand_down')) {
     /**
-     * The plugin does not boot on a tree with missing files: one receipt per admin request and
-     * one admin notice for users who can activate plugins, nothing else registered. A visitor
+     * The plugin does not boot on a tree with missing files: one receipt per admin request, one
+     * notice in the site and network admin for users who can activate plugins, a Repair now link
+     * for those who can update them while WordPress holds a package to offer, and nothing else
+     * registered. A visitor
      * request stands down without a receipt (it would be a write per page view). defines.php is
      * not loaded at this point, so unless the page-cache drop-in defined WPS_IC_CACHE the receipt
      * lands in the log's option fallback (wpc_cache_first_log, the last 40 events), which the
@@ -436,13 +455,24 @@ if (!function_exists('wpc_plugin_tree_stand_down')) {
             }
         }
         if (function_exists('add_action')) {
-            add_action('admin_notices', function () use ($missing) {
+            $notice = function () use ($missing) {
                 if (!function_exists('current_user_can') || !current_user_can('activate_plugins')) {
                     return;
                 }
+                $repair = '';
+                $file = plugin_basename(__FILE__);
+                $offered = function_exists('get_site_transient') ? get_site_transient('update_plugins') : null;
+                if (current_user_can('update_plugins') && is_object($offered) && !empty($offered->response[$file]->package)) {
+                    $repair = ' <a href="' . esc_url(wp_nonce_url(self_admin_url('update.php?action=upgrade-plugin&plugin=' . urlencode($file)), 'upgrade-plugin_' . $file)) . '">Repair now</a> (installs ' . esc_html((string) ($offered->response[$file]->new_version ?? 'the listed version')) . ')';
+                }
                 echo '<div class="notice notice-error"><p>'
-                    . esc_html(wpc_plugin_tree_incomplete_notice($missing)) . '</p></div>';
-            });
+                    . esc_html(wpc_plugin_tree_incomplete_notice($missing)) . $repair . '</p></div>';
+            };
+            add_action('admin_notices', $notice);
+            add_action('network_admin_notices', $notice);
+        }
+        if (function_exists('add_filter')) {
+            add_filter('site_transient_update_plugins', 'wpc_plugin_tree_offer_repair');
         }
     }
 }
@@ -668,8 +698,10 @@ if (wpc_plugin_boots_core()) {
     // CRON fix for WPvivid scheduled backups
     if (get_option('pause_wpcompress_plugin')) {
         add_action('admin_init', 'pause_wpcompress_plugin_deactivate_delete');
-        require_once(ABSPATH . 'wp-includes/pluggable.php');
-        wp_safe_redirect(admin_url('plugins.php'));
+        if (is_admin() && !wp_doing_ajax()) {
+            require_once(ABSPATH . 'wp-includes/pluggable.php');
+            wp_safe_redirect(admin_url('plugins.php'));
+        }
     } else if (get_option('pause_wpcompress_plugin_full_delete')) {
         define('WPC_CC_PLUGIN_FILE', __FILE__);
         include_once __DIR__ . '/wp-compress-core.php';

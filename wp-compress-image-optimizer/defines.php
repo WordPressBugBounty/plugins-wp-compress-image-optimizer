@@ -212,8 +212,26 @@ define('WPS_IC_CRITICAL_URL', WP_CONTENT_URL . '/cache/critical/');
 define('WPS_IC_COMBINE', WP_CONTENT_DIR . '/cache/combine/');
 define('WPS_IC_COMBINE_URL', WP_CONTENT_URL . '/cache/combine/');
 
-define('WPS_IC_LOG', WP_CONTENT_DIR . '/cache/logs/');
-define('WPS_IC_LOG_URL', WP_CONTENT_URL . '/cache/logs/');
+$wpc_log_folder = function_exists('get_option') ? get_option('wpc_log_dir', '') : '';
+if (!is_string($wpc_log_folder) || !preg_match('/^[a-f0-9]{16}$/', $wpc_log_folder)) {
+  $wpc_log_folder = '';
+  if (function_exists('add_option') && function_exists('random_bytes')) {
+    try {
+      $wpc_log_minted = bin2hex(random_bytes(8));
+      if (add_option('wpc_log_dir', $wpc_log_minted, '', true)) {
+        $wpc_log_folder = $wpc_log_minted;
+      } else {
+        $wpc_log_stored = get_option('wpc_log_dir', '');
+        $wpc_log_folder = is_string($wpc_log_stored) && preg_match('/^[a-f0-9]{16}$/', $wpc_log_stored) ? $wpc_log_stored : '';
+      }
+    } catch (\Throwable $e) {
+      $wpc_log_folder = '';
+    }
+  }
+}
+define('WPS_IC_LOG', WP_CONTENT_DIR . '/cache/logs/' . ($wpc_log_folder !== '' ? $wpc_log_folder . '/' : ''));
+define('WPS_IC_LOG_URL', WP_CONTENT_URL . '/cache/logs/' . ($wpc_log_folder !== '' ? $wpc_log_folder . '/' : ''));
+unset($wpc_log_folder, $wpc_log_minted, $wpc_log_stored);
 define('WPC_WARMUP_LOG_SETTING', 'wps_ic_warmup_log');
 
 if (!file_exists(WP_CONTENT_DIR . '/cache')) {
@@ -229,7 +247,7 @@ if (!file_exists(rtrim(WPS_IC_CRITICAL, '/'))) {
 }
 
 if (!file_exists(rtrim(WPS_IC_LOG, '/'))) {
-  mkdir(rtrim(WPS_IC_LOG, '/'));
+  @mkdir(rtrim(WPS_IC_LOG, '/'), 0755, true);
 }
 
 // Stats v2
@@ -1597,8 +1615,34 @@ if (!function_exists('wpc_ledger_body')) {
     }
 }
 
+if (!function_exists('wpc_logs_written_by_plugin')) {
+    /** True for a regular file ending .txt, .log or .jsonl, or a directory holding only .log files: the shapes the plugin's loggers write. */
+    function wpc_logs_written_by_plugin($path)
+    {
+        if (@is_link($path)) {
+            return false;
+        }
+        if (@is_file($path)) {
+            return preg_match('/\.(?:txt|log|jsonl)$/', $path) === 1;
+        }
+        if (!@is_dir($path)) {
+            return false;
+        }
+        $entries = array_diff((array) @scandir($path), ['.', '..']);
+        if (empty($entries)) {
+            return false;
+        }
+        foreach ($entries as $entry) {
+            if (!is_string($entry) || !preg_match('/\.log$/', $entry) || @is_link($path . '/' . $entry) || !@is_file($path . '/' . $entry)) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
 if (!function_exists('wpc_logs_harden')) {
-    /** Once per release: cache/logs/ answers 403 where .htaccess is read, holds an index.php, and the public .jsonl ledgers of earlier releases are deleted. */
+    /** Once per release: cache/logs/ and the log folder answer 403 where .htaccess is read and hold an index.php, the public .jsonl ledgers of earlier releases are deleted, and what the plugin's loggers wrote straight into cache/logs/ (.txt, .log and .jsonl files, folders of .log files) moves into the log folder. */
     function wpc_logs_harden()
     {
         try {
@@ -1613,18 +1657,36 @@ if (!function_exists('wpc_logs_harden')) {
             if (!@is_dir($dir) || !@is_writable($dir)) {
                 return;
             }
-            foreach (['purge-ledger.jsonl', 'purge-ledger.jsonl.1', 'settings-ledger.jsonl'] as $old) {
-                if (@is_file($dir . '/' . $old)) {
-                    @unlink($dir . '/' . $old);
+            $parent = defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR . '/cache/logs' : $dir;
+            $dirs = array_unique([$parent, $dir]);
+            $deny = "# BEGIN WP Compress Logs\n<IfModule mod_authz_core.c>\n  Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n  Order allow,deny\n  Deny from all\n</IfModule>\n# END WP Compress Logs\n";
+            foreach ($dirs as $closed) {
+                if (!@is_dir($closed) || !@is_writable($closed)) {
+                    continue;
+                }
+                foreach ((array) @scandir($closed) as $old) {
+                    if (is_string($old) && preg_match('/ledger.*\.jsonl/', $old) && @is_file($closed . '/' . $old)) {
+                        @unlink($closed . '/' . $old);
+                    }
+                }
+                $htaccess = $closed . '/.htaccess';
+                if (strpos((string) @file_get_contents($htaccess), '# BEGIN WP Compress Logs') === false) {
+                    wpc_fs_put($htaccess, $deny, @is_file($htaccess) ? FILE_APPEND : 0);
+                }
+                if (!@is_file($closed . '/index.php')) {
+                    wpc_fs_put($closed . '/index.php', "<?php\n");
                 }
             }
-            $deny = "# BEGIN WP Compress Logs\n<IfModule mod_authz_core.c>\n  Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n  Order allow,deny\n  Deny from all\n</IfModule>\n# END WP Compress Logs\n";
-            $htaccess = $dir . '/.htaccess';
-            if (strpos((string) @file_get_contents($htaccess), '# BEGIN WP Compress Logs') === false) {
-                wpc_fs_put($htaccess, $deny, @is_file($htaccess) ? FILE_APPEND : 0);
-            }
-            if (!@is_file($dir . '/index.php')) {
-                wpc_fs_put($dir . '/index.php', "<?php\n");
+            if ($parent !== $dir && @is_dir($parent)) {
+                $folder = basename($dir);
+                foreach ((array) @scandir($parent) as $old) {
+                    if (!is_string($old) || in_array($old, ['.', '..', '.htaccess', 'index.php', $folder], true)
+                        || preg_match('/^[a-f0-9]{16}$/', $old) || @file_exists($dir . '/' . $old)
+                        || !wpc_logs_written_by_plugin($parent . '/' . $old)) {
+                        continue;
+                    }
+                    @rename($parent . '/' . $old, $dir . '/' . $old);
+                }
             }
             update_option('wpc_logs_harden', $ver, true);
         } catch (\Throwable $e) {
@@ -2370,6 +2432,37 @@ if (!function_exists('wpc_cf_cname_verified_ok')) {
     }
 }
 
+if (!function_exists('wpc_custom_cname_witness')) {
+    function wpc_custom_cname_witness($host)
+    {
+        $w = function_exists('get_option') ? get_option('wpc_custom_cname_witness') : false;
+        if (!is_array($w) || !isset($w['host'], $w['v']) || strtolower((string) $w['host']) !== strtolower(trim((string) $host))) {
+            return null;
+        }
+        return (int) $w['v'] === 1;
+    }
+
+    function wpc_custom_cname_witness_note($host)
+    {
+        static $noted = [];
+        $host = strtolower(trim((string) $host));
+        if ($host === '') {
+            return;
+        }
+        $witness = wpc_custom_cname_witness($host);
+        if ($witness === true || isset($noted[$host]) || !function_exists('get_transient') || !function_exists('wpc_cache_first_log')) {
+            return;
+        }
+        $noted[$host] = true;
+        $k = 'wpc_ccw_note_' . substr(md5($host), 0, 12);
+        if (get_transient($k)) {
+            return;
+        }
+        set_transient($k, 1, DAY_IN_SECONDS);
+        wpc_cache_first_log('custom-cname-unverified', '', '', ['host' => $host, 'witness' => $witness === null ? 'none' : 'false', 'served' => 1]);
+    }
+}
+
 if (!function_exists('wpc_cdn_custom_host')) {
     function wpc_cdn_custom_host()
     {
@@ -2384,6 +2477,9 @@ if (!function_exists('wpc_cdn_custom_host')) {
                 : trim((string) get_option('ic_custom_cname'));
             if ($host !== '' && function_exists('wpc_cdn_cname_is_reachable') && !wpc_cdn_cname_is_reachable($host)) {
                 return '';
+            }
+            if ($host !== '' && $host !== $cf_cname) {
+                wpc_custom_cname_witness_note($host);
             }
             return $host;
         } catch (\Throwable $e) {
@@ -6204,7 +6300,7 @@ if (!function_exists('wpc_picture_scan_css_selectors')) {
 
     function wpc_picture_scan_css_selectors($css)
     {
-        $out = ['cls' => [], 'tags' => []];
+        $out = ['cls' => [], 'tags' => [], 'inh' => [], 'ihc' => []];
         try {
             if (!is_string($css) || $css === '' || strlen($css) > 1572864) {
                 return $out;
@@ -6239,6 +6335,17 @@ if (!function_exists('wpc_picture_scan_css_selectors')) {
                         $media = ($media === '') ? $frame[1] : $media . ' and ' . $frame[1];
                     }
                 }
+                $inheritDecls = '';
+                $bodyEnd = strpos($css, '}', $off);
+                if ($bodyEnd !== false) {
+                    $body = substr($css, $off, $bodyEnd - $off);
+                    if (stripos($body, 'inherit') !== false && strpos($body, '{') === false
+                        && preg_match_all('/(?:^|;)\s*((?:max-|min-)?(?:height|width))\s*:\s*inherit\s*(!important)?\s*(?=;|$)/i', $body, $inheritMatches, PREG_SET_ORDER)) {
+                        foreach ($inheritMatches as $inheritMatch) {
+                            $inheritDecls .= strtolower($inheritMatch[1]) . ':inherit' . (empty($inheritMatch[2]) ? '' : '!important') . ';';
+                        }
+                    }
+                }
                 foreach (explode(',', $pre) as $sel) {
                     $sel = trim($sel);
                     if ($sel === '' || strlen($sel) > 240 || stripos($sel, 'picture') !== false
@@ -6250,6 +6357,26 @@ if (!function_exists('wpc_picture_scan_css_selectors')) {
                     $flat = (string) preg_replace_callback('/\[[^\]]*\]|\([^)]*\)/', function ($m) {
                         return str_repeat('_', strlen($m[0]));
                     }, $sel);
+                    if ($inheritDecls !== '' && strpos($sel, '<') === false
+                        && preg_match('/(?:^|[+~>\s])\s*([^\s+~>]+)\s*$/', $flat, $inheritFinal, PREG_OFFSET_CAPTURE)
+                        && preg_match('/^(img)?((?:\.[A-Za-z0-9_-]+)*)$/i', substr($sel, $inheritFinal[1][1]), $inheritCompound)
+                        && ($inheritCompound[1] !== '' || $inheritCompound[2] !== '')
+                        && !preg_match('/(?<![\w.#\'"-])img(?![\w-])/i', substr($sel, 0, $inheritFinal[1][1]))) {
+                        $inheritAttrs = '';
+                        $inheritClasses = [];
+                        if ($inheritCompound[2] !== '' && preg_match_all('/\.([A-Za-z0-9_-]+)/', $inheritCompound[2], $inheritClassMatches)) {
+                            foreach ($inheritClassMatches[1] as $c) {
+                                if (strpos($c, 'wpc') !== 0) {
+                                    $inheritClasses[] = $c;
+                                    $inheritAttrs .= '[data-wpc-ih~="' . $c . '"]';
+                                }
+                            }
+                        }
+                        if ($inheritCompound[2] === '' || $inheritClasses) {
+                            $out['inh'][] = ['s' => substr($sel, 0, $inheritFinal[1][1]) . 'picture.wpc-picture' . $inheritAttrs, 'm' => $media, 'd' => $inheritDecls];
+                            $out['ihc'] = array_merge($out['ihc'], $inheritClasses);
+                        }
+                    }
                     if (strpbrk($flat, '+~>') === false) {
                         continue;
                     }
@@ -6308,8 +6435,10 @@ if (!function_exists('wpc_picture_scan_css_selectors')) {
             if (count($out['tags']) > 40) {
                 $out['tags'] = array_slice($out['tags'], 0, 40);
             }
+            $out['ihc'] = array_slice(array_values(array_unique($out['ihc'])), 0, 100);
+            $out['inh'] = array_slice($out['inh'], 0, 60);
         } catch (\Throwable $e) {
-            return ['cls' => [], 'tags' => []];
+            return ['cls' => [], 'tags' => [], 'inh' => [], 'ihc' => []];
         }
         return $out;
     }
@@ -6336,7 +6465,7 @@ if (!function_exists('wpc_picture_scan_css_selectors')) {
         static $memo = [];
         $sz = (int) @filesize($path);
         if ($sz <= 0 || $sz > 1572864) {
-            return ['cls' => [], 'tags' => []];
+            return ['cls' => [], 'tags' => [], 'inh' => [], 'ihc' => []];
         }
         $key = md5($path . '|' . $sz . '|' . (int) @filemtime($path));
         if (isset($memo[$key])) {
@@ -6346,7 +6475,7 @@ if (!function_exists('wpc_picture_scan_css_selectors')) {
         if (!is_array($store)) {
             $store = [];
         }
-        if (isset($store[$key]) && is_array($store[$key]) && isset($store[$key]['cls'], $store[$key]['tags'])) {
+        if (isset($store[$key]) && is_array($store[$key]) && isset($store[$key]['cls'], $store[$key]['tags'], $store[$key]['inh'], $store[$key]['ihc'])) {
             return $memo[$key] = $store[$key];
         }
         $r = wpc_picture_scan_css_selectors((string) @file_get_contents($path));
@@ -6372,7 +6501,7 @@ if (!function_exists('wpc_picture_scan_css_selectors')) {
         if (isset($memo[$mk])) {
             return $memo[$mk];
         }
-        $res = ['cls' => [], 'tags' => [], 'capped' => 0];
+        $res = ['cls' => [], 'tags' => [], 'capped' => 0, 'inh' => [], 'ihc' => []];
         try {
             if (!apply_filters('wpc_picture_fidelity', true)) {
                 return $memo[$mk] = $res;
@@ -6407,6 +6536,8 @@ if (!function_exists('wpc_picture_scan_css_selectors')) {
                     foreach ($r['tags'] as $t) {
                         $res['tags'][] = $t;
                     }
+                    $res['inh'] = array_merge($res['inh'], $r['inh']);
+                    $res['ihc'] = array_merge($res['ihc'], $r['ihc']);
                 }
             }
             if (preg_match_all('/<link\b[^>]{0,600}?href=["\']([^"\']+\.css[^"\']*)["\'][^>]*>/i', (string) $html, $lm)) {
@@ -6422,6 +6553,8 @@ if (!function_exists('wpc_picture_scan_css_selectors')) {
                     foreach ($r['tags'] as $t) {
                         $res['tags'][] = $t;
                     }
+                    $res['inh'] = array_merge($res['inh'], $r['inh']);
+                    $res['ihc'] = array_merge($res['ihc'], $r['ihc']);
                 }
             }
             $res['cls'] = array_values(array_unique($res['cls']));
@@ -6437,8 +6570,14 @@ if (!function_exists('wpc_picture_scan_css_selectors')) {
                 $unique_tags[$t['s'] . '|' . $t['m']] = $t;
             }
             $res['tags'] = array_slice(array_values($unique_tags), 0, 40);
+            $unique_inherits = [];
+            foreach ($res['inh'] as $t) {
+                $unique_inherits[$t['s'] . '|' . $t['m'] . '|' . $t['d']] = $t;
+            }
+            $res['inh'] = array_slice(array_values($unique_inherits), 0, 60);
+            $res['ihc'] = array_slice(array_values(array_unique($res['ihc'])), 0, 100);
         } catch (\Throwable $e) {
-            $res = ['cls' => [], 'tags' => [], 'capped' => 0];
+            $res = ['cls' => [], 'tags' => [], 'capped' => 0, 'inh' => [], 'ihc' => []];
         }
         if (count($memo) > 8) {
             $memo = [];
@@ -7148,11 +7287,11 @@ if (!function_exists('wpc_device_hidden_image_set')) {
                             break;
                         }
                     }
-                    if (!preg_match_all('/(?:src|data-src|data-cp-src|srcset|data-srcset)="([^"]+)"/i', $tagHit[0], $am)) {
+                    if (!preg_match_all('/(src|data-src|data-cp-src|srcset|data-srcset)="([^"]+)"/i', $tagHit[0], $am)) {
                         continue;
                     }
-                    foreach ($am[1] as $val) {
-                        foreach (preg_split('/\s*,\s*/', $val) as $cand) {
+                    foreach ($am[2] as $amAt => $val) {
+                        foreach ((stripos($am[1][$amAt], 'srcset') !== false ? wpc_srcset_urls($val) : [$val]) as $cand) {
                             $u = trim(preg_replace('/\s+\d+(?:\.\d+)?[wx]$/', '', trim($cand)));
                             if ($u === '' || strpos($u, 'data:') === 0) {
                                 continue;
@@ -7554,6 +7693,128 @@ if (!function_exists('wpc_rebake_advanced_cache_if_on')) {
         }
         $htaccess = new wps_ic_htaccess();
         $htaccess->setAdvancedCache();
+    }
+}
+
+/** The keys of wpc-excludes that hold one list of patterns; every other key but the per-page maps is a scalar. */
+if (!function_exists('wpc_excludes_list_keys')) {
+    function wpc_excludes_list_keys()
+    {
+        return ['cdn', 'lazy', 'adaptive', 'webp', 'critical_css', 'delay_js', 'delay_js_v2', 'delay_js_v3', 'cache', 'simple_caching', 'minify_html', 'defer_js', 'combine_js', 'js_minify', 'inline_js', 'font_display', 'css_combine', 'exclude-scripts-to-footer', 'lastLoadScript', 'deferScript'];
+    }
+}
+
+/** wpc-excludes as every reader expects it: a text list reads line by line, any other non-list reads empty. */
+if (!function_exists('wpc_excludes_shape')) {
+    function wpc_excludes_shape($excludes)
+    {
+        if (!is_array($excludes)) {
+            return [];
+        }
+        $reshaped = 0;
+        foreach (wpc_excludes_list_keys() as $key) {
+            if (isset($excludes[$key]) && !is_array($excludes[$key])) {
+                $excludes[$key] = is_string($excludes[$key]) ? array_values(array_filter(array_map('trim', explode("\n", $excludes[$key])))) : [];
+                $reshaped++;
+            }
+        }
+        foreach (['page_excludes', 'page_excludes_files', 'per_page_settings'] as $key) {
+            if (isset($excludes[$key]) && !is_array($excludes[$key])) {
+                $excludes[$key] = [];
+                $reshaped++;
+            }
+        }
+        if ($reshaped && function_exists('wpc_belt_receipt')) {
+            wpc_belt_receipt('excludes-reshaped', ['n' => $reshaped], true, '');
+        }
+        return $excludes;
+    }
+    if (function_exists('add_filter')) {
+        add_filter('option_wpc-excludes', 'wpc_excludes_shape', 1, 1);
+    }
+}
+
+if (!function_exists('wpc_purge_rules_shape')) {
+    /** A purge time that parses, and lists that are lists, whatever the value holds. */
+    function wpc_purge_rules_shape($rules)
+    {
+        if (!is_array($rules)) {
+            return [];
+        }
+        if (!empty($rules['scheduled']) && (!is_string($rules['scheduled']) || strtotime('today ' . $rules['scheduled']) === false)) {
+            $rules['scheduled'] = '';
+        }
+        if (!empty($rules['hooks'])) {
+            $rules['hooks'] = is_array($rules['hooks']) ? array_filter($rules['hooks'], 'is_string') : [];
+        }
+        foreach (['post-publish', 'type-lists'] as $key) {
+            if (isset($rules[$key]) && !is_array($rules[$key])) {
+                $rules[$key] = [];
+            }
+        }
+        if (isset($rules['type-lists'])) {
+            $rules['type-lists'] = array_filter($rules['type-lists'], 'is_array');
+        }
+        return $rules;
+    }
+
+    /** Every reader of the stored purge rules gets the shape, and a repair leaves a site-wide receipt. */
+    function wpc_purge_rules_read($rules)
+    {
+        $shaped = wpc_purge_rules_shape($rules);
+        if ($shaped !== $rules && function_exists('wpc_belt_receipt')) {
+            $keys = [];
+            foreach ((array) $rules as $key => $value) {
+                if (!array_key_exists($key, $shaped) || $shaped[$key] !== $value) {
+                    $keys[] = $key;
+                }
+            }
+            wpc_belt_receipt('purge-rules-reshaped', ['keys' => $keys], true, '');
+        }
+        return $shaped;
+    }
+    if (function_exists('add_filter')) {
+        add_filter('option_wps_ic_purge_rules', 'wpc_purge_rules_read', 1, 1);
+    }
+}
+
+/** Whether an imported file can be stored: false for any shape that would die here or on a later request. */
+if (!function_exists('wpc_import_groups_ok')) {
+    function wpc_import_groups_ok($data)
+    {
+        if (!is_array($data)) {
+            return false;
+        }
+        foreach (['settings', 'excludes', 'cache', 'cache_cookies'] as $group) {
+            if (isset($data[$group]) && !is_array($data[$group])) {
+                return false;
+            }
+        }
+        if (isset($data['settings'])) {
+            if (!$data['settings']) {
+                return false;
+            }
+            $options = new wps_ic_options();
+            foreach ($options::$recommendedSettings as $section => $default) {
+                if (is_array($default) && isset($data['settings'][$section]) && !is_array($data['settings'][$section]) && $data['settings'][$section] !== false) {
+                    return false;
+                }
+            }
+        }
+        if (isset($data['cache']) && wpc_purge_rules_shape($data['cache']) !== $data['cache']) {
+            return false;
+        }
+        foreach (['cookies', 'exclude_cookies'] as $list) {
+            if (isset($data['cache_cookies'][$list]) && !is_array($data['cache_cookies'][$list])) {
+                return false;
+            }
+        }
+        foreach (wpc_excludes_list_keys() as $key) {
+            if (isset($data['excludes'][$key]) && is_array($data['excludes'][$key]) && array_filter($data['excludes'][$key], 'is_array')) {
+                return false;
+            }
+        }
+        return true;
     }
 }
 
@@ -8538,7 +8799,7 @@ if (!function_exists('wpc_purge_human_save')) {
                 'wpc_policy_tighten',
             ],
             'relay' => [
-                'saveSettings', 'change_setting', 'save_excludes', 'saveExcludes', 'save_mode',
+                'saveSettings', 'purgeAfterSave', 'change_setting', 'save_excludes', 'saveExcludes', 'save_mode',
                 'importSettings', 'saveCacheCookies', 'saveCacheQueryParams', 'saveCFOption',
                 'reEnableCDN', 'disableCDN', 'cnameAdd', 'cnameRemove', 'autoModeSet',
                 'autoModeRevert', 'linkSafeMode',
@@ -8677,6 +8938,99 @@ if (!function_exists('wpc_builder_file_clear_hooks')) {
     }
 }
 
+if (!function_exists('wpc_save_is_crit_enable_only')) {
+    function wpc_save_settings_delta($old, $new)
+    {
+        try {
+            $soft = false;
+            if (is_array($old) && is_array($new)) {
+                $before = $old;
+                $after = $new;
+                foreach ([['critical', 'css'], ['used-css']] as $path) {
+                    $a = count($path) === 2 ? ($old[$path[0]][$path[1]] ?? null) : ($old[$path[0]] ?? null);
+                    $b = count($path) === 2 ? ($new[$path[0]][$path[1]] ?? null) : ($new[$path[0]] ?? null);
+                    if ($a !== $b && in_array($a, [null, 0, '0'], true) && in_array($b, [1, '1'], true)) {
+                        $soft = true;
+                        if (count($path) === 2) {
+                            if ($a === null) {
+                                unset($after[$path[0]][$path[1]]);
+                                if (!isset($before[$path[0]]) && $after[$path[0]] === []) { unset($after[$path[0]]); }
+                            } else {
+                                $after[$path[0]][$path[1]] = $a;
+                            }
+                        } elseif ($a === null) {
+                            unset($after[$path[0]]);
+                        } else {
+                            $after[$path[0]] = $a;
+                        }
+                    }
+                }
+                $sort = function ($value) use (&$sort) {
+                    if (is_array($value)) {
+                        ksort($value);
+                        foreach ($value as $key => $item) { $value[$key] = $sort($item); }
+                    }
+                    return $value;
+                };
+                $soft = $soft && $sort($before) === $sort($after);
+            }
+            update_option('wpc_crit_enable_save', [
+                'soft' => $soft && !wpc_save_cf_changed(),
+                'signature' => wpc_delivery_config_signature(),
+                'cf' => md5(serialize(get_option(WPS_IC_CF))),
+                'origin' => wpc_purge_human_save(),
+                'expires' => time() + 300,
+            ], false);
+        } catch (\Throwable $e) {
+            try { delete_option('wpc_crit_enable_save'); } catch (\Throwable $ignored) {}
+        }
+    }
+
+    function wpc_save_cf_changed($mark = false)
+    {
+        static $changed = false;
+        if ($mark) { $changed = true; }
+        return $changed;
+    }
+
+    function wpc_save_cf_delta()
+    {
+        wpc_save_cf_changed(true);
+        delete_option('wpc_crit_enable_save');
+    }
+
+    function wpc_save_is_crit_enable_only()
+    {
+        try {
+            $origin = wpc_purge_human_save();
+            $save = get_option('wpc_crit_enable_save');
+            if ($origin === 'ajax:wps_ic_purge_after_save') {
+                $keys = $_POST['changed_keys'] ?? [];
+            } elseif ($origin === 'relay:purgeAfterSave') {
+                $form = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
+                $keys = $form['changed_keys'] ?? [];
+            }
+            if (isset($keys) && (!is_array($keys) || !$keys || array_diff($keys, ['critical,css', 'used-css']))) {
+                return false;
+            }
+            return $origin !== '' && is_array($save) && !empty($save['soft']) && isset($save['signature'], $save['origin'], $save['expires'])
+                && (int) $save['expires'] > time() && (int) $save['expires'] <= time() + 300
+                && array_key_exists('cf', $save) && $save['cf'] === md5(serialize(get_option(WPS_IC_CF))) && !wpc_save_cf_changed()
+                && ($origin === $save['origin'] || in_array($origin, ['ajax:wps_ic_purge_after_save', 'relay:purgeAfterSave'], true))
+                && $save['signature'] === wpc_delivery_config_signature();
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+    if (function_exists('add_action')) {
+        foreach (['update_option_', 'add_option_', 'delete_option_'] as $event) {
+            add_action($event . WPS_IC_CF, 'wpc_save_cf_delta', 19, 0);
+        }
+        add_action('update_option_' . (defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings'), 'wpc_save_settings_delta', 19, 2);
+        add_action('add_option_' . (defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings'), 'wpc_save_settings_delta', 19, 2);
+    }
+}
+
 if (!function_exists('wpc_purge_is_soft')) {
     function wpc_purge_is_soft($explicit = null)
     {
@@ -8688,9 +9042,7 @@ if (!function_exists('wpc_purge_is_soft')) {
                 && function_exists('wpc_cache_p1_on') && wpc_cache_p1_on()) {
                 return false;
             }
-            // A person saved a setting and must see it on the next request (greenvalleytint.com,
-            // 2026-09-28: the save served the pre-save copy as stale-rewarm). See wpc_purge_human_save().
-            if (function_exists('wpc_purge_human_save') && wpc_purge_human_save() !== '') {
+            if (function_exists('wpc_purge_human_save') && wpc_purge_human_save() !== '' && !wpc_save_is_crit_enable_only()) {
                 return false;
             }
             if (defined('WPC_PURGE_SERVE_STALE') && !WPC_PURGE_SERVE_STALE) {
@@ -9716,17 +10068,34 @@ if (!function_exists('wpc_admin_switch_allowed')) {
     }
 }
 
+if (!function_exists('wpc_admin_nonce_ok')) {
+    /**
+     * Whether the address carries the settings page's `wps_ic_nonce` of the action `wps_ic_nonce_action`.
+     */
+    function wpc_admin_nonce_ok(array $get)
+    {
+        return function_exists('wp_verify_nonce') && !empty($get['wps_ic_nonce']) && is_scalar($get['wps_ic_nonce'])
+            && (bool) wp_verify_nonce((string) $get['wps_ic_nonce'], 'wps_ic_nonce_action');
+    }
+}
+
 if (!function_exists('wpc_admin_flag')) {
     /**
      * Whether the address carries the query flag $name and the visitor is signed in as an
-     * administrator: manage_options, or a super admin on a network. The flags a person types or
-     * pastes from a support page (they cannot carry a nonce), unlike the Support switches above.
+     * administrator: manage_options, or a super admin on a network. A flag that changes state or
+     * sends a request also carries the settings page's `wps_ic_nonce`; the two recovery links
+     * (support pastes them) and the one flag that only prints carry none.
      */
     function wpc_admin_flag($name)
     {
-        return !empty($_GET[$name]) && function_exists('current_user_can')
-            && (current_user_can('manage_options')
-                || (function_exists('is_multisite') && is_multisite() && function_exists('is_super_admin') && is_super_admin()));
+        if (empty($_GET[$name]) || !function_exists('current_user_can')
+            || !(current_user_can('manage_options')
+                || (function_exists('is_multisite') && is_multisite() && function_exists('is_super_admin') && is_super_admin()))) {
+            return false;
+        }
+
+        return in_array($name, ['show_optimizer', 'show_wpcompress_plugin', 'testHistory'], true)
+            || wpc_admin_nonce_ok($_GET);
     }
 }
 
@@ -9767,9 +10136,15 @@ if (!function_exists('wpc_site_key_matches')) {
         $stored = (is_array($options) && isset($options['api_key']) && (is_string($options['api_key']) || is_int($options['api_key']) || is_float($options['api_key'])))
             ? (string) $options['api_key'] : '';
 
-        return $stored !== '' && is_string($given) && hash_equals($stored, $given);
+        $ok = $stored !== '' && is_string($given) && hash_equals($stored, $given);
+        if ($ok && function_exists('wpc_cmd_census')) {
+            wpc_cmd_census(wpc_cmd_door(), wpc_cmd_key_form($given));
+        }
+        return $ok;
     }
 }
+
+require_once __DIR__ . '/addons/v2/v2-cmd-census.php';
 
 if (!function_exists('wpc_hidden_menus_request')) {
     /**

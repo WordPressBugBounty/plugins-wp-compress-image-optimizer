@@ -643,7 +643,7 @@ class wps_rewriteLogic
     public static function wpc_lscwp_own_styles_arm()
     {
         try {
-            if (!defined('LSCWP_V') || !function_exists('add_filter')) {
+            if (!defined('LSCWP_V') || !function_exists('add_filter') || !apply_filters('wpc_lscwp_own_styles_exclude', true)) {
                 return false;
             }
             add_filter('litespeed_optimize_css_excludes', [__CLASS__, 'wpc_lscwp_own_styles_excluded'], 99);
@@ -660,6 +660,9 @@ class wps_rewriteLogic
             $excludes = is_string($excludes) && trim($excludes) !== '' ? preg_split('/\R/', $excludes) : [];
         }
         $excludes[] = 'id="wpc-';
+        if (function_exists('wpc_render_belt_note')) {
+            wpc_render_belt_note('lscwp-css-exclude', ['n' => count($excludes)], true);
+        }
 
         return $excludes;
     }
@@ -2884,8 +2887,8 @@ class wps_rewriteLogic
         }
         $widths = [];
         if (!empty($img_tag['original_srcset'])) {
-            foreach (explode(',', (string) $img_tag['original_srcset']) as $p) {
-                if (preg_match('/\s(\d+)w$/', ' ' . trim((string) $p), $m)) {
+            foreach (wpc_srcset_parse((string) $img_tag['original_srcset']) as $row) {
+                if (preg_match('/(?:^|\s)(\d+)w$/', $row[1], $m)) {
                     $widths[] = (int) $m[1];
                 }
             }
@@ -3234,7 +3237,7 @@ class wps_rewriteLogic
         if (stripos($build_image_tag, 'srcset=') === false) return $build_image_tag;
         $zone = (string) self::$zoneName;
         return preg_replace_callback('/((?:data-)?srcset=")([^"]+)(")/i', function ($mm) use ($zone) {
-            $raw = array_values(array_filter(array_map('trim', explode(',', $mm[2])), 'strlen'));
+            $raw = wpc_srcset_entries($mm[2]);
             if (count($raw) < 2) return $mm[0];
             // Aspect (h/w) from any -WxH rung (file or transform u:) + the largest w-descriptor = source ceiling.
             $aspect = 0.0; $maxW = 0; $aspectW = 0;
@@ -9666,7 +9669,7 @@ SCRIPT;
                     continue;
                 }
                 foreach ($attributes as $attribute) {
-                    $values = (strtolower($attribute[1]) === 'srcset') ? preg_split('/\s*,\s*/', $attribute[3]) : [$attribute[3]];
+                    $values = (strtolower($attribute[1]) === 'srcset') ? wpc_srcset_urls($attribute[3]) : [$attribute[3]];
                     foreach ((array) $values as $value) {
                         $value = trim((string) preg_replace('/\s+\d+(?:\.\d+)?[wx]$/', '', trim((string) $value)));
                         if ($value !== '') {
@@ -9767,10 +9770,14 @@ SCRIPT;
     // css unloaded and .cmplz-dismissed undefined = unclosable banner).
     public static function wpc_consent_family($s)
     {
-        $consentTokens = ['cmplz', 'complianz', 'cookieyes', 'cky-consent', 'cky-style', 'cookie-law-info',
-            'cookiebot', 'borlabs', 'iubenda', 'onetrust', 'usercentrics', 'surecookie', 'ccm19', 'consentmanager.net', 'cookiefirst', 'cookiehub', 'cookie-script.com', 'cookieinformation',
-            'cookie-notice', 'cookie-consent', 'moove_gdpr', 'moove-gdpr', 'osano', 'termly',
-            'tarteaucitron', 'quantcast', 'consently', 'didomi', 'wpl_cookie_consent'];
+        if (!class_exists('wps_ic_js_delay_v3', false) && defined('WPS_IC_DIR')) {
+            foreach (['js_delay_v2', 'js_delay_v3'] as $wpcEngineFile) {
+                if (is_readable(WPS_IC_DIR . 'classes/' . $wpcEngineFile . '.class.php')) {
+                    include_once WPS_IC_DIR . 'classes/' . $wpcEngineFile . '.class.php';
+                }
+            }
+        }
+        $consentTokens = wpc_consent_family_tokens();
         if (function_exists('apply_filters')) {
             $consentTokens = (array) apply_filters('wpc_consent_tokens', $consentTokens);
         }
@@ -10246,6 +10253,15 @@ SCRIPT;
             && apply_filters('wpc_lcp_rung_synth', true);
     }
 
+    /** Whether the rewriter would put the original image $url on the zone and a rung of it may be named: a rung may be synthesised (wpc_lcp_rung_synth_on()), the path rule allows the file, its type is served on the zone and it is on no CDN exclude list. The one owner of 'the original goes to the zone', asked by the phone hero rung and by the edge_rung record. */
+    public static function wpc_rung_zone_lane($url)
+    {
+        $url = (string) $url;
+        return self::wpc_lcp_rung_synth_on()
+            && (!self::wpc_lcp_bg_path_exact_on() || self::wpc_lcp_rung_synth_path_ok($url))
+            && self::isImage($url) && !self::isExcluded($url) && !self::isExcludedFrom('cdn', $url);
+    }
+
     /**
      * The width-$phone['w'] rendition of the hero file $cssUrl as the zone mints it, the aspect of the
      * original kept: the original's name plus the width suffix of the zone's grammar, in the extension
@@ -10253,17 +10269,14 @@ SCRIPT;
      * original through the attachment's metadata. '' (the earlier rendition stands) when the CDN is off,
      * the size is not one of that attachment's, the original is known to be no wider than the width, the
      * grammar needs the original's dimensions and the attachment has none, a rung may not be named
-     * (wpc_lcp_rung_synth_on()), or the rewriter would not put the image on the zone (its type is not
-     * served, or it is on the CDN exclude lists). $phone is
+     * (wpc_lcp_rung_synth_on()), or the rewriter would not put the image on the zone (wpc_rung_zone_lane()). $phone is
      * wps_ic_atf_observation::phoneHero().
      */
     public static function wpc_phone_hero_rung($cssUrl, array $phone)
     {
         $width = isset($phone['w']) ? (int) $phone['w'] : 0;
-        if ($width < 64 || !self::wpc_lcp_rung_synth_on()
-            || (self::wpc_lcp_bg_path_exact_on() && !self::wpc_lcp_rung_synth_path_ok((string) $cssUrl))
-            || !preg_match('#^(https?://[^\s"\')]+)\.(webp|avif|jpe?g|png)$#i', (string) $cssUrl, $parts)
-            || !self::isImage($cssUrl) || self::isExcluded($cssUrl) || self::isExcludedFrom('cdn', $cssUrl)) {
+        if ($width < 64 || !self::wpc_rung_zone_lane($cssUrl)
+            || !preg_match('#^(https?://[^\s"\')]+)\.(webp|avif|jpe?g|png)$#i', (string) $cssUrl, $parts)) {
             return '';
         }
         $meta = null;
@@ -13147,11 +13160,17 @@ WPCJS;
             return $image[0];
         }
 
+        if (wps_ic_lazy_verdict::namesNoImage($image[0])) {
+            return $this->maybe_addslashes($image[0], $addslashes);
+        }
+
         $img_tag = $image[0];
         $original_img_tag['original_tags'] = $this->getAllTags($image[0], []);
         $original_img_tag['original_tags'] = self::wpc_backfill_img_dimensions($original_img_tag['original_tags']);
 
-        preg_match('/src=["|\']([^"]+)["|\']/', $img_tag, $image_src);
+        if (!preg_match('/(?<![\w:-])src=["|\']([^"]+)["|\']/', $img_tag, $image_src)) {
+            return $this->maybe_addslashes($img_tag, $addslashes);
+        }
 
         if (strpos($image_src[1], '$') !== false) {
             $image[0] = $this->maybe_addslashes($image[0], $addslashes);
@@ -13164,10 +13183,7 @@ WPCJS;
             $img_tag = str_replace($image_src[1], $NewSrc, $img_tag);
         }
 
-        // TODO: Was required for some sites that were having slashes
-        $img_tag = $this->maybe_addslashes($img_tag, true);
-
-        return $img_tag;
+        return $this->maybe_addslashes($img_tag, $addslashes);
     }
 
     public function maybe_addslashes($image, $addslashes = false)
@@ -13972,17 +13988,9 @@ WPCJS;
     {
         $best = '';
         $bestScore = PHP_INT_MAX;
-        foreach (explode(',', (string) $srcset) as $cand) {
-            $cand = trim($cand);
-            if ($cand === '') {
-                continue;
-            }
-            $parts = preg_split('/\s+/', $cand);
-            $url = trim((string) $parts[0]);
-            if ($url === '' || stripos($url, 'data:') === 0 || strpos($url, '/') === false) {
-                continue;
-            }
-            $desc = isset($parts[1]) ? strtolower(trim((string) $parts[1])) : '1x';
+        foreach (wpc_srcset_candidates($srcset) as $cand) {
+            $url = $cand[0];
+            $desc = $cand[1] !== '' ? $cand[1] : '1x';
             $score = 1000000;
             if (preg_match('/^([0-9.]+)x$/', $desc, $dm)) {
                 $score = (int) round((float) $dm[1] * 1000);
@@ -13995,6 +14003,38 @@ WPCJS;
             }
         }
         return $best;
+    }
+
+    /**
+     * The one file a srcset leaves behind when Remove srcset drops the set: the smallest width
+     * candidate at least $width wide, the largest when none is or $width is 0, and the lowest
+     * density of a set with no width candidates.
+     */
+    public static function wpc_srcset_fit_url($srcset, $width)
+    {
+        $fit = '';
+        $fitW = PHP_INT_MAX;
+        $largest = '';
+        $largestW = 0;
+        foreach (wpc_srcset_candidates($srcset) as $cand) {
+            if (!preg_match('/^(\d+)w$/', $cand[1], $dm)) {
+                continue;
+            }
+            $url = $cand[0];
+            $candW = (int) $dm[1];
+            if ($candW > $largestW) {
+                $largestW = $candW;
+                $largest = $url;
+            }
+            if ($width > 0 && $candW >= $width && $candW < $fitW) {
+                $fitW = $candW;
+                $fit = $url;
+            }
+        }
+        if ($fit !== '') {
+            return $fit;
+        }
+        return $largest !== '' ? $largest : self::wpc_srcset_smallest_url($srcset);
     }
 
     public static function wpc_repoint_img_to_local_host($tag)
@@ -14250,9 +14290,13 @@ WPCJS;
         // Remove decoding attribute
         $image[0] = preg_replace('/\bdecoding="[^"]*"\s*/si', '', $image[0]);
 
+        $removedSrcsetValue = '';
         if (!empty(self::$settings['remove-srcset']) && self::$settings['remove-srcset'] == '1') {
-            $image[0] = preg_replace('/\bsrcset="[^"]*"\s*/si', '', $image[0]);
-            $image[0] = preg_replace('/\bsizes="[^"]*"\s*/si', '', $image[0]);
+            if (preg_match('/(?<![\w-])srcset="([^"]*)"/i', $image[0], $removedSrcset)) {
+                $removedSrcsetValue = $removedSrcset[1];
+            }
+            $image[0] = preg_replace('/(?<![\w-])srcset="[^"]*"\s*/si', '', $image[0]);
+            $image[0] = preg_replace('/(?<![\w-])sizes="[^"]*"\s*/si', '', $image[0]);
         }
 
 
@@ -14270,10 +14314,13 @@ WPCJS;
             $pageDataSrcUrl = (string) $original_img_tag['original_tags']['data-src'];
             unset($original_img_tag['original_tags']['data-src']);
         }
-        if (!wps_ic_lazy_verdict::isImageAddress($original_img_tag['original_tags']['src'] ?? '') && !empty($original_img_tag['original_tags']['srcset'])) {
-            $smallestSrcsetUrl = self::wpc_srcset_smallest_url((string) $original_img_tag['original_tags']['srcset']);
-            if ($smallestSrcsetUrl !== '') {
-                $original_img_tag['original_tags']['src'] = $smallestSrcsetUrl;
+        if (!wps_ic_lazy_verdict::isImageAddress($original_img_tag['original_tags']['src'] ?? '')) {
+            $imgWidth = (string) ($original_img_tag['original_tags']['width'] ?? '');
+            $srcsetSrc = !empty($original_img_tag['original_tags']['srcset'])
+                ? self::wpc_srcset_smallest_url((string) $original_img_tag['original_tags']['srcset'])
+                : self::wpc_srcset_fit_url($removedSrcsetValue, ctype_digit($imgWidth) ? (int) $imgWidth : 0);
+            if ($srcsetSrc !== '') {
+                $original_img_tag['original_tags']['src'] = $srcsetSrc;
             }
         }
 
@@ -15344,8 +15391,8 @@ WPCJS;
                             }
                             // (b) else the first -WxH entry in the WP srcset (ratio is all the suffix needs).
                             if ($asp_w <= 0 || $asp_h <= 0) {
-                                foreach (explode(',', (string) $original_img_tag['original_srcset']) as $asp_sp) {
-                                    if (preg_match('#-(\d+)x(\d+)\.(?:jpe?g|png|webp|avif)#i', trim($asp_sp), $asp_m)) {
+                                foreach (wpc_srcset_urls((string) $original_img_tag['original_srcset']) as $asp_sp) {
+                                    if (preg_match('#-(\d+)x(\d+)\.(?:jpe?g|png|webp|avif)#i', $asp_sp, $asp_m)) {
                                         $asp_w = (int) $asp_m[1]; $asp_h = (int) $asp_m[2]; break;
                                     }
                                 }
@@ -15452,10 +15499,9 @@ WPCJS;
                             }
                         } elseif (!empty($original_img_tag['original_srcset'])) {
                             $avifEntries = [];
-                            $srcsetParts = explode(',', $original_img_tag['original_srcset']);
+                            $srcsetParts = wpc_srcset_entries($original_img_tag['original_srcset']);
 
                             foreach ($srcsetParts as $part) {
-                                $part = trim($part);
                                 if (preg_match('/^(\S+)\s+(.+)$/', $part, $m)) {
                                     $srcUrl = preg_replace('/[?#].*$/', '', $m[1]);
                                     $descriptor = $m[2];
@@ -15596,8 +15642,7 @@ WPCJS;
                                     $avif_census_synth_entries .= ($avif_census_synth_entries === '' ? '' : ',') . 'wpc-census ' . $avif_census_target_w . 'w';
                                 }
                                 $extra_seen_avif = [];
-                                foreach (explode(',', ($avif_census_synth_entries !== '' ? $avif_census_synth_entries . ',' : '') . $final_srcset_avif) as $entry) {
-                                    $entry = trim($entry);
+                                foreach (wpc_srcset_entries(($avif_census_synth_entries !== '' ? $avif_census_synth_entries . ',' : '') . $final_srcset_avif) as $entry) {
                                     if (!preg_match('/^(\S+)\s+(\d+)w$/', $entry, $em)) continue;
                                     $extra_width = (int) $em[2];
                                     if ($extra_width <= 0) continue;
@@ -15901,8 +15946,7 @@ WPCJS;
                     }
 
                     $webpEntries = [];
-                    foreach (explode(',', $original_img_tag['original_srcset']) as $part) {
-                        $part = trim($part);
+                    foreach (wpc_srcset_entries($original_img_tag['original_srcset']) as $part) {
                         if (!preg_match('/^(\S+)\s+(.+)$/', $part, $wm)) continue;
                         $jpgUrl = preg_replace('/[?#].*$/', '', $wm[1]);
                         $descriptor = $wm[2];
@@ -15999,8 +16043,7 @@ WPCJS;
                             $webp_census_synth_entries .= ($webp_census_synth_entries === '' ? '' : ',') . 'wpc-census ' . $webp_census_target_w . 'w';
                         }
                         $extra_seen_webp = [];
-                        foreach (explode(',', ($webp_census_synth_entries !== '' ? $webp_census_synth_entries . ',' : '') . $final_srcset_webp) as $entry) {
-                            $entry = trim($entry);
+                        foreach (wpc_srcset_entries(($webp_census_synth_entries !== '' ? $webp_census_synth_entries . ',' : '') . $final_srcset_webp) as $entry) {
                             if (!preg_match('/^(\S+)\s+(\d+)w$/', $entry, $em_wp)) continue;
                             $extra_width_wp = (int) $em_wp[2];
                             if ($extra_width_wp <= 0) continue;
@@ -16700,7 +16743,7 @@ WPCJS;
             return $srcset;
         }
 
-        $parts = preg_split('/\s*,\s*/', trim($srcset));
+        $parts = wpc_srcset_entries($srcset);
         $rebuilt = [];
 
         foreach ($parts as $candidate) {

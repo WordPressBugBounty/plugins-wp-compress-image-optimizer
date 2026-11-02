@@ -3860,7 +3860,7 @@ class wps_cdn_rewrite
             return 'cohort-off';
         }
 
-        return wps_ic_atf_observation::bgMobileSourceCrit('mobile') === [] ? true : 'crit-record';
+        return wps_ic_atf_observation::bgMobileSourceStands(wps_ic_atf_observation::bgMobileSourceCrit('mobile')) ? 'crit-record' : true;
     }
 
     public function stage_phone_bg_derive($html, $ctx)
@@ -5614,19 +5614,12 @@ class wps_cdn_rewrite
             $tag = $m[0];
             $failsOver = self::img_fails_over($tag);
             $new = preg_replace_callback('/\s(src|srcset)=(["\'])(.*?)\2/i', function ($a) use ($map, $failsOver) {
-                $parts = [];
-                foreach (preg_split('/\s*,\s*/', $a[3]) as $cand) {
-                    if ($cand === '') {
-                        continue;
-                    }
-                    $d = '';
-                    if (preg_match('/^(\S+)(\s+\d+(?:w|x))$/', $cand, $cm)) {
-                        $cand = $cm[1];
-                        $d = $cm[2];
-                    }
-                    $parts[] = $map($cand, $failsOver) . $d;
-                }
-                return ' ' . $a[1] . '=' . $a[2] . implode(', ', $parts) . $a[2];
+                $mapped = strtolower($a[1]) === 'srcset'
+                    ? wpc_srcset_map($a[3], function ($url) use ($map, $failsOver) {
+                        return $map($url, $failsOver);
+                    })
+                    : ($a[3] === '' ? '' : $map($a[3], $failsOver));
+                return ' ' . $a[1] . '=' . $a[2] . $mapped . $a[2];
             }, $tag);
             if (is_string($new) && $new !== $tag) {
                 $n++;
@@ -5779,22 +5772,13 @@ class wps_cdn_rewrite
             }
             return $cache[$cacheKey] = $out;
         };
-        $mapList = function ($v, $avif = true) use ($map) {
-            $parts = [];
-            foreach (preg_split('/\s*,\s*/', $v) as $cand) {
-                if ($cand === '') {
-                    continue;
-                }
-                $d = '';
-                $w = 0;
-                if (preg_match('/^(\S+)(\s+(\d+)(w|x))$/', $cand, $cm)) {
-                    $cand = $cm[1];
-                    $d = $cm[2];
-                    $w = $cm[4] === 'w' ? (int) $cm[3] : 0;
-                }
-                $parts[] = $map($cand, $avif, $w) . $d;
+        $mapList = function ($v, $avif = true, $isSrcset = true) use ($map) {
+            if (!$isSrcset) {
+                return $v === '' ? '' : $map($v, $avif, 0);
             }
-            return implode(', ', $parts);
+            return wpc_srcset_map($v, function ($url, $desc) use ($map, $avif) {
+                return $map($url, $avif, preg_match('/^(\d+)w$/', $desc, $wm) ? (int) $wm[1] : 0);
+            });
         };
         $n = ['imgs' => 0, 'css' => 0];
         $out = preg_replace_callback('/<img\b[^>]*>/i', function ($m) use ($mapList, &$n, $zone) {
@@ -5804,7 +5788,7 @@ class wps_cdn_rewrite
             }
             $failsOver = self::img_fails_over($tag);
             $new = preg_replace_callback('/\s(src|srcset)=(["\'])(.*?)\2/i', function ($a) use ($mapList, $failsOver) {
-                return ' ' . $a[1] . '=' . $a[2] . $mapList($a[3], (bool) $failsOver) . $a[2];
+                return ' ' . $a[1] . '=' . $a[2] . $mapList($a[3], (bool) $failsOver, strtolower($a[1]) === 'srcset') . $a[2];
             }, $tag);
             if (is_string($new) && $new !== $tag) {
                 $n['imgs']++;
@@ -7466,6 +7450,15 @@ class wps_cdn_rewrite
             foreach ($regions[0] as $region) {
                 if (preg_match_all('/<img\b[^>]*>/i', $region, $tags)) {
                     if (stripos($region, '<picture') === 0 && count($tags[0]) === 1 && stripos($region, '<picture', 8) === false && stripos($region, '<noscript') === false) {
+                        foreach ($heroes as $hero) {
+                            if (!empty($hero['p']) && preg_match_all('/\s(?:src|data-wpc-fb)\s*=\s*(["\'])(.*?)\1/is', $tags[0][0], $addresses, PREG_SET_ORDER)) {
+                                foreach ($addresses as $address) {
+                                    if (trim(html_entity_decode($address[2], ENT_QUOTES)) === $hero['u']) {
+                                        $inside[$tags[0][0]] = true;
+                                    }
+                                }
+                            }
+                        }
                         continue;
                     }
                     foreach ($tags[0] as $tag) {
@@ -7501,9 +7494,8 @@ class wps_cdn_rewrite
             }
         };
         $takeSet = function ($srcset) use ($take) {
-            foreach (explode(',', (string) $srcset) as $candidate) {
-                $parts = preg_split('/\s+/', trim($candidate));
-                $take($parts[0]);
+            foreach (wpc_srcset_urls((string) $srcset) as $address) {
+                $take($address);
             }
         };
         foreach ($heroes as $hero) {
@@ -7533,18 +7525,40 @@ class wps_cdn_rewrite
      */
     public static function wpc_measured_heroes($html, array $written, array $heroDevices, $combined, $lqip = null)
     {
+        $heroes = self::wpc_picture_heroes($html, $written, $heroDevices, $combined, $lqip);
+        if ($heroes !== []) {
+            return $heroes;
+        }
         $heroes = self::wpc_after_hero_heroes($written, $heroDevices, $combined, $lqip);
         if ($heroes === []) {
             $heroes = self::wpc_img_after_hero_page_heroes($html, $heroDevices, $combined);
         }
         if ($heroes === [] && $combined) {
             foreach ($heroDevices as $device) {
-                $own = self::wpc_after_hero_heroes($written, [$device], true, $lqip);
+                $own = self::wpc_picture_heroes($html, $written, [$device], true, $lqip);
+                if ($own === []) {
+                    $own = self::wpc_after_hero_heroes($written, [$device], true, $lqip);
+                }
                 $heroes = array_merge($heroes, $own !== [] ? $own : self::wpc_img_after_hero_page_heroes($html, [$device], true));
             }
         }
 
         return $heroes;
+    }
+
+    private static function wpc_picture_heroes($html, array $written, array $devices, $combined, $lqip = null)
+    {
+        if (stripos((string) $html, '<picture') === false) {
+            return [];
+        }
+        $heroes = self::wpc_doc_heroes($html, $written, $devices, $combined, $lqip);
+        foreach ($heroes as $hero) {
+            if (!empty($hero['p'])) {
+                return $heroes;
+            }
+        }
+
+        return [];
     }
 
     public static function wpc_doc_hero_on()
@@ -7564,7 +7578,12 @@ class wps_cdn_rewrite
         $heroes = [];
         $fromDoc = 0;
         foreach ($devices as $device) {
+            $entry = stripos((string) $html, '<picture') !== false ? self::wpc_doc_hero_entry($html, $device, $combined) : null;
             $own = self::wpc_after_hero_heroes($written, [$device], $combined, $lqip);
+            if ($entry !== null && !empty($entry['p']) && !($device === 'mobile' && !empty($lqip['sel']))) {
+                $own = [$entry];
+                $fromDoc++;
+            }
             if ($own === []) {
                 $entry = self::wpc_doc_hero_entry($html, $device, $combined);
                 if ($entry === null) {
@@ -7603,7 +7622,7 @@ class wps_cdn_rewrite
             return null;
         }
         $scan = preg_replace('#<(noscript|script|template|textarea|style)\b[^>]*>.*?</\1\s*>|<!--.*?-->#is', '', $html);
-        if (!is_string($scan) || !preg_match_all('/<img\b[^>]*>/i', $scan, $tags, PREG_OFFSET_CAPTURE)) {
+        if (!is_string($scan) || !preg_match_all('#<picture\b[^>]*>.*?</picture>|<img\b[^>]*>#is', $scan, $tags, PREG_OFFSET_CAPTURE)) {
             return null;
         }
         $names = function ($tag) use ($target) {
@@ -7611,8 +7630,7 @@ class wps_cdn_rewrite
                 return false;
             }
             foreach ($values as $value) {
-                foreach (explode(',', html_entity_decode($value[3], ENT_QUOTES)) as $candidate) {
-                    $address = (string) preg_split('/\s+/', trim($candidate))[0];
+                foreach (wpc_srcset_urls(html_entity_decode($value[3], ENT_QUOTES)) as $address) {
                     if ($address !== '' && stripos($address, 'data:') !== 0 && wps_rewriteLogic::wpc_image_stem($address) === $target) {
                         return true;
                     }
@@ -7623,38 +7641,93 @@ class wps_cdn_rewrite
         };
         $found = null;
         $at = 0;
+        $picture = false;
         foreach ($tags[0] as $tag) {
             if ($names($tag[0])) {
                 if ($found !== null) {
                     return null;
                 }
-                $found = $tag[0];
                 $at = (int) $tag[1];
+                $picture = stripos($tag[0], '<picture') === 0;
+                if ($picture) {
+                    if (!preg_match_all('/<img\b[^>]*>/i', $tag[0], $images) || count($images[0]) !== 1
+                        || stripos($tag[0], '<picture', 8) !== false) {
+                        return null;
+                    }
+                    $found = $images[0][0];
+                } else {
+                    $found = $tag[0];
+                }
             }
         }
         if ($found === null || !preg_match('/\sfetchpriority\s*=\s*(["\']?)high\1(?=[\s\/>])/i', $found)
             || preg_match('/\sloading\s*=\s*(["\']?)lazy\1(?=[\s\/>])/i', $found)) {
             return null;
         }
-        $before = substr($scan, 0, $at);
-        $open = strripos($before, '<picture');
-        if ($open !== false && stripos(substr($before, $open), '</picture') === false && preg_match('/<source\b/i', substr($before, $open))) {
-            return null;
+        if (!$picture) {
+            $before = substr($scan, 0, $at);
+            $open = strripos($before, '<picture');
+            if ($open !== false && stripos(substr($before, $open), '</picture') === false && preg_match('/<source\b/i', substr($before, $open))) {
+                return null;
+            }
         }
         $attribute = function ($name) use ($found) {
             return preg_match('/\s' . $name . '\s*=\s*(["\'])(.*?)\1/is', $found, $value) ? trim(html_entity_decode($value[2], ENT_QUOTES)) : '';
         };
         $src = $attribute('src');
+        $carrier = $picture && $attribute('data-wpc-fb') !== '' ? 'data-wpc-fb' : 'src';
+        if ($picture && stripos($src, 'data:') === 0) {
+            $src = $attribute('data-wpc-fb');
+        }
         if ($src === '' || stripos($src, 'data:') === 0 || stripos($src, 'blob:') === 0) {
             return null;
         }
+        if ($picture) {
+            $identityOf = function ($tag) use ($carrier) {
+                if (!preg_match('/\s' . $carrier . '\s*=\s*(["\'])(.*?)\1/is', $tag, $value)) {
+                    return null;
+                }
+                if (preg_match('/&(?:#(?:x[0-9a-f]*(?![0-9a-f;])|[0-9]*(?![0-9;x]))|[a-z][a-z0-9]*(?![a-z0-9;=]))/i', $value[2])) {
+                    return null;
+                }
+                if (preg_match_all('/&#(x[0-9a-f]+|[0-9]+);/i', $value[2], $refs)) {
+                    foreach ($refs[1] as $ref) {
+                        $code = ($ref[0] === 'x' || $ref[0] === 'X') ? hexdec(substr($ref, 1)) : (int) $ref;
+                        if ($code === 0 || ($code >= 0x80 && $code <= 0x9f) || ($code >= 0xd800 && $code <= 0xdfff) || $code > 0x10ffff) {
+                            return null;
+                        }
+                    }
+                }
+                return preg_replace_callback('/&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]+);/i', function ($entity) {
+                    return html_entity_decode($entity[0], ENT_QUOTES | ($entity[0][1] === '#' ? ENT_HTML401 : ENT_HTML5));
+                }, str_replace(["\r\n", "\r"], "\n", $value[2]));
+            };
+            $identity = $identityOf($found);
+            if ($identity === null) {
+                return null;
+            }
+            $count = 0;
+            if (preg_match_all('/<img\b[^>]*>/i', $scan, $images)) {
+                foreach ($images[0] as $image) {
+                    if ($identityOf($image) === $identity) {
+                        $count++;
+                    }
+                }
+            }
+            if ($count !== 1) {
+                return null;
+            }
+        }
+        $selector = $picture ? 'picture>img[' . $carrier . '="' . preg_replace_callback('/[\x00-\x1f\x7f"\\\\]/', function ($m) {
+            return '\\' . dechex(ord($m[0])) . ' ';
+        }, $identity) . '"]' : '';
 
         return [
             'u' => $src,
             's' => $attribute('srcset'),
             'z' => $attribute('sizes'),
             'm' => $combined ? ($device === 'mobile' ? wps_ic_image_preload_set::MEDIA_MOBILE : wps_ic_image_preload_set::MEDIA_DESKTOP) : '',
-        ];
+        ] + ($picture ? ['p' => $selector] : []);
     }
 
     /**
@@ -7679,7 +7752,7 @@ class wps_cdn_rewrite
             }
             $href = $attribute($link, 'href');
             $srcset = $attribute($link, 'imagesrcset');
-            $named = $href !== '' ? $href : (string) preg_split('/[\s,]+/', $srcset)[0];
+            $named = $href !== '' ? $href : (string) (wpc_srcset_urls($srcset)[0] ?? '');
             $media = $attribute($link, 'media');
             $preloads[] = [
                 'stem'   => $named === '' ? '' : wps_rewriteLogic::wpc_image_stem($named),
@@ -7790,9 +7863,8 @@ class wps_cdn_rewrite
         $never = isset($hold['never']) && is_array($hold['never']) ? $hold['never'] : [];
         $named = [$address];
         if (preg_match('/\ssrcset\s*=\s*(["\'])(.*?)\1/is', $tag, $set)) {
-            foreach (explode(',', html_entity_decode($set[2], ENT_QUOTES)) as $candidate) {
-                $parts = preg_split('/\s+/', trim($candidate));
-                $named[] = $parts[0];
+            foreach (wpc_srcset_urls(html_entity_decode($set[2], ENT_QUOTES)) as $setAddress) {
+                $named[] = $setAddress;
             }
         }
         foreach ($named as $one) {
@@ -7967,6 +8039,7 @@ class wps_cdn_rewrite
             // kept it in; with nothing fetchable on the tag, leave it to whoever parked it.
             $wpc_placeholder_src = self::img_src_is_data_uri($t);
             $wpc_restore_url = $wpc_placeholder_src ? self::quiet_wire_restore_url($t) : '';
+            if (!$held && $heroOnlyVerdict !== null && $heroOnlyVerdict->aboveOnServedDevice($t, $wpc_restore_url)) return $t;
             // Three lazy lanes park the same <img>: a placeholder src is restored from the picture
             // lane's data-wpc-fb, or left to the lane that parked it. Never sampled: two lanes
             // reached one tag.
@@ -9015,7 +9088,7 @@ class wps_cdn_rewrite
         if (!preg_match('/\s((?:data-)?srcset)\s*=\s*(["\'])(.*?)\2/is', $tag, $ss)) {
             return $tag;
         }
-        $candidates = array_values(array_filter(array_map('trim', preg_split('/,\s+/', trim($ss[3])))));
+        $candidates = wpc_srcset_entries($ss[3]);
         if (count($candidates) < 2) {
             return $tag;
         }
@@ -9406,7 +9479,7 @@ class wps_cdn_rewrite
             || !preg_match('/\ssrc=(["\'])(?!data:)[^"\']+\1/i', $tag)) {
             return $tag;
         }
-        $candidates = array_values(array_filter(array_map('trim', explode(',', $srcsetMatch[2])), 'strlen'));
+        $candidates = wpc_srcset_entries($srcsetMatch[2]);
         if (count($candidates) < 2) {
             return $tag;
         }
@@ -9444,7 +9517,7 @@ class wps_cdn_rewrite
             return $tag;
         }
         $limit = (int) ceil($cssWidth * $cap);
-        $candidates = array_values(array_filter(array_map('trim', explode(',', $srcsetMatch[2])), 'strlen'));
+        $candidates = wpc_srcset_entries($srcsetMatch[2]);
         if (count($candidates) < 2) {
             return $tag;
         }
@@ -9568,7 +9641,59 @@ class wps_cdn_rewrite
                 }
             }
 
+            $inheritPictures = 0;
+            $inheritRules = isset($pictureScan['inh']) && is_array($pictureScan['inh']) ? $pictureScan['inh'] : [];
+            $inheritClassSet = isset($pictureScan['ihc']) && is_array($pictureScan['ihc']) ? array_flip($pictureScan['ihc']) : [];
+            if (function_exists('wpc_policy_cohort') && (int) wpc_policy_cohort('off_picture_inherit') === 1) {
+                $inheritRules = [];
+                $inheritClassSet = [];
+            }
+            if ($inheritClassSet && strpos($html, 'data-wpc-ih=') === false) {
+                $searchOffset = 0;
+                $pictureIterations = 0;
+                while (($pictureStart = strpos($html, '<picture class="wpc-picture', $searchOffset)) !== false && $pictureIterations++ < 400) {
+                    $searchOffset = $pictureStart + 16;
+                    $pictureEnd = strpos($html, '</picture>', $pictureStart);
+                    $openEnd = strpos($html, '>', $pictureStart);
+                    if ($pictureEnd === false || $openEnd === false || $openEnd > $pictureEnd || $pictureEnd - $pictureStart > 12000) {
+                        continue;
+                    }
+                    if (!preg_match('/<img\b[^>]*?class=["\']([^"\']+)["\']/i', substr($html, $openEnd, $pictureEnd - $openEnd), $im)) {
+                        continue;
+                    }
+                    $inheritHits = [];
+                    foreach (preg_split('/\s+/', $im[1], -1, PREG_SPLIT_NO_EMPTY) as $c) {
+                        if (isset($inheritClassSet[$c]) && !in_array($c, $inheritHits, true)) {
+                            $inheritHits[] = $c;
+                        }
+                    }
+                    if (!$inheritHits) {
+                        continue;
+                    }
+                    $inheritAttr = ' data-wpc-ih="' . implode(' ', $inheritHits) . '"';
+                    $html = substr_replace($html, $inheritAttr, $openEnd, 0);
+                    $searchOffset = $openEnd + strlen($inheritAttr);
+                    $inheritPictures++;
+                }
+            }
+            $inheritCss = '';
+            if ($inheritRules && strpos($html, 'wpc-picture-inherit') === false) {
+                foreach ($inheritRules as $rule) {
+                    if (!is_array($rule) || !isset($rule['s'], $rule['m'], $rule['d'])) {
+                        continue;
+                    }
+                    if (strpos((string) $rule['s'], '[data-wpc-ih~=') !== false && $inheritPictures === 0) {
+                        continue;
+                    }
+                    $inheritRule = $rule['s'] . '{' . $rule['d'] . '}';
+                    $inheritCss .= (string) $rule['m'] === '' ? $inheritRule : '@media ' . $rule['m'] . '{' . $inheritRule . '}';
+                }
+            }
+
             $headInjection = '';
+            if ($inheritCss !== '' && stripos($inheritCss, '</style') === false) {
+                $headInjection .= '<style id="wpc-picture-inherit">' . $inheritCss . '</style>';
+            }
             if (strpos($html, 'wpc-picture-contract') === false && strpos($html, 'data-wpc-mir') !== false) {
                 // v7.10.640 — :where gives the mirrored wrapper a PAINT BOX at zero
                 // specificity: display:contents (now :not-scoped away) painted nothing,
@@ -9609,8 +9734,8 @@ class wps_cdn_rewrite
             // The picture tier re-parents an <img> into <picture>, which breaks author CSS that
             // targets the img's classes or its parent; the classes are mirrored and a guard unwraps
             // the tags that still break. Sampled: the site's CSS is the same on every render.
-            if (($mirroredPictures > 0 || $guardedSelectors > 0) && function_exists('wpc_render_belt_note')) {
-                wpc_render_belt_note('picture-fidelity', array_filter(['mirrored' => $mirroredPictures, 'guard_tags' => $guardedSelectors]), true);
+            if (($mirroredPictures > 0 || $guardedSelectors > 0 || $inheritPictures > 0) && function_exists('wpc_render_belt_note')) {
+                wpc_render_belt_note('picture-fidelity', array_filter(['mirrored' => $mirroredPictures, 'guard_tags' => $guardedSelectors, 'inherit' => $inheritPictures]), true);
             }
             return $html;
         } catch (\Throwable $e) {
@@ -10086,7 +10211,7 @@ class wps_cdn_rewrite
                     if (isset($sourceArms[$armKey]) || count($sourceArms) >= 3) { continue; }
                     $sourceSrcset = (preg_match('/\ssrcset\s*=\s*(["\'])(.*?)\1/is', $sourceTag, $srcsetMatch)) ? trim($srcsetMatch[2]) : '';
                     $sourceSizes  = (preg_match('/\ssizes\s*=\s*(["\'])(.*?)\1/is', $sourceTag, $sizesMatch)) ? trim($sizesMatch[2]) : '';
-                    $sourceFirstUrl  = ($sourceSrcset !== '') ? (string) preg_split('/[\s,]+/', ltrim($sourceSrcset))[0] : '';
+                    $sourceFirstUrl  = ($sourceSrcset !== '') ? (string) (wpc_srcset_urls($sourceSrcset)[0] ?? '') : '';
                     if ($sourceSrcset === '' || $sourceFirstUrl === '' || stripos($sourceFirstUrl, 'data:') === 0
                         || (method_exists('wps_rewriteLogic', 'wpc_lcp_bg_url_allowed') && !wps_rewriteLogic::wpc_lcp_bg_url_allowed($sourceFirstUrl))) {
                         continue;
@@ -10115,7 +10240,7 @@ class wps_cdn_rewrite
                             'type'        => 'image/' . $arm['type'],
                         ];
                     }
-                    $firstArmUrl = (string) preg_split('/[\s,]+/', ltrim((string) reset($sourceArms)['srcset']))[0];
+                    $firstArmUrl = (string) (wpc_srcset_urls((string) reset($sourceArms)['srcset'])[0] ?? '');
                     $imagePreloads->add('wpc-lcp-img-preload', '', $proposalDevice, $proposalOrigin, $proposalRank,
                         ['arms' => $pictureArms, 'key' => wps_ic_image_preload_set::imageKey($firstArmUrl)]);
 
@@ -10129,7 +10254,7 @@ class wps_cdn_rewrite
         $sizes  = (preg_match('/\ssizes\s*=\s*(["\'])(.*?)\1/is',  $tag, $zm)) ? trim($zm[2]) : '';
         $src    = (preg_match('/\ssrc\s*=\s*(["\'])(.*?)\1/is',    $tag, $cm)) ? trim($cm[2]) : '';
         // First candidate URL — for the host gate + the no-srcset href.
-        $probe  = ($srcset !== '') ? (string) preg_split('/[\s,]+/', ltrim($srcset))[0] : $src;
+        $probe  = ($srcset !== '') ? (string) (wpc_srcset_urls($srcset)[0] ?? '') : $src;
         if ($probe === '' || stripos($probe, 'data:') === 0) return $html;
         // Same host discipline as the css-bg responder (same-origin or an allowed CDN host).
         if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_lcp_bg_url_allowed')
@@ -12457,7 +12582,7 @@ WPCSZRJS;
      */
     private static function wpc_late_chain_guards()
     {
-        $guards = ['paths' => [], 'ids' => [], 'tokens' => class_exists('wps_ic_js_delay_v3') ? wps_ic_js_delay_v3::wpc_consent_tokens(true) : []];
+        $guards = ['paths' => [], 'ids' => [], 'tokens' => wpc_consent_tokens(true)];
         if (class_exists('wps_ic_atf_observation')) {
             foreach (['mobile', 'desktop'] as $device) {
                 $answer = wps_ic_atf_observation::interactive($device);
@@ -12806,7 +12931,7 @@ WPCSZRJS;
                 return [];
             }
             $preload = $written[$device];
-            $named = $preload['href'] !== '' ? $preload['href'] : (string) preg_split('/[\s,]+/', (string) $preload['imagesrcset'])[0];
+            $named = $preload['href'] !== '' ? $preload['href'] : (string) (wpc_srcset_urls((string) $preload['imagesrcset'])[0] ?? '');
             if ($named === '' || wps_rewriteLogic::wpc_image_stem(html_entity_decode($named, ENT_QUOTES)) !== $target) {
                 return [];
             }
@@ -12847,7 +12972,10 @@ WPCSZRJS;
             $note('csp');
             return $html;
         }
-        $heroes = self::wpc_after_hero_heroes($set->writtenLcp(), $combined ? ['mobile', 'desktop'] : [$renderDevice], $combined, $lqip);
+        $heroes = self::wpc_picture_heroes($html, $set->writtenLcp(), $combined ? ['mobile', 'desktop'] : [$renderDevice], $combined, $lqip);
+        if ($heroes === []) {
+            $heroes = self::wpc_after_hero_heroes($set->writtenLcp(), $combined ? ['mobile', 'desktop'] : [$renderDevice], $combined, $lqip);
+        }
         if ($heroes === []) {
             $heroes = self::wpc_doc_heroes($html, $set->writtenLcp(), $combined ? ['mobile', 'desktop'] : [$renderDevice], $combined, $lqip);
         }
@@ -16823,8 +16951,8 @@ WPCSZRJS;
             return (string) preg_replace('#(?<!:)/{2,}#', '/', $url);
         };
         $srcKey = $fileKey($src);
-        foreach (preg_split('/,\s+/', trim($ss[2])) as $candidate) {
-            $url = $fileKey(strtok(trim($candidate), ' '));
+        foreach (wpc_srcset_urls($ss[2]) as $candidate) {
+            $url = $fileKey($candidate);
             if ($url !== '' && $url !== $srcKey) {
                 return true;
             }
@@ -16949,7 +17077,7 @@ WPCSZRJS;
             : (defined('WPS_IC_HASH') ? (string) WPS_IC_HASH : '5021');
 
         return preg_replace_callback(
-            '#https?://[^\s"\',]*?/q:i/[^\s"\',]*#i',
+            '#https?://(?:[^\s"\',]|,(?![\s"\',]|https?://))*?/q:i/(?:[^\s"\',]|,(?![\s"\',]|https?://))*#i',
             function ($m) use ($lazy_v) {
                 $u = $m[0];
                 return $u . ((strpos($u, '?') !== false) ? '&' : '?') . 'v=' . $lazy_v;
@@ -20155,7 +20283,7 @@ JS;
 
         if (self::$webp == 'true' || self::$webp == '1') {
             if (!empty($original_img_tag['srcset'])) {
-                $exploded_scrcset = explode(',', $original_img_tag['srcset']);
+                $exploded_scrcset = wpc_srcset_entries($original_img_tag['srcset']);
                 if (!empty($exploded_scrcset)) {
                     foreach ($exploded_scrcset as $i => $src) {
                         $src = trim($src);
@@ -20266,8 +20394,7 @@ JS;
                     $avifMainOnDisk = $avifBasePath !== '' && wpc_nextgen_variant_exists($avifBasePath, 'avif');
                     $avifRungs = [];
                     if (!empty($original_img_tag['srcset'])) {
-                        foreach (explode(',', (string) $original_img_tag['srcset']) as $ent) {
-                            $ent = trim($ent);
+                        foreach (wpc_srcset_entries((string) $original_img_tag['srcset']) as $ent) {
                             if ($ent === '' || !preg_match('/^(\S+)(\s+\S+)?$/', $ent, $em)) continue;
                             $eBaseUrl = preg_replace('/\?.*$/', '', $em[1]);
                             $ePath    = self::local_file_path($eBaseUrl);

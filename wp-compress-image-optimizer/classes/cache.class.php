@@ -541,6 +541,61 @@ class wps_ic_cache
     }
 
     /**
+     * Which purge a post reaches in the layers in front of its copy within a 60 s window that
+     * opens at the first counted post: 'url' for the first wpc_foreign_purge_per_request_cap (20)
+     * distinct posts, 'site' for the first post past the cap (one site-scope purge stands for
+     * every page after it), 'none' for each later one. A post seen again keeps the answer it got.
+     */
+    private static function foreignPurgeSlot($post_id)
+    {
+        $now = time();
+        if (!isset($GLOBALS['wpc_foreign_purge_pages']) || !is_array($GLOBALS['wpc_foreign_purge_pages'])
+            || !isset($GLOBALS['wpc_foreign_purge_pages']['t']) || $now - $GLOBALS['wpc_foreign_purge_pages']['t'] > 60) {
+            $GLOBALS['wpc_foreign_purge_pages'] = ['t' => $now, 'url' => 0, 'site' => false, 'seen' => []];
+        }
+        $state = &$GLOBALS['wpc_foreign_purge_pages'];
+        if (isset($state['seen'][$post_id])) {
+            return $state['seen'][$post_id] === 'url' ? 'url' : 'none';
+        }
+        $cap = max(0, (int) apply_filters('wpc_foreign_purge_per_request_cap', 20));
+        if ($state['url'] < $cap) {
+            $state['url']++;
+            $state['seen'][$post_id] = 'url';
+            return 'url';
+        }
+        $state['seen'][$post_id] = 'none';
+        if (!$state['site']) {
+            $state['site'] = true;
+            return 'site';
+        }
+        return 'none';
+    }
+
+    /**
+     * Sends the one site-scope purge that stands for the posts past the per-window cap: now when
+     * shutdown has already fired, otherwise at shutdown.
+     */
+    private static function foreignPurgeSiteScheduled()
+    {
+        if (function_exists('did_action') && did_action('shutdown')) {
+            self::foreignPurgeSite();
+            return;
+        }
+        add_action('shutdown', ['wps_ic_cache', 'foreignPurgeSite'], PHP_INT_MAX - 1);
+    }
+
+    /**
+     * The site-scope purge of the layers in front of the page copies, sent for the posts past
+     * the per-window cap.
+     */
+    public static function foreignPurgeSite()
+    {
+        $cache_integrations = new wps_ic_cache_integrations();
+        $cache_integrations->purgeVarnish(0, true);
+        wpc_purge_foreign_caches(false, 'post-purge-cap', true);
+    }
+
+    /**
      * Removes the plugin's stored page copies and, unless $layers is false, purges the layers in
      * front of them: Varnish, and for one post that page's own layers through the foreign-purge
      * gateway (per URL); only 'all' and 'home' reach the caches that listen on wps_ic_purge_all_cache.
@@ -597,24 +652,26 @@ class wps_ic_cache
         if ($layers) {
             $cache_integrations = new wps_ic_cache_integrations();
 
+            $page_slot = is_int($post_id) ? self::foreignPurgeSlot($post_id) : '';
 
-            if (is_int($post_id)) {
+            if ($page_slot === 'url') {
                 $cache_integrations->purgeVarnish($post_id);
-            } elseif ($post_id === 'home') {
-                $cache_integrations->purgeVarnish(0);
-            } else {
-                $cache_integrations->purgeVarnish(0, true);            // 'all' → full-site
+            } elseif ($page_slot === '') {
+                if ($post_id === 'home') {
+                    $cache_integrations->purgeVarnish(0);
+                } else {
+                    $cache_integrations->purgeVarnish(0, true);            // 'all' → full-site
+                }
             }
 
-            // Fire integration hook once per request (Breeze, LiteSpeed, SG, etc.)
             static $integrations_fired = false;
-            if (!$integrations_fired) {
+            if ($page_slot === 'url') {
+                wpc_purge_foreign_caches(get_permalink($post_id), 'post-purge');
+            } elseif ($page_slot === 'site') {
+                self::foreignPurgeSiteScheduled();
+            } elseif ($page_slot === '' && !$integrations_fired) {
                 $integrations_fired = true;
-                if (is_int($post_id)) {
-                    wpc_purge_foreign_caches(get_permalink($post_id), 'post-purge');
-                } else {
-                    wpc_purge_foreign_caches(false, 'purge-all');
-                }
+                wpc_purge_foreign_caches(false, 'purge-all');
             }
         }
 

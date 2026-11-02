@@ -1,3 +1,61 @@
+if (!window.wpcNonceFix) {
+    window.wpcNonceFix = {
+        refresh: function (done) {
+            jQuery.ajax({url: window.ajaxurl, type: 'POST', timeout: 15000, data: {action: 'wps_ic_refresh_nonce'}}).done(function (r) {
+                var n = (r && r.success && r.data && r.data.nonce) ? String(r.data.nonce) : '';
+                if (n) {
+                    if (window.ajaxVar) { window.ajaxVar.nonce = n; }
+                    if (window.wpc_ajaxVar) { window.wpc_ajaxVar.nonce = n; }
+                }
+                done(n);
+            }).fail(function () { done(''); });
+        },
+        refused: function (xhr) {
+            var body = xhr ? String(xhr.responseText || '') : '';
+            if (xhr && (xhr.status === 401 || (xhr.status === 400 && body === '0'))) { return 'out'; }
+            return (xhr && xhr.status === 403 && body.indexOf('bad-nonce') !== -1) ? 'stale' : '';
+        },
+        reload: function () {
+            try {
+                var t = parseInt(window.sessionStorage.getItem('wpcNonceReload'), 10) || 0;
+                if (Date.now() - t < 300000) { return false; }
+                window.sessionStorage.setItem('wpcNonceReload', String(Date.now()));
+            } catch (e) { return false; }
+            window.onbeforeunload = null;
+            window.location.reload();
+            return true;
+        },
+        recover: function (xhr, retried, retry, giveUp) {
+            var self = window.wpcNonceFix, kind = self.refused(xhr);
+            if (!kind) { return false; }
+            if (retried || kind === 'out') {
+                if (!self.reload()) { giveUp(); }
+                return true;
+            }
+            self.refresh(function (n) {
+                if (n) { retry(n); } else if (!self.reload()) { giveUp(); }
+            });
+            return true;
+        },
+        send: function (opts, onFail) {
+            var self = window.wpcNonceFix, retried = false, inner = jQuery.extend({}, opts);
+            function fail(xhr, st, err) {
+                if (opts.error) { opts.error(xhr, st, err); }
+                if (onFail) { onFail(xhr); }
+            }
+            inner.error = function (xhr, st, err) {
+                var again = function (n) {
+                    retried = true;
+                    inner.data = jQuery.extend({}, inner.data, {nonce: n});
+                    jQuery.ajax(inner);
+                };
+                if (!self.recover(xhr, retried, again, function () { fail(xhr, st, err); })) { fail(xhr, st, err); }
+            };
+            jQuery.ajax(inner);
+        }
+    };
+}
+
 jQuery(document).ready(function ($) {
 
     // v7.04.70 — Audit hardening (P0-5): visibility-resume burst. Mirrors
@@ -165,23 +223,23 @@ jQuery(document).ready(function ($) {
             window.location.replace(u.toString());
         }
 
-        $.ajax({
+        window.wpcNonceFix.send({
             url: ajaxurl,
             type: 'POST',
             data: {action: 'wps_ic_StopBulk', nonce: ajaxVar.nonce},
-            timeout: 12000
-        }).done(function () {
-            // Server has settled in-flight writes + busted the splash count
-            // cache (see wps_ic_StopBulk's bounded-poll). Safe to redirect —
-            // the next page render reads truly-current counts.
-            _redirectFresh();
-        }).fail(_redirectFresh);
+            timeout: 12000,
+            success: function () {
+                _redirectFresh();
+            },
+            error: function () {
+                _redirectFresh();
+            }
+        });
 
-        // Hard fallback: AJAX hangs longer than wp_send_json round-trip should
-        // ever take. Server's bounded settle caps at 2.5 s; a healthy round-
-        // trip is well under 5 s. After 10 s we punt to the same redirect
-        // (the page reload itself re-renders fresh).
-        setTimeout(_redirectFresh, 10000);
+        // Hard fallback: past the request's 12 s, a nonce refresh's 15 s and the
+        // retry's 12 s, punt to the same redirect (the page reload itself
+        // re-renders fresh).
+        setTimeout(_redirectFresh, 40000);
         return false;
     }
     // /_doStopBulk
@@ -268,7 +326,7 @@ jQuery(document).ready(function ($) {
         var _wpcRestoreT0 = Date.now();
         try { window.wpcDebugLog && window.wpcDebugLog('[WPC RestoreTiming] start AJAX sent at', new Date().toISOString()); } catch (e) {}
 
-        $.ajax({
+        window.wpcNonceFix.send({
             url: ajaxurl,
             type: 'POST',
             data: {action: 'wpc_ic_start_bulk_restore', nonce: nonce, pause_sd: (window.WPCRestoreAll && window.WPCRestoreAll.pause) ? 1 : 0},
@@ -380,7 +438,7 @@ jQuery(document).ready(function ($) {
         $('.bulk-status-progress-bar').hide();
         var nonce = ajaxVar.nonce
 
-        $.ajax({
+        window.wpcNonceFix.send({
             url: ajaxurl,
             type: 'POST',
             data: {action: 'wpc_ic_start_bulk_compress', nonce: nonce},
@@ -426,14 +484,12 @@ jQuery(document).ready(function ($) {
                     $('#bulk-start-container').show();
                     $('.bulk-preparing-optimize').hide();
 
-                    if (response.data.msg == '' || response.data.msg == null) {
-                        response.data.msg = 'unknown-error';
-                    }
+                    var failMsg = (response.data && response.data.msg) ? String(response.data.msg) : 'unknown-error';
 
                     // Failure Pop Up
                     WPCSwal.fire({
                         title: '',
-                        html: $('#' + response.data.msg).html(),
+                        html: $('#' + failMsg).html() || '<p style="padding:24px;font-size:15px;">Optimization could not start. Reload this page and try again.</p>',
                         width: 600,
                         showCancelButton: false,
                         showConfirmButton: false,
@@ -447,6 +503,24 @@ jQuery(document).ready(function ($) {
                     });
 
                 }
+            },
+            error: function () {
+                $('.wps-ic-stop-bulk-compress').hide();
+                $('.bulk-area-inner').hide();
+                $('.bulk-preparing-optimize').hide();
+                $('#bulk-start-container').show();
+                WPCSwal.fire({
+                    title: 'Optimization could not start',
+                    html: '<div style="text-align:left;font-size:15px;line-height:1.6;color:#1e293b;"><p style="margin:0 0 14px;font-size:15px;">Network or server error. Try again in a moment.</p></div>',
+                    width: 520,
+                    showCancelButton: false,
+                    confirmButtonText: 'OK',
+                    buttonsStyling: false,
+                    customClass: {
+                        container: 'wpc-popup-v6 wpc-confirm-popup',
+                        confirmButton: 'wpc-confirm-btn wpc-confirm-btn--ghost'
+                    }
+                });
             }
         });
         return false;
@@ -669,10 +743,10 @@ jQuery(document).ready(function ($) {
                     // All done — show final stats
                     var bulkFinished = $('.bulk-finished');
                     setTimeout(function () {
-                        $.ajax({
+                        window.wpcNonceFix.send({
                             url: ajaxurl,
                             type: 'POST',
-                            data: { action: 'wps_ic_getBulkStats', type: 'compress' },
+                            data: { action: 'wps_ic_getBulkStats', nonce: ajaxVar.nonce, type: 'compress' },
                             success: function (statsResponse) {
                                 $('.bulk-preparing-optimize').hide();
                                 $('.bulk-compress-status-progress-prepare').hide();
@@ -684,6 +758,15 @@ jQuery(document).ready(function ($) {
                                     $(bulkFinished).hide().html(statsResponse.data.html).fadeIn(800);
                                 });
                             }
+                        }, function () {
+                            $('.bulk-preparing-optimize').hide();
+                            $('.bulk-compress-status-progress-prepare').hide();
+                            $('.bulk-compress-status-progress').hide();
+                            $('.bulk-status-progress-bar').hide();
+                            $('.wps-ic-stop-bulk-compress').hide();
+                            $('.bulk-status-settings').hide();
+                            $('.bulk-status').hide();
+                            $(bulkFinished).hide().text('Optimization finished. Reload this page to see the results.').fadeIn(800);
                         });
                     }, 500);
                     return;
@@ -755,6 +838,20 @@ jQuery(document).ready(function ($) {
 
         var idx = 0;
         var total = queue.length;
+        var seqRetried = false;
+
+        function seqHalt() {
+            bulkCompressStopped = true;
+            window.__wpcBulkHalted = true;
+            window.__wpcSeqRunning = false;
+            $('.bulk-area-inner').hide();
+            $('.wpc-bulk-v2-surface').hide();
+            $('.bulk-preparing-optimize').hide();
+            $('#bulk-start-container').show();
+            if (typeof WPCSwal !== 'undefined') {
+                WPCSwal.fire({title: '', text: 'Your admin session expired. Reload this page to continue.', showConfirmButton: true});
+            }
+        }
 
         function next() {
             if (bulkCompressStopped) { window.__wpcSeqRunning = false; return; }
@@ -774,18 +871,30 @@ jQuery(document).ready(function ($) {
             idx++;
             window.wpcDebugLog && window.wpcDebugLog('[wpc-seq] dispatch image ' + idx + '/' + total + ' (id=' + imageId + ')');
 
+            var rejected = false;
             $.ajax({
                 url: ajaxurl,
                 type: 'POST',
-                data: { action: 'wps_ic_compress_live', attachment_id: imageId },
+                data: { action: 'wps_ic_compress_live', nonce: ajaxVar.nonce, attachment_id: imageId },
                 // Single-image typical 3-6 s, occasional 15 s on cold. 60 s
                 // ceiling matches the server's set_time_limit(120) safety.
                 timeout: 60000
             }).done(function (resp) {
+                seqRetried = false;
                 window.wpcDebugLog && window.wpcDebugLog('[wpc-seq] image ' + idx + ' phase-A done', resp && resp.success);
             }).fail(function (xhr, status) {
                 console.warn('[wpc-seq] image ' + idx + ' phase-A failed:', status);
+                if (window.wpcNonceFix.recover(xhr, seqRetried, function () {
+                    seqRetried = true;
+                    idx--;
+                    next();
+                }, seqHalt)) {
+                    rejected = true;
+                } else {
+                    seqRetried = false;
+                }
             }).always(function () {
+                if (rejected) { return; }
                 // v7.03.2 — Per-image phase-B wait. The user explicitly asked
                 // for sequencing to be "per variant too not just per image"
                 // (2026-05-25). After Phase A returns, we poll the cheap

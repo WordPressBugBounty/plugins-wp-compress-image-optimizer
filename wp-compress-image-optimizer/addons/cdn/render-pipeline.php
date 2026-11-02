@@ -242,6 +242,8 @@ final class wps_ic_font_face_set
                     $eager = true;
                     $origin = $current['origin'];
                     $faceTag = isset($current['tag']) ? $current['tag'] : '';
+                } elseif (self::isLiveCarrier($current) && (string) $origin !== self::ORIGIN_LIVE_CARRIER) {
+                    $origin = $current['origin'];
                 }
             }
             $this->faces[$key] = [
@@ -1135,7 +1137,7 @@ final class wps_ic_font_face_set
                 || (isset($gatePinned[$face['family']]) && !self::isLiveCarrier($face))
                 || self::paintsWithoutNetwork($face['css'], $face['family'])
                 || !self::hasNetworkSource($face['css'])) { continue; }
-            $declared[$face['family']] = 1;
+            $declared[$face['family']][$face['range']] = 1;
         }
         $subsetBases = [];
         foreach ($faces as $face) {
@@ -1158,9 +1160,9 @@ final class wps_ic_font_face_set
                 || (isset($gatePinned[$face['family']]) && self::hasNetworkSource($face['css'])
                     && !self::isLiveCarrier($face));
             if (!$servedLate) { $eager[] = $face; continue; }
-            // A family with a real eager declarer is already bound; a late twin for it never
-            // gets used and only evicts the bound face for the weights it claims.
-            if (isset($declared[$face['family']])) { $evicted[] = $face; continue; }
+            // A family with a real eager declarer for this range is already bound; a late twin for
+            // that range never gets used and only evicts the bound face for the weights it claims.
+            if (isset($declared[$face['family']]['']) || isset($declared[$face['family']][$face['range']])) { $evicted[] = $face; continue; }
             $late[] = $face;
         }
         if ($twins) {
@@ -1602,7 +1604,7 @@ final class wps_ic_image_preload_set
         if (isset($extras['key'])) {
             $key = strtolower((string) $extras['key']);
         } else {
-            $named = ($href !== '') ? $href : (string) preg_split('/[\s,]+/', $imagesrcset)[0];
+            $named = ($href !== '') ? $href : (string) (wpc_srcset_urls($imagesrcset)[0] ?? '');
             $key = self::imageKey($named);
         }
         if ($this->vetoes($key)) {
@@ -1926,8 +1928,8 @@ final class wps_ic_image_preload_set
                     if (!preg_match('/(?<![-\w])' . $attribute . '\s*=\s*(["\'])(.*?)\1/is', $tag[0], $value)) {
                         continue;
                     }
-                    foreach (preg_split('/\s*,\s*/', html_entity_decode($value[2], ENT_QUOTES)) as $part) {
-                        $part = trim((string) preg_replace('/\s+\d+(?:\.\d+)?[wx]$/', '', trim($part)));
+                    $decoded = html_entity_decode($value[2], ENT_QUOTES);
+                    foreach ($attribute === 'srcset' ? wpc_srcset_urls($decoded) : [trim($decoded)] as $part) {
                         if ($part !== '' && stripos($part, 'data:') !== 0) {
                             $urls[] = $part;
                         }
@@ -2186,7 +2188,7 @@ final class wps_ic_image_preload_set
                         $anotherHigh = true;
                     }
                 }
-                $named = $usable[$seq]['href'] !== '' ? $usable[$seq]['href'] : (string) preg_split('/[\s,]+/', $usable[$seq]['imagesrcset'])[0];
+                $named = $usable[$seq]['href'] !== '' ? $usable[$seq]['href'] : (string) (wpc_srcset_urls($usable[$seq]['imagesrcset'])[0] ?? '');
                 if (!call_user_func($this->backgroundHigh, $named, $anotherHigh, $usable[$seq]['origin'] === 'header-logo')) {
                     $usable[$seq]['fetchpriority'] = '';
                     foreach ($lcpWinners as $device => $winner) {
@@ -2318,7 +2320,7 @@ final class wps_ic_image_preload_set
             $address = trim($hrefMatch[2]);
         }
         if ($address === '' && preg_match('/\simagesrcset\s*=\s*(["\'])(.*?)\1/i', $tag, $srcsetMatch)) {
-            $address = (string) preg_split('/[\s,]+/', trim($srcsetMatch[2]))[0];
+            $address = (string) (wpc_srcset_urls($srcsetMatch[2])[0] ?? '');
         }
         $host = strtolower((string) parse_url(html_entity_decode($address, ENT_QUOTES), PHP_URL_HOST));
         $mark = ($zoneHost !== '' && $host === strtolower($zoneHost)) ? 'zone' : '1';
@@ -2373,7 +2375,7 @@ final class wps_ic_image_preload_set
             }
             $href = preg_match('/\bhref\s*=\s*(["\'])(.*?)\1/i', $tag, $hrefMatch) ? trim($hrefMatch[2]) : '';
             $srcset = preg_match('/\bimagesrcset\s*=\s*(["\'])(.*?)\1/i', $tag, $srcsetMatch) ? trim($srcsetMatch[2]) : '';
-            $key = self::imageKey(($href !== '') ? $href : (string) preg_split('/[\s,]+/', $srcset)[0], $widthNames);
+            $key = self::imageKey(($href !== '') ? $href : (string) (wpc_srcset_urls($srcset)[0] ?? ''), $widthNames);
             if ($key === '') {
                 continue;
             }
@@ -2433,7 +2435,7 @@ final class wps_ic_image_preload_set
             $pageCounts['seen']++;
             $href = preg_match('/\bhref\s*=\s*(["\'])(.*?)\1/i', $tag, $hrefMatch) ? trim($hrefMatch[2]) : '';
             $srcset = preg_match('/\bimagesrcset\s*=\s*(["\'])(.*?)\1/i', $tag, $srcsetMatch) ? trim($srcsetMatch[2]) : '';
-            $named = ($href !== '') ? $href : (string) preg_split('/[\s,]+/', $srcset)[0];
+            $named = ($href !== '') ? $href : (string) (wpc_srcset_urls($srcset)[0] ?? '');
             $key = self::imageKey($named);
             $media = preg_match('/\bmedia\s*=\s*(["\'])(.*?)\1/i', $tag, $mediaMatch) ? strtolower($mediaMatch[2]) : '';
             $maxWidth = strpos($media, 'max-width') !== false;
@@ -3104,11 +3106,7 @@ final class wps_ic_image_preload_set
                 }
             }
         }
-        foreach (preg_split('/\s*,\s*/', html_entity_decode((string) $address, ENT_QUOTES)) as $part) {
-            $part = (string) preg_replace('/\s+\d+(?:\.\d+)?[wx]$/', '', trim($part));
-            if ($part === '') {
-                continue;
-            }
+        foreach (wpc_srcset_urls(html_entity_decode((string) $address, ENT_QUOTES)) as $part) {
             if (preg_match('#^[a-z]:[\\\\/]#i', $part) || stripos($part, 'file:') === 0) {
                 return true;
             }
@@ -3150,9 +3148,9 @@ final class wps_ic_image_preload_set
                 }
             }
         }
-        if (preg_match_all('/\s(?:src|srcset|href|data-[a-z-]*src(?:set)?)\s*=\s*(["\'])(.*?)\1/is', $html, $attributes)) {
-            foreach ($attributes[2] as $value) {
-                foreach (preg_split('/\s*,\s*/', $value) as $part) {
+        if (preg_match_all('/\s((?:src|srcset|href|data-[a-z-]*src(?:set)?))\s*=\s*(["\'])(.*?)\2/is', $html, $attributes)) {
+            foreach ($attributes[3] as $attributeAt => $value) {
+                foreach ((strtolower(substr($attributes[1][$attributeAt], -6)) === 'srcset' ? wpc_srcset_urls($value) : [$value]) as $part) {
                     $part = trim((string) preg_replace('/\s+\d+(?:\.\d+)?[wx]$/', '', trim($part)));
                     if ($part !== '' && preg_match('#^(?:https?:)?//#i', $part)) {
                         $urls['markup'][] = $part;

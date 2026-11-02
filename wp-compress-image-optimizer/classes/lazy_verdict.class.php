@@ -337,9 +337,8 @@ final class wps_ic_lazy_verdict
                 return false;
             }
         }
-        foreach (explode(',', self::attributeValue($tag, 'srcset')) as $candidate) {
-            $parts = preg_split('/\s+/', trim($candidate));
-            if (self::isImageAddress($parts[0])) {
+        foreach (wpc_srcset_urls(self::attributeValue($tag, 'srcset')) as $address) {
+            if (self::isImageAddress($address)) {
                 return false;
             }
         }
@@ -349,7 +348,7 @@ final class wps_ic_lazy_verdict
 
     private static function attributeValue($tag, $attribute)
     {
-        if (!preg_match('/\s' . preg_quote($attribute, '/') . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $tag, $match)) {
+        if (!preg_match('/(?<![\w:-])' . preg_quote($attribute, '/') . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $tag, $match)) {
             return '';
         }
         return isset($match[3]) ? $match[3] : (isset($match[2]) && $match[2] !== '' ? $match[2] : $match[1]);
@@ -715,8 +714,7 @@ final class wps_ic_lazy_verdict
         if (isset($this->foldMemo[$key])) {
             return $this->foldMemo[$key];
         }
-        $devices = (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_combined_crit_on') && wps_rewriteLogic::wpc_combined_crit_on())
-            ? ['mobile', 'desktop'] : [(function_exists('wpc_ua_is_mobile') && wpc_ua_is_mobile()) ? 'mobile' : 'desktop'];
+        $devices = self::servedDevices();
         $answers = [];
         foreach ($devices as $device) {
             $answers[] = $this->foldAnswer($device, $key);
@@ -769,6 +767,32 @@ final class wps_ic_lazy_verdict
         return $this->foldVerdict($tag, $imageUrl) === 'below';
     }
 
+    /** The devices this render's HTML is served to: both under combined crit, else the requesting one. */
+    private static function servedDevices()
+    {
+        return (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_combined_crit_on') && wps_rewriteLogic::wpc_combined_crit_on())
+            ? ['mobile', 'desktop'] : [(function_exists('wpc_ua_is_mobile') && wpc_ua_is_mobile()) ? 'mobile' : 'desktop'];
+    }
+
+    /** True when the crit service's measurement puts the image on the first screen of at least one device this render serves (its first-screen list names the file, or it is that device's LCP). The quiet wire never parks such an image. */
+    public function aboveOnServedDevice($tag, $imageUrl = '')
+    {
+        $url = (string) $imageUrl;
+        if ($url === '' || stripos($url, 'data:') === 0) {
+            $url = $this->tagUrl((string) $tag);
+        }
+        $key = self::fileKey($url);
+        if ($key === '') {
+            return false;
+        }
+        foreach (self::servedDevices() as $device) {
+            if ($this->foldAnswer($device, $key) === 'above') {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * True when the crit service's measurement puts the image below the first screen of every device this render
      * serves, with policy.hero_fold on or off: each leg is measured and lists neither the image nor the LCP under
@@ -785,8 +809,7 @@ final class wps_ic_lazy_verdict
         if ($key === '') {
             return false;
         }
-        $devices = (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_combined_crit_on') && wps_rewriteLogic::wpc_combined_crit_on())
-            ? ['mobile', 'desktop'] : [(function_exists('wpc_ua_is_mobile') && wpc_ua_is_mobile()) ? 'mobile' : 'desktop'];
+        $devices = self::servedDevices();
         foreach ($devices as $device) {
             if ($this->foldAnswer($device, $key) !== 'below') {
                 return false;
@@ -813,8 +836,7 @@ final class wps_ic_lazy_verdict
         if ($key === '') {
             return false;
         }
-        $devices = (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_combined_crit_on') && wps_rewriteLogic::wpc_combined_crit_on())
-            ? ['mobile', 'desktop'] : [(function_exists('wpc_ua_is_mobile') && wpc_ua_is_mobile()) ? 'mobile' : 'desktop'];
+        $devices = self::servedDevices();
         foreach ($devices as $device) {
             $facts = wps_ic_atf_observation::foldFacts($device);
             if ($facts === null || !$facts['measured'] || !is_array($facts['listed'])) {
@@ -1218,8 +1240,8 @@ final class wps_ic_lazy_verdict
                     $addresses[] = $attribute[3];
                     continue;
                 }
-                foreach (explode(',', $attribute[3]) as $candidate) {
-                    $addresses[] = (string) strtok(trim($candidate), " \t\n");
+                foreach (wpc_srcset_urls($attribute[3]) as $address) {
+                    $addresses[] = $address;
                 }
             }
         }

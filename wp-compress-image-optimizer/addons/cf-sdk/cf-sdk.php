@@ -337,7 +337,7 @@ class WPC_CloudflareAPI
                         'detail' => 'Cloudflare zone looks misconfigured (' . $msg . '). Check the zone is active and the token is scoped to it.'];
                 }
             }
-            if (stripos($msg, 'authentication') !== false || stripos($msg, 'unauthor') !== false || stripos($msg, 'permission') !== false) {
+            if (stripos($msg, 'authentication') !== false || stripos($msg, 'unauthor') !== false || stripos($msg, 'not authorized') !== false || stripos($msg, 'permission') !== false) {
                 return ['ok' => false, 'mode' => 'permission',
                     'detail' => 'Cloudflare rejected it — token permissions. CF said: ' . $msg];
             }

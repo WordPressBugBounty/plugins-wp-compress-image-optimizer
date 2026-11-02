@@ -1697,6 +1697,30 @@ if (!function_exists('wpc_warm_rx_gate')) {
                 || (function_exists('wp_doing_ajax') && wp_doing_ajax())) {
                 return;
             }
+            wpc_stale_rewarm_receiver();
+            try {
+                if (wpc_rewarm_single_flight()) {
+                    global $wpdb;
+                    if (is_object($wpdb) && function_exists('wpc_lock_name')) {
+                        $name = wpc_lock_name('warm-render');
+                        $got = $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 0)', $name));
+                        if ($got === '0' || $got === 0) {
+                            if (function_exists('status_header')) { status_header(204); }
+                            exit;
+                        }
+                        if ($got === '1' || $got === 1) {
+                            register_shutdown_function(function () use ($name) {
+                                try {
+                                    global $wpdb;
+                                    $wpdb->query($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $name));
+                                } catch (\Throwable $e) {
+                                }
+                            });
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+            }
             $now = time();
             $sl  = wpc_warm_rx_live_slots($now);
             if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
@@ -5979,7 +6003,14 @@ if (!function_exists('wpc_under_pressure')) {
                 function_exists('wpc_is_core_count_known') ? wpc_is_core_count_known() : true)) {
                 return false;
             }
-            $cores = function_exists('wpc_box_cores') ? max(1, (int) wpc_box_cores()) : 2;
+            static $cores = null;
+            if ($cores === null) {
+                $ci = @is_readable('/proc/cpuinfo') ? (string) @file_get_contents('/proc/cpuinfo') : '';
+                $cores = $ci !== '' ? (int) preg_match_all('/^processor\s*:/m', $ci, $pm) : 0;
+                if ($cores < 1) {
+                    $cores = function_exists('wpc_cgroup_cores') && wpc_cgroup_cores() > 0 ? wpc_cgroup_cores() : 2;
+                }
+            }
             $hot = (float) $l[0] > $cores * (float) apply_filters('wpc_pressure_threshold', 1.5);
             if ($hot && function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_pressure_log')) {
                 set_transient('wpc_pressure_log', 1, 60);
@@ -5999,37 +6030,22 @@ if (!function_exists('wpc_box_cores')) {
         if ($cores === null) {
             $cores = 2;
             $ci = @is_readable('/proc/cpuinfo') ? (string) @file_get_contents('/proc/cpuinfo') : '';
-            if ($ci !== '' && preg_match_all('/^processor\s*:/m', $ci, $pm)) {
-                $cores = max(1, count($pm[0]));
-            } else {
-                // Containerized: the cgroup CPU quota is the container's real allowance —
-                // host cpuinfo (when readable at all) overstates it
+            $cpuCount = $ci !== '' ? preg_match_all('/^processor\s*:/m', $ci, $pm) : 0;
+            if ($cpuCount > 0) {
+                $cores = max(1, $cpuCount);
+            }
+            try {
                 $cg = wpc_cgroup_cores();
                 if ($cg > 0) {
-                    $cores = $cg;
+                    $cores = $cpuCount > 0 ? min($cores, $cg) : $cg;
                 }
+            } catch (\Throwable $e) {
             }
         }
         return $cores;
     }
 }
 
-if (!function_exists('wpc_cgroup_cores')) {
-    function wpc_cgroup_cores()
-    {
-        // v2: "<quota|max> <period>"; v1: cfs_quota_us (-1 = unlimited) / cfs_period_us
-        $v2 = @is_readable('/sys/fs/cgroup/cpu.max') ? trim((string) @file_get_contents('/sys/fs/cgroup/cpu.max')) : '';
-        if ($v2 !== '' && preg_match('/^(\d+)\s+(\d+)$/', $v2, $m) && (int) $m[2] > 0) {
-            return max(1, (int) ceil((int) $m[1] / (int) $m[2]));
-        }
-        $q = @is_readable('/sys/fs/cgroup/cpu/cpu.cfs_quota_us') ? (int) trim((string) @file_get_contents('/sys/fs/cgroup/cpu/cpu.cfs_quota_us')) : 0;
-        $p = @is_readable('/sys/fs/cgroup/cpu/cpu.cfs_period_us') ? (int) trim((string) @file_get_contents('/sys/fs/cgroup/cpu/cpu.cfs_period_us')) : 0;
-        if ($q > 0 && $p > 0) {
-            return max(1, (int) ceil($q / $p));
-        }
-        return 0;
-    }
-}
 
 if (!function_exists('wpc_is_core_count_known')) {
     /** Cores are KNOWN when either /proc/cpuinfo or a cgroup quota is readable. When neither
@@ -11836,6 +11852,9 @@ if (!function_exists('wpc_crit_webhook_rx')) {
                 echo 'x';
                 exit;
             }
+            if (function_exists('wpc_cmd_census')) {
+                wpc_cmd_census('ajax:wpc_crit_published', 'key-hmac');
+            }
             if (!wpc_crit_key_binds($ukey, [$url], (new wps_ic_url_key())->setup((string) strtok($url, '?')))) {
                 $keyEnforced = function_exists('wpc_policy_cohort') && wpc_policy_cohort('sig_enforce') === 1 && wpc_policy_cohort('off_sig_403') !== 1;
                 if (function_exists('wpc_cache_first_log')) {
@@ -13370,7 +13389,7 @@ if (!function_exists('wpc_crit_selftest_run')) {
     function wpc_crit_selftest_rx()
     {
         try {
-            $tok = isset($_GET['t']) && defined('WPC_PERF_DEBUG_TOKEN') && hash_equals((string) WPC_PERF_DEBUG_TOKEN, (string) $_GET['t']);
+            $tok = isset($_GET['t']) && defined('WPC_PERF_DEBUG_TOKEN') && (string) WPC_PERF_DEBUG_TOKEN !== '' && hash_equals((string) WPC_PERF_DEBUG_TOKEN, (string) $_GET['t']);
             $resyncAsked = (isset($_GET['refetch']) && sanitize_key((string) $_GET['refetch']) === 'resync')
                 || (isset($_POST['refetch']) && sanitize_key((string) $_POST['refetch']) === 'resync');
             $resyncDelegated = isset($_POST['refetch']) && sanitize_key((string) $_POST['refetch']) === 'resync'
@@ -13381,7 +13400,9 @@ if (!function_exists('wpc_crit_selftest_run')) {
                 echo 'x';
                 exit;
             }
-            if ($resyncAsked && !$tok) {
+            $refetchWhat = isset($_GET['refetch']) ? sanitize_key((string) $_GET['refetch'])
+                : (isset($_POST['refetch']) ? sanitize_key((string) $_POST['refetch']) : '');
+            if (($resyncAsked || in_array($refetchWhat, ['fonts', 'crit', 'used', 'all'], true) || !empty($_GET['run'])) && !$tok) {
                 $resyncNonce = isset($_POST['wps_ic_nonce']) ? (string) $_POST['wps_ic_nonce'] : '';
                 if (!isset($_SERVER['REQUEST_METHOD']) || strtoupper((string) $_SERVER['REQUEST_METHOD']) !== 'POST'
                     || !current_user_can('manage_wpc_settings')
@@ -13535,8 +13556,6 @@ if (!function_exists('wpc_crit_selftest_run')) {
             // &refetch=resync → the one-click full close: stale-mark everything (pages
             //   keep serving), clear every gate/backoff, force a fresh dispatch, pull all
             //   lanes now, and self-schedule follow-up waves for the observe-leg artifacts.
-            $refetchWhat = isset($_GET['refetch']) ? sanitize_key((string) $_GET['refetch'])
-                : (isset($_POST['refetch']) ? sanitize_key((string) $_POST['refetch']) : '');
             $isResync = ($refetchWhat === 'resync');
             if ($isResync) {
                 $refetchWhat = 'all';
@@ -15501,6 +15520,32 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
 }
 
 
+if (!function_exists('wpc_perf_debug_own_url')) {
+    function wpc_perf_debug_own_url($url)
+    {
+        $url = (string) $url;
+        if ($url === '' || strpbrk($url, "\\ \t\r\n") !== false) {
+            return false;
+        }
+        $parts = wp_parse_url($url);
+        $home = wp_parse_url(home_url('/'));
+        if (!is_array($parts) || !is_array($home) || empty($parts['host']) || empty($home['host'])
+            || !isset($parts['scheme']) || !in_array(strtolower((string) $parts['scheme']), ['http', 'https'], true)
+            || isset($parts['user']) || isset($parts['pass'])) {
+            return false;
+        }
+        $bare = function ($host) { return preg_replace('/^www\./', '', strtolower(rtrim((string) $host, '.'))); };
+        if ($bare($parts['host']) !== $bare($home['host'])) {
+            return false;
+        }
+        $namedPort = function (array $address) {
+            $default = strtolower((string) ($address['scheme'] ?? 'https')) === 'http' ? 80 : 443;
+            return isset($address['port']) && (int) $address['port'] !== $default ? (int) $address['port'] : 0;
+        };
+        return $namedPort($parts) === $namedPort($home);
+    }
+}
+
 if (!function_exists('wpc_perf_debug_report')) {
     function wpc_perf_debug_report()
     {
@@ -15508,6 +15553,7 @@ if (!function_exists('wpc_perf_debug_report')) {
             wp_die('disabled', '', ['response' => 404]);
         }
         $wpc_is_admin = current_user_can('manage_options');
+        $wpc_can_write = $wpc_is_admin && isset($_GET['_wpnonce']) && wp_verify_nonce((string) $_GET['_wpnonce'], 'wpc_perf_debug');
         if (!$wpc_is_admin) {
             // Read-only lookup: an unauthenticated request must never be able to MINT the secret
             // by asking for it, only to present one it already holds.
@@ -15518,31 +15564,62 @@ if (!function_exists('wpc_perf_debug_report')) {
         }
         if (function_exists('nocache_headers')) { nocache_headers(); }
         header('Content-Type: text/plain; charset=utf-8');
-        $url = !empty($_GET['url']) ? esc_url_raw((string) $_GET['url']) : home_url('/');
+        $url = !empty($_GET['url']) ? (is_string($_GET['url']) ? esc_url_raw((string) $_GET['url']) : '') : home_url('/');
         $o = [];
         $o[] = "=== WPC PERF DEBUG  (plugin " . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '?') . ") ===";
+        if (!wpc_perf_debug_own_url($url)) {
+            $o[] = "url refused: &url= must be an http(s) address on this site's own host (" . (string) wp_parse_url(home_url('/'), PHP_URL_HOST) . ", www or not); nothing was fetched and nothing was changed";
+            echo implode("\n", $o) . "\n";
+            wp_die();
+        }
         // Minted here, on an admin-authenticated view, so a fresh install needs no wp-config edit.
         if ($wpc_is_admin && function_exists('wpc_perf_debug_token')) {
             $o[] = "token: " . wpc_perf_debug_token() . "   (append &t=TOKEN to read this without being logged in)";
         }
+        if ($wpc_is_admin && !$wpc_can_write) {
+            $o[] = "read_only: append &_wpnonce=" . wp_create_nonce('wpc_perf_debug') . " to arm the tier benchmark and run the probes";
+        }
         // v7.10.743 — same trip arms the benchmark: mint the tier key, set the cache flag, and
         // rewrite the drop-in so the pre-WordPress read gate can see it. Admin branch only.
         if ($wpc_is_admin && class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'tierKey')) {
-            $wpc_tier_key = wps_ic_url_key::tierKey();
-            if ($wpc_tier_key !== '') {
-                if (get_option('wpc_tier_cache', '') !== '1') {
-                    update_option('wpc_tier_cache', '1', false);
-                }
+            $wpc_tier_armed = false;
+            $wpc_tier_can_arm = false;
+            if ($wpc_can_write) {
                 if (!class_exists('wps_ic_htaccess') && defined('WPS_IC_DIR')) {
                     @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
                 }
-                if (class_exists('wps_ic_htaccess')) {
+                $wpc_tier_set = get_option(defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings');
+                if (!is_array($wpc_tier_set) || empty($wpc_tier_set['cache']['advanced']) || $wpc_tier_set['cache']['advanced'] != '1') {
+                    $o[] = "tier_arm: Advanced Caching is off, so the tier key, the tier flag, WP_CACHE and the drop-in were left alone";
+                } elseif (function_exists('wpc_page_cache_blocked') && wpc_page_cache_blocked()) {
+                    $o[] = "tier_arm: page caching is blocked on this install, so the tier key, the tier flag, WP_CACHE and the drop-in were left alone";
+                } elseif (!class_exists('wps_ic_htaccess')) {
+                    $o[] = "tier_arm: the drop-in writer did not load, so the tier key, the tier flag, WP_CACHE and the drop-in were left alone";
+                } else {
+                    $wpc_tier_can_arm = true;
+                }
+            }
+            $wpc_tier_key = wps_ic_url_key::tierKey($wpc_tier_can_arm);
+            if ($wpc_tier_key !== '') {
+                if ($wpc_tier_can_arm) {
+                    $wpc_tier_flag_before = get_option('wpc_tier_cache', '');
+                    if ($wpc_tier_flag_before !== '1') {
+                        update_option('wpc_tier_cache', '1', false);
+                    }
                     $wpc_htaccess = new wps_ic_htaccess();
-                    $wpc_htaccess->setWPCache(true);
-                    $wpc_htaccess->setAdvancedCache();
+                    $wpc_tier_config = $wpc_htaccess->setWPCache(true);
+                    $wpc_tier_dropin = $wpc_htaccess->setAdvancedCache();
+                    $wpc_tier_config = is_string($wpc_tier_config) ? $wpc_tier_config : 'unknown';
+                    $wpc_tier_dropin = is_string($wpc_tier_dropin) ? $wpc_tier_dropin : 'unknown';
+                    $wpc_tier_dropin_ok = in_array($wpc_tier_dropin, ['written', 'unchanged'], true);
+                    $wpc_tier_armed = $wpc_tier_dropin_ok && in_array($wpc_tier_config, ['found', 'written', 'defined-elsewhere'], true);
+                    if (!$wpc_tier_dropin_ok && $wpc_tier_flag_before !== '1') {
+                        delete_option('wpc_tier_cache');
+                    }
+                    $o[] = "tier_arm: wp-config.php " . $wpc_tier_config . ", drop-in " . $wpc_tier_dropin;
                 }
                 $o[] = "tier_key: " . $wpc_tier_key
-                     . "   cacheable_arms: " . ((defined('WPC_TIER_CACHE') && WPC_TIER_CACHE) ? 'ARMED' : 'armed-next-request');
+                     . "   cacheable_arms: " . ((defined('WPC_TIER_CACHE') && WPC_TIER_CACHE) ? 'ARMED' : ($wpc_tier_armed ? 'armed-next-request' : 'not armed'));
                 $o[] = "tier_urls: ?wpc_tier=control|free|local|edge &wpc_key=" . $wpc_tier_key;
             }
         }
@@ -15551,7 +15628,7 @@ if (!function_exists('wpc_perf_debug_report')) {
         // (every asset in its m:0 working form) indefinitely. admin-ajax IS an is_admin() context,
         // so this report is the arming trip: run the probe synchronously when unproven.
         $wpc_asset_mime_ok = (string) get_option('wpc_v2_cf_asset_mime_ok', '');
-        if ($wpc_asset_mime_ok !== '1' && function_exists('wpc_v2_asset_mime_probe_run')) {
+        if ($wpc_can_write && $wpc_asset_mime_ok !== '1' && function_exists('wpc_v2_asset_mime_probe_run')) {
             delete_transient('wpc_v2_cf_asset_mime_retry');
             delete_transient('wpc_v2_asset_probe_inflight');
             $wpc_mime_probe_result = wpc_v2_asset_mime_probe_run();
@@ -15564,19 +15641,19 @@ if (!function_exists('wpc_perf_debug_report')) {
                 $o[] = "natural_assets: page cache purged — next render collapses m:0";
             }
         }
-        $o[] = "natural_assets: mime_ok=" . ($wpc_asset_mime_ok !== '' ? $wpc_asset_mime_ok : 'unproven')
+        $o[] = "natural_assets: mime_ok=" . ($wpc_asset_mime_ok !== '' ? $wpc_asset_mime_ok : ($wpc_can_write ? 'unproven' : 'not probed (read-only: the probe was skipped)'))
              . " | gate=" . ((class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on') && wps_rewriteLogic::natural_assets_on()) ? 'OPEN (m:0 collapses)' : 'SHUT (m:0 stands)');
         // Origin security headers replayed by the pull can block cross-origin image delivery
         // (ERR_BLOCKED_BY_RESPONSE) — surface the guard's verdict, and run it now if never run.
         $wpc_corp_guard = get_option('wpc_corp_guard_state', []);
-        if ((!is_array($wpc_corp_guard) || empty($wpc_corp_guard['state'])) && function_exists('wpc_corp_guard_tick')) {
+        if ($wpc_can_write && (!is_array($wpc_corp_guard) || empty($wpc_corp_guard['state'])) && function_exists('wpc_corp_guard_tick')) {
             wpc_corp_guard_tick(true);
             $wpc_corp_guard = get_option('wpc_corp_guard_state', []);
         }
         $o[] = "corp_guard: " . ((is_array($wpc_corp_guard) && !empty($wpc_corp_guard['state']))
             ? $wpc_corp_guard['state'] . ' (origin corp=' . (isset($wpc_corp_guard['corp']) ? ($wpc_corp_guard['corp'] !== '' ? $wpc_corp_guard['corp'] : 'none') : '?')
                 . (isset($wpc_corp_guard['after']) ? ' -> ' . ($wpc_corp_guard['after'] !== '' ? $wpc_corp_guard['after'] : 'none') : '') . ')'
-            : 'never-ran (guard off, cdn off, or probe unreachable)');
+            : ($wpc_can_write ? 'never-ran (guard off, cdn off, or probe unreachable)' : 'not probed (read-only: the probe was skipped)'));
         // THE WHOLE CHAIN, in evaluation order, with the probe's ACTUAL last response. A gate
         // that only reports its verdict makes every refusal a guess about invisible option
         // state; this makes "why is this site still on m:0" readable in one line.
@@ -15640,7 +15717,7 @@ if (!function_exists('wpc_perf_debug_report')) {
         // Under WPC_CF_CNAME_GATE_LEGACY the site's own probe promotes the cname gate; make the
         // panel visit run it synchronously and report the promote/refuse verdict. Outside the
         // switch the orchestrator's witness is the gate and the probe does not run.
-        if ($wpc_cf_cname !== '' && is_array($wpc_cf_settings) && !empty($wpc_cf_settings['settings']['cdn'])
+        if ($wpc_can_write && $wpc_cf_cname !== '' && is_array($wpc_cf_settings) && !empty($wpc_cf_settings['settings']['cdn'])
             && $wpc_cname_verified_flag !== '1' && $wpc_cname_verified_flag !== 1 && function_exists('wpc_v2_cf_cname_reverify')
             && wpc_cf_cname_gate_legacy()) {
             $wpc_cname_reverify = wpc_v2_cf_cname_reverify(false);
@@ -15671,18 +15748,6 @@ if (!function_exists('wpc_perf_debug_report')) {
         }
         $o[] = "mode_drift: preset=" . ($wpc_preset_name !== '' ? $wpc_preset_name : 'none')
              . ($wpc_drift_rows ? ' | ' . implode(' | ', $wpc_drift_rows) : ($wpc_preset_name !== '' ? ' | in sync' : ''));
-        // Panel visit doubles as the coherence-heal trip (belt for the upgrade lane): the
-        // v2=1+v3=0 pair is unreachable through any current writer, so heal it here too.
-        if (isset($set['delay-js-v2']) && $set['delay-js-v2'] == '1'
-            && isset($set['delay-js-v3']) && $set['delay-js-v3'] === '0'
-            && apply_filters('wpc_settings_coherence_heal', true)) {
-            $set['delay-js-v3'] = '1';
-            update_option(defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings', $set);
-            if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
-                wps_ic_cache::removeHtmlCacheFiles('all');
-            }
-            $o[] = "coherence_heal: RAN -> delay-js-v3=1 (html cache purged; next render drops legacy optimize.js)";
-        }
         $key = class_exists('wps_ic_url_key') ? (new wps_ic_url_key())->setup($url) : '';
         $cd  = defined('WPS_IC_CRITICAL') ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/' : '';
         // The full consume-gate chain: every runtime reason a crit-bearing dir still serves
@@ -16295,12 +16360,14 @@ if (!empty($_GET['autoload'])) {
             }
             return empty($hit) ? 'NONE' : implode('+', $hit);
         };
-        $r = wp_remote_get($url, ['timeout' => 15, 'headers' => ['User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile']]);
+        $r = wp_remote_get($url, ['timeout' => 15, 'redirection' => 0, 'headers' => ['User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile']]);
         $h = is_wp_error($r) ? '' : wp_remote_retrieve_body($r);
         $o[] = "SERVED page: " . strlen($h) . "B | crit=" . (preg_match('/<style[^>]*id=["\']wpc-critical-css["\']/i', $h) ? 'Y' : 'N')
              . " | gstatic=" . substr_count($h, 'fonts.gstatic.com') . " | subset_base64=" . substr_count($h, 'data:font/woff2;base64')
              . " | lcp-preload=" . $wpc_preload_marker($h) . " | used-css=" . (strpos($h, 'wpc-used-css') !== false ? 'Y' : 'N')
-             . " | size-adjust=" . (strpos($h, 'size-adjust') !== false ? 'Y' : 'N');
+             . " | size-adjust=" . (strpos($h, 'size-adjust') !== false ? 'Y' : 'N')
+             . (is_wp_error($r) ? ' | FETCH FAILED: ' . substr((string) $r->get_error_message(), 0, 90)
+                 : ((int) wp_remote_retrieve_response_code($r) !== 200 ? ' | HTTP ' . (int) wp_remote_retrieve_response_code($r) : ''));
 
 
         // The headers below are ours; an edge in front of the origin does not honour them and
@@ -16314,7 +16381,7 @@ if (!empty($_GET['autoload'])) {
         // code path) while controlParams() refuses cache read/write for it (a genuinely fresh
         // render, never stored). The timestamp value defeats the foreign edge's query-keyed cache.
         $wpc_fresh_url = $url . ((strpos($url, '?') !== false) ? '&' : '?') . 'disable_cache=' . time();
-        $rf = wp_remote_get($wpc_fresh_url, ['timeout' => 25, 'headers' => ['User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile', 'X-WPC-Cache-Warm' => wpc_warm_header_for($wpc_fresh_url), 'X-WPC-Diag' => wpc_warm_header_for($wpc_fresh_url, 'diag')]]);
+        $rf = wp_remote_get($wpc_fresh_url, ['timeout' => 25, 'redirection' => 0, 'headers' => ['User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile', 'X-WPC-Cache-Warm' => wpc_warm_header_for($wpc_fresh_url), 'X-WPC-Diag' => wpc_warm_header_for($wpc_fresh_url, 'diag')]]);
         $hf = is_wp_error($rf) ? '' : wp_remote_retrieve_body($rf);
         // An empty arm must say WHY: a transport error, a non-200, and an empty 200 are three
         // different diagnoses (blocked loopback / edge challenge / render died), and a bare 0B
@@ -16436,7 +16503,7 @@ if (!empty($_GET['autoload'])) {
                 ? (string) ($wpc_selftest['verdict'] ?? '?') . ' (' . (string) ($wpc_selftest['mode'] ?? '?') . ', '
                     . max(0, time() - (int) ($wpc_selftest['t'] ?? 0)) . 's ago'
                     . (isset($wpc_selftest['latency_s']) && $wpc_selftest['latency_s'] !== null ? ', land ' . (int) $wpc_selftest['latency_s'] . 's' : '') . ')'
-                : 'never run — POST admin-ajax?action=wpc_crit_selftest&run=1&drill=1');
+                : 'never run — POST admin-ajax?action=wpc_crit_selftest&run=1&drill=1 with wps_ic_nonce');
             // CRIT-BLAME: when crit is missing, name the side. The pointer shelf is the
             // service's PUBLISH receipt — present = plugin pickup stalled; absent = service
             // generate pending (or never dispatched if no fail evidence). Debug-only probe.
@@ -17516,7 +17583,7 @@ if (!function_exists('wpc_auto_mode_on')) {
         $epoch = (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '?') . '|' . $land_uuid;
         return $epoch;
     }
-    function wpc_auto_state()
+    function wpc_auto_state($read_only = false)
     {
         $s = get_option('wpc_auto_mode_state');
         $d = [
@@ -17527,7 +17594,7 @@ if (!function_exists('wpc_auto_mode_on')) {
             'arm_tries' => 0,
         ];
         $s = is_array($s) ? array_merge($d, $s) : $d;
-        if (!empty($s['frozen'])) {
+        if (!$read_only && !empty($s['frozen'])) {
             $epoch = wpc_auto_freeze_epoch();
             if ((string) (isset($s['frozen_epoch']) ? $s['frozen_epoch'] : '') !== $epoch) {
                 $thawed_rules = $s['frozen'];
@@ -18486,6 +18553,7 @@ if (!function_exists('wpc_auto_mode_on')) {
         if ($wpc_sig === '' || !hash_equals($wpc_sig, isset($_GET['k']) ? (string) $_GET['k'] : '')) {
             wp_send_json_error(['msg' => 'forbidden'], 403);
         }
+        if (function_exists('wpc_cmd_census')) { wpc_cmd_census(wpc_cmd_door(), 'self-hmac'); }
 
 
         if (isset($_GET['w']) && $_GET['w'] === 'r2') {
@@ -19415,7 +19483,9 @@ if (!function_exists('wpc_update_window_active')) {
             wpc_crit_meta_write($d . 'repull_due.txt', (string) time());
             if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
                 && !wp_next_scheduled('wpc_lcp_repull', [$hk, 1])) {
-                wpc_pl_sched(time() + 90, 'wpc_lcp_repull', [$hk, 1]);
+                $windowSecs = max(60, (int) apply_filters('wpc_update_window_secs', 180));
+                $repullDelay = 90 + mt_rand(0, max(0, $windowSecs - 120));
+                wpc_pl_sched(time() + min($repullDelay, $windowSecs - wpc_crit_site_offset()), 'wpc_lcp_repull', [$hk, 1]);
             }
             if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('artifact-refresh', $hk, '', ['v' => $v]); }
         } catch (\Throwable $e) {
@@ -21049,6 +21119,9 @@ if (!function_exists('wpc_pipeline_debug_handler')) {
                 wp_send_json(['err' => 'bad key']);
                 return;
             }
+            if (function_exists('wpc_cmd_census')) {
+                wpc_cmd_census(wpc_cmd_door(), 'key-token');
+            }
             $url = (isset($_GET['url']) && is_string($_GET['url'])) ? esc_url_raw((string) $_GET['url']) : home_url('/');
             $uk  = class_exists('wps_ic_url_key') ? ltrim((string) (new wps_ic_url_key())->setup($url), '/') : '';
             $cd  = defined('WPS_IC_CRITICAL') ? WPS_IC_CRITICAL . $uk . '/' : '';
@@ -21435,9 +21508,14 @@ if (!function_exists('wpc_box_debug_report')) {
     {
         $tok = isset($_GET['t']) ? (string) $_GET['t'] : '';
         $ok  = (function_exists('current_user_can') && current_user_can('manage_options'));
+        $can_write = $ok && isset($_GET['_wpnonce']) && wp_verify_nonce((string) $_GET['_wpnonce'], 'wpc_box_debug');
+        $switch_nonce = $ok ? ' &_wpnonce=' . wp_create_nonce('wpc_box_debug') : '';
         if (!$ok && function_exists('wpc_v2_get_apikey')) {
             $k = (string) wpc_v2_get_apikey();
             $ok = ($k !== '' && $tok !== '' && hash_equals(md5('wpc-dbg:' . $k), $tok));
+            if ($ok && function_exists('wpc_cmd_census')) {
+                wpc_cmd_census(wpc_cmd_door(), 'key-token');
+            }
         }
         if (!$ok) { status_header(403); exit('forbidden'); }
 
@@ -21521,7 +21599,10 @@ if (!function_exists('wpc_box_debug_report')) {
         // &safe=on / &safe=off — the operator lever. LOUD by design: printed on every debug run
         // with how long it has been on, because a stand-down left on by accident is its own outage.
         $safe_action = isset($_GET['safe']) ? strtolower((string) $_GET['safe']) : '';
-        if ($safe_action === 'on' || $safe_action === 'off') {
+        if (($safe_action === 'on' || $safe_action === 'off') && !$can_write) {
+            $o[] = '*** SAFE MODE change refused — it needs a signed-in administrator and the &_wpnonce= this report prints ***';
+            $o[] = '';
+        } elseif ($safe_action === 'on' || $safe_action === 'off') {
             if ($safe_action === 'on') {
                 update_option('wpc_safe_mode', 1, false);
                 update_option('wpc_safe_mode_at', time(), false);
@@ -21545,10 +21626,13 @@ if (!function_exists('wpc_box_debug_report')) {
             ? '*** ON *** — every render is shed (no optimization, no page cache, no CDN rewrite) and every background lane stands down'
                 . ' — set by ' . ($safe_mode_source === 'manual' ? 'a human (&safe=on)' : 'the post-update self-check (cleared by its next successful check)')
                 . ($safe_mode_at ? ' since ' . human_time_diff($safe_mode_at, time()) . ' ago' : ' since unknown')
-            : 'off') . '   [&safe=on / &safe=off]';
+            : 'off') . '   [&safe=on / &safe=off]' . $switch_nonce;
 
         $wpc_wa = isset($_GET['warm']) ? strtolower((string) $_GET['warm']) : '';
-        if ($wpc_wa === 'off' || $wpc_wa === 'on') {
+        if (($wpc_wa === 'off' || $wpc_wa === 'on') && !$can_write) {
+            $o[] = '*** WARM change refused — it needs a signed-in administrator and the &_wpnonce= this report prints ***';
+            $o[] = '';
+        } elseif ($wpc_wa === 'off' || $wpc_wa === 'on') {
             $cleared = 0;
             if ($wpc_wa === 'off') {
                 update_option('wpc_url_warm_on_purge', 0, false);
@@ -21576,7 +21660,7 @@ if (!function_exists('wpc_box_debug_report')) {
         }
         $wpc_wp = (int) get_option('wpc_warm_paused_at', 0);
         $o[] = 'warm scheduler: ' . (get_option('wpc_url_warm_on_purge', 1) ? 'ENABLED' : 'PAUSED'
-             . ($wpc_wp ? ' (' . human_time_diff($wpc_wp, time()) . ' ago)' : '')) . '   [&warm=off / &warm=on]';
+             . ($wpc_wp ? ' (' . human_time_diff($wpc_wp, time()) . ' ago)' : '')) . '   [&warm=off / &warm=on]' . $switch_nonce;
 
         $cores = 0;
         if (@is_readable('/proc/cpuinfo')) {

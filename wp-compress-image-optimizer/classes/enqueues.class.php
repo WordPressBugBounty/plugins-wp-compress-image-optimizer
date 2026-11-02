@@ -649,6 +649,7 @@ JS;
     {
         $this->asset_script('admin-settings-page-charts', 'js/admin/charts/chartsjs.min.js?ver=' . $this::$version);
         $this->asset_style('menu-icon', 'css/menu.wp.css?ver=' . $this::$version);
+        wp_enqueue_style($this::$slug . '-admin-bar', WPS_IC_URI . 'assets/css/admin-bar.css', [], $this::$version);
         wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js?ver=' . $this::$version, ['jquery'], $this::$version, true);
         wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
 
@@ -767,6 +768,7 @@ JS;
         if (!empty(self::$api_key)) {
             $this->asset_script('admin-settings-page-charts', 'js/admin/charts/chartsjs.min.js?ver=' . $this::$version);
             $this->asset_style('menu-icon', 'css/menu.wp.css?ver=' . $this::$version);
+            wp_enqueue_style($this::$slug . '-admin-bar', WPS_IC_URI . 'assets/css/admin-bar.css', [], $this::$version);
             wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js?ver=' . $this::$version, ['jquery'], $this::$version, true);
             wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
 
@@ -811,6 +813,7 @@ JS;
         $screen = get_current_screen();
 
         $this->asset_style('menu-icon', 'css/menu.wp.css');
+        wp_enqueue_style($this::$slug . '-admin-bar', WPS_IC_URI . 'assets/css/admin-bar.css', [], $this::$version);
         wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js', ['jquery'], $this::$version, true);
         wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
 
@@ -939,6 +942,7 @@ JS;
     public function enqueue_v3()
     {
         $this->asset_style('menu-icon', 'css/menu.wp.css');
+        wp_enqueue_style($this::$slug . '-admin-bar', WPS_IC_URI . 'assets/css/admin-bar.css', [], $this::$version);
         wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js', ['jquery'], $this::$version, true);
         wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
         wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
